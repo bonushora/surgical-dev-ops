@@ -4,11 +4,9 @@ Este repositório é a minha **Central da Verdade** para metodologias, processos
 
 A filosofia central aqui é: **intervenção cirúrgica baseada em evidências**, tratando modificações de código como procedimentos de precisão, e não como reescritas completas.
 
----
+## ⚡ Como invocar o BH-SEP em qualquer IA (Comando Único)
 
-## ⚡ Como usar o BH-SEP em qualquer IA com 1 comando
-
-Copie e cole a linha abaixo no início da sua conversa com o ChatGPT, Claude, Gemini ou Copilot:
+Copie e cole a linha abaixo no início da sua conversa com o ChatGPT, Claude, Gemini ou Copilot para carregar o protocolo instantaneamente via link remoto:
 
 ```text
 Acesse a URL [raw.githubusercontent.com/bonushora/surgical-dev-ops/main/protocols/BH-SEP.md](https://raw.githubusercontent.com/bonushora/surgical-dev-ops/main/protocols/BH-SEP.md), adote rigorosamente o protocolo BH-SEP descrito nela para as próximas mensagens e confirme com "BH-SEP ATIVADO".
