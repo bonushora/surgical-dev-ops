@@ -8,10 +8,12 @@ A filosofia central aqui é: **intervenção cirúrgica baseada em evidências**
 
 Copie e cole a linha abaixo no início da sua conversa com o ChatGPT, Claude, Gemini ou Copilot para carregar o protocolo instantaneamente via link remoto:
 
-```text
-Acesse a URL [raw.githubusercontent.com/bonushora/surgical-dev-ops/main/protocols/BH-SEP.md](https://raw.githubusercontent.com/bonushora/surgical-dev-ops/main/protocols/BH-SEP.md), adote rigorosamente o protocolo BH-SEP descrito nela para as próximas mensagens e confirme com "BH-SEP ATIVADO".
-📋 Índice de Protocolos
-💻 Desenvolvimento & Engenharia de Prompts
-BH-SEP (BônusHora Safe Evolution Protocol): Protocolo de edição cirúrgica assistida por IA, priorizando o contexto real, diff mínimo e validação incremental passo a passo.
+> **Acesse a URL [raw.githubusercontent.com/bonushora/surgical-dev-ops/main/protocols/BH-SEP.md](https://raw.githubusercontent.com/bonushora/surgical-dev-ops/main/protocols/BH-SEP.md), adote rigorosamente o protocolo BH-SEP descrito nela para as próximas mensagens e confirme com "BH-SEP ATIVADO".**
 
-Desenvolvido e mantido para a evolução segura de ecossistemas de software.
+## 📋 Índice de Protocolos
+
+### 💻 Desenvolvimento & Engenharia de Prompts
+* **[BH-SEP (BônusHora Safe Evolution Protocol)](./protocols/BH-SEP.md):** Protocolo de edição cirúrgica assistida por IA, priorizando o contexto real, diff mínimo e validação incremental passo a passo.
+
+---
+*Desenvolvido e mantido para a evolução segura de ecossistemas de software.*
