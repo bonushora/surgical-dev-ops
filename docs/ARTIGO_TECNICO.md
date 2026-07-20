@@ -19,7 +19,7 @@ Toda LLM possui um limite físico em sua janela de contexto. À medida que o his
 
 ## 2. A Solução: Ecossistema Surgical DevOps
 
-Para neutralizar essas falhas de forma agnóstica — sem custos com *fine-tuning* ou infraestrutura complexa —, criamos uma abordagem baseada em protocolos comportamentais operando na camada de tempo de execução (*Prompt System*): o **BH-SEP** e o **BH-SDP**.
+Para neutralizar essas falhas de forma agnóstica — sem custos com *fine-tuning* ou infraestrutura complexa —, criamos uma abordagem baseada em protocolos substituíveis operando na camada de tempo de execução (*Prompt System*): o **BH-SEP** e o **BH-SDP**.
 
 [Código Existente (Verdade)] ──> [BH-SEP: Inspeção Total] ──> [BH-SEP: Intervenção Cirúrgica (Diff Mínimo)]
 │
@@ -48,28 +48,32 @@ O Snapshot funciona como um arquivo de despejo compactado de estado contendo: ob
 Para implantar o ecossistema, o desenvolvedor padroniza o primeiro prompt de qualquer nova sessão enviando uma diretriz que busca os protocolos direto da fonte de controle de versão (GitHub), garantindo que as regras não sofram desvios entre diferentes modelos de mercado.
 
 ### 3.1 O Prompt Unificado de Ativação
-```text
-Acesse simultaneamente as URLs de protocolo em [raw.githubusercontent.com/bonushora/surgical-dev-ops/main/protocols/BH-SEP.md](https://raw.githubusercontent.com/bonushora/surgical-dev-ops/main/protocols/BH-SEP.md) e [raw.githubusercontent.com/bonushora/surgical-dev-ops/main/protocols/BH-SDP.md](https://raw.githubusercontent.com/bonushora/surgical-dev-ops/main/protocols/BH-SDP.md). Adote de forma estrita, combinada e silenciosa as diretrizes do BH-SEP (Evolução Cirúrgica) e do BH-SDP (Snapshot de Estado) contidas nelas.
 
-Opere como um Engenheiro de Software Sênior especialista no ecossistema do projeto baseado nas regras baixadas. Mantenha o monitoramento ativo em segundo plano e, após compreender os arquivos base fornecidos nas URLs, confirme a activation respondendo estritamente com a mensagem: "BH-SEP E BH-SDP ATIVADOS 🚀". Caso possua um Snapshot de sessão anterior para hidratação de contexto, eu o colarei em seguida. Se não, pergunte qual arquivo ou contexto vamos inspecionar primeiro.
-3.2 O Fluxo de Passagem de Bastão (Delivery)
-Quando o teto de contexto é atingido ou uma etapa é concluída, a IA gera o bloco isolado em Markdown:
+> Acesse simultaneamente as URLs de protocolo em `raw.githubusercontent.com/bonushora/surgical-dev-ops/main/protocols/BH-SEP.md` e `raw.githubusercontent.com/bonushora/surgical-dev-ops/main/protocols/BH-SDP.md`. Adote de forma estrita, combinada e silenciosa as diretrizes do BH-SEP (Evolução Cirúrgica) e do BH-SDP (Snapshot de Estado) contidas nelas.
+>
+> Opere como um Engenheiro de Software Sênior especialista no ecossistema do projeto baseado nas regras baixadas. Mantenha o monitoramento ativo em segundo plano e, após compreender os arquivos base fornecidos nas URLs, confirme a ativação respondendo estritamente com a mensagem: "BH-SEP E BH-SDP ATIVADOS 🚀". Caso possua um Snapshot de sessão anterior para hidratação de contexto, eu o colarei em seguida. Se não, pergunte qual arquivo ou contexto vamos inspecionar primeiro.
 
-Plaintext
-### 📦 BH-SDP AUTOMATIC SNAPSHOT
-- **Objetivo Central Atual:** Implementação do Middleware de Cache de Sessão.
-- **Últimos Arquivos Alterados/Inspecionados:**
-  - `src/middlewares/auth.js`: Adicionado suporte ao header de idempotência.
-- **Definições Críticas Estabelecidas (Blindagem):**
-  - O cache deve expirar estritamente em 300 segundos.
-  - Erros de conexão com o Redis não devem derrubar a requisição (Fail-safe).
-- **Status do Ponto de Parada:** Código estruturado, aguardando testes de integração locais.
-- **Próximos Passos Sugeridos para Novo Chat:**
-  1. Configurar suite de testes em `tests/middleware.test.js`.
+### 3.2 O Fluxo de Passagem de Bastão (Delivery)
+
+Quando o teto de contexto é atingido ou uma etapa é concluída, a IA gera o bloco de Snapshot estruturado:
+
+**📦 BH-SDP AUTOMATIC SNAPSHOT**
+*   **Objetivo Central Atual:** Implementação do Middleware de Cache de Sessão.
+*   **Últimos Arquivos Alterados/Inspecionados:**
+    *   `src/middlewares/auth.js`: Adicionado suporte ao header de idempotência.
+*   **Definições Críticas Estabelecidas (Blindagem):**
+    *   O cache deve expirar estritamente em 300 segundos.
+    *   Erros de conexão com o Redis não devem derrubar a requisição (Fail-safe).
+*   **Status do Ponto de Parada:** Código estruturado, aguardando testes de integração locais.
+*   **Próximos Passos Sugeridos para Novo Chat:**
+    1.  Configurar suite de testes em `tests/middleware.test.js`.
+
+**DIRETRIZ DE RETOMADA PARA A NOVA IA:** *"Baseado no Snapshot acima e sob as regras do BH-SEP, execute imediatamente o Próximo Passo 1 listado, solicitando o arquivo necessário para inspeção."*
+
+O desenvolvedor simplesmente armazena esse conteúdo em um arquivo de texto adjacente local e, ao abrir um chat limpo, cola-o logo após o prompt de ativação. A nova IA lê a linha final imperativa e inicia o desenvolvimento do caso de teste **automaticamente**, sem fazer perguntas redundantes ou exigir comandos manuais.
 
 ---
-**DIRETRIZ DE RETOMADA PARA A NOVA IA:** "Baseado no Snapshot acima e sob as regras do BH-SEP, execute imediatamente o Próximo Passo 1 listado, solicitando o arquivo necessário para inspeção."
-O desenvolvedor simplesmente copia o bloco gerado, armazena-o em um arquivo de texto adjacente local e, ao abrir um chat limpo, cola-o logo após o prompt de ativação. A nova IA lê a linha final imperativa e inicia o desenvolvimento do caso de teste automaticamente, sem fazer perguntas redundantes ou exigir comandos manuais.
 
-4. Resultados e Conclusão
+## 4. Resultados e Conclusão
+
 A aplicação do ecossistema de protocolos altera drasticamente a dinâmica da engenharia assistida. Ao remover a necessidade de auditar códigos redundantes gerados por alucinação e eliminar o tempo gasto reexplicando a arquitetura do sistema, as equipes conseguem fragmentar sessões complexas de desenvolvimento em múltiplos chats isolados de forma totalmente previsível, segura e auditável.
