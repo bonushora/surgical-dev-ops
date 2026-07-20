@@ -1,4 +1,4 @@
-k# Preventing Silent LLM Regressions and Context Drift in Production Pipelines
+# Preventing Silent LLM Regressions and Context Drift in Production Pipelines
 
 The biggest bottleneck preventing companies from deploying autonomous LLM agents into critical production workflows isn’t the lack of reasoning power—it’s the lack of reliability. 
 
