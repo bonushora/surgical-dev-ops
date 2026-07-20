@@ -15,6 +15,7 @@ Ele obriga o modelo de linguagem a monitorar e registrar continuamente em segund
 3. **Context Exhaustion Autonomy (Autonomia por Exaustão de Contexto):** A IA deve monitorar proativamente a extensão da conversa e o uso de seus próprios tokens (janela de contexto). Caso perceba que a sessão está se tornando longa demais e há risco iminente de perda de memória de curto prazo ou corte abrupto, a IA deve, por iniciativa própria, gerar e cuspir o Snapshot na sua última resposta viável, alertando o usuário sobre a necessidade de abrir um novo chat.
 4. **Self-Correction Alert (Alerta de Autocorreção):** A IA deve cruzar as novas instruções do usuário com as definições críticas já salvas no Snapshot atual. Caso o usuário solicite uma alteração que entre em conflito direto com uma premissa ou contrato homologado anteriormente nesta sessão, a IA deve cuspir o Snapshot imediatamente evidenciando a contradição antes de realizar o código.
 5. **Pure Code Block (Bloco de Código Puro):** O snapshot deve ser gerado estritamente em um bloco markdown isolado para facilitar a cópia rápida e a hidratação de um novo chat.
+6. **Self-Starting Instruction (Instrução Auto-Iniciável):** O Snapshot deve obrigatoriamente terminar com uma diretriz de comando clara e imperativa para a próxima IA, criando uma continuidade imediata de trabalho sem perguntas redundantes.
 
 ---
 
@@ -42,3 +43,6 @@ A partir de agora, você manterá em cache o estado atual da nossa sessão. De f
 - **Próximos Passos Sugeridos para Novo Chat:**
   1. [Micro-tarefa imediata 1]
   2. [Micro-tarefa imediata 2]
+
+---
+**DIRETRIZ DE RETOMADA PARA A NOVA IA:** "Baseado no Snapshot acima e sob as regras do BH-SEP, execute imediatamente o Próximo Passo 1 listado, solicitando o arquivo necessário para inspeção."
