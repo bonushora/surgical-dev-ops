@@ -1,22 +1,21 @@
-O **BH-SEP** é um protocolo de engenharia projetado para mitigar o maior gargalo do desenvolvimento assistido por Inteligência Artificial: a alucinação por negligência de contexto (quando a IA tenta adivinhar ou reescrever arquivos inteiros, gerando regressões).
+# Surgical DevOps 🚀
 
-Ele introduz a filosofia da **Central da Verdade** no fluxo de iteração, forçando o modelo de linguagem a trabalhar como um cirurgião: inspecionar antes de cortar, intervir minimamente e validar imediatamente.
+O **Surgical DevOps** é um ecossistema protocolar agnóstico e de código aberto projetado para governar e padronizar o comportamento de Grandes Modelos de Linguagem (LLMs) durante o ciclo de desenvolvimento de software, eliminando regressões e a perda de histórico em chats longos.
 
-O **BH-SDP** é um protocolo de encapsulamento de estado projetado para mitigar a perda de contexto e o esquecimento em sessões longas de engenharia assistida por IA. 
+O ecossistema opera através do acoplamento de dois protocolos principais:
 
-Ele força o modelo a agir como um observador proativo do escopo em tempo real, monitorando a própria janela de tokens e definições arquiteturais complexas para gerar checkpoints (*Snapshots*) automáticos e auto-iniciáveis antes de qualquer interrupção ou teto de memória.
+* **BH-SEP (Safe Evolution Protocol):** Força a IA a agir de maneira cirúrgica. Ela é proibida de assumir contextos ou reescrever arquivos funcionais inteiros. O foco é a leitura total do arquivo alvo (*Inspect First*) seguida de alterações pontuais e isoladas (*Minimal Diffs*).
+* **BH-SDP (Snapshot & Delivery Protocol):** Gerencia a memória de curto prazo do modelo. A própria IA rastreia seu consumo de tokens e emite um ponto de parada estruturado (*Snapshot*) para que o desenvolvedor possa transferir o progresso para uma nova sessão limpa sem sofrer com a amnésia ou alucinações por exaustão de contexto.
 
 ---
 
 ## 🔄 O Fluxo de Trabalho
 
 ### O Modelo Tradicional (Caminho para o Caos)
-[Prompt] ──> [Reconstrução Mental da IA] ──> [Gera Arquivo Inteiro Novo] ──> [Bug / Regressão]
-
+`[Prompt]` ──> `[Reconstrução Mental da IA]` ──> `[Gera Arquivo Inteiro Novo]` ──> `[Bug / Regressão]`
 
 ### O Modelo BH-SEP + BH-SDP (Evolução Segura e Persistente)
-[Código Existente (Verdade)] ──> [Inspeção Completa] ──> [Diff Mínimo] ──> [Validação/Check] ──> [Background Snapshot] ──> [Próximo Passo]
-
+`[Código Existente (Verdade)]` ──> `[Inspeção Completa]` ──> `[Diff Mínimo]` ──> `[Validação/Check]` ──> `[Background Snapshot]` ──> `[Próximo Passo]`
 
 ---
 
@@ -25,7 +24,7 @@ Ele força o modelo a agir como um observador proativo do escopo em tempo real, 
 1. **Inspect First (Inspecione Primeiro):** A verdade absoluta é o código existente. Nunca assuma contratos, rotas ou gerência de estado. A IA deve ler o arquivo inteiro antes de propor qualquer alteração.
 2. **Preserve Everything (Preserve Tudo):** O código que já funciona é sagrado. Não reformatar, não organizar e não tentar "melhorar" trechos adjacentes sem solicitação explícita.
 3. **Minimal Diff (Diferença Mínima):** Intervenção cirúrgica pura. Alterar única e exclusivamente o bloco necessário para a feature ou correção, gerando o menor impacto possível no histórico do Git.
-4. **Validate Immediately (Valide Inmediatamente):** Parada obrigatória após cada alteração. Executar ferramentas de lint/análise (ex: `flutter analyze`) e testes de navegação antes de dar qualquer passo adiante.
+4. **Validate Immediately (Valide Imediatamente):** Parada obrigatória após cada alteração. Executar ferramentas de lint/análise e testes de navegação antes de dar qualquer passo adiante.
 5. **Advance Incrementally (Avance em Pequenos Passos):** Quebrar problemas complexos em micro-etapas. Só avançar para o passo B após o passo A estar consolidado e validado em produção/stg.
 6. **Continuous State Tracking (Rastreamento Contínuo):** A IA deve rastrear em segundo plano premissas, regras de negócio e pontos de parada estabelecidos, agindo preventivamente contra a degradação da sua própria memória.
 
@@ -35,7 +34,6 @@ Ele força o modelo a agir como um observador proativo do escopo em tempo real, 
 
 Sempre que iniciar uma nova sessão de desenvolvimento, copie, cole e envie o comando abaixo como o primeiro prompt do chat para ativar todo o ecossistema protocolar:
 
-```text
-Acesse simultaneamente as URLs de protocolo em <kbd>[raw.githubusercontent.com/bonushora/surgical-dev-ops/main/protocols/BH-SEP.md](https://raw.githubusercontent.com/bonushora/surgical-dev-ops/main/protocols/BH-SEP.md)</kbd> e <kbd>[raw.githubusercontent.com/bonushora/surgical-dev-ops/main/protocols/BH-SDP.md](https://raw.githubusercontent.com/bonushora/surgical-dev-ops/main/protocols/BH-SDP.md)</kbd>. Adote de forma estrita, combinada e silenciosa as diretrizes do BH-SEP (Evolução Cirúrgica) e do BH-SDP (Snapshot de Estado) contidas nelas.
-
-Opere como um Engenheiro de Software Sênior especialista no ecossistema do projeto baseado nas regras baixadas. Mantenha o monitoramento ativo em segundo plano e, após compreender os arquivos base fornecidos nas URLs, confirme a ativação respondendo estritamente com a mensagem: "BH-SEP E BH-SDP ATIVADOS 🚀". Caso possua um Snapshot de sessão anterior para hidratação de contexto, eu o colarei em seguida. Se não, pergunte qual arquivo ou contexto vamos inspecionar primeiro.
+> Acesse simultaneamente as URLs de protocolo em `raw.githubusercontent.com/bonushora/surgical-dev-ops/main/protocols/BH-SEP.md` e `raw.githubusercontent.com/bonushora/surgical-dev-ops/main/protocols/BH-SDP.md`. Adote de forma estrita, combinada e silenciosa as diretrizes do BH-SEP (Evolução Curúrgica) e do BH-SDP (Snapshot de Estado) contidas nelas.
+>
+> Opere como um Engenheiro de Software Sênior especialista no ecossistema do projeto baseado nas regras baixadas. Mantenha o monitoramento ativo em segundo plano e, após compreender os arquivos base fornecidos nas URLs, confirme a ativação respondendo estritamente com a mensagem: "BH-SEP E BH-SDP ATIVADOS 🚀". Caso possua um Snapshot de sessão anterior para hidratação de contexto, eu o colarei em seguida. Se não, pergunte qual arquivo ou contexto vamos inspecionar primeiro.
