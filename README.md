@@ -1,39 +1,109 @@
 # Surgical DevOps 🚀
+> English version: [README_EN.md](./README_EN.md)
 
-O **Surgical DevOps** é um ecossistema protocolar agnóstico e de código aberto projetado para governar e padronizar o comportamento de Grandes Modelos de Linguagem (LLMs) durante o ciclo de desenvolvimento de software, eliminando regressões e a perda de histórico em chats longos.
 
-O ecossistema opera através do acoplamento de dois protocolos principais:
+O **Surgical DevOps** é um ecossistema protocolar agnóstico e de código aberto criado para governar e padronizar o comportamento de Grandes Modelos de Linguagem (LLMs) durante o ciclo de desenvolvimento de software assistido por Inteligência Artificial.
 
-* **BH-SEP (Safe Evolution Protocol):** Força a IA a agir de maneira cirúrgica. Ela é proibida de assumir contextos ou reescrever arquivos funcionais inteiros. O foco é a leitura total do arquivo alvo (*Inspect First*) seguida de alterações pontuais e isoladas (*Minimal Diffs*).
-* **BH-SDP (Snapshot & Delivery Protocol):** Gerencia a memória de curto prazo do modelo. A própria IA rastreia seu consumo de tokens e emite um ponto de parada estruturado (*Snapshot*) para que o desenvolvedor possa transferir o progresso para uma nova sessão limpa sem sofrer com a amnésia ou alucinações por exaustão de contexto.
+Seu objetivo é reduzir regressões, evitar suposições indevidas sobre sistemas existentes e preservar conhecimento estratégico durante sessões longas de desenvolvimento.
+
+O ecossistema opera através da combinação de dois protocolos principais:
+
+* **BH-SEP (Safe Evolution Protocol):** Define como a IA deve evoluir software existente com segurança. O protocolo estabelece inspeção antes de alteração (*Inspect First*), preservação do código funcional (*Preserve Everything*), alterações mínimas (*Minimal Diff*) e validação incremental.
+
+* **BH-SDP (Snapshot & Delivery Protocol):** Define mecanismos para preservação de estado e continuidade entre sessões. O protocolo transforma decisões, contratos, arquivos envolvidos e próximos passos em um artefato estruturado (*Snapshot*) capaz de transportar contexto de forma segura.
 
 ---
 
 ## 🔄 O Fluxo de Trabalho
 
-### O Modelo Tradicional (Caminho para o Caos)
-`[Prompt]` ──> `[Reconstrução Mental da IA]` ──> `[Gera Arquivo Inteiro Novo]` ──> `[Bug / Regressão]`
+### O Modelo Tradicional (Caminho para Regressões)
 
-### O Modelo BH-SEP + BH-SDP (Evolução Segura e Persistente)
-`[Código Existente (Verdade)]` ──> `[Inspeção Completa]` ──> `[Diff Mínimo]` ──> `[Validação/Check]` ──> `[Background Snapshot]` ──> `[Próximo Passo]`
+`[Prompt]` ──> `[Reconstrução Mental da IA]` ──> `[Reescrita de Código Existente]` ──> `[Bug / Regressão]`
+
+### O Modelo Surgical DevOps (Evolução Segura e Persistente)
+
+`[Código Existente (Verdade)]` ──> `[Inspeção Completa]` ──> `[Diff Mínimo]` ──> `[Validação]` ──> `[Snapshot de Estado]` ──> `[Próximo Passo Seguro]`
 
 ---
 
-## 🏛️ Os Princípios Fundamentais do Ecossistema
+## 🏛️ Princípios Fundamentais do Ecossistema
 
-1. **Inspect First (Inspecione Primeiro):** A verdade absoluta é o código existente. Nunca assuma contratos, rotas ou gerência de estado. A IA deve ler o arquivo inteiro antes de propor qualquer alteração.
-2. **Preserve Everything (Preserve Tudo):** O código que já funciona é sagrado. Não reformatar, não organizar e não tentar "melhorar" trechos adjacentes sem solicitação explícita.
-3. **Minimal Diff (Diferença Mínima):** Intervenção cirúrgica pura. Alterar única e exclusivamente o bloco necessário para a feature ou correção, gerando o menor impacto possível no histórico do Git.
-4. **Validate Immediately (Valide Imediatamente):** Parada obrigatória após cada alteração. Executar ferramentas de lint/análise e testes de navegação antes de dar qualquer passo adiante.
-5. **Advance Incrementally (Avance em Pequenos Passos):** Quebrar problemas complexos em micro-etapas. Só avançar para o passo B após o passo A estar consolidado e validado em produção/stg.
-6. **Continuous State Tracking (Rastreamento Contínuo):** A IA deve rastrear em segundo plano premissas, regras de negócio e pontos de parada estabelecidos, agindo preventivamente contra a degradação da sua própria memória.
+1. **Inspect First (Inspecione Primeiro):**
+O código existente representa a fonte de verdade. A IA não deve assumir contratos, rotas, dependências ou gerenciamento de estado sem inspeção adequada.
+
+2. **Preserve Everything (Preserve Tudo):**
+Código funcional deve ser preservado. Alterações fora do escopo solicitado aumentam risco e devem ser evitadas.
+
+3. **Minimal Diff (Diferença Mínima):**
+A evolução deve ocorrer através de intervenções pequenas, isoladas e rastreáveis, reduzindo impacto no histórico do projeto.
+
+4. **Validate Immediately (Valide Imediatamente):**
+Cada alteração deve ser seguida por validação antes da continuidade da próxima etapa.
+
+5. **Advance Incrementally (Avance Incrementalmente):**
+Problemas complexos devem ser divididos em passos menores e independentes.
+
+6. **State Continuity (Continuidade de Estado):**
+Decisões, contratos e pontos de parada relevantes devem ser preservados para permitir continuidade segura entre sessões.
 
 ---
 
 ## 🤖 Artefato: System Prompt Unificado para IA
 
-Sempre que iniciar uma nova sessão de desenvolvimento, copie, cole e envie o comando abaixo como o primeiro prompt do chat para ativar todo o ecossistema protocolar:
+Para iniciar uma sessão de desenvolvimento utilizando o ecossistema Surgical DevOps, copie e cole:
 
-> Acesse simultaneamente as URLs de protocolo em `raw.githubusercontent.com/bonushora/surgical-dev-ops/main/protocols/BH-SEP.md` e `raw.githubusercontent.com/bonushora/surgical-dev-ops/main/protocols/BH-SDP.md`. Adote de forma estrita, combinada e silenciosa as diretrizes do BH-SEP (Evolução Curúrgica) e do BH-SDP (Snapshot de Estado) contidas nelas.
+> Acesse os protocolos:
 >
-> Opere como um Engenheiro de Software Sênior especialista no ecossistema do projeto baseado nas regras baixadas. Mantenha o monitoramento ativo em segundo plano e, após compreender os arquivos base fornecidos nas URLs, confirme a ativação respondendo estritamente com a mensagem: "BH-SEP E BH-SDP ATIVADOS 🚀". Caso possua um Snapshot de sessão anterior para hidratação de contexto, eu o colarei em seguida. Se não, pergunte qual arquivo ou contexto vamos inspecionar primeiro.
+> `https://raw.githubusercontent.com/bonushora/surgical-dev-ops/main/protocols/BH-SEP.md`
+>
+> `https://raw.githubusercontent.com/bonushora/surgical-dev-ops/main/protocols/BH-SDP.md`
+>
+> Adote de forma estrita, combinada e silenciosa as diretrizes do BH-SEP (Safe Evolution Protocol) e BH-SDP (Snapshot & Delivery Protocol).
+>
+> Opere como um Engenheiro de Software Sênior especializado no ecossistema do projeto.
+>
+> Antes de qualquer alteração, inspecione o contexto existente. Preserve código funcional, aplique mudanças mínimas e valide cada etapa.
+>
+> Caso exista um Snapshot de sessão anterior, utilize-o para recuperar o estado atual.
+>
+> Após compreender os protocolos e o contexto inicial, confirme respondendo:
+>
+> **"BH-SEP E BH-SDP ATIVADOS 🚀"**
+>
+> Em seguida, solicite o arquivo ou contexto que deve ser inspecionado primeiro.
+
+---
+
+## 📚 Documentação
+
+Protocolos principais:
+
+- [BH-SEP — Safe Evolution Protocol](./protocols/BH-SEP.md)
+- [BH-SDP — Snapshot & Delivery Protocol](./protocols/BH-SDP.md)
+- [Guia de Aplicabilidade](./protocols/APPLICABILITY.md)
+
+Versão em inglês:
+
+- [README_EN.md](./README_EN.md)
+
+---
+
+## 🌎 Origem
+
+O Surgical DevOps nasceu dentro do ecossistema BônusHora, mas seus princípios são independentes de linguagem, framework ou arquitetura.
+
+Pode ser aplicado em:
+
+- aplicações mobile;
+- aplicações web;
+- sistemas backend;
+- infraestrutura como código;
+- projetos desenvolvidos com assistência de IA.
+
+---
+
+## 💡 Visão
+
+O Surgical DevOps não substitui julgamento de engenharia.
+
+Ele estabelece um modelo disciplinado onde decisões humanas permanecem soberanas e a execução assistida por IA permanece alinhada, rastreável e segura.
