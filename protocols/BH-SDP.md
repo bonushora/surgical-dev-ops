@@ -1,48 +1,135 @@
 # 📦 BH-SDP — BônusHora Snapshot & Delivery Protocol
 
-O **BH-SDP** é um protocolo de encapsulamento de estado projetado para mitigar a perda de contexto em sessões de desenvolvimento assistido por Inteligência Artificial.
+O **BH-SDP (Snapshot & Delivery Protocol)** é um protocolo de encapsulamento de estado projetado para mitigar a perda de contexto em sessões de desenvolvimento assistido por Inteligência Artificial.
 
-Ele obriga o modelo de linguagem a monitorar e registrar continuamente em segundo plano os objetivos assumidos, contratos e o progresso da sessão, cuspindo o artefato atualizado de forma proativa, automática e preventiva.
+Seu objetivo é transformar conhecimento temporário de uma sessão de desenvolvimento em um artefato estruturado, permitindo continuidade segura entre diferentes sessões, agentes ou desenvolvedores.
 
----
+O BH-SDP preserva:
 
-## 🏛️ Os Princípios da Automação Proativa
-
-1. **Background Tracking (Rastreamento em Segundo Plano):** A cada iteração do chat, a IA deve atualizar mentalmente o estado atual do projeto (objetivos, arquivos modificados e decisões tomadas), sem necessariamente imprimir isso em todas as mensagens.
-2. **Context & Definition Interception (Interceptação de Mudanças e Definições):** A IA deve monitorar ativamente o teor da conversa. Ela deve tomar a decisão automática de cuspir o Snapshot na tela sempre que:
-   - O usuário mudar de arquivo ou sugerir uma pausa.
-   - Uma informação crucial for definida ou alterada no prompt (ex: regras de negócio complexas, contratos de API, novos modelos de dados ou arquiteturas de funções importantes).
-3. **Context Exhaustion Autonomy (Autonomia por Exaustão de Contexto):** A IA deve monitorar proativamente a extensão da conversa e o uso de seus próprios tokens (janela de contexto). Caso perceba que a sessão está se tornando longa demais e há risco iminente de perda de memória de curto prazo ou corte abrupto, a IA deve, por iniciativa própria, gerar e cuspir o Snapshot na sua última resposta viável, alertando o usuário sobre a necessidade de abrir um novo chat.
-4. **Self-Correction Alert (Alerta de Autocorreção):** A IA deve cruzar as novas instruções do usuário com as definições críticas já salvas no Snapshot atual. Caso o usuário solicite uma alteração que entre em conflito direto com uma premissa ou contrato homologado anteriormente nesta sessão, a IA deve cuspir o Snapshot imediatamente evidenciando a contradição antes de realizar o código.
-5. **Pure Code Block (Bloco de Código Puro):** O snapshot deve ser gerado estritamente em um bloco markdown isolado para facilitar a cópia rápida e a hidratação de um novo chat.
-6. **Self-Starting Instruction (Instrução Auto-Iniciável):** O Snapshot deve obrigatoriamente terminar com uma diretriz de comando clara e imperativa para a próxima IA, criando uma continuidade imediata de trabalho sem perguntas redundantes.
+- objetivos atuais;
+- decisões arquiteturais;
+- arquivos envolvidos;
+- contratos estabelecidos;
+- restrições importantes;
+- próximos passos seguros.
 
 ---
 
-## 🤖 Artefato: System Prompt para IA
+# 🏛️ Princípios da Preservação de Estado
 
-Sempre que iniciar uma sessão onde precise garantir a persistência dos objetivos, anexe as instruções abaixo ao seu prompt inicial:
+## 1. Background Tracking (Rastreamento em Segundo Plano)
+
+Durante a evolução do projeto, o estado relevante da sessão deve ser continuamente acompanhado.
+
+Esse estado inclui:
+
+- objetivos ativos;
+- alterações realizadas;
+- arquivos inspecionados;
+- decisões tomadas;
+- contratos definidos.
+
+O acompanhamento permite gerar um Snapshot consistente quando necessário.
+
+---
+
+## 2. Context & Definition Interception (Intercepção de Mudanças e Definições)
+
+O Snapshot deve ser gerado quando ocorrerem eventos relevantes como:
+
+- mudança de arquivo ou contexto de trabalho;
+- pausa planejada no desenvolvimento;
+- definição de regra de negócio importante;
+- alteração de contrato de API;
+- criação ou modificação de modelos de dados;
+- decisões arquiteturais relevantes.
+
+O objetivo é impedir que conhecimento crítico permaneça apenas no histórico temporário da conversa.
+
+---
+
+## 3. Context Exhaustion Protection (Proteção contra Exaustão de Contexto)
+
+Sessões longas podem sofrer degradação de contexto.
+
+O BH-SDP estabelece que, quando houver risco de perda de informações importantes devido ao tamanho da sessão, o estado atual deve ser consolidado em um Snapshot antes da continuidade.
+
+---
+
+## 4. Self-Correction Alert (Alerta de Autocorreção)
+
+Novas solicitações devem ser comparadas com definições críticas já estabelecidas.
+
+Caso exista conflito entre:
+
+- uma nova solicitação;
+- uma regra de negócio validada;
+- um contrato existente;
+- uma decisão arquitetural;
+
+o conflito deve ser identificado antes da implementação.
+
+---
+
+## 5. Pure Code Block (Bloco de Código Puro)
+
+O Snapshot deve ser produzido em um bloco markdown isolado.
+
+Isso permite:
+
+- cópia direta;
+- armazenamento;
+- transferência para uma nova sessão;
+- recuperação rápida do contexto.
+
+---
+
+## 6. Self-Starting Instruction (Instrução Auto-Iniciável)
+
+Todo Snapshot deve terminar com uma instrução clara para continuidade.
+
+A próxima sessão deve saber:
+
+- onde o trabalho parou;
+- qual arquivo deve ser inspecionado;
+- qual microetapa deve ser executada.
+
+---
+
+# 🤖 Artefato: System Prompt para IA
+
+Sempre que iniciar uma sessão onde seja necessário preservar continuidade de contexto:
 
 ```text
-Opere também sob o protocolo complementar BH-SDP (Snapshot & Delivery Protocol) ativo em segundo plano. Suas respostas devem respeitar estritamente a seguinte diretriz de automação de estado:
+Opere também sob o protocolo complementar BH-SDP (Snapshot & Delivery Protocol).
 
-A partir de agora, você manterá em cache o estado atual da nossa sessão. De forma 100% AUTOMÁTICA e por iniciativa PRÓPRIA, você deve imprimir na tela o bloco de código abaixo (preenchido com os dados reais) SEMPRE que:
-1. O usuário indicar que vai fazer uma pausa ou mudar de foco.
-2. Uma informação ou definição crucial para o projeto for estabelecida (regras de negócio, novos contratos, modelos ou lógicas arquiteturais complexas). Você deve blindar esse progresso gerando o Snapshot imediatamente após a definição.
-3. O comando do usuário entrar em conflito direto com uma definição ou contrato estabelecido anteriormente nesta sessão (você deve alertar sobre a discrepância antes de cortar o código).
-4. Você detectar que a conversa está longa e que sua janela de contexto está próxima do limite.
-5. O usuário digitar "[SNAPSHOT]".
+Mantenha o estado atual da sessão organizado contendo:
 
-### 📦 BH-SDP AUTOMATIC SNAPSHOT
-- **Objetivo Central Atual:** [O que estamos resolvendo agora]
-- **Últimos Arquivos Alterados/Inspecionados:**
-  - `caminho/do/arquivo.ext`: [Breve resumo do estado/mudança]
-- **Definições Críticas Estabelecidas (Blindagem):**
-  - [Mapeamento das regras cruciais ou contratos recém-definidos]
-- **Status do Ponto de Parada:** [Ex: Código compilando, aguardando teste do clique / ALERTA: Conflito detectado com a regra X]
-- **Próximos Passos Sugeridos para Novo Chat:**
-  1. [Micro-tarefa imediata 1]
-  2. [Micro-tarefa imediata 2]
+- objetivo central;
+- arquivos envolvidos;
+- decisões críticas;
+- restrições;
+- próximo passo seguro.
 
----
-**DIRETRIZ DE RETOMADA PARA A NOVA IA:** "Baseado no Snapshot acima e sob as regras do BH-SEP, execute imediatamente o Próximo Passo 1 listado, solicitando o arquivo necessário para inspeção."
+Gere um Snapshot quando:
+
+1. O usuário solicitar [SNAPSHOT].
+2. Uma definição crítica do projeto for estabelecida.
+3. Houver mudança relevante de contexto.
+4. A sessão estiver próxima de perder informações importantes.
+5. Existir conflito entre uma nova solicitação e uma decisão anterior validada.
+
+Formato obrigatório:
+
+### 📦 BH-SDP SNAPSHOT
+
+- Objetivo Central Atual:
+- Últimos Arquivos Alterados/Inspecionados:
+- Definições Críticas Estabelecidas:
+- Status Atual:
+- Próximos Passos:
+
+Finalize sempre com:
+
+"DIRETRIZ DE RETOMADA:
+Baseado neste Snapshot, execute o próximo passo listado seguindo as regras de evolução segura."
