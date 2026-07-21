@@ -1,35 +1,127 @@
 # Surgical Context Engineering: Mitigating LLM Hallucinations and Amnesia in Production
 
 ## Abstract
-The adoption of Large Language Models (LLMs) as coding assistants has dramatically accelerated development velocity, but it has introduced two severe engineering bottlenecks: *context drift* (which causes regressions in complex software systems) and *token-exhaustion amnesia* (the degradation of chat memory during long sessions). This paper introduces **Surgical DevOps (BH-SEP and BH-SDP)**, a practical, agnostic prompt-engineering framework that forces language models to operate through strict, isolated code interventions (*Minimal Diffs*) and background state tracking (*Snapshots*).
+
+The adoption of Large Language Models (LLMs) as coding assistants has increased software development speed, but it has also introduced two major engineering bottlenecks: *context negligence* (which generates regressions in complex systems) and *token exhaustion amnesia* (degradation of chat memory during long development sessions).
+
+This article presents the **Surgical DevOps ecosystem (BH-SEP and BH-SDP)**, an agnostic and practical engineering approach that forces language models to operate through strict code interventions (*Minimal Diffs*) and structured state preservation through *Snapshots*.
 
 ---
 
 ## 1. The Productivity Paradox with LLMs
-Integrating AI assistants like GPT-4, Claude, and Gemini into development workflows yields high initial velocity. However, as the codebase scales or the chat session grows, tool efficiency degrades exponentially. Senior developers frequently encounter two systemic pathologies:
 
-### 1.1 Context Drift (The "Guessing" Effect)
-When requested to alter a specific function, the model often attempts to rewrite adjacent code blocks, alter code styles, or change variable names outside the required scope. In strict execution environments—such as memory-sensitive **C development**—this unrequested autonomy can introduce catastrophic memory leaks or break pointer tracking.
+The integration of AI assistants such as GPT, Claude, and Gemini into software development workflows provides significant productivity gains. However, as projects grow or chat sessions become longer, developers encounter systemic reliability problems.
 
-### 1.2 Context Exhaustion (Amnesia)
-Every LLM operates within a fixed context window. As files are sent and extensive pieces of code are generated, the token limit fills up. To stay within limits, the model quietly drops older information, losing its grasp of architectural patterns, business logic rules, and current task constraints.
+Senior engineers commonly face two major challenges:
 
----
+### 1.1 Context Negligence (The "Guessing" Effect)
 
-## 2. The Architectural Solution: Surgical DevOps
-The Surgical DevOps framework shifts AI interaction from a "conversational" dynamic to a "protocol-driven, strict engineering pipeline." It isolates the execution into two complementary layers:
+When requested to perform a targeted modification, models may attempt to rewrite adjacent stable functions, alter validated method signatures, or assume global states that do not exist.
 
-### 2.1 BH-SEP: Safe Evolution Protocol
-Forces the model to act as a precision surgical instrument.
-* **Inspect First Principle:** The model cannot assume any architecture or dependency. It must read the full definition or target source file entirely before drafting changes.
-* **Minimal Diff Deliverables:** The model is explicitly barred from outputting full files. It must isolate changes into standard Git patch formats or localized blocks, ensuring minimal git footprint and zero collateral damage to working code.
+In legacy systems or software with complex business rules, this behavior breaks code isolation and introduces silent regressions that increase review and maintenance costs.
 
-### 2.2 BH-SDP: Snapshot & Delivery Protocol
-A manual, active state manager for short-term chat memory.
-* **State Breakpoints:** Before memory degradation occurs, the AI compiles a dense, structured state payload (the *Snapshot*).
-* **Hydration Loop:** The developer can instantly drop the Snapshot into a completely fresh, empty chat session. This clears out thousands of wasted tokens from old conversation logs while immediately restoring 100% of the active architectural constraints.
+### 1.2 Token Exhaustion Amnesia (Context Drift)
+
+Every LLM operates within a limited context window. As conversations accumulate logs, source files, and generated code, earlier instructions may lose influence.
+
+The practical symptom is the loss of previously established business rules, architectural decisions, and operational constraints, forcing developers to repeatedly restore the same context.
 
 ---
 
-## 3. Empirical Results and Conclusion
-By applying Surgical DevOps, development teams drastically decrease the overhead spent on fixing AI-generated regressions. Furthermore, token spending is highly optimized, allowing developers to extend the lifecycles of their AI sessions indefinitely without encountering model performance degradation. The framework proves that the problem with modern AI coding isn't the capacity of the models, but the lack of formal governance over their output.
+## 2. The Solution: Surgical DevOps Ecosystem
+
+To address these failures without requiring fine-tuning or complex infrastructure, Surgical DevOps introduces a protocol-based approach operating at the interaction layer between developers and AI systems.
+
+The ecosystem is composed of two complementary protocols:
+
+
+[Existing Code (Truth)] ──> [BH-SEP: Full Inspection] ──> [BH-SEP: Surgical Intervention (Minimal Diff)]
+
+[Clean New Session] <── [BH-SDP: Context Hydration] <── [BH-SDP: State Snapshot]
+
+
+---
+
+### 2.1 BH-SEP (Safe Evolution Protocol) — The "Truth First" Philosophy
+
+BH-SEP establishes that the existing repository code is the primary source of architectural truth.
+
+The protocol changes AI behavior through two fundamental principles:
+
+1. **Inspect First:**
+The model must not generate modifications based on assumptions or incomplete information. It must inspect the complete target file before proposing changes.
+
+2. **Minimal Diff:**
+Changes must be isolated and surgical. The AI should modify only the required blocks, reducing Git history impact and protecting unrelated working logic.
+
+---
+
+### 2.2 BH-SDP (Snapshot & Delivery Protocol) — State Encapsulation
+
+BH-SDP addresses context volatility through continuous state preservation.
+
+The protocol introduces **Background Tracking**, where relevant session information is consolidated into structured Snapshots.
+
+A Snapshot may be generated when:
+
+- The context window approaches exhaustion.
+- Important business rules or API contracts are established.
+- The developer pauses or changes development focus.
+
+A Snapshot contains:
+
+- current objective;
+- inspected or modified files;
+- architectural decisions;
+- established constraints;
+- next safe execution steps.
+
+It also provides a **Resumption Directive** allowing a new AI session to continue safely without reconstructing the entire previous conversation.
+
+---
+
+## 3. Practical Implementation
+
+To deploy the ecosystem, developers initialize new AI sessions by loading the official protocols directly from version-controlled sources.
+
+This guarantees that operational rules remain consistent across different AI models and development environments.
+
+### 3.1 Unified Activation Prompt
+
+> Access the protocol URLs:
+>
+> `https://raw.githubusercontent.com/bonushora/surgical-dev-ops/main/protocols/BH-SEP.md`
+>
+> `https://raw.githubusercontent.com/bonushora/surgical-dev-ops/main/protocols/BH-SDP.md`
+>
+> Adopt the BH-SEP (Safe Evolution Protocol) and BH-SDP (Snapshot & Delivery Protocol) directives strictly and silently.
+>
+> Operate as a Senior Software Engineer following these protocols. If a previous Snapshot is provided, hydrate the current context from it. Otherwise, request the first file or context that must be inspected.
+
+---
+
+## 3.2 Session Handoff Flow (Delivery)
+
+When a development stage is completed or context transfer is required, the AI produces a structured Snapshot:
+
+**📦 BH-SDP AUTOMATIC SNAPSHOT**
+
+- **Current Objective:** Current development goal.
+- **Files Inspected or Modified:** Relevant repository files.
+- **Critical Definitions Established:** Business rules, contracts, and constraints.
+- **Current Status:** Validated state of the implementation.
+- **Next Safe Steps:** Ordered continuation instructions.
+
+The developer stores this artifact and provides it to the next clean session after protocol activation.
+
+The new session can immediately continue from the preserved state without unnecessary reconstruction.
+
+---
+
+## 4. Results and Conclusion
+
+The Surgical DevOps ecosystem changes the interaction model between developers and AI assistants.
+
+By reducing unnecessary rewrites, preventing context loss, and preserving architectural decisions, development teams can divide complex engineering tasks into multiple controlled sessions while maintaining predictability, safety, and auditability.
+
+The framework demonstrates that reliable AI-assisted software development depends not only on model capability, but also on disciplined governance of AI behavior.
