@@ -44,9 +44,12 @@ Decisões, contratos e estado físico (commit hash e status de testes) são grav
 
 ---
 
-## 🤖 Artefato: System Prompt Unificado para IA (v2.1)
+## 🤖 Artefatos: System Prompts para IA (v2.1)
 
-Para iniciar uma sessão de desenvolvimento utilizando o ecossistema Surgical DevOps v2.1, copie e cole o bloco abaixo na janela de chat da IA:
+Escolha o modo de operação desejado e copie o bloco correspondente para a janela de chat da sua IA:
+
+### 🎯 1. Modo Cirúrgico (Deterministico — Padrão)
+*Recomendado para refatoração, correção de bugs em código legado e manutenção segura.*
 
 ```bash
 # Acesse os protocolos:
@@ -63,6 +66,19 @@ Para iniciar uma sessão de desenvolvimento utilizando o ecossistema Surgical De
 # Em seguida, solicite o arquivo ou contexto a ser inspecionado.
 
 echo -e "\n\033[1;33m⚠️ ATENÇÃO:\033[0m Este texto é um System Prompt para ser colado no CHAT DA IA, e não um comando do terminal Linux!\n\033[1;32m👉 Copie e cole este bloco no chat do seu assistente de IA para ativar os protocolos.\033[0m\n"
+🔓 2. Modo Livre (Exploratório / Sem Determinismo)
+Recomendado para brainstorm, criação de novos arquivos do zero (Greenfield) ou conversas consultivas.
+
+Bash
+# Opere como um Engenheiro de Software Sênior em Modo Consultivo / Livre.
+#
+# Não é necessário aplicar restrições de Inspeção Declarativa, Modo Patch ou Snapshots JSON.
+# Responda de forma direta, flexível e adaptativa às minhas solicitações.
+#
+# Confirme respondendo:
+# "MODO LIVRE ATIVADO 🔓"
+
+echo -e "\n\033[1;33m⚠️ ATENÇÃO:\033[0m Este texto é um Prompt para o CHAT DA IA (Modo Livre), e não um comando do terminal Linux!\n"
 📚 Documentação
 Protocolos principais:
 
