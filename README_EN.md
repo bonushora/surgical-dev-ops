@@ -9,7 +9,7 @@ The ecosystem operates by combining two core protocols:
 
 * **[BH-SEP v2.2](./protocols/BH-SEP.md) (Safe Evolution Protocol):** Defines how the AI must safely evolve existing software through Declarative Inspection (*Inspect First*), Large File Circuit Breaker (*Focus Window*), Dual Modes (*Patch* and *Refactor*), and Prior Validation (*Red-to-Green*).
 
-* **[BH-SDP v2.2](./protocols/BH-SDP.md) (Snapshot & Delivery Protocol):** Defines mechanisms for cross-session state preservation via Physical Anchoring in repository metadata (*Git Commit Hash*, *Test Status*, and *Risk Level*) within a strict JSON block in Portuguese.
+* **[BH-SDP v2.2](./protocols/BH-SDP.md) (Snapshot & Delivery Protocol):** Defines mechanisms for cross-session state preservation via Physical Anchoring in repository metadata (*Git Commit Hash*, *Test Status*, and *Risk Level*) within a strict JSON block in English.
 
 ---
 
@@ -35,7 +35,7 @@ Once the System Prompt is loaded into the session, you can toggle between operat
 # Operate as a Senior Software Engineer. Before any changes, perform Declarative Inspection (lines read, root cause, hypothesis, and diff estimate in maximum 3 lines). Respect Patch Mode by default.
 #
 # SNAPSHOT STRUCTURE:
-# Generate the sdp_snapshot block with fields and values in PORTUGUESE (nome_do_projeto, versao_do_protocolo, tipo_de_arquitetura, meta_de_custo, fase_atual, nivel_de_risco, ancoras_fisicas, componentes_validados, proximo_passo).
+# Generate the sdp_snapshot block with fields and values in ENGLISH (project_name, protocol_version, architecture_type, cost_goal, current_phase, risk_level, physical_anchors, validated_components, next_step).
 #
 # MODE TRIGGERS:
 # Ignore the informal use of the words "free" or "deterministic" in normal sentences. Toggle the mode ONLY if the command starts with a slash:
