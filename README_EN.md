@@ -1,16 +1,15 @@
 # Surgical DevOps 🚀
 > Versão em Português: [README.md](./README.md)
 
-
 **Surgical DevOps** is an open-source, agnostic protocol ecosystem created to govern and standardize the behavior of Large Language Models (LLMs) during the AI-assisted software development lifecycle.
 
 Its objective is to reduce regressions, prevent incorrect assumptions about existing systems, and preserve strategic knowledge throughout long development sessions.
 
 The ecosystem operates through the combination of two core protocols:
 
-* **BH-SEP (Safe Evolution Protocol):** Defines how AI should safely evolve existing software. The protocol establishes inspection before modification (*Inspect First*), preservation of functional code (*Preserve Everything*), minimal changes (*Minimal Diff*), and incremental validation.
+* **[BH-SEP v2.0](./protocols/BH-SEP_EN.md) (Safe Evolution Protocol):** Defines how AI should safely evolve existing software through Declarative Inspection (*Inspect First*), Dual Modes (*Patch* and *Refactor*), Minimal Diff, and deterministic Schema circuit breakers.
 
-* **BH-SDP (Snapshot & Delivery Protocol):** Defines mechanisms for state preservation and continuity between sessions. The protocol transforms decisions, contracts, involved files, and next steps into a structured artifact (*Snapshot*) capable of safely transporting context.
+* **[BH-SDP v2.0](./protocols/BH-SDP_EN.md) (Snapshot & Delivery Protocol):** Defines mechanisms for state preservation across sessions via Physical Anchors in repository metadata (*Git Commit Hash* and *Test Status*) inside a strict JSON block.
 
 ---
 
@@ -20,57 +19,47 @@ The ecosystem operates through the combination of two core protocols:
 
 `[Prompt]` ──> `[AI Mental Reconstruction]` ──> `[Rewriting Existing Code]` ──> `[Bug / Regression]`
 
-### The Surgical DevOps Model (Safe & Persistent Evolution)
+### The Surgical DevOps v2.0 Model (Harness & Physical Anchors)
 
-`[Existing Code (Truth)]` ──> `[Complete Inspection]` ──> `[Minimal Diff]` ──> `[Validation]` ──> `[State Snapshot]` ──> `[Next Safe Step]`
+`[Existing Code (Truth)]` ──> `[Declarative Inspection]` ──> `[Minimal Diff / Circuit Breaker]` ──> `[Pass/Fail Validation]` ──> `[Anchored Snapshot]` ──> `[Next Safe Step]`
 
 ---
 
 ## 🏛️ Core Principles of the Ecosystem
 
 1. **Inspect First:**
-Existing code represents the source of truth. AI must not assume contracts, routes, dependencies, or state management without proper inspection.
+Existing code represents the source of truth. The AI must declare lines and diagnoses before proposing changes.
 
 2. **Preserve Everything:**
 Functional code must be preserved. Changes outside the requested scope increase risk and should be avoided.
 
 3. **Minimal Diff:**
-Evolution should occur through small, isolated, and traceable interventions, reducing impact on project history.
+Evolution occurs through surgical and isolated interventions (PATCH Mode by default).
 
 4. **Validate Immediately:**
-Every modification must be followed by validation before continuing to the next stage.
+Every modification must be followed by automated validation and tests before continuing.
 
-5. **Advance Incrementally:**
-Complex problems should be divided into smaller and independent steps.
-
-6. **State Continuity:**
-Relevant decisions, contracts, and stopping points must be preserved to enable safe continuity between sessions.
+5. **State Continuity & Physical Anchors:**
+Decisions, contracts, and physical state (commit hash and test status) are saved in structured Snapshots.
 
 ---
 
-## 🤖 Artifact: Unified System Prompt for AI
+## 🤖 Artifact: Unified System Prompt for AI (v2.0)
 
-To start a development session using the Surgical DevOps ecosystem, copy and paste:
+To start a development session using the Surgical DevOps v2.0 ecosystem in English, copy and paste:
 
 > Access the protocols:
+> `https://raw.githubusercontent.com/bonushora/surgical-dev-ops/main/protocols/BH-SEP_EN.md`
+> `https://raw.githubusercontent.com/bonushora/surgical-dev-ops/main/protocols/BH-SDP_EN.md`
 >
-> `https://raw.githubusercontent.com/bonushora/surgical-dev-ops/main/protocols/BH-SEP.md`
+> Strictly and combinedly adopt the BH-SEP v2.0 (Safe Evolution Protocol) and BH-SDP v2.0 (Snapshot & Delivery Protocol) directives.
 >
-> `https://raw.githubusercontent.com/bonushora/surgical-dev-ops/main/protocols/BH-SDP.md`
+> Operate as a Senior Software Engineer. Before any modification, perform a Declarative Inspection (inspected lines, root cause, hypothesis, and estimated diff). Respect PATCH Mode by default.
 >
-> Strictly, silently, and combinedly adopt the BH-SEP (Safe Evolution Protocol) and BH-SDP (Snapshot & Delivery Protocol) directives.
+> After understanding the protocols, confirm by replying:
+> **"BH-SEP v2.0 AND BH-SDP v2.0 ACTIVATED 🚀"**
 >
-> Operate as a Senior Software Engineer specialized in the project's ecosystem.
->
-> Before any modification, inspect the existing context. Preserve functional code, apply minimal changes, and validate each step.
->
-> If a previous session Snapshot exists, use it to recover the current state.
->
-> After understanding the protocols and initial context, confirm by replying:
->
-> **"BH-SEP AND BH-SDP ACTIVATED 🚀"**
->
-> Then request the file or context that should be inspected first.
+> Then request the file or context to be inspected first.
 
 ---
 
@@ -78,9 +67,9 @@ To start a development session using the Surgical DevOps ecosystem, copy and pas
 
 Main protocols:
 
-- [BH-SEP — Safe Evolution Protocol](./protocols/BH-SEP_EN.md)
-- [BH-SDP — Snapshot & Delivery Protocol](./protocols/BH-SDP_EN.md)
-- [Applicability Guide](./APPLICABILITY_EN.md)
+- [BH-SEP v2.0 — Safe Evolution Protocol](./protocols/BH-SEP_EN.md)
+- [BH-SDP v2.0 — Snapshot & Delivery Protocol](./protocols/BH-SDP_EN.md)
+- [Applicability Guide](./APPLICABILITY.md)
 
 Portuguese version:
 
@@ -92,18 +81,8 @@ Portuguese version:
 
 Surgical DevOps was born inside the BônusHora ecosystem, but its principles are independent of programming language, framework, or architecture.
 
-It can be applied to:
-
-- mobile applications;
-- web applications;
-- backend systems;
-- infrastructure as code;
-- AI-assisted software projects.
-
 ---
 
 ## 💡 Vision
 
-Surgical DevOps does not replace engineering judgment.
-
-It establishes a disciplined model where human decisions remain sovereign and AI-assisted execution remains aligned, traceable, and secure.
+Surgical DevOps does not replace engineering judgment. It establishes a disciplined model where human decisions remain sovereign and AI-assisted execution remains aligned, traceable, and secure.

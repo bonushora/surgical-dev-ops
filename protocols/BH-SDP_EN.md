@@ -1,136 +1,42 @@
-# 📦 BH-SDP — BônusHora Snapshot & Delivery Protocol
+# 📦 BH-SDP — Snapshot & Delivery Protocol (v2.0)
 
-The **BH-SDP (Snapshot & Delivery Protocol)** is a state encapsulation protocol designed to mitigate context loss in Artificial Intelligence-assisted software development sessions.
+The **BH-SDP (Snapshot & Delivery Protocol)** is a state encapsulation and preservation protocol for AI-assisted development sessions.
 
-Its purpose is to transform temporary session knowledge into a structured artifact, enabling safe continuity between different sessions, agents, or developers.
-
-BH-SDP preserves:
-
-- current objectives;
-- architectural decisions;
-- involved files;
-- established contracts;
-- important constraints;
-- safe next steps.
+v2.0 introduces **Physical Anchors** to eliminate context amnesia and hallucinations.
 
 ---
 
-# 🏛️ Principles of State Preservation
+## 🏛️ Principles of State Preservation
 
-## 1. Background Tracking
+### 1. Physical Anchors (Anti-Amnesia)
+Snapshots do not accept loose text alone. They MUST reference real metadata from the repository/environment:
+- **Git Commit Hash:** Exact commit hash or `uncommitted` status.
+- **Test Status:** Objective test suite result (`PASS`, `FAIL`, `NOT_RUN`).
+- **Last Inspected Lines:** Log of inspected files and line ranges.
 
-During project evolution, relevant session state must be continuously monitored.
-
-This state includes:
-
-- active objectives;
-- implemented changes;
-- inspected files;
-- decisions made;
-- established contracts.
-
-This tracking enables the generation of a consistent Snapshot whenever required.
+### 2. Strict JSON Format
+Every Snapshot must be emitted in a structured `sdp_snapshot` block for rapid copying, programmatic validation, and session recovery.
 
 ---
 
-## 2. Context & Definition Interception
+## 🤖 Artifact: Strict Snapshot Schema (v2.0)
 
-The Snapshot should be generated when relevant events occur, such as:
+Every technical output or phase completion MUST end with:
 
-- file or work context changes;
-- planned development pauses;
-- definition of important business rules;
-- API contract changes;
-- creation or modification of data models;
-- relevant architectural decisions.
-
-The goal is preventing critical knowledge from remaining only inside temporary conversation history.
-
----
-
-## 3. Context Exhaustion Protection
-
-Long sessions may suffer from context degradation.
-
-BH-SDP establishes that when there is a risk of losing important information due to session length, the current state must be consolidated into a Snapshot before continuing.
-
----
-
-## 4. Self-Correction Alert
-
-New requests must be compared against previously established critical definitions.
-
-If there is a conflict between:
-
-- a new request;
-- a validated business rule;
-- an existing contract;
-- an architectural decision;
-
-the conflict must be identified before implementation.
-
----
-
-## 5. Pure Code Block
-
-The Snapshot must be produced inside an isolated markdown block.
-
-This enables:
-
-- direct copying;
-- storage;
-- transfer to a new session;
-- fast context recovery.
-
----
-
-## 6. Self-Starting Instruction
-
-Every Snapshot must end with a clear continuation instruction.
-
-The next session must know:
-
-- where the work stopped;
-- which file must be inspected;
-- which micro-step must be executed.
-
----
-
-# 🤖 Artifact: AI System Prompt
-
-Whenever starting a session where context continuity must be preserved:
-
-```text
-Also operate under the complementary BH-SDP (Snapshot & Delivery Protocol).
-
-Maintain the current session state organized with:
-
-- central objective;
-- involved files;
-- critical decisions;
-- constraints;
-- safe next step.
-
-Generate a Snapshot when:
-
-1. The user requests [SNAPSHOT].
-2. A critical project definition is established.
-3. A relevant context change occurs.
-4. The session is approaching important information loss.
-5. A conflict exists between a new request and a previously validated decision.
-
-Required format:
-
-### 📦 BH-SDP SNAPSHOT
-
-- Current Central Objective:
-- Latest Files Modified/Inspected:
-- Critical Established Definitions:
-- Current Status:
-- Next Steps:
-
-Always finish with:
-
-"CONTINUATION DIRECTIVE:
-Based on this Snapshot, execute the next listed step following safe evolution rules."
-
+```sdp_snapshot
+{
+  "project_name": "Project Name",
+  "protocol_version": "BH-SDP-v2.0 / BH-SEP-v2.0",
+  "arch_type": "Current Architecture (e.g., BH-SMC)",
+  "cost_target": "Cost Target",
+  "current_phase": "Development Phase",
+  "physical_anchors": {
+    "git_commit_hash": "a1b2c3d",
+    "test_status": "PASS (X/X)",
+    "last_inspected_lines": "file.py: 12-45"
+  },
+  "components_validated": [
+    "Validated and tested components"
+  ],
+  "next_step": "Immediate next step"
+}
