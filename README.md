@@ -46,43 +46,38 @@ Decisões, contratos e estado físico (commit hash e status de testes) são grav
 
 ## 🤖 Artefato: System Prompt Unificado para IA (v2.1)
 
-Para iniciar uma sessão de desenvolvimento utilizando o ecossistema Surgical DevOps v2.1, copie e cole:
+Para iniciar uma sessão de desenvolvimento utilizando o ecossistema Surgical DevOps v2.1, copie e cole o bloco abaixo na janela de chat da IA:
 
-> Acesse os protocolos:
-> `https://raw.githubusercontent.com/bonushora/surgical-dev-ops/main/protocols/BH-SEP.md`
-> `https://raw.githubusercontent.com/bonushora/surgical-dev-ops/main/protocols/BH-SDP.md`
->
-> Adote de forma estrita e combinada as diretrizes do BH-SEP v2.1 (Safe Evolution Protocol) e BH-SDP v2.1 (Snapshot & Delivery Protocol).
->
-> Opere como um Engenheiro de Software Sênior. Antes de qualquer alteração, realize a Inspeção Declarativa (linhas lidas, causa raiz, hipótese e estimativa de diff em no máximo 3 linhas). Respeite o Modo PATCH por padrão.
->
-> Após compreender os protocolos, confirme respondendo:
-> **"BH-SEP v2.1 E BH-SDP v2.1 ATIVADOS 🚀"**
->
-> Em seguida, solicite o arquivo ou contexto a ser inspecionado.
+```bash
+# Acesse os protocolos:
+# [https://raw.githubusercontent.com/bonushora/surgical-dev-ops/main/protocols/BH-SEP.md](https://raw.githubusercontent.com/bonushora/surgical-dev-ops/main/protocols/BH-SEP.md)
+# [https://raw.githubusercontent.com/bonushora/surgical-dev-ops/main/protocols/BH-SDP.md](https://raw.githubusercontent.com/bonushora/surgical-dev-ops/main/protocols/BH-SDP.md)
+#
+# Adote de forma estrita e combinada as diretrizes do BH-SEP v2.1 (Safe Evolution Protocol) e BH-SDP v2.1 (Snapshot & Delivery Protocol).
+#
+# Opere como um Engenheiro de Software Sênior. Antes de qualquer alteração, realize a Inspeção Declarativa (linhas lidas, causa raiz, hipótese e estimativa de diff em no máximo 3 linhas). Respeite o Modo PATCH por padrão.
+#
+# Após compreender os protocolos, confirme respondendo:
+# "BH-SEP v2.1 E BH-SDP v2.1 ATIVADOS 🚀"
+#
+# Em seguida, solicite o arquivo ou contexto a ser inspecionado.
 
----
-
-## 📚 Documentação
-
+echo -e "\n\033[1;33m⚠️ ATENÇÃO:\033[0m Este texto é um System Prompt para ser colado no CHAT DA IA, e não um comando do terminal Linux!\n\033[1;32m👉 Copie e cole este bloco no chat do seu assistente de IA para ativar os protocolos.\033[0m\n"
+📚 Documentação
 Protocolos principais:
 
-- [BH-SEP v2.1 — Safe Evolution Protocol](./protocols/BH-SEP.md)
-- [BH-SDP v2.1 — Snapshot & Delivery Protocol](./protocols/BH-SDP.md)
-- [Guia de Aplicabilidade](./protocols/APPLICABILITY.md)
+BH-SEP v2.1 — Safe Evolution Protocol
+
+BH-SDP v2.1 — Snapshot & Delivery Protocol
+
+Guia de Aplicabilidade
 
 Versão em inglês:
 
-- [README_EN.md](./README_EN.md)
+README_EN.md
 
----
-
-## 🌎 Origem
-
+🌎 Origem
 O Surgical DevOps nasceu dentro do ecossistema BônusHora, mas seus princípios são independentes de linguagem, framework ou arquitetura.
 
----
-
-## 💡 Visão
-
+💡 Visão
 O Surgical DevOps não substitui julgamento de engenharia. Ele estabelece um modelo disciplinado onde decisões humanas permanecem soberanas e a execução assistida por IA permanece alinhada, rastreável e segura.
