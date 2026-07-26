@@ -1,34 +1,88 @@
+# Surgical DevOps 🚀
+> English version: [README_EN.md](./README_EN.md)
 
-Surgical DevOps 🚀 (v2.1 Deterministic)
-English version: README_EN.md
+O **Surgical DevOps** é um ecossistema protocolar agnóstico e de código aberto criado para governar e padronizar o comportamento de Grandes Modelos de Linguagem (LLMs) durante o ciclo de desenvolvimento de software assistido por Inteligência Artificial.
 
-O Surgical DevOps é um ecossistema protocolar agnóstico e de código aberto projetado para impor comportamento determinístico, rastreável e defensivo em Modelos de Linguagem (LLMs) durante o desenvolvimento de software.
+Seu objetivo é reduzir regressões, evitar suposições indevidas sobre sistemas existentes e preservar conhecimento estratégico durante sessões longas de desenvolvimento.
 
-Ele combina o rigor de Inspeção Cirúrgica no prompt com Disjuntores Mecânicos (Harness) no código.
+O ecossistema opera através da combinação de dois protocolos principais:
 
-🏛️ Os Dois Pilares da v2.1
-BH-SEP v2.1 Deterministic: Elimina suposições indevidas forçando a verificação da Central da Verdade (código existente) via Inspeção Cirúrgica, Modo Patch e validação via Schemas (Pydantic/FastAPI).
+* **[BH-SEP v2.1](./protocols/BH-SEP.md) (Safe Evolution Protocol):** Define como a IA deve evoluir software existente com segurança através de Inspeção Declarativa (*Inspect First*), Modos Dual (*Patch* e *Refactor*), Diff Mínimo e disjuntores determinísticos via Schema.
 
-BH-SDP v2.1 Snapshot: Garante a preservação do estado entre sessões ancorando a IA em metadados físicos do repositório (git_commit_hash e status real de testes).
+* **[BH-SDP v2.1](./protocols/BH-SDP.md) (Snapshot & Delivery Protocol):** Define mecanismos para preservação de estado entre sessões via Ancoragem Física em metadados do repositório (*Git Commit Hash* e *Test Status*) em um bloco JSON estrito.
 
-🤖 System Prompt Unificado (v2.1)
-Cole o prompt abaixo para iniciar uma sessão determinística:
+---
 
-Acesse os protocolos:
-https://raw.githubusercontent.com/bonushora/surgical-dev-ops/main/protocols/BH-SEP.md
-https://raw.githubusercontent.com/bonushora/surgical-dev-ops/main/protocols/BH-SDP.md
+## 🔄 O Fluxo de Trabalho
 
-Opere sob o rigor do BH-SEP v2.1 Deterministic e BH-SDP v2.1.
+### O Modelo Tradicional (Caminho para Regressões)
 
-Inspecione a Central da Verdade (código real) antes de alterar qualquer arquivo.
+`[Prompt]` ──> `[Reconstrução Mental da IA]` ──> `[Reescrita de Código Existente]` ──> `[Bug / Regressão]`
 
-Forneça a Inspeção Declarativa em no máximo 3 linhas concisas.
+### O Modelo Surgical DevOps v2.1 (Harness & Ancoragem Física)
 
-Respeite o Modo PATCH (Diff Mínimo) por padrão.
+`[Código Existente (Verdade)]` ──> `[Inspeção Declarativa]` ──> `[Diff Mínimo / Disjuntor]` ──> `[Validação Passa/Falha]` ──> `[Snapshot Ancorado]` ──> `[Próximo Passo Seguro]`
 
-Valide dados e regras de negócio com Schemas Pydantic/FastAPI e testes unitários.
+---
 
-Confirme respondendo:
-"BH-SEP v2.1 DETERMINISTIC ATIVADO 🚀"
+## 🏛️ Princípios Fundamentais do Ecossistema
 
-Em seguida, solicite o arquivo a ser inspecionado.
+1. **Inspect First (Inspecione Primeiro):**
+O código existente representa a fonte de verdade (Central da Verdade). A IA deve declarar linhas e diagnósticos antes de propor alterações.
+
+2. **Preserve Everything (Preserve Tudo):**
+Código funcional deve ser preservado. Alterações fora do escopo solicitado aumentam risco e devem ser evitadas.
+
+3. **Minimal Diff (Diferença Mínima):**
+A evolução ocorre através de intervenções cirúrgicas e isoladas (Modo Patch por padrão).
+
+4. **Validate Immediately (Valide Imediatamente):**
+Cada alteração deve ser seguida por validação automatizada e testes antes da continuidade.
+
+5. **State Continuity & Physical Anchors (Ancoragem Física):**
+Decisões, contratos e estado físico (commit hash e status de testes) são gravados em Snapshots estruturados.
+
+---
+
+## 🤖 Artefato: System Prompt Unificado para IA (v2.1)
+
+Para iniciar uma sessão de desenvolvimento utilizando o ecossistema Surgical DevOps v2.1, copie e cole:
+
+> Acesse os protocolos:
+> `https://raw.githubusercontent.com/bonushora/surgical-dev-ops/main/protocols/BH-SEP.md`
+> `https://raw.githubusercontent.com/bonushora/surgical-dev-ops/main/protocols/BH-SDP.md`
+>
+> Adote de forma estrita e combinada as diretrizes do BH-SEP v2.1 (Safe Evolution Protocol) e BH-SDP v2.1 (Snapshot & Delivery Protocol).
+>
+> Opere como um Engenheiro de Software Sênior. Antes de qualquer alteração, realize a Inspeção Declarativa (linhas lidas, causa raiz, hipótese e estimativa de diff em no máximo 3 linhas). Respeite o Modo PATCH por padrão.
+>
+> Após compreender os protocolos, confirme respondendo:
+> **"BH-SEP v2.1 E BH-SDP v2.1 ATIVADOS 🚀"**
+>
+> Em seguida, solicite o arquivo ou contexto a ser inspecionado.
+
+---
+
+## 📚 Documentação
+
+Protocolos principais:
+
+- [BH-SEP v2.1 — Safe Evolution Protocol](./protocols/BH-SEP.md)
+- [BH-SDP v2.1 — Snapshot & Delivery Protocol](./protocols/BH-SDP.md)
+- [Guia de Aplicabilidade](./protocols/APPLICABILITY.md)
+
+Versão em inglês:
+
+- [README_EN.md](./README_EN.md)
+
+---
+
+## 🌎 Origem
+
+O Surgical DevOps nasceu dentro do ecossistema BônusHora, mas seus princípios são independentes de linguagem, framework ou arquitetura.
+
+---
+
+## 💡 Visão
+
+O Surgical DevOps não substitui julgamento de engenharia. Ele estabelece um modelo disciplinado onde decisões humanas permanecem soberanas e a execução assistida por IA permanece alinhada, rastreável e segura.
