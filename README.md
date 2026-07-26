@@ -1,27 +1,32 @@
+# Surgical DevOps 🚀
+> English version: [README_EN.md](./README_EN.md)
 
-Surgical DevOps 🚀
-English version: README_EN.md
-
-O Surgical DevOps é um ecossistema protocolar agnóstico e de código aberto criado para governar e padronizar o comportamento de Grandes Modelos de Linguagem (LLMs) durante o ciclo de desenvolvimento de software assistido por Inteligência Artificial.
+O **Surgical DevOps** é um ecossistema protocolar agnóstico e de código aberto criado para governar e padronizar o comportamento de Grandes Modelos de Linguagem (LLMs) durante o ciclo de desenvolvimento de software assistido por Inteligência Artificial.
 
 Seu objetivo é reduzir regressões, evitar suposições indevidas sobre sistemas existentes e preservar conhecimento estratégico durante sessões longas de desenvolvimento.
 
 O ecossistema opera através da combinação de dois protocolos principais:
 
-BH-SEP v2.2 (Safe Evolution Protocol): Define como a IA deve evoluir software existente com segurança através de Inspeção Declarativa (Inspect First), Disjuntor de Arquivos Grandes (Focus Window), Modos Dual (Patch e Refactor) e Validação Prévia (Red-to-Green).
+* **[BH-SEP v2.2](./protocols/BH-SEP.md) (Safe Evolution Protocol):** Define como a IA deve evoluir software existente com segurança através de Inspeção Declarativa (*Inspect First*), Disjuntor de Arquivos Grandes (*Focus Window*), Modos Dual (*Patch* e *Refactor*) e Validação Prévia (*Red-to-Green*).
 
-BH-SDP v2.2 (Snapshot & Delivery Protocol): Define mecanismos para preservação de estado entre sessões via Ancoragem Física em metadados do repositório (Git Commit Hash, Test Status e Nível de Risco) em um bloco JSON estrito em Português.
+* **[BH-SDP v2.2](./protocols/BH-SDP.md) (Snapshot & Delivery Protocol):** Define mecanismos para preservação de estado entre sessões via Ancoragem Física em metadados do repositório (*Git Commit Hash*, *Test Status* e *Nível de Risco*) em um bloco JSON estrito em Português.
 
-⚡ Comandos Rápidos de Atalho (Slash Commands)
-Após o System Prompt ser carregado na sessão, você pode alternar entre os modos de operação enviando comandos iniciados por barra (/):
+---
 
-Envie /DETERMINISTICO para ativar ou reconfirmar a proteção cirúrgica estrita.
+## ⚡ Comandos Rápidos de Atalho (Slash Commands)
 
-Envie /LIVRE para desativar as travas e conversar abertamente.
+Após o System Prompt ser carregado na sessão, você pode alternar entre os modos de operação enviando comandos iniciados por barra (`/`):
 
-🤖 Artefatos: System Prompts para IA (v2.2)
-🎯 1. Modo Cirúrgico (Deterministico — Padrão)
-Bash
+* Envie **`/DETERMINISTICO`** para ativar ou reconfirmar a proteção cirúrgica estrita.
+* Envie **`/LIVRE`** para desativar as travas e conversar abertamente.
+
+---
+
+## 🤖 Artefatos: System Prompts para IA (v2.2)
+
+### 🎯 1. Modo Cirúrgico (Deterministico — Padrão)
+
+```text
 # Acesse os protocolos:
 # [https://raw.githubusercontent.com/bonushora/surgical-dev-ops/main/protocols/BH-SEP.md](https://raw.githubusercontent.com/bonushora/surgical-dev-ops/main/protocols/BH-SEP.md)
 # [https://raw.githubusercontent.com/bonushora/surgical-dev-ops/main/protocols/BH-SDP.md](https://raw.githubusercontent.com/bonushora/surgical-dev-ops/main/protocols/BH-SDP.md)
@@ -39,10 +44,8 @@ Bash
 #
 # Após compreender os protocolos, confirme respondendo:
 # "BH-SEP v2.2 E BH-SDP v2.2 ATIVADOS 🚀"
-
-echo -e "\n\033[1;33m⚠️ ATENÇÃO:\033[0m Este texto é um System Prompt para ser colado no CHAT DA IA, e não um comando do terminal Linux!\n"
 🔓 2. Modo Livre (Exploratório / Sem Determinismo)
-Bash
+Plaintext
 # Opere como um Engenheiro de Software Sênior em Modo Consultivo / Livre.
 #
 # Não é necessário aplicar restrições de Inspeção Declarativa, Modo Patch ou Snapshots JSON.
@@ -54,5 +57,21 @@ Bash
 #
 # Confirme respondendo:
 # "MODO LIVRE ATIVADO 🔓"
+📚 Documentação
+Protocolos principais:
 
-echo -e "\n\033[1;33m⚠️ ATENÇÃO:\033[0m Este texto é um Prompt para o CHAT DA IA (Modo Livre), e não um comando do terminal Linux!\n"
+BH-SEP v2.2 — Safe Evolution Protocol
+
+BH-SDP v2.2 — Snapshot & Delivery Protocol
+
+Guia de Aplicabilidade
+
+Versão em inglês:
+
+README_EN.md
+
+🌎 Origem
+O Surgical DevOps nasceu dentro do ecossistema BônusHora, mas seus princípios são independentes de linguagem, framework ou arquitetura.
+
+💡 Visão
+O Surgical DevOps não substitui julgamento de engenharia. Ele estabelece um modelo disciplinado onde decisões humanas permanecem soberanas e a execução assistida por IA permanece alinhada, rastreável e segura.
