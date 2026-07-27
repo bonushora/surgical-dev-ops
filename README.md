@@ -163,106 +163,146 @@ Na ausência desse comando, o estado determinístico permanece ativo.
 
 ---
 
-# Sequência Operacional
+# ⚡ Ativação Universal RAW
 
+## Ativação agnóstica do Surgical DevOps
 
+O Surgical DevOps foi projetado para ser independente de plataforma, fornecedor ou modelo de Inteligência Artificial.
+
+A ativação do modo determinístico ocorre através de um artefato textual universal que pode ser utilizado em qualquer sistema de IA compatível.
+
+Copie o bloco abaixo e cole no início de uma nova sessão:
+
+```text
+Surgical DevOps Activation
+
+Ative o modo determinístico do Surgical DevOps.
+
+Carregue e aplique conjuntamente:
+
+BH-SEP v2.2 — Safe Evolution Protocol
+BH-SDP v2.2 — Snapshot & Delivery Protocol
+
+Estado operacional:
+
+MODO: DETERMINÍSTICO
+
+Regras obrigatórias:
+
+1. Aplicar Inspeção Declarativa antes de qualquer alteração técnica.
+
+2. Utilizar Modo PATCH como estratégia padrão.
+
+3. Preservar o estado operacional durante toda a sessão.
+
+4. Manter o contexto através do mecanismo de snapshot definido pelo BH-SDP.
+
+5. Não alterar o modo operacional sem o comando explícito:
+
+/LIVRE
+
+Após a ativação:
+
+1. Confirmar:
+
+BH-SEP v2.2 E BH-SDP v2.2 ATIVADOS 🚀
+
+2. Exibir o escopo operacional ativo.
+
+3. Solicitar o primeiro arquivo, diretório ou artefato para inspeção.
+
+Fim da ativação.
+
+Este artefato é apenas o mecanismo de ativação.
+
+Os protocolos BH-SEP e BH-SDP permanecem como núcleo normativo independente de qualquer implementação.
+
+Sequência Operacional
 Sessão iniciada
 
-  |
-  v
+      |
+      v
 
 /DETERMINISTICO
 
-  |
-  v
+      |
+      v
 
 Surgical DevOps ativo
 
-  |
-  v
+      |
+      v
 
 BH-SEP + BH-SDP
 
-  |
-  v
+      |
+      v
 
 Escopo exibido
 
-  |
-  v
+      |
+      v
 
 Primeiro artefato solicitado
 
-  |
-  v
+      |
+      v
 
 Inspeção Declarativa
 
-  |
-  v
+      |
+      v
 
 PATCH / REFACTOR autorizado
 
-  |
-  v
+      |
+      v
 
 Snapshot BH-SDP
 
-  |
-  v
+      |
+      v
 
 Continuidade da sessão
-
-
----
-
-# Separação de Responsabilidades
-
-## README
+Separação de Responsabilidades
+README
 
 Define:
 
-- visão;
-- ciclo de vida;
-- estados operacionais.
-
-## BH-SEP
-
-Define:
-
-- evolução segura;
-- inspeção;
-- alterações;
-- validação.
-
-## BH-SDP
+visão;
+ciclo de vida;
+estados operacionais.
+BH-SEP
 
 Define:
 
-- snapshots;
-- preservação de contexto;
-- continuidade operacional.
+evolução segura;
+inspeção;
+alterações;
+validação.
+BH-SDP
 
----
+Define:
 
-# Implementações
+snapshots;
+preservação de contexto;
+continuidade operacional.
+Implementações
 
 O Surgical DevOps é agnóstico de plataforma.
 
 Implementações podem incluir:
 
-- prompts;
-- agentes;
-- SDKs;
-- extensões;
-- integrações;
-- ferramentas.
+prompts;
+agentes;
+SDKs;
+extensões;
+integrações;
+ferramentas.
 
 Esses componentes utilizam a especificação, mas não fazem parte do núcleo normativo.
 
----
-
-# Filosofia
+Filosofia
 
 O Surgical DevOps não substitui julgamento humano.
 
@@ -270,25 +310,17 @@ Ele cria uma disciplina operacional para colaboração entre humanos e sistemas 
 
 As decisões técnicas permanecem sob responsabilidade do engenheiro.
 
----
-
-# Estrutura Inicial
-
-
+Estrutura Inicial
 surgical-dev-ops/
 
 ├── README.md
 ├── README_EN.md
 ├── protocols/
-│ ├── BH-SEP.md
-│ └── BH-SDP.md
+│   ├── BH-SEP.md
+│   └── BH-SDP.md
 └── LICENSE
-
-
----
-
-# Status
+Status
 
 🚀 Surgical DevOps v2.2
 
-**Baseline inicial congelada para publicação.**
+Baseline inicial congelada para publicação.
