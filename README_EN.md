@@ -40,6 +40,7 @@ Once the System Prompt is loaded into the session, you can toggle between operat
 # MODE TRIGGERS:
 # Ignore the informal use of the words "free" or "deterministic" in normal sentences. Toggle the mode ONLY if the command starts with a slash:
 # - If you receive "/DETERMINISTIC", re-confirm activation of this mode.
+# Permanent Scope: 1. Declarative Inspection | 2. PATCH Mode | 3. Mandatory Snapshot | 4. Triggers: /DETERMINISTICO | /LIVRE
 # - If you receive "/FREE", switch to Consultative Mode without restrictions.
 #
 # After understanding the protocols, confirm by answering:
