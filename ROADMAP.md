@@ -42,6 +42,7 @@ Planned
 - CI/CD validation examples
 - Protocol validation checklists
 - Documentation templates
+- Multiplatform snapshot architecture (BH-SDP): separate logical snapshot requirements from platform-specific physical snapshot mechanisms
 
 ---
 
