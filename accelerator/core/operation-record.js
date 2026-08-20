@@ -79,7 +79,8 @@ function validateApproval(input, operationId) {
   const evaluation = evaluateR3ApprovalAuthority(input.approvalAuthority, {
     operationId, workspace: input.workspace, capabilityType: input.capabilityType,
     action: input.action, scope: input.scope, riskLevel: 'R3',
-    policyDecision: 'APPROVAL_REQUIRED', observedAt: input.observedAt
+    policyDecision: 'APPROVAL_REQUIRED', tenantId: input.tenantId || null,
+    projectId: input.projectId || null, observedAt: input.observedAt
   });
   return evaluation.decision === 'ALLOWED' ? null : evaluation.reason;
 }
@@ -112,7 +113,9 @@ function validateEvents(events, input) {
         approvalEvent.decision !== input.approvalAuthority.decision ||
         approvalEvent.approvalTimestamp !== input.approvalAuthority.timestamp ||
         approvalEvent.approvalAuthorityId !== input.approvalAuthority.approvalAuthorityId ||
-        approvalEvent.approvalAuthorityFingerprint !== input.approvalAuthority.fingerprint) {
+        approvalEvent.approvalAuthorityFingerprint !== input.approvalAuthority.fingerprint ||
+        approvalEvent.verifiedIdentityAssertionFingerprint !==
+          input.approvalAuthority.verifiedIdentityAssertionFingerprint) {
       return 'Approval event does not match the bound approval.';
     }
   }
@@ -171,8 +174,15 @@ function createOperationRecord(input) {
         ? evaluateR3ApprovalAuthority(input.approvalAuthority, {
             operationId, workspace: input.workspace, capabilityType: input.capabilityType,
             action: input.action, scope: input.scope, riskLevel: 'R3',
-            policyDecision: 'APPROVAL_REQUIRED', observedAt: input.observedAt
+            policyDecision: 'APPROVAL_REQUIRED', tenantId: input.tenantId || null,
+            projectId: input.projectId || null, observedAt: input.observedAt
           }).authority : null,
+      verifiedIdentityAssertion: input.riskLevel === 'R3'
+        ? input.approvalAuthority.verifiedIdentityAssertion : null,
+      verifiedIdentityAssertionFingerprint: input.riskLevel === 'R3'
+        ? input.approvalAuthority.verifiedIdentityAssertionFingerprint : null,
+      tenantId: input.riskLevel === 'R3' ? (input.tenantId || null) : null,
+      projectId: input.riskLevel === 'R3' ? (input.projectId || null) : null,
       capabilityType: input.riskLevel === 'R3' ? input.capabilityType : null,
       action: input.riskLevel === 'R3' ? input.action : null,
       scope: input.riskLevel === 'R3' ? input.scope : null,
@@ -193,6 +203,22 @@ function requireRecord(record) {
   }
   const eventError = validateEvents(record.events, record);
   if (eventError) throw new Error(eventError);
+  if (record.riskLevel === 'R3') {
+    const approval = evaluateR3ApprovalAuthority(record.approvalAuthority, {
+      operationId: record.operationId, workspace: record.workspace,
+      capabilityType: record.capabilityType, action: record.action, scope: record.scope,
+      riskLevel: 'R3', policyDecision: 'APPROVAL_REQUIRED',
+      tenantId: record.tenantId, projectId: record.projectId,
+      observedAt: record.events[2].timestamp
+    });
+    if (approval.decision !== 'ALLOWED' ||
+        record.verifiedIdentityAssertionFingerprint !==
+          approval.authority.verifiedIdentityAssertionFingerprint ||
+        JSON.stringify(record.verifiedIdentityAssertion) !==
+          JSON.stringify(approval.authority.verifiedIdentityAssertion)) {
+      throw new Error('Stored R3 verified identity binding is malformed or substituted.');
+    }
+  }
   const identities = new Set();
   let previousTimestamp = record.events[record.events.length - 1].timestamp;
   for (const entry of record.adapterEvidence) {
@@ -238,6 +264,7 @@ function validatePayload(record, item) {
     const r3Authorized = item.riskLevel === 'R3' && record.riskLevel === 'R3' &&
       record.policyDecision === 'APPROVAL_REQUIRED' && record.approvalAuthority &&
       item.approvalAuthorityFingerprint === record.approvalAuthority.fingerprint &&
+      item.verifiedIdentityAssertionFingerprint === record.verifiedIdentityAssertionFingerprint &&
       record.scope && record.scope.target &&
       record.scope.target.path === target.requested &&
       record.scope.target.beforeSha256 === item.beforeSha256;
@@ -330,7 +357,8 @@ function normalizeAdapterEvidence(record, item, orderedAfter) {
       replacementSha256: item.replacementSha256,
       afterSha256: item.afterSha256,
       recovery: item.recovery,
-      approvalAuthorityFingerprint: item.approvalAuthorityFingerprint || null
+      approvalAuthorityFingerprint: item.approvalAuthorityFingerprint || null,
+      verifiedIdentityAssertionFingerprint: item.verifiedIdentityAssertionFingerprint || null
     } : {})
   };
 }

@@ -15,6 +15,7 @@ const gitReadAdapter = require('../../accelerator/adapters/git-read-adapter');
 const processValidationAdapter = require('../../accelerator/adapters/process-validation-adapter');
 const { evaluateCapabilityGrant } = require('../../accelerator/core/capability-grant');
 const { evaluateR3ApprovalAuthority } = require('../../accelerator/core/risk-classification');
+const { evaluateVerifiedHumanIdentityAssertion } = require('../../accelerator/core/human-identity-assertion');
 const { createOperationRecord } = require('../../accelerator/core/operation-record');
 const { createLifecycle } = require('../../accelerator/core/state-boundary');
 const {
@@ -79,9 +80,18 @@ function operationRecord(repo) {
 function r3Authority(repo, overrides = {}) {
   const scope = { target: { path: 'target.js', beforeSha256:
     crypto.createHash('sha256').update('const value = 1;\n').digest('hex') } };
+  const verifiedIdentityAssertion = evaluateVerifiedHumanIdentityAssertion({
+    schema: 'sdo.verified_human_identity_assertion.v1', verification: 'VERIFIED',
+    assertionId: 'assertion-1', subject: { id: 'human-1', type: 'HUMAN' }, issuer: 'issuer:test',
+    authentication: { method: 'PASSKEY', context: 'MFA' }, issuedAt: '2026-08-20T11:55:00.000Z',
+    expiresAt: EXPIRY, audience: ['surgical-devops'], operationId: 'op-1', workspace: repo,
+    tenantId: 'tenant-1', projectId: 'project-1', revocationStatus: 'NOT_REVOKED',
+    verifiedAt: CREATED
+  }).assertion;
   return evaluateR3ApprovalAuthority({ approvalAuthorityId: 'approval-r3', operationId: 'op-1',
     approver: { id: 'human-1', type: 'HUMAN' }, decision: 'APPROVED', riskLevel: 'R3',
     capabilityType: 'FILESYSTEM_PATCH', action: 'PATCH_FILE', workspace: repo, scope,
+    tenantId: 'tenant-1', projectId: 'project-1', verifiedIdentityAssertion,
     policyDecision: 'APPROVAL_REQUIRED', timestamp: CREATED, expiresAt: EXPIRY,
     ...overrides }).authority;
 }
@@ -91,7 +101,7 @@ function r3Execution(repo, overrides = {}) {
   const scope = approvalAuthority.scope;
   const common = { operationId: 'op-1', workspace: repo, policyDecision: 'APPROVAL_REQUIRED',
     riskLevel: 'R3', lifecycleState: 'PENDING', capabilityType: 'FILESYSTEM_PATCH', scope,
-    idempotency: 'IDEMPOTENT', approvalAuthority };
+    idempotency: 'IDEMPOTENT', approvalAuthority, tenantId: 'tenant-1', projectId: 'project-1' };
   const grantEvaluation = evaluateCapabilityGrant(
     { ...common, expiresAt: EXPIRY }, { ...common, evaluatedAt: CREATED });
   const operationRecord = createOperationRecord({ operationId: 'op-1',
@@ -99,17 +109,20 @@ function r3Execution(repo, overrides = {}) {
     objective: 'Govern one bounded R3 patch authority.', policyDecision: 'APPROVAL_REQUIRED',
     riskLevel: 'R3', idempotency: 'IDEMPOTENT', approvalAuthority,
     capabilityType: 'FILESYSTEM_PATCH', action: 'PATCH_FILE', scope, observedAt: NOW,
+    tenantId: 'tenant-1', projectId: 'project-1',
     events: [
       { type: 'intent', operationId: 'op-1', timestamp: CREATED, objective: 'Govern one bounded R3 patch authority.' },
       { type: 'policy', operationId: 'op-1', timestamp: CREATED, policyDecision: 'APPROVAL_REQUIRED', riskLevel: 'R3' },
       { type: 'approval', operationId: 'op-1', timestamp: CREATED, approverId: 'human-1',
         decision: 'APPROVED', approvalTimestamp: CREATED,
         approvalAuthorityId: approvalAuthority.approvalAuthorityId,
-        approvalAuthorityFingerprint: approvalAuthority.fingerprint },
+        approvalAuthorityFingerprint: approvalAuthority.fingerprint,
+        verifiedIdentityAssertionFingerprint: approvalAuthority.verifiedIdentityAssertionFingerprint },
       { type: 'state', operationId: 'op-1', timestamp: CREATED, status: 'PENDING' }
     ] }).record;
   return { adapter: 'FILESYSTEM_PATCH', action: 'PATCH_FILE', operationId: 'op-1',
     workspace: repo, target: 'target.js', replacement: 'const value = 2;\n', observedAt: NOW,
+    tenantId: 'tenant-1', projectId: 'project-1',
     grantEvaluation, operationRecord, lifecycle: lifecycle(repo), ...overrides };
 }
 
@@ -303,6 +316,36 @@ test('boolean, missing or invalid R3 approval cannot authorize or self-approve',
       assert.equal(result.orchestration.status, 'DENIED');
       assert.notEqual(result.governed && result.governed.approvalAuthorityRecognized, true);
     }
+  }));
+
+test('authentication alone does not authorize mutation', () => withFixture((repo) => {
+  const request = r3Execution(repo);
+  const identityOnly = request.operationRecord.verifiedIdentityAssertion;
+  const result = orchestrate(input(repo, request, { risk: 'ALTO', policy: {
+    decision: 'APPROVAL_REQUIRED', verifiedIdentityAssertion: identityOnly
+  } }));
+  assert.equal(result.orchestration.status, 'DENIED');
+  assert.notEqual(result.governed && result.governed.approvalAuthorityRecognized, true);
+}));
+
+test('tenant and verified assertion grant-link substitution fail closed', () =>
+  withFixture((repo) => {
+    const request = r3Execution(repo);
+    const wrongTenant = orchestrate(input(repo, { ...request, tenantId: 'other' }, {
+      risk: 'ALTO', policy: { decision: 'APPROVAL_REQUIRED',
+        approvalAuthority: request.operationRecord.approvalAuthority }
+    }));
+    assert.equal(wrongTenant.orchestration.status, 'DENIED');
+
+    const substitutedGrant = frozen({ ...request.grantEvaluation,
+      grant: { ...request.grantEvaluation.grant,
+        verifiedIdentityAssertionFingerprint: 'f'.repeat(64) } });
+    const substituted = orchestrate(input(repo, { ...request, grantEvaluation: substitutedGrant }, {
+      risk: 'ALTO', policy: { decision: 'APPROVAL_REQUIRED',
+        approvalAuthority: request.operationRecord.approvalAuthority }
+    }));
+    assert.equal(substituted.orchestration.status, 'DENIED');
+    assert.notEqual(substituted.governed && substituted.governed.approvalAuthorityRecognized, true);
   }));
 
 test('legacy execution reaches zero governed dispatch', (context) => {

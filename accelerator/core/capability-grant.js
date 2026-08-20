@@ -209,17 +209,28 @@ function evaluateCapabilityGrant(request, authority) {
   const r3Patch = capabilityType === 'FILESYSTEM_PATCH' && request.riskLevel === 'R3';
   let approvalAuthority = null;
   if (r3Patch) {
+    const tenantId = request.tenantId === undefined ? null : text(request.tenantId);
+    const authoritativeTenantId = authority.tenantId === undefined ? null : text(authority.tenantId);
+    const projectId = request.projectId === undefined ? null : text(request.projectId);
+    const authoritativeProjectId = authority.projectId === undefined ? null : text(authority.projectId);
+    if (tenantId !== authoritativeTenantId || projectId !== authoritativeProjectId ||
+        (request.tenantId !== undefined && !tenantId) ||
+        (request.projectId !== undefined && !projectId)) {
+      return denied('R3 tenant or project authority is missing or mismatched.');
+    }
     if (request.policyDecision !== 'APPROVAL_REQUIRED' ||
         authority.policyDecision !== 'APPROVAL_REQUIRED') {
       return denied('R3 patch policy must remain APPROVAL_REQUIRED.');
     }
     const requestApproval = evaluateR3ApprovalAuthority(request.approvalAuthority, {
       operationId, workspace, capabilityType, action: 'PATCH_FILE', scope: request.scope,
-      riskLevel: 'R3', policyDecision: 'APPROVAL_REQUIRED', observedAt: authority.evaluatedAt
+      riskLevel: 'R3', policyDecision: 'APPROVAL_REQUIRED', tenantId, projectId,
+      observedAt: authority.evaluatedAt
     });
     const authorityApproval = evaluateR3ApprovalAuthority(authority.approvalAuthority, {
       operationId, workspace, capabilityType, action: 'PATCH_FILE', scope: authority.scope,
-      riskLevel: 'R3', policyDecision: 'APPROVAL_REQUIRED', observedAt: authority.evaluatedAt
+      riskLevel: 'R3', policyDecision: 'APPROVAL_REQUIRED', tenantId, projectId,
+      observedAt: authority.evaluatedAt
     });
     if (requestApproval.decision !== 'ALLOWED' || authorityApproval.decision !== 'ALLOWED' ||
         requestApproval.authority.fingerprint !== authorityApproval.authority.fingerprint) {
@@ -259,7 +270,11 @@ function evaluateCapabilityGrant(request, authority) {
       expiresAt,
       idempotency: request.idempotency,
       approvalAuthorityFingerprint: approvalAuthority ? approvalAuthority.fingerprint : null,
-      approvalAuthorityId: approvalAuthority ? approvalAuthority.approvalAuthorityId : null
+      approvalAuthorityId: approvalAuthority ? approvalAuthority.approvalAuthorityId : null,
+      verifiedIdentityAssertionFingerprint: approvalAuthority
+        ? approvalAuthority.verifiedIdentityAssertionFingerprint : null,
+      tenantId: approvalAuthority ? approvalAuthority.tenantId : null,
+      projectId: approvalAuthority ? approvalAuthority.projectId : null
     }
   });
 }

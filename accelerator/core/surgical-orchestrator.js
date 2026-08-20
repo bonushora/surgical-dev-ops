@@ -209,11 +209,19 @@ function validateControlledRequest(request, repositoryPath, expectedRisk) {
       operationId: request.operationId, workspace: repositoryPath,
       capabilityType: 'FILESYSTEM_PATCH', action: 'PATCH_FILE',
       scope: operationRecord.scope,
-      riskLevel: 'R3', policyDecision: 'APPROVAL_REQUIRED', observedAt: request.observedAt
+      riskLevel: 'R3', policyDecision: 'APPROVAL_REQUIRED',
+      tenantId: operationRecord.tenantId, projectId: operationRecord.projectId,
+      observedAt: request.observedAt
     });
     if (approval.decision !== 'ALLOWED' ||
         approval.authority.fingerprint !== grant.approvalAuthorityFingerprint ||
-        approval.authority.approvalAuthorityId !== grant.approvalAuthorityId) {
+        approval.authority.approvalAuthorityId !== grant.approvalAuthorityId ||
+        approval.authority.verifiedIdentityAssertionFingerprint !==
+          grant.verifiedIdentityAssertionFingerprint ||
+        operationRecord.verifiedIdentityAssertionFingerprint !==
+          grant.verifiedIdentityAssertionFingerprint ||
+        request.tenantId !== operationRecord.tenantId ||
+        request.projectId !== operationRecord.projectId) {
       return executionDenial('R3 approval authority is missing or mismatched.');
     }
   }
@@ -260,7 +268,9 @@ function evidenceIdentity(request, grantFingerprint) {
         ? request.grantEvaluation.grant.scope.target.beforeSha256 : null,
       replacementSha256: replacementDigest(request),
       approvalAuthorityFingerprint:
-        request.grantEvaluation.grant.approvalAuthorityFingerprint || null
+        request.grantEvaluation.grant.approvalAuthorityFingerprint || null,
+      verifiedIdentityAssertionFingerprint:
+        request.grantEvaluation.grant.verifiedIdentityAssertionFingerprint || null
     } : {}),
     grantFingerprint
   });
@@ -447,6 +457,8 @@ function orchestrate(input) {
     action: input.execution && input.execution.action,
     scope: input.execution && input.execution.operationRecord &&
       input.execution.operationRecord.scope,
+    tenantId: input.execution && input.execution.tenantId,
+    projectId: input.execution && input.execution.projectId,
     observedAt: input.execution && input.execution.observedAt
   });
 

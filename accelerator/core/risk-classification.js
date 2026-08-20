@@ -5,6 +5,7 @@
 const crypto = require('crypto');
 const fs = require('fs');
 const path = require('path');
+const { evaluateVerifiedHumanIdentityAssertion } = require('./human-identity-assertion');
 
 const LEVEL_ORDER = Object.freeze({ R0: 0, R1: 1, R2: 2, R3: 3 });
 const LEGACY_RISK = Object.freeze({ BAIXO: 'R1', MÉDIO: 'R2', ALTO: 'R3' });
@@ -42,6 +43,18 @@ function evaluateR3ApprovalAuthority(candidate, expected = {}) {
   const timestamp = Date.parse(candidate.timestamp);
   const expiresAt = Date.parse(candidate.expiresAt);
   const approver = candidate.approver;
+  const identityEvaluation = evaluateVerifiedHumanIdentityAssertion(
+    candidate.verifiedIdentityAssertion,
+    {
+      subjectId: approver && approver.id,
+      operationId: candidate.operationId,
+      workspace,
+      tenantId: candidate.tenantId === undefined ? null : candidate.tenantId,
+      projectId: candidate.projectId === undefined ? null : candidate.projectId,
+      observedAt: candidate.timestamp
+    }
+  );
+  const verifiedIdentityAssertion = identityEvaluation.assertion;
   const fields = {
     approvalAuthorityId: candidate.approvalAuthorityId,
     operationId: candidate.operationId,
@@ -51,10 +64,14 @@ function evaluateR3ApprovalAuthority(candidate, expected = {}) {
     capabilityType: candidate.capabilityType,
     action: candidate.action,
     workspace,
+    tenantId: candidate.tenantId === undefined ? null : candidate.tenantId,
+    projectId: candidate.projectId === undefined ? null : candidate.projectId,
     scope: canonicalize(candidate.scope),
     policyDecision: candidate.policyDecision,
     timestamp: candidate.timestamp,
-    expiresAt: candidate.expiresAt
+    expiresAt: candidate.expiresAt,
+    verifiedIdentityAssertionFingerprint: verifiedIdentityAssertion
+      ? verifiedIdentityAssertion.fingerprint : null
   };
   const computed = authorityFingerprint(fields);
   const valid = typeof fields.approvalAuthorityId === 'string' && fields.approvalAuthorityId.trim() &&
@@ -65,6 +82,11 @@ function evaluateR3ApprovalAuthority(candidate, expected = {}) {
     canonicalWorkspace && fields.scope && typeof fields.scope === 'object' &&
     fields.policyDecision === 'APPROVAL_REQUIRED' && Number.isFinite(timestamp) &&
     Number.isFinite(expiresAt) && expiresAt > timestamp &&
+    identityEvaluation.decision === 'VERIFIED' &&
+    Date.parse(fields.timestamp) >= Date.parse(verifiedIdentityAssertion.issuedAt) &&
+    Date.parse(fields.expiresAt) <= Date.parse(verifiedIdentityAssertion.expiresAt) &&
+    (!candidate.verifiedIdentityAssertionFingerprint ||
+      candidate.verifiedIdentityAssertionFingerprint === verifiedIdentityAssertion.fingerprint) &&
     (!candidate.fingerprint || candidate.fingerprint === computed);
   if (!valid) {
     return deepFreeze({ decision: 'DENIED', reason: 'R3 approval authority is malformed.', authority: null });
@@ -81,7 +103,7 @@ function evaluateR3ApprovalAuthority(candidate, expected = {}) {
   }
   return deepFreeze({
     decision: 'ALLOWED', reason: 'Bound R3 human approval authority is valid.',
-    authority: { ...fields, fingerprint: computed }
+    authority: { ...fields, verifiedIdentityAssertion, fingerprint: computed }
   });
 }
 

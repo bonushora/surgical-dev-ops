@@ -6,15 +6,26 @@ const fs = require('fs');
 const os = require('os');
 const path = require('path');
 const { classifyScope, evaluateR3ApprovalAuthority } = require('../../accelerator/core/risk-classification');
+const { evaluateVerifiedHumanIdentityAssertion } = require('../../accelerator/core/human-identity-assertion');
 
 const workspace = fs.mkdtempSync(path.join(os.tmpdir(), 'sdo-risk-'));
 test.after(() => fs.rmSync(workspace, { recursive: true, force: true }));
 
 function approval(overrides = {}) {
+  const verifiedIdentityAssertion = evaluateVerifiedHumanIdentityAssertion({
+    schema: 'sdo.verified_human_identity_assertion.v1', verification: 'VERIFIED',
+    assertionId: 'assertion-1', subject: { id: 'human-1', type: 'HUMAN' },
+    issuer: 'issuer:test', authentication: { method: 'PASSKEY', context: 'MFA' },
+    issuedAt: '2026-08-20T11:55:00.000Z', expiresAt: '2026-08-20T13:00:00.000Z',
+    audience: ['surgical-devops'], operationId: 'op-r3', workspace,
+    tenantId: 'tenant-1', projectId: 'project-1', revocationStatus: 'NOT_REVOKED',
+    verifiedAt: '2026-08-20T11:59:00.000Z'
+  }).assertion;
   return evaluateR3ApprovalAuthority({
     approvalAuthorityId: 'approval-1', operationId: 'op-r3',
     approver: { id: 'human-1', type: 'HUMAN' }, decision: 'APPROVED', riskLevel: 'R3',
     capabilityType: 'FILESYSTEM_PATCH', action: 'PATCH_FILE', workspace,
+    tenantId: 'tenant-1', projectId: 'project-1', verifiedIdentityAssertion,
     scope: { target: { path: 'target.js', beforeSha256: 'a'.repeat(64) } },
     policyDecision: 'APPROVAL_REQUIRED', timestamp: '2026-08-20T12:00:00.000Z',
     expiresAt: '2026-08-20T13:00:00.000Z', ...overrides
@@ -25,6 +36,7 @@ function r3Input(overrides = {}) {
   const scope = { target: { path: 'target.js', beforeSha256: 'a'.repeat(64) } };
   return input({ facts: { ...input().facts, critical: true }, operationId: 'op-r3', workspace,
     capabilityType: 'FILESYSTEM_PATCH', action: 'PATCH_FILE', scope,
+    tenantId: 'tenant-1', projectId: 'project-1',
     observedAt: '2026-08-20T12:30:00.000Z',
     policy: { decision: 'APPROVAL_REQUIRED', approvalAuthority: approval() }, ...overrides });
 }
@@ -137,6 +149,14 @@ test('R3 with valid explicit human approval is allowed by policy', () => {
 test('malformed or inexact R3 authority is denied', () => {
   assert.equal(classifyScope(r3Input({ policy: { decision: 'APPROVAL_REQUIRED', approvalAuthority: { approved: true } } })).policy.decision, 'DENIED');
   assert.equal(classifyScope(r3Input({ scope: { target: { path: 'other.js', beforeSha256: 'a'.repeat(64) } } })).policy.decision, 'DENIED');
+});
+
+test('unverified identity or approver substitution cannot authorize R3', () => {
+  const valid = approval();
+  assert.equal(classifyScope(r3Input({ policy: { decision: 'APPROVAL_REQUIRED',
+    approvalAuthority: { ...valid, verifiedIdentityAssertion: { approved: true } } } })).policy.decision, 'DENIED');
+  assert.equal(classifyScope(r3Input({ policy: { decision: 'APPROVAL_REQUIRED',
+    approvalAuthority: { ...valid, approver: { id: 'agent-1', type: 'HUMAN' } } } })).policy.decision, 'DENIED');
 });
 
 test('approval authority cannot downgrade risk or rewrite policy', () => {
