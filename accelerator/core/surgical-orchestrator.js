@@ -34,6 +34,8 @@ const {
 const filesystemReadAdapter = require('../adapters/filesystem-read-adapter');
 const gitReadAdapter = require('../adapters/git-read-adapter');
 const processValidationAdapter = require('../adapters/process-validation-adapter');
+const filesystemPatchAdapter = require('../adapters/filesystem-patch-adapter');
+const identityVerificationAdapter = require('../adapters/identity-verification-adapter');
 
 const CONTROLLED_ACTIONS = Object.freeze({
   FILESYSTEM_READ: Object.freeze({
@@ -50,7 +52,7 @@ const CONTROLLED_ACTIONS = Object.freeze({
     actions: new Set(['NODE_SYNTAX_CHECK']), capabilityType: 'PROCESS_VALIDATION'
   }),
   FILESYSTEM_PATCH: Object.freeze({
-    actions: new Set(['PATCH_FILE']), capabilityType: 'FILESYSTEM_PATCH', dispatch: false
+    actions: new Set(['PATCH_FILE']), capabilityType: 'FILESYSTEM_PATCH'
   })
 });
 
@@ -129,7 +131,7 @@ function rejectUnsafeRequestShape(input) {
   return null;
 }
 
-function validateControlledRequest(request, repositoryPath, expectedRisk) {
+function validateControlledRequest(request, repositoryPath, expectedRisk, runtime = {}) {
   if (!request || typeof request !== 'object' || Array.isArray(request)) {
     return executionDenial('Missing or malformed capability context.');
   }
@@ -162,6 +164,9 @@ function validateControlledRequest(request, repositoryPath, expectedRisk) {
   if (expectedRisk && grant.riskLevel !== expectedRisk) {
     return executionDenial('Capability risk does not match authorized orchestration risk.');
   }
+  if (request.adapter === 'FILESYSTEM_PATCH' && grant.riskLevel !== 'R3') {
+    return executionDenial('FILESYSTEM_PATCH requires R3 authenticated human authority.');
+  }
   if (grant.capabilityType !== contract.capabilityType) {
     return executionDenial('Capability scope or type mismatch.');
   }
@@ -188,7 +193,8 @@ function validateControlledRequest(request, repositoryPath, expectedRisk) {
     }
   } else if (request.adapter === 'FILESYSTEM_PATCH') {
     const target = grant.scope && grant.scope.target;
-    if (!target || target.path !== request.target || !target.beforeSha256) {
+    if (!target || target.path !== request.target || !target.beforeSha256 ||
+        target.replacementSha256 !== replacementDigest(request)) {
       return executionDenial('Capability scope mismatch.');
     }
   }
@@ -213,13 +219,31 @@ function validateControlledRequest(request, repositoryPath, expectedRisk) {
       tenantId: operationRecord.tenantId, projectId: operationRecord.projectId,
       observedAt: request.observedAt
     });
-    if (approval.decision !== 'ALLOWED' ||
+    const identityVerification = identityVerificationAdapter.verifyHumanIdentityAssertion({
+      rawAssertion: request.rawIdentityAssertion,
+      trustedIssuers: runtime.trustedIdentityIssuers,
+      expected: {
+        subjectId: operationRecord.approvalAuthority.approver.id,
+        audience: runtime.identityAudience,
+        operationId: request.operationId,
+        workspace: repositoryPath,
+        tenantId: operationRecord.tenantId,
+        projectId: operationRecord.projectId,
+        fingerprint: operationRecord.verifiedIdentityAssertionFingerprint,
+        observedAt: request.observedAt
+      }
+    }, runtime.identityVerifierPort);
+    if (approval.decision !== 'ALLOWED' || identityVerification.decision !== 'VERIFIED' ||
         approval.authority.fingerprint !== grant.approvalAuthorityFingerprint ||
         approval.authority.approvalAuthorityId !== grant.approvalAuthorityId ||
         approval.authority.verifiedIdentityAssertionFingerprint !==
           grant.verifiedIdentityAssertionFingerprint ||
         operationRecord.verifiedIdentityAssertionFingerprint !==
           grant.verifiedIdentityAssertionFingerprint ||
+        identityVerification.evidence.fingerprint !==
+          grant.identityVerificationEvidenceFingerprint ||
+        operationRecord.identityVerificationEvidenceFingerprint !==
+          grant.identityVerificationEvidenceFingerprint ||
         request.tenantId !== operationRecord.tenantId ||
         request.projectId !== operationRecord.projectId) {
       return executionDenial('R3 approval authority is missing or mismatched.');
@@ -308,7 +332,9 @@ function invokeControlledAdapter(request) {
     return gitReadAdapter.readGitWithGrant({ ...common, selector: request.action });
   }
   if (request.adapter === 'FILESYSTEM_PATCH') {
-    throw new Error('FILESYSTEM_PATCH physical dispatch remains disconnected.');
+    return filesystemPatchAdapter.patchFileWithGrant({
+      ...common, target: request.target, replacement: request.replacement
+    });
   }
   return processValidationAdapter.validateJavaScriptWithGrant({
     ...common, selector: request.action, target: request.target
@@ -319,7 +345,8 @@ function validateAdapterResult(request, result) {
   const schemas = {
     FILESYSTEM_READ: 'sdo.filesystem_read_result.v1',
     GIT_READ: 'sdo.git_read_result.v1',
-    PROCESS_VALIDATION: 'sdo.process_validation_result.v1'
+    PROCESS_VALIDATION: 'sdo.process_validation_result.v1',
+    FILESYSTEM_PATCH: 'sdo.filesystem_patch_result.v1'
   };
   if (!result || result.schema !== schemas[request.adapter] || !isDeepFrozen(result) ||
       result.operationId !== request.operationId || result.workspace !== request.workspace ||
@@ -328,6 +355,15 @@ function validateAdapterResult(request, result) {
   }
   if (request.adapter === 'GIT_READ' && result.selector !== request.action) {
     throw new Error('Controlled Git evidence action mismatch.');
+  }
+  if (request.adapter === 'FILESYSTEM_PATCH' &&
+      (!result.target || result.target.requested !== request.target ||
+       result.target.canonical !== request.grantEvaluation.grant.scope.target.canonicalPath ||
+       result.beforeSha256 !== request.grantEvaluation.grant.scope.target.beforeSha256 ||
+       result.afterSha256 !== request.grantEvaluation.grant.scope.target.replacementSha256 ||
+       !['APPLIED', 'ALREADY_APPLIED'].includes(result.outcome) ||
+       result.recovery !== 'NOT_REQUIRED')) {
+    throw new Error('Controlled filesystem-patch evidence is inconsistent.');
   }
   if (request.adapter === 'PROCESS_VALIDATION' &&
       (result.selector !== request.action || !result.validation ||
@@ -363,7 +399,7 @@ function validateInput(input) {
   }
 }
 
-function orchestrate(input) {
+function orchestrate(input, runtime = {}) {
   const boundaryDenial = rejectUnsafeRequestShape(input);
   if (boundaryDenial) return boundaryDenial;
 
@@ -426,6 +462,51 @@ function orchestrate(input) {
     proofOfGovernedExecution: false
   });
 
+  if (input.execution && input.execution.adapter === 'FILESYSTEM_PATCH' &&
+      input.execution.operationRecord &&
+      input.execution.operationRecord.finalization !== null) {
+    const replayValidation = validateControlledRequest(
+      input.execution, discovery.repository.path, 'R3', runtime
+    );
+    if (replayValidation.decision === 'DENIED') {
+      return {
+        schema: 'sdo.orchestration.v1',
+        orchestration: { status: 'DENIED', executionAttempted: false, executionAllowed: false },
+        repository: discovery.repository, worktree: discovery.worktree,
+        pipeline: { preAuthorizationPreflight, discovery, task, inspection },
+        execution: replayValidation, nextStep: replayValidation.reason
+      };
+    }
+    const replayId = evidenceIdentity(input.execution, replayValidation.grantFingerprint);
+    const prior = replayValidation.operationRecord.adapterEvidence.find(
+      (entry) => entry.adapterType === 'FILESYSTEM_PATCH' && entry.action === 'PATCH_FILE'
+    );
+    const completed = prior && prior.evidenceId === replayId &&
+      prior.grantFingerprint === replayValidation.grantFingerprint &&
+      replayValidation.operationRecord.finalization.lifecycleState === 'COMPLETED' &&
+      replayValidation.lifecycle.status === 'COMPLETED';
+    if (!completed) {
+      const denial = executionDenial('Conflicting finalized filesystem-patch replay.');
+      return {
+        schema: 'sdo.orchestration.v1',
+        orchestration: { status: 'DENIED', executionAttempted: false, executionAllowed: false },
+        repository: discovery.repository, worktree: discovery.worktree,
+        pipeline: { preAuthorizationPreflight, discovery, task, inspection },
+        execution: denial, nextStep: denial.reason
+      };
+    }
+    return {
+      schema: 'sdo.orchestration.v1',
+      orchestration: { status: 'COMPLETED', executionAttempted: false, executionAllowed: true },
+      repository: discovery.repository, worktree: discovery.worktree,
+      pipeline: { preAuthorizationPreflight, discovery, task, inspection },
+      execution: prior.payload,
+      governed: { operationRecord: replayValidation.operationRecord,
+        lifecycle: replayValidation.lifecycle, replay: true },
+      nextStep: 'Identical governed filesystem-patch evidence replayed without physical mutation.'
+    };
+  }
+
   /*
    * PHASE 4
    * Risk classification.
@@ -470,32 +551,9 @@ function orchestrate(input) {
     discovery,
     task,
     inspection,
-    classification
+    classification,
+    execution: input.execution || null
   });
-
-  if (input.execution && input.execution.adapter === 'FILESYSTEM_PATCH') {
-    const authority = validateControlledRequest(
-      input.execution, discovery.repository.path, classification.classification.level
-    );
-    const recognized = authority.decision !== 'DENIED' &&
-      classification.policy.decision === 'ALLOWED';
-    const denial = executionDenial(recognized
-      ? 'R3 mutation authority is valid; FILESYSTEM_PATCH physical dispatch remains disconnected.'
-      : authority.reason || 'R3 mutation authority is missing or inconsistent.');
-    return {
-      schema: 'sdo.orchestration.v1',
-      orchestration: { status: 'DENIED', executionAttempted: false, executionAllowed: false },
-      repository: discovery.repository, worktree: discovery.worktree,
-      pipeline: { preAuthorizationPreflight, discovery, task, inspection, classification, changePlan },
-      execution: denial,
-      governed: recognized ? {
-        operationRecord: authority.operationRecord,
-        lifecycle: authority.lifecycle,
-        approvalAuthorityRecognized: true
-      } : null,
-      nextStep: denial.reason
-    };
-  }
 
   /*
    * Deterministic gate.
@@ -504,11 +562,12 @@ function orchestrate(input) {
    * change plan is explicitly AUTHORIZED.
    */
   if (!changePlan.decision.executionAllowed) {
+    const patchDenied = input.execution && input.execution.adapter === 'FILESYSTEM_PATCH';
     return {
       schema: 'sdo.orchestration.v1',
 
       orchestration: {
-        status: 'BLOCKED',
+        status: patchDenied ? 'DENIED' : 'BLOCKED',
         executionAttempted: false,
         executionAllowed: false
       },
@@ -526,7 +585,9 @@ function orchestrate(input) {
         changePlan
       },
 
-      execution: null,
+      execution: patchDenied
+        ? executionDenial('FILESYSTEM_PATCH authority or exact mutation plan is invalid.')
+        : null,
 
       nextStep:
         changePlan.nextStep
@@ -602,7 +663,7 @@ function orchestrate(input) {
 
   const request = input.execution;
   const validation = validateControlledRequest(
-    request, discovery.repository.path, classification.classification.level
+    request, discovery.repository.path, classification.classification.level, runtime
   );
 
   if (validation.decision === 'DENIED') {
@@ -650,10 +711,14 @@ function orchestrate(input) {
 
   let adapterResult = priorForAction ? priorForAction.payload : null;
   let executionAttempted = false;
+  let refreshedPhysical = null;
   if (!adapterResult) {
     try {
       adapterResult = validateAdapterResult(request, invokeControlledAdapter(request));
       executionAttempted = true;
+      if (request.adapter === 'FILESYSTEM_PATCH') {
+        refreshedPhysical = physicalEvidence(repositoryDiscovery.discover(request.workspace));
+      }
     } catch (error) {
       let errorEvidence = null;
       let failureReason = error.message;
@@ -662,13 +727,43 @@ function orchestrate(input) {
       } catch (evidenceError) {
         failureReason = evidenceError.message;
       }
+      let failurePhysical = physicalEvidence(discovery);
+      if (request.adapter === 'FILESYSTEM_PATCH') {
+        try { failurePhysical = physicalEvidence(repositoryDiscovery.discover(request.workspace)); } catch {}
+      }
       const failedLifecycle = transitionLifecycle(validation.lifecycle, {
         transitionId: evidenceId,
         operationId: request.operationId,
         type: 'FAIL',
         occurredAt: request.observedAt,
-        failure: { reason: failureReason, physicalEvidence: physicalEvidence(discovery) }
+        failure: { reason: failureReason, physicalEvidence: failurePhysical }
       });
+      let failedRecord = validation.operationRecord;
+      if (request.adapter === 'FILESYSTEM_PATCH' && errorEvidence) {
+        const payload = errorEvidence.payload;
+        failedRecord = appendAdapterEvidence(failedRecord, {
+          evidenceId, operationId: request.operationId, workspace: request.workspace,
+          adapterType: 'FILESYSTEM_PATCH', action: 'PATCH_FILE',
+          grantFingerprint: validation.grantFingerprint,
+          policyDecision: request.grantEvaluation.grant.policyDecision,
+          riskLevel: 'R3', lifecycleState: 'PENDING', outcome: 'FAILED',
+          timestamp: request.observedAt, payload,
+          target: payload.target, beforeSha256: payload.beforeSha256,
+          replacementSha256: request.grantEvaluation.grant.scope.target.replacementSha256,
+          afterSha256: null, recovery: payload.recovery,
+          approvalAuthorityFingerprint:
+            request.grantEvaluation.grant.approvalAuthorityFingerprint,
+          verifiedIdentityAssertionFingerprint:
+            request.grantEvaluation.grant.verifiedIdentityAssertionFingerprint,
+          identityVerificationEvidenceFingerprint:
+            request.grantEvaluation.grant.identityVerificationEvidenceFingerprint
+        });
+        failedRecord = finalizeOperationRecord(failedRecord, {
+          operationId: request.operationId, workspace: request.workspace,
+          lifecycleState: 'FAILED', outcome: 'FAILED',
+          successfulCompletionEligible: false, timestamp: request.observedAt
+        });
+      }
       const execution = deepFreeze({
         ...executionDenial(`Controlled adapter failed closed: ${failureReason}`),
         errorEvidence
@@ -679,14 +774,15 @@ function orchestrate(input) {
         repository: discovery.repository, worktree: discovery.worktree,
         pipeline: { preAuthorizationPreflight, discovery, task, inspection, classification, changePlan },
         execution,
-        governed: { operationRecord: validation.operationRecord, lifecycle: failedLifecycle },
+        governed: { operationRecord: failedRecord, lifecycle: failedLifecycle },
         nextStep: 'Inspect controlled adapter failure evidence; successful completion is forbidden.'
       };
     }
   }
 
   const outcome = request.adapter === 'PROCESS_VALIDATION'
-    ? adapterResult.validation.status : 'SUCCEEDED';
+    ? adapterResult.validation.status
+    : request.adapter === 'FILESYSTEM_PATCH' ? adapterResult.outcome : 'SUCCEEDED';
   let operationRecord = validation.operationRecord;
   if (!priorForAction) {
     operationRecord = appendAdapterEvidence(operationRecord, {
@@ -701,7 +797,20 @@ function orchestrate(input) {
       lifecycleState: 'PENDING',
       outcome,
       timestamp: adapterResult.observedAt,
-      payload: adapterResult
+      payload: adapterResult,
+      ...(request.adapter === 'FILESYSTEM_PATCH' ? {
+        target: adapterResult.target,
+        beforeSha256: adapterResult.beforeSha256,
+        replacementSha256: request.grantEvaluation.grant.scope.target.replacementSha256,
+        afterSha256: adapterResult.afterSha256,
+        recovery: adapterResult.recovery,
+        approvalAuthorityFingerprint:
+          request.grantEvaluation.grant.approvalAuthorityFingerprint,
+        verifiedIdentityAssertionFingerprint:
+          request.grantEvaluation.grant.verifiedIdentityAssertionFingerprint,
+        identityVerificationEvidenceFingerprint:
+          request.grantEvaluation.grant.identityVerificationEvidenceFingerprint
+      } : {})
     });
   }
 
@@ -745,7 +854,7 @@ function orchestrate(input) {
     operationId: request.operationId,
     type: 'COMPLETE',
     occurredAt: adapterResult.observedAt,
-    after: physicalEvidence(discovery)
+    after: refreshedPhysical || physicalEvidence(discovery)
   });
   operationRecord = finalizeOperationRecord(operationRecord, {
     operationId: request.operationId,

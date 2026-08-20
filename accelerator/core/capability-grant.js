@@ -7,6 +7,7 @@ const {
   resolveInspectedFile
 } = require('./workspace-boundary');
 const { evaluateR3ApprovalAuthority } = require('./risk-classification');
+const { validateIdentityVerificationResult } = require('../adapters/identity-verification-adapter');
 
 const ALLOWED_TYPES = new Set([
   'FILESYSTEM_READ', 'FILESYSTEM_PATCH', 'GIT_READ', 'PROCESS_VALIDATION'
@@ -103,9 +104,11 @@ function validateScope(type, scope, authorizedScope, workspace) {
         !text(target.path) || !text(authorizedTarget.path) ||
         target.path !== authorizedTarget.path ||
         !sha256(target.beforeSha256) || target.beforeSha256 !== authorizedTarget.beforeSha256 ||
+        !sha256(target.replacementSha256) ||
+        target.replacementSha256 !== authorizedTarget.replacementSha256 ||
         Object.keys(scope).length !== 1 || Object.keys(authorizedScope).length !== 1 ||
-        Object.keys(target).some((key) => !['path', 'beforeSha256'].includes(key)) ||
-        Object.keys(authorizedTarget).some((key) => !['path', 'beforeSha256'].includes(key))) {
+        Object.keys(target).some((key) => !['path', 'beforeSha256', 'replacementSha256'].includes(key)) ||
+        Object.keys(authorizedTarget).some((key) => !['path', 'beforeSha256', 'replacementSha256'].includes(key))) {
       return { error: 'Filesystem patch scope is missing, ambiguous or broadened.' };
     }
     try {
@@ -120,7 +123,8 @@ function validateScope(type, scope, authorizedScope, workspace) {
           target: {
             path: target.path,
             canonicalPath: file.canonicalTarget,
-            beforeSha256: target.beforeSha256
+            beforeSha256: target.beforeSha256,
+            replacementSha256: target.replacementSha256
           }
         }
       };
@@ -202,8 +206,8 @@ function evaluateCapabilityGrant(request, authority) {
       !ALLOWED_TYPES.has(capabilityType)) {
     return denied('Capability type is denied.');
   }
-  if (capabilityType === 'FILESYSTEM_PATCH' && request.riskLevel === 'R0') {
-    return denied('A filesystem patch cannot be classified as read-only risk R0.');
+  if (capabilityType === 'FILESYSTEM_PATCH' && request.riskLevel !== 'R3') {
+    return denied('A filesystem patch requires R3 authenticated human authority.');
   }
 
   const r3Patch = capabilityType === 'FILESYSTEM_PATCH' && request.riskLevel === 'R3';
@@ -237,6 +241,21 @@ function evaluateCapabilityGrant(request, authority) {
       return denied('Valid matching R3 approval authority is required.');
     }
     approvalAuthority = requestApproval.authority;
+    const identityExpected = {
+      subjectId: approvalAuthority.approver.id, operationId, workspace, tenantId, projectId,
+      fingerprint: approvalAuthority.verifiedIdentityAssertionFingerprint,
+      observedAt: authority.evaluatedAt
+    };
+    const requestIdentity = validateIdentityVerificationResult(
+      request.identityVerification, identityExpected
+    );
+    const authorityIdentity = validateIdentityVerificationResult(
+      authority.identityVerification, identityExpected
+    );
+    if (!requestIdentity || !authorityIdentity ||
+        requestIdentity.evidence.fingerprint !== authorityIdentity.evidence.fingerprint) {
+      return denied('Trusted identity verification evidence is required for R3 mutation.');
+    }
   } else if (request.policyDecision !== 'ALLOWED' || authority.policyDecision !== 'ALLOWED') {
     return denied('Explicit ALLOWED policy is required.');
   }
@@ -274,7 +293,9 @@ function evaluateCapabilityGrant(request, authority) {
       verifiedIdentityAssertionFingerprint: approvalAuthority
         ? approvalAuthority.verifiedIdentityAssertionFingerprint : null,
       tenantId: approvalAuthority ? approvalAuthority.tenantId : null,
-      projectId: approvalAuthority ? approvalAuthority.projectId : null
+      projectId: approvalAuthority ? approvalAuthority.projectId : null,
+      identityVerificationEvidenceFingerprint: approvalAuthority
+        ? request.identityVerification.evidence.fingerprint : null
     }
   });
 }

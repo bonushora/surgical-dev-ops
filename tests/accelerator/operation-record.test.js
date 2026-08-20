@@ -12,6 +12,7 @@ const {
 } = require('../../accelerator/core/operation-record');
 const { evaluateR3ApprovalAuthority } = require('../../accelerator/core/risk-classification');
 const { evaluateVerifiedHumanIdentityAssertion } = require('../../accelerator/core/human-identity-assertion');
+const { verifyHumanIdentityAssertion } = require('../../accelerator/adapters/identity-verification-adapter');
 
 const TIME = '2026-08-20T12:00:00.000Z';
 const WORKSPACE = fs.realpathSync(os.tmpdir());
@@ -50,7 +51,8 @@ function input(overrides = {}) {
 }
 
 function r3(overrides = {}) {
-  const scope = { target: { path: 'target.js', beforeSha256: 'c'.repeat(64) } };
+  const scope = { target: { path: 'target.js', beforeSha256: 'c'.repeat(64),
+    replacementSha256: 'd'.repeat(64) } };
   const verifiedIdentityAssertion = evaluateVerifiedHumanIdentityAssertion({
     schema: 'sdo.verified_human_identity_assertion.v1', verification: 'VERIFIED',
     assertionId: 'assertion-1', subject: { id: 'human-1', type: 'HUMAN' }, issuer: 'issuer:test',
@@ -67,10 +69,17 @@ function r3(overrides = {}) {
     policyDecision: 'APPROVAL_REQUIRED', timestamp: TIME,
     expiresAt: '2026-08-20T13:00:00.000Z'
   }).authority;
+  const identityVerification = verifyHumanIdentityAssertion({ rawAssertion: { token: 'test' },
+    trustedIssuers: ['issuer:test'], expected: { subjectId: 'human-1',
+      audience: 'surgical-devops', operationId: 'op-1', workspace: WORKSPACE,
+      tenantId: 'tenant-1', projectId: 'project-1', observedAt: TIME }
+  }, { verify() { return { status: 'VERIFIED', assertion: verifiedIdentityAssertion,
+    verifierId: 'test-port' }; } });
   return input({
     policyDecision: 'APPROVAL_REQUIRED',
     riskLevel: 'R3',
-    approvalAuthority, capabilityType: 'FILESYSTEM_PATCH', action: 'PATCH_FILE', scope,
+    approvalAuthority, identityVerification,
+    capabilityType: 'FILESYSTEM_PATCH', action: 'PATCH_FILE', scope,
     tenantId: 'tenant-1', projectId: 'project-1',
     observedAt: '2026-08-20T12:30:00.000Z',
     events: events('R3', 'op-1', approvalAuthority),
@@ -154,6 +163,8 @@ test('valid R3 operation binds explicit approval', () => {
   assert.ok(Object.isFrozen(result.record.approvalAuthority));
   assert.equal(result.record.verifiedIdentityAssertionFingerprint,
     result.record.approvalAuthority.verifiedIdentityAssertionFingerprint);
+  assert.equal(result.record.identityVerificationEvidenceFingerprint,
+    result.record.identityVerification.evidence.fingerprint);
 });
 
 test('R3 without approval is denied', () => {
@@ -189,6 +200,13 @@ test('operation record rejects verified identity substitution', () => {
   const approvalAuthority = { ...r3().approvalAuthority,
     verifiedIdentityAssertionFingerprint: 'f'.repeat(64) };
   assert.equal(createOperationRecord(r3({ approvalAuthority })).decision, 'DENIED');
+});
+
+test('operation record rejects missing or substituted verification evidence', () => {
+  assert.equal(createOperationRecord(r3({ identityVerification: undefined })).decision, 'DENIED');
+  const identityVerification = frozen({ ...r3().identityVerification,
+    evidence: { ...r3().identityVerification.evidence, fingerprint: 'f'.repeat(64) } });
+  assert.equal(createOperationRecord(r3({ identityVerification })).decision, 'DENIED');
 });
 
 test('operation evaluation, record and nested events are immutable', () => {
@@ -354,7 +372,8 @@ test('matching R3 patch evidence requires and preserves approval authority', () 
   const record = r3PatchRecord();
   const item = evidence('FILESYSTEM_PATCH', { riskLevel: 'R3',
     approvalAuthorityFingerprint: record.approvalAuthority.fingerprint,
-    verifiedIdentityAssertionFingerprint: record.verifiedIdentityAssertionFingerprint });
+    verifiedIdentityAssertionFingerprint: record.verifiedIdentityAssertionFingerprint,
+    identityVerificationEvidenceFingerprint: record.identityVerificationEvidenceFingerprint });
   const next = appendAdapterEvidence(record, item);
   assert.equal(next.adapterEvidence[0].approvalAuthorityFingerprint,
     record.approvalAuthority.fingerprint);
@@ -375,7 +394,8 @@ test('conflicting R3 approval authority replay fails closed', () => {
   const record = r3PatchRecord();
   const matching = evidence('FILESYSTEM_PATCH', { riskLevel: 'R3',
     approvalAuthorityFingerprint: record.approvalAuthority.fingerprint,
-    verifiedIdentityAssertionFingerprint: record.verifiedIdentityAssertionFingerprint });
+    verifiedIdentityAssertionFingerprint: record.verifiedIdentityAssertionFingerprint,
+    identityVerificationEvidenceFingerprint: record.identityVerificationEvidenceFingerprint });
   const next = appendAdapterEvidence(record, matching);
   assert.throws(() => appendAdapterEvidence(next, evidence('FILESYSTEM_PATCH', {
     evidenceId: 'FILESYSTEM_PATCH-2', riskLevel: 'R3',

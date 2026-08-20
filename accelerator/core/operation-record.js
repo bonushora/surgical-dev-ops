@@ -3,6 +3,7 @@
 const fs = require('fs');
 const path = require('path');
 const { evaluateR3ApprovalAuthority } = require('./risk-classification');
+const { validateIdentityVerificationResult } = require('../adapters/identity-verification-adapter');
 
 const RISKS = new Set(['R0', 'R1', 'R2', 'R3']);
 const POLICY_DECISIONS = new Set(['ALLOWED', 'DENIED', 'APPROVAL_REQUIRED']);
@@ -82,7 +83,14 @@ function validateApproval(input, operationId) {
     policyDecision: 'APPROVAL_REQUIRED', tenantId: input.tenantId || null,
     projectId: input.projectId || null, observedAt: input.observedAt
   });
-  return evaluation.decision === 'ALLOWED' ? null : evaluation.reason;
+  if (evaluation.decision !== 'ALLOWED') return evaluation.reason;
+  const identity = validateIdentityVerificationResult(input.identityVerification, {
+    subjectId: evaluation.authority.approver.id, operationId, workspace: input.workspace,
+    tenantId: input.tenantId || null, projectId: input.projectId || null,
+    fingerprint: evaluation.authority.verifiedIdentityAssertionFingerprint,
+    observedAt: input.observedAt
+  });
+  return identity ? null : 'Trusted identity verification evidence is missing or mismatched.';
 }
 
 function validateEvents(events, input) {
@@ -181,6 +189,9 @@ function createOperationRecord(input) {
         ? input.approvalAuthority.verifiedIdentityAssertion : null,
       verifiedIdentityAssertionFingerprint: input.riskLevel === 'R3'
         ? input.approvalAuthority.verifiedIdentityAssertionFingerprint : null,
+      identityVerification: input.riskLevel === 'R3' ? input.identityVerification : null,
+      identityVerificationEvidenceFingerprint: input.riskLevel === 'R3'
+        ? input.identityVerification.evidence.fingerprint : null,
       tenantId: input.riskLevel === 'R3' ? (input.tenantId || null) : null,
       projectId: input.riskLevel === 'R3' ? (input.projectId || null) : null,
       capabilityType: input.riskLevel === 'R3' ? input.capabilityType : null,
@@ -215,7 +226,14 @@ function requireRecord(record) {
         record.verifiedIdentityAssertionFingerprint !==
           approval.authority.verifiedIdentityAssertionFingerprint ||
         JSON.stringify(record.verifiedIdentityAssertion) !==
-          JSON.stringify(approval.authority.verifiedIdentityAssertion)) {
+          JSON.stringify(approval.authority.verifiedIdentityAssertion) ||
+        !validateIdentityVerificationResult(record.identityVerification, {
+          subjectId: approval.authority.approver.id, operationId: record.operationId,
+          workspace: record.workspace, tenantId: record.tenantId, projectId: record.projectId,
+          fingerprint: record.verifiedIdentityAssertionFingerprint,
+          observedAt: record.events[2].timestamp
+        }) || record.identityVerificationEvidenceFingerprint !==
+          record.identityVerification.evidence.fingerprint) {
       throw new Error('Stored R3 verified identity binding is malformed or substituted.');
     }
   }
@@ -265,6 +283,8 @@ function validatePayload(record, item) {
       record.policyDecision === 'APPROVAL_REQUIRED' && record.approvalAuthority &&
       item.approvalAuthorityFingerprint === record.approvalAuthority.fingerprint &&
       item.verifiedIdentityAssertionFingerprint === record.verifiedIdentityAssertionFingerprint &&
+      item.identityVerificationEvidenceFingerprint ===
+        record.identityVerificationEvidenceFingerprint &&
       record.scope && record.scope.target &&
       record.scope.target.path === target.requested &&
       record.scope.target.beforeSha256 === item.beforeSha256;
@@ -358,7 +378,9 @@ function normalizeAdapterEvidence(record, item, orderedAfter) {
       afterSha256: item.afterSha256,
       recovery: item.recovery,
       approvalAuthorityFingerprint: item.approvalAuthorityFingerprint || null,
-      verifiedIdentityAssertionFingerprint: item.verifiedIdentityAssertionFingerprint || null
+      verifiedIdentityAssertionFingerprint: item.verifiedIdentityAssertionFingerprint || null,
+      identityVerificationEvidenceFingerprint:
+        item.identityVerificationEvidenceFingerprint || null
     } : {})
   };
 }

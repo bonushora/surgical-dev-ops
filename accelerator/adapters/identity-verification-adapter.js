@@ -11,6 +11,42 @@ function denied(reason) {
   return deepFreeze({ schema: 'sdo.identity_verification_result.v1', decision: 'DENIED', reason, assertion: null, evidence: null });
 }
 
+function isDeepFrozen(value, seen = new Set()) {
+  if (!value || typeof value !== 'object') return true;
+  if (seen.has(value)) return true;
+  if (!Object.isFrozen(value)) return false;
+  seen.add(value);
+  return Object.values(value).every((child) => isDeepFrozen(child, seen));
+}
+
+function evidenceFingerprint(fields) {
+  return crypto.createHash('sha256')
+    .update(JSON.stringify(canonicalize(fields))).digest('hex');
+}
+
+function validateIdentityVerificationResult(result, expected = {}) {
+  if (!result || result.schema !== 'sdo.identity_verification_result.v1' ||
+      result.decision !== 'VERIFIED' || !isDeepFrozen(result) ||
+      !result.assertion || !result.evidence) return null;
+  const assertion = evaluateVerifiedHumanIdentityAssertion(result.assertion, expected);
+  if (assertion.decision !== 'VERIFIED') return null;
+  const evidence = result.evidence;
+  const fields = {
+    schema: 'sdo.identity_verification_evidence.v1', outcome: 'VERIFIED',
+    assertionFingerprint: assertion.assertion.fingerprint,
+    issuer: assertion.assertion.issuer, subjectId: assertion.assertion.subject.id,
+    operationId: assertion.assertion.operationId, workspace: assertion.assertion.workspace,
+    tenantId: assertion.assertion.tenantId, projectId: assertion.assertion.projectId,
+    verifiedAt: assertion.assertion.verifiedAt, verifierId: evidence.verifierId,
+    trustConfigurationFingerprint: evidence.trustConfigurationFingerprint
+  };
+  if (typeof fields.verifierId !== 'string' || !fields.verifierId.trim() ||
+      !/^[a-f0-9]{64}$/.test(fields.trustConfigurationFingerprint || '') ||
+      evidence.fingerprint !== evidenceFingerprint(fields) ||
+      Object.keys(evidence).length !== Object.keys(fields).length + 1) return null;
+  return result;
+}
+
 function verifyHumanIdentityAssertion(request, verifierPort) {
   if (!request || typeof request !== 'object' || Array.isArray(request) ||
       !request.rawAssertion || typeof request.rawAssertion !== 'object' ||
@@ -56,16 +92,18 @@ function verifyHumanIdentityAssertion(request, verifierPort) {
     projectId: evaluation.assertion.projectId,
     verifiedAt: evaluation.assertion.verifiedAt,
     verifierId: typeof output.verifierId === 'string' && output.verifierId.trim()
-      ? output.verifierId.trim() : 'EXTERNAL_VERIFIER'
+      ? output.verifierId.trim() : 'EXTERNAL_VERIFIER',
+    trustConfigurationFingerprint: evidenceFingerprint({
+      trustedIssuers: [...request.trustedIssuers].sort(),
+      audience: request.expected.audience
+    })
   };
-  const evidenceFingerprint = crypto.createHash('sha256')
-    .update(JSON.stringify(canonicalize(evidenceFields))).digest('hex');
   return deepFreeze({
     schema: 'sdo.identity_verification_result.v1', decision: 'VERIFIED',
     reason: 'External verifier and configured issuer trust accepted the human assertion.',
     assertion: evaluation.assertion,
-    evidence: { ...evidenceFields, fingerprint: evidenceFingerprint }
+    evidence: { ...evidenceFields, fingerprint: evidenceFingerprint(evidenceFields) }
   });
 }
 
-module.exports = { verifyHumanIdentityAssertion };
+module.exports = { verifyHumanIdentityAssertion, validateIdentityVerificationResult };

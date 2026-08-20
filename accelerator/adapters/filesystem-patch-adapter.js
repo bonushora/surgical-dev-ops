@@ -50,11 +50,16 @@ function validateGrant(evaluation) {
   const grant = evaluation.grant;
   const target = grant.scope && grant.scope.target;
   if (grant.capabilityType !== 'FILESYSTEM_PATCH' || grant.policyDecision !== 'ALLOWED' ||
-      !['R1', 'R2', 'R3'].includes(grant.riskLevel) || grant.lifecycleState !== 'PENDING' ||
+      grant.underlyingPolicyDecision !== 'APPROVAL_REQUIRED' || grant.riskLevel !== 'R3' ||
+      !/^[a-f0-9]{64}$/.test(grant.approvalAuthorityFingerprint || '') ||
+      !/^[a-f0-9]{64}$/.test(grant.verifiedIdentityAssertionFingerprint || '') ||
+      !/^[a-f0-9]{64}$/.test(grant.identityVerificationEvidenceFingerprint || '') ||
+      grant.lifecycleState !== 'PENDING' ||
       grant.idempotency !== 'IDEMPOTENT' || !target ||
       typeof target.path !== 'string' || !target.path ||
       typeof target.canonicalPath !== 'string' ||
-      !/^[a-f0-9]{64}$/.test(target.beforeSha256)) {
+      !/^[a-f0-9]{64}$/.test(target.beforeSha256) ||
+      !/^[a-f0-9]{64}$/.test(target.replacementSha256)) {
     throw new Error('Capability grant does not permit a bounded single-file patch.');
   }
   return grant;
@@ -113,11 +118,11 @@ function atomicReplace(target, content, mode) {
   }
 }
 
-function evidence({ operationId, workspace, requested, canonical, beforeHash, afterHash, outcome, recovery }) {
+function evidence({ operationId, workspace, requested, canonical, beforeHash, afterHash, outcome, recovery, observedAt }) {
   return deepFreeze({
     schema: 'sdo.filesystem_patch_result.v1', operationId, workspace,
     target: { requested, canonical }, beforeSha256: beforeHash, afterSha256: afterHash,
-    outcome, recovery
+    outcome, recovery, observedAt
   });
 }
 
@@ -141,6 +146,10 @@ function patchFileWithGrant({
   }
   const replacementBytes = Buffer.from(replacement);
   if (replacementBytes.byteLength > MAX_BYTES) throw new Error('Replacement exceeds the bounded patch size.');
+  const replacementHash = hash(replacementBytes);
+  if (replacementHash !== grant.scope.target.replacementSha256) {
+    throw new Error('Replacement content does not match the exact authorized SHA-256.');
+  }
 
   const resolved = resolveInspectedFile(canonicalWorkspace, requested);
   const lexicalTarget = path.resolve(canonicalWorkspace, requested);
@@ -162,12 +171,12 @@ function patchFileWithGrant({
   }
   const before = readRegularNoFollow(resolved.canonicalTarget);
   const beforeHash = hash(before.content);
-  const afterHash = hash(replacementBytes);
+  const afterHash = replacementHash;
   if (beforeHash !== authorized.beforeSha256) {
     if (beforeHash === afterHash) {
       return evidence({ operationId: normalizedOperationId, workspace: canonicalWorkspace,
         requested, canonical: resolved.canonicalTarget, beforeHash: authorized.beforeSha256,
-        afterHash, outcome: 'ALREADY_APPLIED', recovery: 'NOT_REQUIRED' });
+        afterHash, outcome: 'ALREADY_APPLIED', recovery: 'NOT_REQUIRED', observedAt: now });
     }
     throw new Error('BEFORE hash mismatch; target is stale or conflicting.');
   }
@@ -187,7 +196,7 @@ function patchFileWithGrant({
     }
     return evidence({ operationId: normalizedOperationId, workspace: canonicalWorkspace,
       requested, canonical: resolved.canonicalTarget, beforeHash, afterHash,
-      outcome: 'APPLIED', recovery: 'NOT_REQUIRED' });
+      outcome: 'APPLIED', recovery: 'NOT_REQUIRED', observedAt: now });
   } catch (verificationError) {
     let owned = false;
     try {
@@ -202,7 +211,7 @@ function patchFileWithGrant({
         const error = new Error('AFTER verification failed; original content was restored.');
         error.evidence = evidence({ operationId: normalizedOperationId, workspace: canonicalWorkspace,
           requested, canonical: resolved.canonicalTarget, beforeHash, afterHash,
-          outcome: 'FAILED', recovery: 'RESTORED' });
+          outcome: 'FAILED', recovery: 'RESTORED', observedAt: now });
         throw error;
       } catch (restoreError) {
         if (restoreError.evidence) throw restoreError;
@@ -211,7 +220,7 @@ function patchFileWithGrant({
     const error = new Error('AFTER verification failed; target ownership is unproven and was not restored.');
     error.evidence = evidence({ operationId: normalizedOperationId, workspace: canonicalWorkspace,
       requested, canonical: resolved.canonicalTarget, beforeHash, afterHash,
-      outcome: 'FAILED', recovery: 'NOT_ATTEMPTED_UNPROVEN_OWNERSHIP' });
+      outcome: 'FAILED', recovery: 'NOT_ATTEMPTED_UNPROVEN_OWNERSHIP', observedAt: now });
     throw error;
   }
 }

@@ -7,6 +7,9 @@ const fs = require('fs');
 const os = require('os');
 const path = require('path');
 const { evaluateCapabilityGrant } = require('../../accelerator/core/capability-grant');
+const { evaluateR3ApprovalAuthority } = require('../../accelerator/core/risk-classification');
+const { evaluateVerifiedHumanIdentityAssertion } = require('../../accelerator/core/human-identity-assertion');
+const { verifyHumanIdentityAssertion } = require('../../accelerator/adapters/identity-verification-adapter');
 const { patchFileWithGrant } = require('../../accelerator/adapters/filesystem-patch-adapter');
 
 const root = fs.mkdtempSync(path.join(os.tmpdir(), 'sdo-fs-patch-'));
@@ -28,12 +31,36 @@ const digest = (value) => crypto.createHash('sha256').update(value).digest('hex'
 
 function issue(overrides = {}) {
   const scope = overrides.scope || {
-    target: { path: 'target.txt', beforeSha256: digest('before\n') }
+    target: { path: 'target.txt', beforeSha256: digest('before\n'),
+      replacementSha256: digest('after\n') }
   };
+  const verifiedIdentityAssertion = evaluateVerifiedHumanIdentityAssertion({
+    schema: 'sdo.verified_human_identity_assertion.v1', verification: 'VERIFIED',
+    assertionId: 'assertion-patch', subject: { id: 'human-1', type: 'HUMAN' },
+    issuer: 'issuer:test', authentication: { method: 'PASSKEY', context: 'MFA' },
+    issuedAt: '2026-08-20T11:55:00.000Z', expiresAt: EXPIRY,
+    audience: ['surgical-devops'], operationId: 'op-patch', workspace,
+    tenantId: 'tenant-1', projectId: 'project-1', revocationStatus: 'NOT_REVOKED',
+    verifiedAt: '2026-08-20T11:59:00.000Z'
+  }).assertion;
+  const approvalAuthority = evaluateR3ApprovalAuthority({
+    approvalAuthorityId: 'approval-patch', operationId: 'op-patch',
+    approver: { id: 'human-1', type: 'HUMAN' }, decision: 'APPROVED', riskLevel: 'R3',
+    capabilityType: 'FILESYSTEM_PATCH', action: 'PATCH_FILE', workspace, scope,
+    tenantId: 'tenant-1', projectId: 'project-1', verifiedIdentityAssertion,
+    policyDecision: 'APPROVAL_REQUIRED', timestamp: NOW, expiresAt: EXPIRY
+  }).authority;
+  const identityVerification = verifyHumanIdentityAssertion({ rawAssertion: { token: 'test' },
+    trustedIssuers: ['issuer:test'], expected: { subjectId: 'human-1',
+      audience: 'surgical-devops', operationId: 'op-patch', workspace,
+      tenantId: 'tenant-1', projectId: 'project-1', observedAt: NOW }
+  }, { verify() { return { status: 'VERIFIED', assertion: verifiedIdentityAssertion,
+    verifierId: 'test-port' }; } });
   const common = {
-    operationId: 'op-patch', workspace, policyDecision: 'ALLOWED', riskLevel: 'R1',
+    operationId: 'op-patch', workspace, policyDecision: 'APPROVAL_REQUIRED', riskLevel: 'R3',
     lifecycleState: 'PENDING', capabilityType: 'FILESYSTEM_PATCH', scope,
-    idempotency: 'IDEMPOTENT'
+    idempotency: 'IDEMPOTENT', tenantId: 'tenant-1', projectId: 'project-1',
+    approvalAuthority, identityVerification
   };
   return evaluateCapabilityGrant(
     { ...common, expiresAt: EXPIRY, ...overrides.request },
@@ -92,7 +119,8 @@ test('symlink target fails closed', () => {
   const link = path.join(workspace, 'link.txt');
   fs.writeFileSync(link, 'before\n');
   const grantEvaluation = issue({
-    scope: { target: { path: 'link.txt', beforeSha256: digest('before\n') } }
+    scope: { target: { path: 'link.txt', beforeSha256: digest('before\n'),
+      replacementSha256: digest('after\n') } }
   });
   fs.unlinkSync(link);
   fs.symlinkSync(targetPath, link);
@@ -115,7 +143,8 @@ test('nonexistent target creation attempt fails closed', () => {
 });
 
 test('multi-file or broadened scope is denied', () => {
-  const target = { path: 'target.txt', beforeSha256: digest('before\n') };
+  const target = { path: 'target.txt', beforeSha256: digest('before\n'),
+    replacementSha256: digest('after\n') };
   assert.equal(issue({ scope: { target, paths: ['other.txt'] } }).decision, 'DENIED');
 });
 
@@ -162,7 +191,13 @@ test('identical replay returns deterministic idempotent result', () => {
 test('conflicting retry fails closed', () => {
   const grantEvaluation = issue();
   patch({ grantEvaluation });
-  assert.throws(() => patch({ grantEvaluation, replacement: 'different\n' }), /BEFORE hash mismatch/);
+  assert.throws(() => patch({ grantEvaluation, replacement: 'different\n' }), /authorized SHA-256/);
+});
+
+test('R1 and R2 patch grants are denied before adapter dispatch', () => {
+  for (const riskLevel of ['R1', 'R2']) {
+    assert.equal(issue({ request: { riskLevel }, authority: { riskLevel } }).decision, 'DENIED');
+  }
 });
 
 test('verification failure restores only provably owned output', () => {

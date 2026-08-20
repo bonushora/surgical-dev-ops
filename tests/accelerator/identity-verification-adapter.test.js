@@ -5,7 +5,10 @@ const assert = require('node:assert/strict');
 const fs = require('fs');
 const os = require('os');
 const path = require('path');
-const { verifyHumanIdentityAssertion } = require('../../accelerator/adapters/identity-verification-adapter');
+const {
+  verifyHumanIdentityAssertion,
+  validateIdentityVerificationResult
+} = require('../../accelerator/adapters/identity-verification-adapter');
 
 const workspace = fs.mkdtempSync(path.join(os.tmpdir(), 'sdo-verifier-'));
 test.after(() => fs.rmSync(workspace, { recursive: true, force: true }));
@@ -37,6 +40,14 @@ test('explicitly trusted issuer succeeds with immutable evidence', () => {
   assert.ok(Object.isFrozen(result));
   assert.ok(Object.isFrozen(result.assertion));
   assert.ok(Object.isFrozen(result.evidence));
+  assert.strictEqual(validateIdentityVerificationResult(result, request().expected), result);
+});
+
+test('verification evidence fingerprint substitution fails validation', () => {
+  const result = verifyHumanIdentityAssertion(request(), verifier());
+  const substituted = Object.freeze({ ...result, evidence: Object.freeze({ ...result.evidence,
+    fingerprint: 'f'.repeat(64) }) });
+  assert.equal(validateIdentityVerificationResult(substituted, request().expected), null);
 });
 
 test('untrusted issuer fails closed', () => {

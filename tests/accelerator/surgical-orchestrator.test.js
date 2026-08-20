@@ -13,6 +13,8 @@ const declarativeInspection = require('../../accelerator/core/declarative-inspec
 const filesystemReadAdapter = require('../../accelerator/adapters/filesystem-read-adapter');
 const gitReadAdapter = require('../../accelerator/adapters/git-read-adapter');
 const processValidationAdapter = require('../../accelerator/adapters/process-validation-adapter');
+const identityVerificationAdapter = require('../../accelerator/adapters/identity-verification-adapter');
+const filesystemPatchAdapter = require('../../accelerator/adapters/filesystem-patch-adapter');
 const { evaluateCapabilityGrant } = require('../../accelerator/core/capability-grant');
 const { evaluateR3ApprovalAuthority } = require('../../accelerator/core/risk-classification');
 const { evaluateVerifiedHumanIdentityAssertion } = require('../../accelerator/core/human-identity-assertion');
@@ -79,7 +81,9 @@ function operationRecord(repo) {
 
 function r3Authority(repo, overrides = {}) {
   const scope = { target: { path: 'target.js', beforeSha256:
-    crypto.createHash('sha256').update('const value = 1;\n').digest('hex') } };
+    crypto.createHash('sha256').update('const value = 1;\n').digest('hex'),
+    replacementSha256:
+    crypto.createHash('sha256').update('const value = 2;\n').digest('hex') } };
   const verifiedIdentityAssertion = evaluateVerifiedHumanIdentityAssertion({
     schema: 'sdo.verified_human_identity_assertion.v1', verification: 'VERIFIED',
     assertionId: 'assertion-1', subject: { id: 'human-1', type: 'HUMAN' }, issuer: 'issuer:test',
@@ -99,15 +103,24 @@ function r3Authority(repo, overrides = {}) {
 function r3Execution(repo, overrides = {}) {
   const approvalAuthority = r3Authority(repo);
   const scope = approvalAuthority.scope;
+  const identityVerification = identityVerificationAdapter.verifyHumanIdentityAssertion({
+    rawAssertion: { token: 'test' }, trustedIssuers: ['issuer:test'], expected: {
+      subjectId: 'human-1', audience: 'surgical-devops', operationId: 'op-1', workspace: repo,
+      tenantId: 'tenant-1', projectId: 'project-1', observedAt: NOW
+    }
+  }, { verify() { return { status: 'VERIFIED',
+    assertion: approvalAuthority.verifiedIdentityAssertion, verifierId: 'test-port' }; } });
   const common = { operationId: 'op-1', workspace: repo, policyDecision: 'APPROVAL_REQUIRED',
     riskLevel: 'R3', lifecycleState: 'PENDING', capabilityType: 'FILESYSTEM_PATCH', scope,
-    idempotency: 'IDEMPOTENT', approvalAuthority, tenantId: 'tenant-1', projectId: 'project-1' };
+    idempotency: 'IDEMPOTENT', approvalAuthority, identityVerification,
+    tenantId: 'tenant-1', projectId: 'project-1' };
   const grantEvaluation = evaluateCapabilityGrant(
     { ...common, expiresAt: EXPIRY }, { ...common, evaluatedAt: CREATED });
   const operationRecord = createOperationRecord({ operationId: 'op-1',
     requester: { id: 'requester-1', type: 'HUMAN' }, workspace: repo,
     objective: 'Govern one bounded R3 patch authority.', policyDecision: 'APPROVAL_REQUIRED',
     riskLevel: 'R3', idempotency: 'IDEMPOTENT', approvalAuthority,
+    identityVerification,
     capabilityType: 'FILESYSTEM_PATCH', action: 'PATCH_FILE', scope, observedAt: NOW,
     tenantId: 'tenant-1', projectId: 'project-1',
     events: [
@@ -123,7 +136,15 @@ function r3Execution(repo, overrides = {}) {
   return { adapter: 'FILESYSTEM_PATCH', action: 'PATCH_FILE', operationId: 'op-1',
     workspace: repo, target: 'target.js', replacement: 'const value = 2;\n', observedAt: NOW,
     tenantId: 'tenant-1', projectId: 'project-1',
+    rawIdentityAssertion: { token: 'test' },
     grantEvaluation, operationRecord, lifecycle: lifecycle(repo), ...overrides };
+}
+
+function r3Runtime(request, overrides = {}) {
+  return { trustedIdentityIssuers: ['issuer:test'], identityAudience: 'surgical-devops',
+    identityVerifierPort: { verify() { return { status: 'VERIFIED',
+      assertion: request.operationRecord.verifiedIdentityAssertion, verifierId: 'test-port' }; } },
+    ...overrides };
 }
 
 function lifecycle(repo) {
@@ -289,43 +310,173 @@ test('unknown action is denied before preflight and dispatch', (context) => {
   assert.equal(discoveryCalls, 0);
 });
 
-test('valid R3 authority is recognized while FILESYSTEM_PATCH remains physically disconnected', () =>
+test('valid verified R3 authority physically applies one exact FILESYSTEM_PATCH', () =>
   withFixture((repo) => {
-    const before = fs.readFileSync(path.join(repo, 'target.js'), 'utf8');
     const request = r3Execution(repo);
     const result = orchestrate(input(repo, request, { risk: 'ALTO',
-      policy: { decision: 'APPROVAL_REQUIRED', approvalAuthority: request.operationRecord.approvalAuthority } }));
-    assert.equal(result.orchestration.status, 'DENIED');
-    assert.equal(result.governed.approvalAuthorityRecognized, true, JSON.stringify(result.execution));
-    assert.equal(result.orchestration.executionAttempted, false);
-    assert.equal(fs.readFileSync(path.join(repo, 'target.js'), 'utf8'), before);
+      policy: { decision: 'APPROVAL_REQUIRED',
+        approvalAuthority: request.operationRecord.approvalAuthority } }), r3Runtime(request));
+    assert.equal(result.orchestration.status, 'COMPLETED', JSON.stringify(result.execution));
+    assert.equal(result.execution.outcome, 'APPLIED');
+    assert.equal(result.governed.lifecycle.status, 'COMPLETED');
+    assert.equal(result.governed.operationRecord.finalization.outcome, 'SUCCESS');
+    assert.ok(result.governed.lifecycle.evidence.after.changedFiles.some(
+      (entry) => entry.endsWith('target.js')));
+    assert.equal(result.governed.operationRecord.adapterEvidence[0].replacementSha256,
+      request.grantEvaluation.grant.scope.target.replacementSha256);
+    assert.equal(fs.readFileSync(path.join(repo, 'target.js'), 'utf8'), 'const value = 2;\n');
     assert.equal(request.grantEvaluation.grant.approvalAuthorityFingerprint,
       request.operationRecord.approvalAuthority.fingerprint);
   }));
 
-test('boolean, missing or invalid R3 approval cannot authorize or self-approve', () =>
+test('identical completed patch replay performs zero duplicate mutation', (context) =>
   withFixture((repo) => {
     const request = r3Execution(repo);
+    const governedInput = input(repo, request, { risk: 'ALTO', policy: {
+      decision: 'APPROVAL_REQUIRED', approvalAuthority: request.operationRecord.approvalAuthority
+    } });
+    const first = orchestrate(governedInput, r3Runtime(request));
+    let calls = 0;
+    context.mock.method(filesystemPatchAdapter, 'patchFileWithGrant', () => { calls += 1; });
+    const replayRequest = { ...request, operationRecord: first.governed.operationRecord,
+      lifecycle: first.governed.lifecycle };
+    const replay = orchestrate(input(repo, replayRequest, { risk: 'ALTO', policy: {
+      decision: 'APPROVAL_REQUIRED', approvalAuthority: request.operationRecord.approvalAuthority
+    } }), r3Runtime(replayRequest));
+    assert.equal(replay.orchestration.status, 'COMPLETED');
+    assert.equal(replay.orchestration.executionAttempted, false);
+    assert.equal(replay.governed.replay, true);
+    assert.equal(calls, 0);
+  }));
+
+test('conflicting completed patch replay fails closed before dispatch', (context) =>
+  withFixture((repo) => {
+    const request = r3Execution(repo);
+    const first = orchestrate(input(repo, request, { risk: 'ALTO', policy: {
+      decision: 'APPROVAL_REQUIRED', approvalAuthority: request.operationRecord.approvalAuthority
+    } }), r3Runtime(request));
+    let calls = 0;
+    context.mock.method(filesystemPatchAdapter, 'patchFileWithGrant', () => { calls += 1; });
+    const conflicting = { ...request, replacement: 'const value = 3;\n',
+      operationRecord: first.governed.operationRecord, lifecycle: first.governed.lifecycle };
+    const result = orchestrate(input(repo, conflicting, { risk: 'ALTO', policy: {
+      decision: 'APPROVAL_REQUIRED', approvalAuthority: request.operationRecord.approvalAuthority
+    } }), r3Runtime(conflicting));
+    assert.equal(result.orchestration.status, 'DENIED');
+    assert.equal(calls, 0);
+  }));
+
+test('untrusted identity and stale target produce zero patch dispatch', (context) =>
+  withFixture((repo) => {
+    const request = r3Execution(repo);
+    let calls = 0;
+    context.mock.method(filesystemPatchAdapter, 'patchFileWithGrant', () => { calls += 1; });
+    const untrusted = orchestrate(input(repo, request, { risk: 'ALTO', policy: {
+      decision: 'APPROVAL_REQUIRED', approvalAuthority: request.operationRecord.approvalAuthority
+    } }), r3Runtime(request, { trustedIdentityIssuers: ['issuer:other'] }));
+    assert.notEqual(untrusted.orchestration.status, 'COMPLETED');
+    fs.writeFileSync(path.join(repo, 'target.js'), 'stale\n');
+    const stale = orchestrate(input(repo, request, { risk: 'ALTO', policy: {
+      decision: 'APPROVAL_REQUIRED', approvalAuthority: request.operationRecord.approvalAuthority
+    } }), r3Runtime(request));
+    assert.notEqual(stale.orchestration.status, 'COMPLETED');
+    assert.equal(calls, 0);
+  }));
+
+test('R1 and R2 patch requests produce zero physical dispatch', (context) =>
+  withFixture((repo) => {
+    const request = r3Execution(repo);
+    let calls = 0;
+    context.mock.method(filesystemPatchAdapter, 'patchFileWithGrant', () => { calls += 1; });
+    for (const [riskLevel, risk] of [['R1', 'BAIXO'], ['R2', 'MÉDIO']]) {
+      const grantEvaluation = frozen({ ...request.grantEvaluation,
+        grant: { ...request.grantEvaluation.grant, riskLevel } });
+      const result = orchestrate(input(repo, { ...request, grantEvaluation }, {
+        risk, policy: { decision: 'ALLOW' }
+      }), r3Runtime(request));
+      assert.notEqual(result.orchestration.status, 'COMPLETED');
+    }
+    assert.equal(calls, 0);
+  }));
+
+test('patch identity authority grant scope and lifecycle mismatches dispatch zero times', (context) =>
+  withFixture((repo) => {
+    const request = r3Execution(repo);
+    let calls = 0;
+    context.mock.method(filesystemPatchAdapter, 'patchFileWithGrant', () => { calls += 1; });
+    const policy = { decision: 'APPROVAL_REQUIRED',
+      approvalAuthority: request.operationRecord.approvalAuthority };
+    const cases = [
+      [{ ...request, operationId: 'other' }, r3Runtime(request)],
+      [{ ...request, workspace: fs.realpathSync(os.tmpdir()) }, r3Runtime(request)],
+      [{ ...request, projectId: 'other' }, r3Runtime(request)],
+      [{ ...request, target: 'invalid.js' }, r3Runtime(request)],
+      [{ ...request, grantEvaluation: null }, r3Runtime(request)],
+      [{ ...request, observedAt: EXPIRY }, r3Runtime(request)],
+      [{ ...request, lifecycle: frozen({ ...request.lifecycle, status: 'NOT_EXECUTABLE' }) },
+        r3Runtime(request)],
+      [request, r3Runtime(request, { identityAudience: 'wrong-audience' })]
+    ];
+    for (const [candidate, runtime] of cases) {
+      const result = orchestrate(input(repo, candidate, { risk: 'ALTO', policy }), runtime);
+      assert.notEqual(result.orchestration.status, 'COMPLETED');
+    }
+    assert.equal(calls, 0);
+  }));
+
+test('patch recovery evidence finalizes only as FAILED', (context) =>
+  withFixture((repo) => {
+    for (const recovery of ['RESTORED', 'NOT_ATTEMPTED_UNPROVEN_OWNERSHIP']) {
+      const request = r3Execution(repo);
+      context.mock.method(filesystemPatchAdapter, 'patchFileWithGrant', () => {
+        const error = new Error('AFTER verification failed');
+        error.evidence = frozen({ schema: 'sdo.filesystem_patch_result.v1',
+          operationId: 'op-1', workspace: repo,
+          target: { requested: 'target.js', canonical: path.join(repo, 'target.js') },
+          beforeSha256: request.grantEvaluation.grant.scope.target.beforeSha256,
+          afterSha256: request.grantEvaluation.grant.scope.target.replacementSha256,
+          outcome: 'FAILED', recovery, observedAt: NOW });
+        throw error;
+      });
+      const result = orchestrate(input(repo, request, { risk: 'ALTO', policy: {
+        decision: 'APPROVAL_REQUIRED', approvalAuthority: request.operationRecord.approvalAuthority
+      } }), r3Runtime(request));
+      assert.equal(result.orchestration.status, 'FAILED');
+      assert.equal(result.governed.lifecycle.status, 'FAILED');
+      assert.equal(result.governed.operationRecord.finalization.successfulCompletionEligible, false);
+      context.mock.restoreAll();
+    }
+  }));
+
+test('boolean, missing or invalid R3 approval cannot authorize or self-approve', (context) =>
+  withFixture((repo) => {
+    const request = r3Execution(repo);
+    let calls = 0;
+    context.mock.method(filesystemPatchAdapter, 'patchFileWithGrant', () => { calls += 1; });
     for (const policy of [
       { decision: 'APPROVAL_REQUIRED', approved: true },
       { decision: 'APPROVAL_REQUIRED' },
       { decision: 'APPROVAL_REQUIRED', approvalAuthority: { ...request.operationRecord.approvalAuthority,
         approver: { id: 'agent-1', type: 'AGENT' } } }
     ]) {
-      const result = orchestrate(input(repo, request, { risk: 'ALTO', policy }));
-      assert.equal(result.orchestration.status, 'DENIED');
+      const result = orchestrate(input(repo, request, { risk: 'ALTO', policy }), r3Runtime(request));
+      assert.notEqual(result.orchestration.status, 'COMPLETED');
       assert.notEqual(result.governed && result.governed.approvalAuthorityRecognized, true);
     }
+    assert.equal(calls, 0);
   }));
 
-test('authentication alone does not authorize mutation', () => withFixture((repo) => {
+test('authentication alone does not authorize mutation', (context) => withFixture((repo) => {
   const request = r3Execution(repo);
+  let calls = 0;
+  context.mock.method(filesystemPatchAdapter, 'patchFileWithGrant', () => { calls += 1; });
   const identityOnly = request.operationRecord.verifiedIdentityAssertion;
   const result = orchestrate(input(repo, request, { risk: 'ALTO', policy: {
     decision: 'APPROVAL_REQUIRED', verifiedIdentityAssertion: identityOnly
-  } }));
-  assert.equal(result.orchestration.status, 'DENIED');
+  } }), r3Runtime(request));
+  assert.notEqual(result.orchestration.status, 'COMPLETED');
   assert.notEqual(result.governed && result.governed.approvalAuthorityRecognized, true);
+  assert.equal(calls, 0);
 }));
 
 test('tenant and verified assertion grant-link substitution fail closed', () =>
@@ -334,8 +485,8 @@ test('tenant and verified assertion grant-link substitution fail closed', () =>
     const wrongTenant = orchestrate(input(repo, { ...request, tenantId: 'other' }, {
       risk: 'ALTO', policy: { decision: 'APPROVAL_REQUIRED',
         approvalAuthority: request.operationRecord.approvalAuthority }
-    }));
-    assert.equal(wrongTenant.orchestration.status, 'DENIED');
+    }), r3Runtime(request));
+    assert.notEqual(wrongTenant.orchestration.status, 'COMPLETED');
 
     const substitutedGrant = frozen({ ...request.grantEvaluation,
       grant: { ...request.grantEvaluation.grant,
@@ -343,8 +494,8 @@ test('tenant and verified assertion grant-link substitution fail closed', () =>
     const substituted = orchestrate(input(repo, { ...request, grantEvaluation: substitutedGrant }, {
       risk: 'ALTO', policy: { decision: 'APPROVAL_REQUIRED',
         approvalAuthority: request.operationRecord.approvalAuthority }
-    }));
-    assert.equal(substituted.orchestration.status, 'DENIED');
+    }), r3Runtime(request));
+    assert.notEqual(substituted.orchestration.status, 'COMPLETED');
     assert.notEqual(substituted.governed && substituted.governed.approvalAuthorityRecognized, true);
   }));
 

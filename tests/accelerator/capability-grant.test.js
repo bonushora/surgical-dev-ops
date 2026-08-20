@@ -9,6 +9,7 @@ const crypto = require('crypto');
 const { evaluateCapabilityGrant } = require('../../accelerator/core/capability-grant');
 const { evaluateR3ApprovalAuthority } = require('../../accelerator/core/risk-classification');
 const { evaluateVerifiedHumanIdentityAssertion } = require('../../accelerator/core/human-identity-assertion');
+const { verifyHumanIdentityAssertion } = require('../../accelerator/adapters/identity-verification-adapter');
 
 const workspace = fs.mkdtempSync(path.join(os.tmpdir(), 'sdo-capability-'));
 fs.writeFileSync(path.join(workspace, 'target.txt'), 'read-only\n');
@@ -46,19 +47,33 @@ function r3Approval(overrides = {}) {
     approver: { id: 'human-1', type: 'HUMAN' }, decision: 'APPROVED', riskLevel: 'R3',
     capabilityType: 'FILESYSTEM_PATCH', action: 'PATCH_FILE', workspace,
     tenantId: 'tenant-1', projectId: 'project-1', verifiedIdentityAssertion,
-    scope: { target: { path: 'target.txt', beforeSha256: crypto.createHash('sha256').update('read-only\n').digest('hex') } },
+    scope: { target: { path: 'target.txt',
+      beforeSha256: crypto.createHash('sha256').update('read-only\n').digest('hex'),
+      replacementSha256: crypto.createHash('sha256').update('after\n').digest('hex') } },
     policyDecision: 'APPROVAL_REQUIRED', timestamp: '2026-08-20T12:00:00.000Z',
     expiresAt: '2026-08-20T13:00:00.000Z', ...overrides }).authority;
 }
 
+function identityVerification(approvalAuthority = r3Approval()) {
+  return verifyHumanIdentityAssertion({ rawAssertion: { token: 'test' },
+    trustedIssuers: ['issuer:test'], expected: {
+      subjectId: 'human-1', audience: 'surgical-devops', operationId: 'op-1', workspace,
+      tenantId: 'tenant-1', projectId: 'project-1', observedAt: '2026-08-20T12:00:00.000Z'
+    } }, { verify() { return { status: 'VERIFIED',
+    assertion: approvalAuthority.verifiedIdentityAssertion, verifierId: 'test-port' }; } });
+}
+
 function r3Grant(overrides = {}, authorityOverrides = {}) {
   const approvalAuthority = r3Approval();
+  const verifiedIdentity = identityVerification(approvalAuthority);
   const scope = approvalAuthority.scope;
   return evaluateCapabilityGrant(request({ policyDecision: 'APPROVAL_REQUIRED', riskLevel: 'R3',
     capabilityType: 'FILESYSTEM_PATCH', scope, approvalAuthority,
+    identityVerification: verifiedIdentity,
     tenantId: 'tenant-1', projectId: 'project-1', ...overrides }),
   authority({ policyDecision: 'APPROVAL_REQUIRED', riskLevel: 'R3', capabilityType: 'FILESYSTEM_PATCH',
-    scope, approvalAuthority, tenantId: 'tenant-1', projectId: 'project-1', ...authorityOverrides }));
+    scope, approvalAuthority, identityVerification: verifiedIdentity,
+    tenantId: 'tenant-1', projectId: 'project-1', ...authorityOverrides }));
 }
 
 test('default deny without authoritative policy', () => {
@@ -85,18 +100,22 @@ test('valid bounded process-validation grant is allowed', () => {
   ).decision, 'ALLOWED');
 });
 
-test('valid exact single-file patch grant is allowed', () => {
+test('R1 and R2 single-file patch grants are denied', () => {
   const capabilityType = 'FILESYSTEM_PATCH';
   const scope = { target: {
     path: 'target.txt',
-    beforeSha256: crypto.createHash('sha256').update('read-only\n').digest('hex')
+    beforeSha256: crypto.createHash('sha256').update('read-only\n').digest('hex'),
+    replacementSha256: crypto.createHash('sha256').update('after\n').digest('hex')
   } };
   const result = evaluateCapabilityGrant(
     request({ capabilityType, riskLevel: 'R1', scope }),
     authority({ capabilityType, riskLevel: 'R1', scope })
   );
-  assert.equal(result.decision, 'ALLOWED');
-  assert.equal(result.grant.scope.target.canonicalPath, path.join(workspace, 'target.txt'));
+  assert.equal(result.decision, 'DENIED');
+  assert.equal(evaluateCapabilityGrant(
+    request({ capabilityType, riskLevel: 'R2', scope }),
+    authority({ capabilityType, riskLevel: 'R2', scope })
+  ).decision, 'DENIED');
 });
 
 test('valid R3 patch grant binds human approval authority', () => {
@@ -105,6 +124,8 @@ test('valid R3 patch grant binds human approval authority', () => {
   assert.equal(result.grant.approvalAuthorityFingerprint, r3Approval().fingerprint);
   assert.equal(result.grant.verifiedIdentityAssertionFingerprint,
     r3Approval().verifiedIdentityAssertionFingerprint);
+  assert.equal(result.grant.identityVerificationEvidenceFingerprint,
+    identityVerification().evidence.fingerprint);
 });
 
 test('R3 grant rejects verified identity or tenant substitution', () => {
@@ -112,6 +133,7 @@ test('R3 grant rejects verified identity or tenant substitution', () => {
     verifiedIdentityAssertionFingerprint: 'f'.repeat(64) } }).decision, 'DENIED');
   assert.equal(r3Grant({ tenantId: 'other' }).decision, 'DENIED');
   assert.equal(r3Grant({ projectId: 'other' }).decision, 'DENIED');
+  assert.equal(r3Grant({ identityVerification: undefined }).decision, 'DENIED');
 });
 
 test('R3 patch grant denies missing or mismatched authority', () => {
