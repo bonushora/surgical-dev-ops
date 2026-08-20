@@ -39,6 +39,7 @@ const filesystemPatchAdapter = require('../adapters/filesystem-patch-adapter');
 const identityVerificationAdapter = require('../adapters/identity-verification-adapter');
 const { deriveCapabilityGrantFingerprint } = require('./capability-grant');
 const { classifyMutationAuthority } = require('./authoritative-clock');
+const { requireDurabilityReceipt } = require('./mutation-durability');
 const {
   createMutationTransaction,
   createCommitAuthorityEvidence,
@@ -361,6 +362,12 @@ function createMutationCoordinator(request, validation, runtime, idempotencyKey)
     throw new Error('Exact-target mutation lock adapter is required.');
   }
   const grant = request.grantEvaluation.grant;
+  function requireJournalDurability(state, stage) {
+    const operation = ['FINALIZED_SUCCESS', 'FINALIZED_FAILED', 'RECOVERY_UNRESOLVED']
+      .includes(stage) ? 'DURABLE_FINALIZATION' : 'DURABLE_JOURNAL_APPEND';
+    requireDurabilityReceipt(state && state.durability, operation);
+    return state;
+  }
   let transaction = createMutationTransaction({
     operationId: request.operationId,
     workspace: request.workspace,
@@ -380,10 +387,11 @@ function createMutationCoordinator(request, validation, runtime, idempotencyKey)
     }
   } catch (error) {
     if (!/does not exist/.test(error.message)) throw error;
-    journal = journalPort.create(transaction);
+    journal = requireJournalDurability(journalPort.create(transaction), 'PREPARED');
   }
   const acquired = lockPort.acquireMutationLock({
-    transaction, workspace: request.workspace, target: request.target
+    transaction, workspace: request.workspace, target: request.target,
+    durabilityAdapter: runtime.durabilityAdapter
   });
   if (!acquired || acquired.decision !== 'ACQUIRED') {
     throw new Error('Exact-target mutation lock is contended; mutation is denied.');
@@ -391,7 +399,7 @@ function createMutationCoordinator(request, validation, runtime, idempotencyKey)
   transaction = acquired.transaction;
   let lockRetained = true;
   try {
-    journal = journalPort.append(transaction);
+    journal = requireJournalDurability(journalPort.append(transaction), 'LOCKED');
   } catch (error) {
     error.lockRetained = true;
     throw error;
@@ -399,7 +407,7 @@ function createMutationCoordinator(request, validation, runtime, idempotencyKey)
 
   function advance(stage) {
     const candidate = transitionMutationTransaction(transaction, stage);
-    const accepted = journalPort.append(candidate);
+    const accepted = requireJournalDurability(journalPort.append(candidate), stage);
     transaction = candidate;
     journal = accepted;
     return transaction;
@@ -408,7 +416,8 @@ function createMutationCoordinator(request, validation, runtime, idempotencyKey)
   function verifyCommitAuthority(input) {
     const evidence = createCommitAuthorityEvidence(transaction, input);
     const candidate = bindCommitAuthorityEvidence(transaction, evidence);
-    const accepted = journalPort.append(candidate);
+    const accepted = requireJournalDurability(journalPort.append(candidate),
+      'COMMIT_AUTHORITY_VERIFIED');
     if (!accepted || accepted.journalId !== journal.journalId ||
         !accepted.transaction || accepted.transaction.transactionId !== candidate.transactionId ||
         accepted.transaction.stage !== 'COMMIT_AUTHORITY_VERIFIED' ||
@@ -435,7 +444,8 @@ function createMutationCoordinator(request, validation, runtime, idempotencyKey)
     }
     try {
       advance('FINALIZED_FAILED');
-      const released = lockPort.releaseMutationLock({ transaction, lock: transaction.lock });
+      const released = lockPort.releaseMutationLock({ transaction, lock: transaction.lock,
+        durabilityAdapter: runtime.durabilityAdapter });
       lockRetained = released.decision !== 'RELEASED';
       return !lockRetained;
     } catch {
@@ -448,7 +458,8 @@ function createMutationCoordinator(request, validation, runtime, idempotencyKey)
     if (!['FINALIZED_SUCCESS', 'FINALIZED_FAILED', 'RECOVERY_UNRESOLVED'].includes(transaction.stage)) {
       throw new Error('Mutation lock release requires a durable terminal journal state.');
     }
-    const released = lockPort.releaseMutationLock({ transaction, lock: transaction.lock });
+    const released = lockPort.releaseMutationLock({ transaction, lock: transaction.lock,
+      durabilityAdapter: runtime.durabilityAdapter });
     if (released.decision !== 'RELEASED') throw new Error('Mutation lock release is ambiguous.');
     lockRetained = false;
     return released;
@@ -534,6 +545,7 @@ function invokeControlledAdapter(request, runtime, validation, mutationCoordinat
       ...common, target: request.target, replacement: request.replacement
     }, { authoritativeClock: runtime.authoritativeClock,
       previousReading: validation.authorityTimeEvidence.reading,
+      durabilityAdapter: runtime.durabilityAdapter,
       mutationTransaction: mutationCoordinator });
   }
   return processValidationAdapter.validateJavaScriptWithGrant({
@@ -1215,7 +1227,8 @@ function recoverGovernedMutation(input, runtime = {}) {
     journalAdapter: runtime.mutationJournalAdapter,
     lockAdapter: runtime.mutationLockAdapter || mutationLockAdapter,
     authoritativeClock: runtime.authoritativeClock,
-    ownerTerminationPort: runtime.ownerTerminationPort
+    ownerTerminationPort: runtime.ownerTerminationPort,
+    durabilityAdapter: runtime.durabilityAdapter
   });
   const recovery = adapter.recover({ transaction: input.transaction });
   const operationRecord = input.operationRecord && recovery.fingerprint

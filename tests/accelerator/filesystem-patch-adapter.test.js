@@ -105,9 +105,11 @@ function issue(overrides = {}) {
 function patch(overrides = {}) {
   const clock = overrides.authoritativeClock || clockAt();
   const suppliedMutationTransaction = overrides.mutationTransaction;
+  const durabilityAdapter = overrides.durabilityAdapter;
   const request = { ...overrides };
   delete request.authoritativeClock;
   delete request.mutationTransaction;
+  delete request.durabilityAdapter;
   const patchRequest = {
     operationId: 'op-patch', workspace, target: 'target.txt', replacement: 'after\n',
     grantEvaluation: issue(), observedAt: NOW, ...request
@@ -153,7 +155,23 @@ function patch(overrides = {}) {
   }
   return patchFileWithGrant(patchRequest,
     { authoritativeClock: clock,
+      durabilityAdapter,
       mutationTransaction: suppliedMutationTransaction || mutationTransaction });
+}
+
+function durabilityReceipt(operation) {
+  return frozen({ schema: 'sdo.filesystem_durability_receipt.v1', operation,
+    decision: 'CONFIRMED', platform: 'test', provider: 'TEST_DURABILITY',
+    claimLevel: 'FILESYSTEM_DURABILITY_PRIMITIVES_ENFORCED',
+    powerLossValidated: false, subject: 'test' });
+}
+
+function durabilityPort(overrides = {}) {
+  return frozen({
+    flushFile: overrides.flushFile || (() => durabilityReceipt('FLUSH_FILE_DATA')),
+    confirmRename: overrides.confirmRename ||
+      (() => durabilityReceipt('DURABLE_RENAME_BOUNDARY'))
+  });
 }
 
 test('valid single-file replacement', () => {
@@ -190,6 +208,44 @@ test('physical replacement requires durable commit-authority journal acceptance'
     schema: 'sdo.capability_grant_evaluation.v1', decision: 'ALLOWED', grant }),
   mutationTransaction: coordinator }), /commit-authority journal failure/);
   assert.equal(fs.readFileSync(targetPath, 'utf8'), 'before\n');
+});
+
+test('temporary replacement flush failure occurs before atomic rename and causes zero mutation', () => {
+  const originalRename = fs.renameSync;
+  let renames = 0;
+  fs.renameSync = (...args) => { renames += 1; return originalRename(...args); };
+  try {
+    assert.throws(() => patch({ durabilityAdapter: durabilityPort({
+      flushFile() { throw new Error('injected temporary flush failure'); }
+    }) }), /temporary flush failure/);
+  } finally {
+    fs.renameSync = originalRename;
+  }
+  assert.equal(renames, 0);
+  assert.equal(fs.readFileSync(targetPath, 'utf8'), 'before\n');
+});
+
+test('parent-directory durability failure after rename is recovery-required and never success', () => {
+  assert.throws(() => patch({ durabilityAdapter: durabilityPort({
+    confirmRename() { throw new Error('injected parent-directory fsync failure'); }
+  }) }), (error) => {
+    assert.equal(error.evidence.outcome, 'FAILED');
+    assert.equal(error.evidence.recovery, 'RECOVERY_REQUIRED_JOURNAL_AMBIGUITY');
+    assert.equal(error.evidence.durability.classification, 'POST_RENAME_AMBIGUOUS');
+    return true;
+  });
+  assert.equal(fs.readFileSync(targetPath, 'utf8'), 'after\n');
+});
+
+test('unsupported and malformed durability responses fail closed before replacement', () => {
+  for (const response of [
+    () => { throw new Error('Filesystem durability is UNSUPPORTED.'); },
+    () => ({ operation: 'FLUSH_FILE_DATA', decision: 'CONFIRMED' })
+  ]) {
+    assert.throws(() => patch({ durabilityAdapter: durabilityPort({ flushFile: response }) }),
+      /UNSUPPORTED|unsupported or unconfirmed/);
+    assert.equal(fs.readFileSync(targetPath, 'utf8'), 'before\n');
+  }
 });
 
 test('BEFORE hash mismatch fails closed', () => {
@@ -367,7 +423,7 @@ test('verification failure restores only provably owned output', () => {
   let reads = 0;
   fs.readFileSync = function (...args) {
     reads += 1;
-    if (reads === 3) return Buffer.from('invalid-observation\n');
+    if (reads === 4) return Buffer.from('invalid-observation\n');
     return original.apply(this, args);
   };
   try {
@@ -383,7 +439,7 @@ test('verification failure does not restore unowned state', () => {
   let reads = 0;
   fs.readFileSync = function (...args) {
     reads += 1;
-    if (reads === 3) {
+    if (reads === 4) {
       fs.writeFileSync(targetPath, 'external\n');
       return Buffer.from('external\n');
     }

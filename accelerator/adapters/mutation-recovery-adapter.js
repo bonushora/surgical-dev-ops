@@ -8,6 +8,7 @@ const {
 } = require('../core/mutation-transaction');
 const filesystemPatch = require('./filesystem-patch-adapter');
 const defaultLock = require('./mutation-lock-adapter');
+const { defaultFilesystemDurabilityAdapter } = require('./filesystem-durability-adapter');
 
 function deepFreeze(value) {
   if (value && typeof value === 'object' && !Object.isFrozen(value)) {
@@ -33,7 +34,8 @@ function terminationEvidence(port, transaction) {
 }
 
 function createMutationRecoveryAdapter({ journalAdapter, lockAdapter = defaultLock,
-  authoritativeClock, ownerTerminationPort } = {}) {
+  authoritativeClock, ownerTerminationPort,
+  durabilityAdapter = defaultFilesystemDurabilityAdapter } = {}) {
   if (!journalAdapter || typeof journalAdapter.reopen !== 'function' ||
       typeof journalAdapter.append !== 'function' || !authoritativeClock ||
       typeof authoritativeClock.observe !== 'function') {
@@ -59,14 +61,15 @@ function createMutationRecoveryAdapter({ journalAdapter, lockAdapter = defaultLo
     const preliminary = classifyMutationRecovery({ journal: reopened, physical, lock,
       authoritativeObservation: observation });
     const ownership = lockAdapter.acquireMutationRecoveryClaim({ transaction: current,
-      terminationEvidence: termination });
+      terminationEvidence: termination, durabilityAdapter });
     if (ownership.decision !== 'ACQUIRED') return classifyMutationRecovery({
       journal: reopened, physical, lock: deepFreeze({ classification: 'AMBIGUOUS_OWNER' }),
       authoritativeObservation: observation });
     try {
       if (['FINALIZED_SUCCESS', 'FINALIZED_FAILED', 'RECOVERY_UNRESOLVED'].includes(current.stage)) {
         if (current.stage !== 'RECOVERY_UNRESOLVED') {
-          lockAdapter.releaseMutationLock({ transaction: current, lock: current.lock });
+          lockAdapter.releaseMutationLock({ transaction: current, lock: current.lock,
+            durabilityAdapter });
         }
         return preliminary;
       }
@@ -84,11 +87,13 @@ function createMutationRecoveryAdapter({ journalAdapter, lockAdapter = defaultLo
         journalAdapter.append(current);
         current = transitionMutationTransaction(current, preliminary.terminalStage);
         journalAdapter.append(current);
-        lockAdapter.releaseMutationLock({ transaction: current, lock: current.lock });
+        lockAdapter.releaseMutationLock({ transaction: current, lock: current.lock,
+          durabilityAdapter });
       }
       return preliminary;
     } finally {
-      lockAdapter.releaseMutationRecoveryClaim({ transaction: current, claim: ownership.claim });
+      lockAdapter.releaseMutationRecoveryClaim({ transaction: current, claim: ownership.claim,
+        durabilityAdapter });
     }
   }
 

@@ -4,6 +4,8 @@ const crypto = require('node:crypto');
 const fs = require('node:fs');
 const os = require('node:os');
 const path = require('node:path');
+const { defaultFilesystemDurabilityAdapter } = require('./filesystem-durability-adapter');
+const { requireDurabilityReceipt } = require('../core/mutation-durability');
 
 const {
   bindMutationLock,
@@ -131,7 +133,8 @@ function readLockFile(file) {
   }
 }
 
-function acquireMutationLock({ transaction, workspace, target }) {
+function acquireMutationLock({ transaction, workspace, target,
+  durabilityAdapter = defaultFilesystemDurabilityAdapter }) {
   if (!transaction || transaction.stage !== 'PREPARED') {
     throw new Error('A PREPARED immutable mutation transaction is required.');
   }
@@ -161,8 +164,12 @@ function acquireMutationLock({ transaction, workspace, target }) {
       0o600
     );
     fs.writeFileSync(descriptor, serialize(metadata));
+    requireDurabilityReceipt(durabilityAdapter.flushFile(descriptor,
+      `mutation-lock:${identity.lockId}`), 'FLUSH_FILE_DATA');
     fs.closeSync(descriptor);
     descriptor = undefined;
+    requireDurabilityReceipt(durabilityAdapter.confirmLock(path.dirname(file)),
+      'DURABLE_LOCK_BOUNDARY');
   } catch (error) {
     if (descriptor !== undefined) fs.closeSync(descriptor);
     if (error.code === 'EEXIST') {
@@ -192,7 +199,8 @@ function acquireMutationLock({ transaction, workspace, target }) {
   });
 }
 
-function releaseMutationLock({ transaction, lock }) {
+function releaseMutationLock({ transaction, lock,
+  durabilityAdapter = defaultFilesystemDurabilityAdapter }) {
   if (!transaction || transaction.lock !== lock || !Object.isFrozen(transaction) ||
       !Object.isFrozen(lock)) {
     throw new Error('Release requires the exact immutable bound transaction and lock metadata.');
@@ -221,6 +229,8 @@ function releaseMutationLock({ transaction, lock }) {
   validateMetadata(current, expected);
   try {
     fs.unlinkSync(file);
+    requireDurabilityReceipt(durabilityAdapter.confirmLock(path.dirname(file)),
+      'DURABLE_LOCK_BOUNDARY');
   } catch (error) {
     if (error.code === 'ENOENT') {
       return deepFreeze({
@@ -247,7 +257,8 @@ function inspectMutationLock({ transaction }) {
   }
 }
 
-function acquireMutationRecoveryClaim({ transaction, terminationEvidence }) {
+function acquireMutationRecoveryClaim({ transaction, terminationEvidence,
+  durabilityAdapter = defaultFilesystemDurabilityAdapter }) {
   if (!transaction || !transaction.lock || !Object.isFrozen(transaction) ||
       !terminationEvidence || terminationEvidence.decision !== 'TERMINATED' ||
       terminationEvidence.ownerProcess !== transaction.lock.ownerProcess ||
@@ -263,16 +274,21 @@ function acquireMutationRecoveryClaim({ transaction, terminationEvidence }) {
     descriptor = fs.openSync(file, fs.constants.O_WRONLY | fs.constants.O_CREAT |
       fs.constants.O_EXCL, 0o600);
     fs.writeFileSync(descriptor, serialize(claim));
+    requireDurabilityReceipt(durabilityAdapter.flushFile(descriptor,
+      `mutation-recovery-claim:${transaction.transactionId}`), 'FLUSH_FILE_DATA');
   } catch (error) {
     if (error.code === 'EEXIST') return deepFreeze({ decision: 'CONTENDED' });
     throw error;
   } finally {
     if (descriptor !== undefined) fs.closeSync(descriptor);
   }
+  requireDurabilityReceipt(durabilityAdapter.confirmLock(path.dirname(file)),
+    'DURABLE_LOCK_BOUNDARY');
   return deepFreeze({ decision: 'ACQUIRED', claim });
 }
 
-function releaseMutationRecoveryClaim({ transaction, claim }) {
+function releaseMutationRecoveryClaim({ transaction, claim,
+  durabilityAdapter = defaultFilesystemDurabilityAdapter }) {
   if (!transaction || !claim || claim.transactionId !== transaction.transactionId ||
       claim.lockId !== transaction.lock.lockId) {
     throw new Error('Recovery claim ownership mismatch.');
@@ -287,6 +303,8 @@ function releaseMutationRecoveryClaim({ transaction, claim }) {
     throw new Error('Recovery claim ownership mismatch.');
   }
   fs.unlinkSync(file);
+  requireDurabilityReceipt(durabilityAdapter.confirmLock(path.dirname(file)),
+    'DURABLE_LOCK_BOUNDARY');
   return deepFreeze({ decision: 'RELEASED' });
 }
 

@@ -9,6 +9,8 @@ const {
 } = require('../core/workspace-boundary');
 const { deriveCapabilityGrantFingerprint } = require('../core/capability-grant');
 const { evaluateMutationAuthority } = require('../core/authoritative-clock');
+const { defaultFilesystemDurabilityAdapter } = require('./filesystem-durability-adapter');
+const { requireDurabilityReceipt, durabilityClaims } = require('../core/mutation-durability');
 
 const MAX_BYTES = 1024 * 1024;
 
@@ -92,7 +94,7 @@ function sameIdentity(left, right) {
     left.mtimeNs === right.mtimeNs && left.ctimeNs === right.ctimeNs;
 }
 
-function writeTemporary(directory, mode, content) {
+function writeTemporary(directory, mode, content, durabilityAdapter) {
   const temporary = path.join(directory, `.sdo-patch-${crypto.randomUUID()}.tmp`);
   let descriptor;
   try {
@@ -102,7 +104,8 @@ function writeTemporary(directory, mode, content) {
       mode & 0o777
     );
     fs.writeFileSync(descriptor, content);
-    fs.fsyncSync(descriptor);
+    const flushed = durabilityAdapter.flushFile(descriptor, `replacement-temp:${temporary}`);
+    requireDurabilityReceipt(flushed, 'FLUSH_FILE_DATA');
     fs.closeSync(descriptor);
     descriptor = undefined;
     return temporary;
@@ -113,10 +116,24 @@ function writeTemporary(directory, mode, content) {
   }
 }
 
-function atomicReplace(target, content, mode) {
-  const temporary = writeTemporary(path.dirname(target), mode, content);
+function atomicReplace(target, content, mode, durabilityAdapter) {
+  const temporary = writeTemporary(path.dirname(target), mode, content, durabilityAdapter);
+  const verified = readRegularNoFollow(temporary);
+  if (!verified.content.equals(content)) {
+    try { fs.unlinkSync(temporary); } catch {}
+    throw new Error('Durably flushed replacement temporary file failed identity verification.');
+  }
   try {
     fs.renameSync(temporary, target);
+    try {
+      const durableRename = durabilityAdapter.confirmRename(path.dirname(target));
+      requireDurabilityReceipt(durableRename, 'DURABLE_RENAME_BOUNDARY');
+      return deepFreeze({ tempData: 'CONFIRMED', renameBoundary: durableRename,
+        claims: durabilityClaims() });
+    } catch (error) {
+      error.physicalCommitOccurred = true;
+      throw error;
+    }
   } catch (error) {
     try { fs.unlinkSync(temporary); } catch {}
     throw error;
@@ -143,12 +160,13 @@ function transactionEvidence(context) {
 }
 
 function evidence({ operationId, workspace, requested, canonical, beforeHash, afterHash,
-  outcome, recovery, observedAt, temporalAuthority, commitAuthority, transaction }) {
+  outcome, recovery, observedAt, temporalAuthority, commitAuthority, transaction,
+  durability = null }) {
   return deepFreeze({
     schema: 'sdo.filesystem_patch_result.v1', operationId, workspace,
     target: { requested, canonical }, beforeSha256: beforeHash, afterSha256: afterHash,
     outcome, recovery, observedAt, temporalAuthority, commitAuthority: commitAuthority || null,
-    transaction
+    transaction, durability
   });
 }
 
@@ -199,6 +217,8 @@ function patchFileWithGrant({
     throw new Error('Capability workspace mismatch.');
   }
   const transactionContext = temporalRuntime.mutationTransaction;
+  const durabilityAdapter = temporalRuntime.durabilityAdapter ||
+    defaultFilesystemDurabilityAdapter;
   const initialTransaction = transactionContext && transactionContext.current();
   if (!initialTransaction || initialTransaction.transaction.stage !== 'LOCKED' ||
       !initialTransaction.transaction.lock) {
@@ -299,7 +319,25 @@ function patchFileWithGrant({
         durableCommitAuthority.fingerprint) {
     throw new Error('Durable commit-authority journal proof is required before replacement.');
   }
-  atomicReplace(resolved.canonicalTarget, replacementBytes, Number(before.stat.mode));
+  let physicalDurability;
+  try {
+    physicalDurability = atomicReplace(resolved.canonicalTarget, replacementBytes,
+      Number(before.stat.mode), durabilityAdapter);
+  } catch (commitError) {
+    if (!commitError.physicalCommitOccurred) throw commitError;
+    try { transactionContext.requireRecovery(); } catch {}
+    const error = new Error(`Physical replacement durability is ambiguous: ${commitError.message}`);
+    error.evidence = evidence({ operationId: normalizedOperationId,
+      workspace: canonicalWorkspace, requested, canonical: resolved.canonicalTarget,
+      beforeHash, afterHash, outcome: 'FAILED',
+      recovery: 'RECOVERY_REQUIRED_JOURNAL_AMBIGUITY',
+      observedAt: commitAuthority.reading.wallTime, temporalAuthority: commitEvidence,
+      commitAuthority: durableCommitAuthority,
+      transaction: transactionEvidence(transactionContext),
+      durability: deepFreeze({ classification: 'POST_RENAME_AMBIGUOUS',
+        claims: durabilityClaims() }) });
+    throw error;
+  }
   try {
     transactionContext.advance('PHYSICAL_APPLIED');
   } catch (stageError) {
@@ -310,7 +348,7 @@ function patchFileWithGrant({
       outcome: 'FAILED', recovery: 'RECOVERY_REQUIRED_JOURNAL_AMBIGUITY',
       observedAt: commitAuthority.reading.wallTime, temporalAuthority: commitEvidence,
       commitAuthority: durableCommitAuthority,
-      transaction: transactionEvidence(transactionContext) });
+      transaction: transactionEvidence(transactionContext), durability: physicalDurability });
     throw error;
   }
   let afterResolved;
@@ -331,7 +369,8 @@ function patchFileWithGrant({
     } catch {}
     if (owned) {
       try {
-        atomicReplace(resolved.canonicalTarget, before.content, Number(before.stat.mode));
+        atomicReplace(resolved.canonicalTarget, before.content, Number(before.stat.mode),
+          durabilityAdapter);
         const restored = readRegularNoFollow(resolved.canonicalTarget);
         if (hash(restored.content) !== beforeHash) throw new Error('Restore verification failed.');
         try { transactionContext.advance('RECOVERED'); } catch {}
@@ -341,7 +380,7 @@ function patchFileWithGrant({
           outcome: 'FAILED', recovery: 'RESTORED',
           observedAt: commitAuthority.reading.wallTime, temporalAuthority: commitEvidence,
           commitAuthority: durableCommitAuthority,
-          transaction: transactionEvidence(transactionContext) });
+          transaction: transactionEvidence(transactionContext), durability: physicalDurability });
         throw error;
       } catch (restoreError) {
         if (restoreError.evidence) throw restoreError;
@@ -353,7 +392,7 @@ function patchFileWithGrant({
       outcome: 'FAILED', recovery: 'NOT_ATTEMPTED_UNPROVEN_OWNERSHIP',
       observedAt: commitAuthority.reading.wallTime, temporalAuthority: commitEvidence,
       commitAuthority: durableCommitAuthority,
-      transaction: transactionEvidence(transactionContext) });
+      transaction: transactionEvidence(transactionContext), durability: physicalDurability });
     throw error;
   }
   try {
@@ -366,7 +405,7 @@ function patchFileWithGrant({
       outcome: 'FAILED', recovery: 'RECOVERY_REQUIRED_JOURNAL_AMBIGUITY',
       observedAt: commitAuthority.reading.wallTime, temporalAuthority: commitEvidence,
       commitAuthority: durableCommitAuthority,
-      transaction: transactionEvidence(transactionContext) });
+      transaction: transactionEvidence(transactionContext), durability: physicalDurability });
     throw error;
   }
   return evidence({ operationId: normalizedOperationId, workspace: canonicalWorkspace,
@@ -374,7 +413,7 @@ function patchFileWithGrant({
     outcome: 'APPLIED', recovery: 'NOT_REQUIRED',
     observedAt: commitAuthority.reading.wallTime, temporalAuthority: commitEvidence,
     commitAuthority: durableCommitAuthority,
-    transaction: transactionEvidence(transactionContext) });
+    transaction: transactionEvidence(transactionContext), durability: physicalDurability });
 }
 
 function verifyAppliedFile({ workspace, target, expectedSha256 }) {

@@ -118,6 +118,28 @@ function recordFile(setup, state, sequence) {
   return path.join(journalDirectory(setup, state), `${String(sequence).padStart(8, '0')}.json`);
 }
 
+function durabilityReceipt(operation) {
+  return freeze({ schema: 'sdo.filesystem_durability_receipt.v1', operation,
+    decision: 'CONFIRMED', platform: 'test', provider: 'TEST_DURABILITY',
+    claimLevel: 'FILESYSTEM_DURABILITY_PRIMITIVES_ENFORCED',
+    powerLossValidated: false, subject: 'journal-test' });
+}
+
+function durabilityPort({ failConfirmationAt = 0 } = {}) {
+  let confirmations = 0;
+  return freeze({
+    flushFile() { return durabilityReceipt('FLUSH_FILE_DATA'); },
+    flushDirectory() { return durabilityReceipt('FLUSH_DIRECTORY'); },
+    confirmJournal(directory, terminal) {
+      confirmations += 1;
+      if (confirmations === failConfirmationAt) {
+        throw new Error('injected journal durability failure');
+      }
+      return durabilityReceipt(terminal ? 'DURABLE_FINALIZATION' : 'DURABLE_JOURNAL_APPEND');
+    }
+  });
+}
+
 function childRequest(payload) {
   return new Promise((resolve, reject) => {
     const child = fork(__filename, ['--journal-child', JSON.stringify(payload)], {
@@ -269,8 +291,155 @@ if (process.argv[2] === '--journal-child') {
     const held = locked(initial);
     const first = adapter.append(held);
     const replay = adapter.append(held);
-    assert.deepEqual(replay, first);
+    assert.deepEqual(replay.transaction, first.transaction);
+    assert.deepEqual(replay.records, first.records);
+    assert.equal(first.durability.operation, 'DURABLE_JOURNAL_APPEND');
     assert.equal(replay.records.length, 2);
+  });
+
+  test('pending record is outside committed journal view and reopen sees no partial stage', (t) => {
+    const setup = fixture(t);
+    const initial = prepared(setup);
+    let observation;
+    const adapter = createMutationJournalAdapter({ storageRoot: setup.storageRoot,
+      publicationHooks: { afterPendingFlushed(paths) {
+        if (paths.sequence !== 2) return;
+        const reopened = createMutationJournalAdapter({ storageRoot: setup.storageRoot })
+          .reopen(initial);
+        observation = { paths, stage: reopened.transaction.stage,
+          committedNames: fs.readdirSync(path.dirname(paths.committedPath)) };
+      } } });
+    adapter.create(initial);
+    adapter.append(locked(initial));
+    assert.equal(path.dirname(observation.paths.pendingPath),
+      path.join(setup.storageRoot, '.pending-v1'));
+    assert.notEqual(path.dirname(observation.paths.pendingPath),
+      path.dirname(observation.paths.committedPath));
+    assert.equal(observation.stage, 'PREPARED');
+    assert.deepEqual(observation.committedNames, ['00000001.json']);
+  });
+
+  test('partial or interrupted owned pending record cannot become committed', (t) => {
+    const setup = fixture(t);
+    const initial = prepared(setup);
+    let ownedPending;
+    const adapter = createMutationJournalAdapter({ storageRoot: setup.storageRoot,
+      publicationHooks: { afterPendingFlushed(paths) {
+        if (paths.sequence !== 2) return;
+        ownedPending = paths.pendingPath;
+        fs.writeFileSync(ownedPending, '{partial');
+        throw new Error('injected pre-publication interruption');
+      } } });
+    adapter.create(initial);
+    assert.throws(() => adapter.append(locked(initial)), /pre-publication interruption/);
+    assert.equal(fs.existsSync(ownedPending), false);
+    assert.equal(createMutationJournalAdapter({ storageRoot: setup.storageRoot })
+      .reopen(initial).records.length, 1);
+  });
+
+  test('completed flushed pending record publishes atomically with a valid hash chain', (t) => {
+    const setup = fixture(t);
+    const initial = prepared(setup);
+    let inspected = false;
+    const adapter = createMutationJournalAdapter({ storageRoot: setup.storageRoot,
+      publicationHooks: { afterPendingFlushed(paths) {
+        if (paths.sequence !== 2) return;
+        assert.equal(fs.existsSync(paths.committedPath), false);
+        assert.equal(fs.readFileSync(paths.pendingPath, 'utf8').endsWith('\n'), true);
+        inspected = true;
+      } } });
+    adapter.create(initial);
+    const state = adapter.append(locked(initial));
+    assert.equal(inspected, true);
+    assert.equal(state.records[1].previousRecordHash, state.records[0].recordHash);
+    assert.equal(adapter.reopen(initial).records.length, 2);
+  });
+
+  test('duplicate convergence independently rechecks directory durability', (t) => {
+    const setup = fixture(t);
+    const initial = prepared(setup);
+    let confirmations = 0;
+    const port = durabilityPort();
+    const counted = freeze({ ...port, confirmJournal(directory, terminal) {
+      confirmations += 1;
+      return port.confirmJournal(directory, terminal);
+    } });
+    const adapter = createMutationJournalAdapter({ storageRoot: setup.storageRoot,
+      durabilityAdapter: counted });
+    adapter.create(initial);
+    const transaction = locked(initial);
+    adapter.append(transaction);
+    const beforeReplay = confirmations;
+    assert.equal(adapter.append(transaction).transaction.stage, 'LOCKED');
+    assert.equal(confirmations, beforeReplay + 1);
+  });
+
+  test('duplicate convergence durability failure prevents clean success', (t) => {
+    const setup = fixture(t);
+    const initial = prepared(setup);
+    let fail = false;
+    const base = durabilityPort();
+    const port = freeze({ ...base, confirmJournal(directory, terminal) {
+      if (fail) throw new Error('injected convergence durability failure');
+      return base.confirmJournal(directory, terminal);
+    } });
+    const adapter = createMutationJournalAdapter({ storageRoot: setup.storageRoot,
+      durabilityAdapter: port });
+    adapter.create(initial);
+    const transaction = locked(initial);
+    adapter.append(transaction);
+    fail = true;
+    assert.throws(() => adapter.append(transaction), /convergence durability failure/);
+  });
+
+  test('failed publication cleans only its own pending record', (t) => {
+    const setup = fixture(t);
+    const initial = prepared(setup);
+    const pendingRoot = path.join(setup.storageRoot, '.pending-v1');
+    fs.mkdirSync(pendingRoot, { mode: 0o700 });
+    const foreign = path.join(pendingRoot, 'foreign-abandoned.pending');
+    fs.writeFileSync(foreign, 'foreign');
+    let owned;
+    const adapter = createMutationJournalAdapter({ storageRoot: setup.storageRoot,
+      publicationHooks: { afterPendingFlushed(paths) {
+        if (paths.sequence !== 2) return;
+        owned = paths.pendingPath;
+        throw new Error('injected owner failure');
+      } } });
+    adapter.create(initial);
+    assert.throws(() => adapter.append(locked(initial)), /owner failure/);
+    assert.equal(fs.existsSync(owned), false);
+    assert.equal(fs.readFileSync(foreign, 'utf8'), 'foreign');
+  });
+
+  test('commit-authority record is rejected when its journal durability flush fails', (t) => {
+    const setup = fixture(t);
+    const initial = prepared(setup);
+    const adapter = createMutationJournalAdapter({ storageRoot: setup.storageRoot,
+      durabilityAdapter: durabilityPort({ failConfirmationAt: 5 }) });
+    adapter.create(initial);
+    let transaction = locked(initial);
+    adapter.append(transaction);
+    for (const stage of ['BEFORE_VERIFIED', 'MUTATION_STARTED']) {
+      transaction = transitionMutationTransaction(transaction, stage);
+      adapter.append(transaction);
+    }
+    transaction = bindCommitAuthorityEvidence(transaction, commitAuthority(transaction));
+    assert.throws(() => adapter.append(transaction), /journal durability failure/);
+    assert.equal(adapter.reopen(initial).transaction.stage, 'COMMIT_AUTHORITY_VERIFIED');
+  });
+
+  test('terminal finalization requires a distinct durable finalization receipt', (t) => {
+    const setup = fixture(t);
+    const initial = prepared(setup);
+    const adapter = createMutationJournalAdapter({ storageRoot: setup.storageRoot,
+      durabilityAdapter: durabilityPort() });
+    adapter.create(initial);
+    let transaction = locked(initial);
+    adapter.append(transaction);
+    transaction = transitionMutationTransaction(transaction, 'FINALIZED_FAILED');
+    const state = adapter.append(transaction);
+    assert.equal(state.durability.operation, 'DURABLE_FINALIZATION');
   });
 
   test('same sequence with conflicting content fails closed', (t) => {
@@ -484,7 +653,7 @@ if (process.argv[2] === '--journal-child') {
     assert.ok(Object.isFrozen(adapter));
   });
 
-  test('journal port is integrated while fsync and restart recovery remain deferred', () => {
+  test('journal durability is integrated while restart recovery remains external', () => {
     const source = fs.readFileSync(path.join(__dirname,
       '../../accelerator/adapters/mutation-journal-adapter.js'), 'utf8');
     const orchestrator = fs.readFileSync(path.join(__dirname,
@@ -493,7 +662,9 @@ if (process.argv[2] === '--journal-child') {
       '../../accelerator/adapters/filesystem-patch-adapter.js'), 'utf8');
     const lock = fs.readFileSync(path.join(__dirname,
       '../../accelerator/adapters/mutation-lock-adapter.js'), 'utf8');
-    assert.doesNotMatch(source, /fsyncSync|fdatasyncSync|Date\.now|new Date/);
+    assert.match(source, /flushFile/);
+    assert.match(source, /confirmJournal/);
+    assert.doesNotMatch(source, /Date\.now|new Date/);
     assert.match(orchestrator, /mutationJournalAdapter/);
     assert.doesNotMatch(orchestrator, /mutation-journal-adapter/);
     assert.doesNotMatch(patch, /mutation-journal-adapter/);

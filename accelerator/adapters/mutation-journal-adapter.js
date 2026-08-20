@@ -3,6 +3,9 @@
 const crypto = require('node:crypto');
 const fs = require('node:fs');
 const path = require('node:path');
+const { defaultFilesystemDurabilityAdapter } =
+  require('./filesystem-durability-adapter');
+const { requireDurabilityReceipt } = require('../core/mutation-durability');
 
 const {
   STAGES,
@@ -33,6 +36,7 @@ const JOURNAL_TERMINAL = new Set([
 ]);
 const ZERO_HASH = '0'.repeat(64);
 const RECORD_NAME = /^(\d{8})\.json$/;
+const PENDING_DIRECTORY = '.pending-v1';
 
 function deepFreeze(value) {
   if (value && typeof value === 'object' && !Object.isFrozen(value)) {
@@ -136,6 +140,22 @@ function validateJournalDirectory(root, directory) {
       path.dirname(directory) !== root) {
     throw new Error('Mutation journal directory is unsafe or ambiguous.');
   }
+}
+
+function pendingDirectory(root, durabilityAdapter) {
+  const directory = path.join(root, PENDING_DIRECTORY);
+  try {
+    fs.mkdirSync(directory, { mode: 0o700 });
+    requireDurabilityReceipt(durabilityAdapter.flushDirectory(root), 'FLUSH_DIRECTORY');
+  } catch (error) {
+    if (error.code !== 'EEXIST') throw error;
+  }
+  const stat = fs.lstatSync(directory);
+  if (!stat.isDirectory() || stat.isSymbolicLink() || fs.realpathSync(directory) !== directory ||
+      path.dirname(directory) !== root) {
+    throw new Error('Mutation journal pending store is unsafe or ambiguous.');
+  }
+  return directory;
 }
 
 function recordPath(directory, sequence) {
@@ -272,19 +292,33 @@ function reconstruct(records) {
   return { transaction, identity };
 }
 
-function publishRecord(directory, record) {
+function publishRecord(root, directory, record, durabilityAdapter, publicationHooks) {
   const destination = recordPath(directory, record.sequence);
-  const temporary = path.join(directory,
-    `.pending-${String(record.sequence).padStart(8, '0')}-${process.pid}-${crypto.randomUUID()}`);
+  const pendingRoot = pendingDirectory(root, durabilityAdapter);
+  const temporary = path.join(pendingRoot,
+    `${record.journalId}-${String(record.sequence).padStart(8, '0')}-${process.pid}-${crypto.randomUUID()}.pending`);
   let descriptor;
   try {
     descriptor = fs.openSync(temporary,
       fs.constants.O_WRONLY | fs.constants.O_CREAT | fs.constants.O_EXCL, 0o600);
     fs.writeFileSync(descriptor, `${JSON.stringify(record)}\n`);
+    requireDurabilityReceipt(durabilityAdapter.flushFile(descriptor,
+      `journal:${record.transactionId}:${record.sequence}`), 'FLUSH_FILE_DATA');
     fs.closeSync(descriptor);
     descriptor = undefined;
+    if (publicationHooks && typeof publicationHooks.afterPendingFlushed === 'function') {
+      publicationHooks.afterPendingFlushed(deepFreeze({
+        pendingPath: temporary, committedPath: destination,
+        journalId: record.journalId, sequence: record.sequence
+      }));
+    }
     fs.linkSync(temporary, destination);
     fs.unlinkSync(temporary);
+    const terminal = JOURNAL_TERMINAL.has(record.stage);
+    const durable = durabilityAdapter.confirmJournal(directory, terminal);
+    requireDurabilityReceipt(durable,
+      terminal ? 'DURABLE_FINALIZATION' : 'DURABLE_JOURNAL_APPEND');
+    return durable;
   } catch (error) {
     if (descriptor !== undefined) fs.closeSync(descriptor);
     try { fs.unlinkSync(temporary); } catch {}
@@ -292,8 +326,16 @@ function publishRecord(directory, record) {
   }
 }
 
-function createMutationJournalAdapter({ storageRoot } = {}) {
+function createMutationJournalAdapter({ storageRoot,
+  durabilityAdapter = defaultFilesystemDurabilityAdapter, publicationHooks = null } = {}) {
   const root = validateStorageRoot(storageRoot);
+
+  function confirmConverged(directory, state, terminal = false) {
+    const durable = durabilityAdapter.confirmJournal(directory, terminal);
+    requireDurabilityReceipt(durable,
+      terminal ? 'DURABLE_FINALIZATION' : 'DURABLE_JOURNAL_APPEND');
+    return deepFreeze({ ...state, durability: durable });
+  }
 
   function readJournal(transaction) {
     const requested = verifyTransaction(transaction);
@@ -341,26 +383,40 @@ function createMutationJournalAdapter({ storageRoot } = {}) {
     } catch (error) {
       if (error.code === 'EEXIST') {
         const existing = readJournal(prepared);
-        if (existing.records.length === 1) return existing;
+        if (existing.records.length === 1) {
+          return confirmConverged(directory, existing);
+        }
         throw new Error('Mutation journal already exists beyond PREPARED state.');
       }
       throw error;
     }
     validateJournalDirectory(root, directory);
     try {
-      publishRecord(directory, recordFor(prepared, identity, ZERO_HASH));
+      requireDurabilityReceipt(durabilityAdapter.flushDirectory(root), 'FLUSH_DIRECTORY');
+      const durable = publishRecord(root, directory,
+        recordFor(prepared, identity, ZERO_HASH), durabilityAdapter, publicationHooks);
+      return deepFreeze({ ...readJournal(prepared), durability: durable });
     } catch (error) {
-      if (error.code === 'EEXIST') return readJournal(prepared);
+      if (error.code === 'EEXIST') {
+        const winner = readJournal(prepared);
+        if (winner.records.length !== 1 ||
+            canonicalJson(winner.transaction) !== canonicalJson(prepared)) {
+          throw new Error('Conflicting concurrent mutation journal creation.');
+        }
+        return confirmConverged(directory, winner);
+      }
       throw error;
     }
-    return readJournal(prepared);
   }
 
   function append(transaction) {
     const candidate = verifyTransaction(transaction);
     const current = readJournal(candidate);
     if (candidate.version === current.transaction.version) {
-      if (canonicalJson(candidate) === canonicalJson(current.transaction)) return current;
+      if (canonicalJson(candidate) === canonicalJson(current.transaction)) {
+        const directory = journalDirectory(root, current.identity.journalId);
+        return confirmConverged(directory, current, JOURNAL_TERMINAL.has(candidate.stage));
+      }
       throw new Error('Conflicting duplicate mutation journal record.');
     }
     if (JOURNAL_TERMINAL.has(current.transaction.stage)) {
@@ -377,17 +433,19 @@ function createMutationJournalAdapter({ storageRoot } = {}) {
       current.records[current.records.length - 1].recordHash);
     const directory = journalDirectory(root, identity.journalId);
     try {
-      publishRecord(directory, record);
+      const durable = publishRecord(root, directory, record, durabilityAdapter, publicationHooks);
+      return deepFreeze({ ...readJournal(candidate), durability: durable });
     } catch (error) {
       if (error.code === 'EEXIST') {
         const winner = readJournal(candidate);
         if (winner.transaction.version === candidate.version &&
-            canonicalJson(winner.transaction) === canonicalJson(candidate)) return winner;
+            canonicalJson(winner.transaction) === canonicalJson(candidate)) {
+          return confirmConverged(directory, winner, JOURNAL_TERMINAL.has(candidate.stage));
+        }
         throw new Error('Conflicting concurrent mutation journal append.');
       }
       throw error;
     }
-    return readJournal(candidate);
   }
 
   return deepFreeze({ create, append, reopen: readJournal });
