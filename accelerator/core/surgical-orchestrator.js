@@ -14,7 +14,8 @@ const {
 const declarativeInspection = require('./declarative-inspection');
 
 const {
-  classifyScope
+  classifyScope,
+  evaluateR3ApprovalAuthority
 } = require('./risk-classification');
 
 const {
@@ -47,6 +48,9 @@ const CONTROLLED_ACTIONS = Object.freeze({
   }),
   PROCESS_VALIDATION: Object.freeze({
     actions: new Set(['NODE_SYNTAX_CHECK']), capabilityType: 'PROCESS_VALIDATION'
+  }),
+  FILESYSTEM_PATCH: Object.freeze({
+    actions: new Set(['PATCH_FILE']), capabilityType: 'FILESYSTEM_PATCH', dispatch: false
   })
 });
 
@@ -182,14 +186,36 @@ function validateControlledRequest(request, repositoryPath, expectedRisk) {
         !Array.isArray(selectors) || !selectors.includes(request.action)) {
       return executionDenial('Capability scope mismatch.');
     }
+  } else if (request.adapter === 'FILESYSTEM_PATCH') {
+    const target = grant.scope && grant.scope.target;
+    if (!target || target.path !== request.target || !target.beforeSha256) {
+      return executionDenial('Capability scope mismatch.');
+    }
   }
   const operationRecord = request.operationRecord;
+  const r3Patch = request.adapter === 'FILESYSTEM_PATCH' && grant.riskLevel === 'R3';
+  const recordPolicyMatches = r3Patch
+    ? operationRecord && operationRecord.policyDecision === 'APPROVAL_REQUIRED'
+    : operationRecord && operationRecord.policyDecision === grant.policyDecision;
   if (!operationRecord || operationRecord.schema !== 'sdo.operation_record.v1' ||
       !isDeepFrozen(operationRecord) || operationRecord.operationId !== request.operationId ||
       operationRecord.workspace !== repositoryPath ||
-      operationRecord.policyDecision !== grant.policyDecision ||
+      !recordPolicyMatches ||
       operationRecord.riskLevel !== grant.riskLevel) {
     return executionDenial('Operation record binding is missing or mismatched.');
+  }
+  if (r3Patch) {
+    const approval = evaluateR3ApprovalAuthority(operationRecord.approvalAuthority, {
+      operationId: request.operationId, workspace: repositoryPath,
+      capabilityType: 'FILESYSTEM_PATCH', action: 'PATCH_FILE',
+      scope: operationRecord.scope,
+      riskLevel: 'R3', policyDecision: 'APPROVAL_REQUIRED', observedAt: request.observedAt
+    });
+    if (approval.decision !== 'ALLOWED' ||
+        approval.authority.fingerprint !== grant.approvalAuthorityFingerprint ||
+        approval.authority.approvalAuthorityId !== grant.approvalAuthorityId) {
+      return executionDenial('R3 approval authority is missing or mismatched.');
+    }
   }
   const lifecycle = request.lifecycle;
   if (!lifecycle || lifecycle.schema !== 'sdo.lifecycle.v1' ||
@@ -232,7 +258,9 @@ function evidenceIdentity(request, grantFingerprint) {
       beforeSha256: request.grantEvaluation && request.grantEvaluation.grant &&
         request.grantEvaluation.grant.scope && request.grantEvaluation.grant.scope.target
         ? request.grantEvaluation.grant.scope.target.beforeSha256 : null,
-      replacementSha256: replacementDigest(request)
+      replacementSha256: replacementDigest(request),
+      approvalAuthorityFingerprint:
+        request.grantEvaluation.grant.approvalAuthorityFingerprint || null
     } : {}),
     grantFingerprint
   });
@@ -268,6 +296,9 @@ function invokeControlledAdapter(request) {
   }
   if (request.adapter === 'GIT_READ') {
     return gitReadAdapter.readGitWithGrant({ ...common, selector: request.action });
+  }
+  if (request.adapter === 'FILESYSTEM_PATCH') {
+    throw new Error('FILESYSTEM_PATCH physical dispatch remains disconnected.');
   }
   return processValidationAdapter.validateJavaScriptWithGrant({
     ...common, selector: request.action, target: request.target
@@ -409,7 +440,14 @@ function orchestrate(input) {
     },
     policy: input.policy || {
       decision: input.authorizeExecution === true ? 'ALLOW' : 'DENY'
-    }
+    },
+    operationId: input.execution && input.execution.operationId,
+    workspace: discovery.repository.path,
+    capabilityType: input.execution && input.execution.adapter,
+    action: input.execution && input.execution.action,
+    scope: input.execution && input.execution.operationRecord &&
+      input.execution.operationRecord.scope,
+    observedAt: input.execution && input.execution.observedAt
   });
 
   /*
@@ -422,6 +460,30 @@ function orchestrate(input) {
     inspection,
     classification
   });
+
+  if (input.execution && input.execution.adapter === 'FILESYSTEM_PATCH') {
+    const authority = validateControlledRequest(
+      input.execution, discovery.repository.path, classification.classification.level
+    );
+    const recognized = authority.decision !== 'DENIED' &&
+      classification.policy.decision === 'ALLOWED';
+    const denial = executionDenial(recognized
+      ? 'R3 mutation authority is valid; FILESYSTEM_PATCH physical dispatch remains disconnected.'
+      : authority.reason || 'R3 mutation authority is missing or inconsistent.');
+    return {
+      schema: 'sdo.orchestration.v1',
+      orchestration: { status: 'DENIED', executionAttempted: false, executionAllowed: false },
+      repository: discovery.repository, worktree: discovery.worktree,
+      pipeline: { preAuthorizationPreflight, discovery, task, inspection, classification, changePlan },
+      execution: denial,
+      governed: recognized ? {
+        operationRecord: authority.operationRecord,
+        lifecycle: authority.lifecycle,
+        approvalAuthorityRecognized: true
+      } : null,
+      nextStep: denial.reason
+    };
+  }
 
   /*
    * Deterministic gate.

@@ -6,6 +6,7 @@ const {
   canonicalizeAuthorizedRoot,
   resolveInspectedFile
 } = require('./workspace-boundary');
+const { evaluateR3ApprovalAuthority } = require('./risk-classification');
 
 const ALLOWED_TYPES = new Set([
   'FILESYSTEM_READ', 'FILESYSTEM_PATCH', 'GIT_READ', 'PROCESS_VALIDATION'
@@ -186,9 +187,6 @@ function evaluateCapabilityGrant(request, authority) {
     return denied('Capability workspace is missing, non-canonical or mismatched.');
   }
 
-  if (request.policyDecision !== 'ALLOWED' || authority.policyDecision !== 'ALLOWED') {
-    return denied('Explicit ALLOWED policy is required.');
-  }
   if (!RISKS.has(request.riskLevel) || request.riskLevel !== authority.riskLevel) {
     return denied('Risk requirements are missing, invalid or mismatched.');
   }
@@ -206,6 +204,30 @@ function evaluateCapabilityGrant(request, authority) {
   }
   if (capabilityType === 'FILESYSTEM_PATCH' && request.riskLevel === 'R0') {
     return denied('A filesystem patch cannot be classified as read-only risk R0.');
+  }
+
+  const r3Patch = capabilityType === 'FILESYSTEM_PATCH' && request.riskLevel === 'R3';
+  let approvalAuthority = null;
+  if (r3Patch) {
+    if (request.policyDecision !== 'APPROVAL_REQUIRED' ||
+        authority.policyDecision !== 'APPROVAL_REQUIRED') {
+      return denied('R3 patch policy must remain APPROVAL_REQUIRED.');
+    }
+    const requestApproval = evaluateR3ApprovalAuthority(request.approvalAuthority, {
+      operationId, workspace, capabilityType, action: 'PATCH_FILE', scope: request.scope,
+      riskLevel: 'R3', policyDecision: 'APPROVAL_REQUIRED', observedAt: authority.evaluatedAt
+    });
+    const authorityApproval = evaluateR3ApprovalAuthority(authority.approvalAuthority, {
+      operationId, workspace, capabilityType, action: 'PATCH_FILE', scope: authority.scope,
+      riskLevel: 'R3', policyDecision: 'APPROVAL_REQUIRED', observedAt: authority.evaluatedAt
+    });
+    if (requestApproval.decision !== 'ALLOWED' || authorityApproval.decision !== 'ALLOWED' ||
+        requestApproval.authority.fingerprint !== authorityApproval.authority.fingerprint) {
+      return denied('Valid matching R3 approval authority is required.');
+    }
+    approvalAuthority = requestApproval.authority;
+  } else if (request.policyDecision !== 'ALLOWED' || authority.policyDecision !== 'ALLOWED') {
+    return denied('Explicit ALLOWED policy is required.');
   }
 
   const expiresAt = timestamp(request.expiresAt);
@@ -228,13 +250,16 @@ function evaluateCapabilityGrant(request, authority) {
     grant: {
       operationId,
       workspace,
-      policyDecision: request.policyDecision,
+      policyDecision: 'ALLOWED',
+      underlyingPolicyDecision: r3Patch ? 'APPROVAL_REQUIRED' : request.policyDecision,
       riskLevel: request.riskLevel,
       lifecycleState: request.lifecycleState,
       capabilityType,
       scope: scopeResult.scope,
       expiresAt,
-      idempotency: request.idempotency
+      idempotency: request.idempotency,
+      approvalAuthorityFingerprint: approvalAuthority ? approvalAuthority.fingerprint : null,
+      approvalAuthorityId: approvalAuthority ? approvalAuthority.approvalAuthorityId : null
     }
   });
 }

@@ -2,11 +2,88 @@
 
 'use strict';
 
+const crypto = require('crypto');
+const fs = require('fs');
+const path = require('path');
+
 const LEVEL_ORDER = Object.freeze({ R0: 0, R1: 1, R2: 2, R3: 3 });
 const LEGACY_RISK = Object.freeze({ BAIXO: 'R1', MÉDIO: 'R2', ALTO: 'R3' });
 const LEGACY_LABEL = Object.freeze({ R0: 'BAIXO', R1: 'BAIXO', R2: 'MÉDIO', R3: 'ALTO' });
 const MODES = new Set(['OBSERVE', 'PATCH', 'REFRACTOR']);
 const REQUIRED_FACTS = ['readOnly', 'externalEffect', 'reversible', 'sensitive', 'critical', 'irreversible'];
+
+function deepFreeze(value) {
+  if (!value || typeof value !== 'object' || Object.isFrozen(value)) return value;
+  for (const child of Object.values(value)) deepFreeze(child);
+  return Object.freeze(value);
+}
+
+function canonicalize(value) {
+  if (Array.isArray(value)) return value.map(canonicalize);
+  if (!value || typeof value !== 'object') return value;
+  return Object.fromEntries(Object.keys(value).sort().map((key) => [key, canonicalize(value[key])]));
+}
+
+function authorityFingerprint(fields) {
+  return crypto.createHash('sha256').update(JSON.stringify(canonicalize(fields))).digest('hex');
+}
+
+function evaluateR3ApprovalAuthority(candidate, expected = {}) {
+  if (!candidate || typeof candidate !== 'object' || Array.isArray(candidate)) {
+    return deepFreeze({ decision: 'DENIED', reason: 'R3 approval authority is missing.', authority: null });
+  }
+  const workspace = typeof candidate.workspace === 'string' ? candidate.workspace.trim() : '';
+  let canonicalWorkspace = null;
+  try {
+    canonicalWorkspace = path.isAbsolute(workspace) && path.normalize(workspace) === workspace &&
+      fs.realpathSync(workspace) === workspace && fs.statSync(workspace).isDirectory()
+      ? workspace : null;
+  } catch {}
+  const timestamp = Date.parse(candidate.timestamp);
+  const expiresAt = Date.parse(candidate.expiresAt);
+  const approver = candidate.approver;
+  const fields = {
+    approvalAuthorityId: candidate.approvalAuthorityId,
+    operationId: candidate.operationId,
+    approver: approver && { id: approver.id, type: approver.type },
+    decision: candidate.decision,
+    riskLevel: candidate.riskLevel,
+    capabilityType: candidate.capabilityType,
+    action: candidate.action,
+    workspace,
+    scope: canonicalize(candidate.scope),
+    policyDecision: candidate.policyDecision,
+    timestamp: candidate.timestamp,
+    expiresAt: candidate.expiresAt
+  };
+  const computed = authorityFingerprint(fields);
+  const valid = typeof fields.approvalAuthorityId === 'string' && fields.approvalAuthorityId.trim() &&
+    typeof fields.operationId === 'string' && fields.operationId.trim() &&
+    approver && typeof approver.id === 'string' && approver.id.trim() && approver.type === 'HUMAN' &&
+    fields.decision === 'APPROVED' && fields.riskLevel === 'R3' &&
+    fields.capabilityType === 'FILESYSTEM_PATCH' && fields.action === 'PATCH_FILE' &&
+    canonicalWorkspace && fields.scope && typeof fields.scope === 'object' &&
+    fields.policyDecision === 'APPROVAL_REQUIRED' && Number.isFinite(timestamp) &&
+    Number.isFinite(expiresAt) && expiresAt > timestamp &&
+    (!candidate.fingerprint || candidate.fingerprint === computed);
+  if (!valid) {
+    return deepFreeze({ decision: 'DENIED', reason: 'R3 approval authority is malformed.', authority: null });
+  }
+  for (const [key, value] of Object.entries(expected)) {
+    if (key === 'observedAt') continue;
+    if (value !== undefined && JSON.stringify(canonicalize(fields[key])) !==
+        JSON.stringify(canonicalize(value))) {
+      return deepFreeze({ decision: 'DENIED', reason: `R3 approval authority ${key} mismatch.`, authority: null });
+    }
+  }
+  if (expected.observedAt && Date.parse(expected.observedAt) >= expiresAt) {
+    return deepFreeze({ decision: 'DENIED', reason: 'R3 approval authority is expired.', authority: null });
+  }
+  return deepFreeze({
+    decision: 'ALLOWED', reason: 'Bound R3 human approval authority is valid.',
+    authority: { ...fields, fingerprint: computed }
+  });
+}
 
 function denied(reason, details = {}) {
   return {
@@ -118,22 +195,37 @@ function computedLevel(input, mode, signals, reasons) {
   return level;
 }
 
-function evaluatePolicy(policy, level) {
+function evaluatePolicy(policy, level, input) {
   if (!policy || typeof policy !== 'object' || Array.isArray(policy)) {
     return { decision: 'DENIED', reason: 'Policy is missing.' };
   }
-  if (policy.decision !== 'ALLOW' && policy.decision !== 'DENY') {
+  if (!['ALLOW', 'DENY', 'APPROVAL_REQUIRED'].includes(policy.decision)) {
     return { decision: 'DENIED', reason: 'Policy decision is missing or ambiguous.' };
   }
   if (policy.decision === 'DENY') {
     return { decision: 'DENIED', reason: 'Policy explicitly denied the operation.' };
   }
+  if (level !== 'R3' && policy.decision !== 'ALLOW') {
+    return { decision: 'DENIED', reason: 'Approval-required policy is invalid for non-R3 risk.' };
+  }
   if (level === 'R3') {
-    const approval = policy.humanApproval;
-    if (!approval || approval.approved !== true ||
-        typeof approval.approverId !== 'string' || !approval.approverId.trim()) {
-      return { decision: 'APPROVAL_REQUIRED', reason: 'R3 requires explicit human approval.' };
+    if (policy.decision !== 'APPROVAL_REQUIRED') {
+      return { decision: 'DENIED', underlyingDecision: 'APPROVAL_REQUIRED',
+        reason: 'R3 policy must remain APPROVAL_REQUIRED until bound approval.' };
     }
+    const evaluation = evaluateR3ApprovalAuthority(policy.approvalAuthority, {
+      operationId: input.operationId, workspace: input.workspace,
+      capabilityType: input.capabilityType, action: input.action,
+      scope: input.scope, riskLevel: 'R3', policyDecision: 'APPROVAL_REQUIRED',
+      observedAt: input.observedAt
+    });
+    if (evaluation.decision !== 'ALLOWED') {
+      return { decision: 'DENIED', underlyingDecision: 'APPROVAL_REQUIRED',
+        reason: evaluation.reason, approvalAuthority: null };
+    }
+    return { decision: 'ALLOWED', underlyingDecision: 'APPROVAL_REQUIRED',
+      reason: 'Explicit R3 approval authority satisfies policy.',
+      approvalAuthority: evaluation.authority };
   }
   return { decision: 'ALLOWED', reason: 'Explicit policy requirements are satisfied.' };
 }
@@ -168,7 +260,7 @@ function classifyScope(input) {
     return denied('Mutating operations require a clean worktree.', { level, mode, signals });
   }
 
-  const policy = evaluatePolicy(input.policy, level);
+  const policy = evaluatePolicy(input.policy, level, input);
   const allowed = policy.decision === 'ALLOWED';
   return {
     schema: 'sdo.risk_policy.v1',
@@ -195,4 +287,4 @@ function classifyScope(input) {
   };
 }
 
-module.exports = { classifyScope };
+module.exports = { classifyScope, evaluateR3ApprovalAuthority, authorityFingerprint };

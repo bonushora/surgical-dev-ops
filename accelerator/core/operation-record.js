@@ -2,6 +2,7 @@
 
 const fs = require('fs');
 const path = require('path');
+const { evaluateR3ApprovalAuthority } = require('./risk-classification');
 
 const RISKS = new Set(['R0', 'R1', 'R2', 'R3']);
 const POLICY_DECISIONS = new Set(['ALLOWED', 'DENIED', 'APPROVAL_REQUIRED']);
@@ -74,23 +75,13 @@ function validateWorkspace(workspace) {
   return null;
 }
 
-function validateApproval(approval, operationId, policyDecision, riskLevel) {
-  if (!approval || typeof approval !== 'object' || Array.isArray(approval)) {
-    return 'R3 requires explicit human approval.';
-  }
-  if (approval.operationId !== operationId) return 'Approval operationId does not match.';
-  const identityError = validateIdentity(approval.approver, 'Approver');
-  if (identityError) return identityError;
-  if (approval.approver.type !== 'HUMAN') return 'Approver identity must be HUMAN.';
-  if (approval.decision !== 'APPROVED') return 'Approval decision must be APPROVED.';
-  if (!timestamp(approval.timestamp)) return 'Approval timestamp is malformed or missing.';
-  if ('policyDecision' in approval || 'riskLevel' in approval) {
-    return 'Approval cannot alter policy or risk.';
-  }
-  if (policyDecision !== 'APPROVAL_REQUIRED' || riskLevel !== 'R3') {
-    return 'Approval is inconsistent with policy or risk.';
-  }
-  return null;
+function validateApproval(input, operationId) {
+  const evaluation = evaluateR3ApprovalAuthority(input.approvalAuthority, {
+    operationId, workspace: input.workspace, capabilityType: input.capabilityType,
+    action: input.action, scope: input.scope, riskLevel: 'R3',
+    policyDecision: 'APPROVAL_REQUIRED', observedAt: input.observedAt
+  });
+  return evaluation.decision === 'ALLOWED' ? null : evaluation.reason;
 }
 
 function validateEvents(events, input) {
@@ -117,9 +108,11 @@ function validateEvents(events, input) {
   }
   if (input.riskLevel === 'R3') {
     const approvalEvent = events[2];
-    if (approvalEvent.approverId !== input.approval.approver.id ||
-        approvalEvent.decision !== input.approval.decision ||
-        approvalEvent.approvalTimestamp !== input.approval.timestamp) {
+    if (approvalEvent.approverId !== input.approvalAuthority.approver.id ||
+        approvalEvent.decision !== input.approvalAuthority.decision ||
+        approvalEvent.approvalTimestamp !== input.approvalAuthority.timestamp ||
+        approvalEvent.approvalAuthorityId !== input.approvalAuthority.approvalAuthorityId ||
+        approvalEvent.approvalAuthorityFingerprint !== input.approvalAuthority.fingerprint) {
       return 'Approval event does not match the bound approval.';
     }
   }
@@ -145,11 +138,9 @@ function createOperationRecord(input) {
   if (input.policyDecision === 'DENIED') violations.push('Policy denied the operation.');
 
   if (input.riskLevel === 'R3') {
-    const approvalError = validateApproval(
-      input.approval, operationId, input.policyDecision, input.riskLevel
-    );
+    const approvalError = validateApproval(input, operationId);
     if (approvalError) violations.push(approvalError);
-  } else if (input.approval !== undefined) {
+  } else if (input.approvalAuthority !== undefined || input.approval !== undefined) {
     violations.push('Approval is not permitted to alter non-R3 treatment.');
   } else if (input.policyDecision !== 'ALLOWED') {
     violations.push('Non-R3 operations require an ALLOWED policy decision.');
@@ -175,7 +166,16 @@ function createOperationRecord(input) {
       policyDecision: input.policyDecision,
       riskLevel: input.riskLevel,
       idempotency: input.idempotency,
-      approval: input.riskLevel === 'R3' ? input.approval : null,
+      approval: null,
+      approvalAuthority: input.riskLevel === 'R3'
+        ? evaluateR3ApprovalAuthority(input.approvalAuthority, {
+            operationId, workspace: input.workspace, capabilityType: input.capabilityType,
+            action: input.action, scope: input.scope, riskLevel: 'R3',
+            policyDecision: 'APPROVAL_REQUIRED', observedAt: input.observedAt
+          }).authority : null,
+      capabilityType: input.riskLevel === 'R3' ? input.capabilityType : null,
+      action: input.riskLevel === 'R3' ? input.action : null,
+      scope: input.riskLevel === 'R3' ? input.scope : null,
       events: input.events,
       adapterEvidence: [],
       finalization: null
@@ -235,7 +235,14 @@ function validatePayload(record, item) {
     const sha256 = (value) => typeof value === 'string' && /^[a-f0-9]{64}$/.test(value);
     const target = item.target;
     const payloadTarget = item.payload.target;
-    if (!['R1', 'R2'].includes(item.riskLevel) || item.policyDecision !== 'ALLOWED' ||
+    const r3Authorized = item.riskLevel === 'R3' && record.riskLevel === 'R3' &&
+      record.policyDecision === 'APPROVAL_REQUIRED' && record.approvalAuthority &&
+      item.approvalAuthorityFingerprint === record.approvalAuthority.fingerprint &&
+      record.scope && record.scope.target &&
+      record.scope.target.path === target.requested &&
+      record.scope.target.beforeSha256 === item.beforeSha256;
+    if ((!['R1', 'R2'].includes(item.riskLevel) && !r3Authorized) ||
+        item.policyDecision !== 'ALLOWED' ||
         !target || !text(target.requested) || !text(target.canonical) ||
         !path.isAbsolute(target.canonical) ||
         path.resolve(record.workspace, target.requested) !== target.canonical ||
@@ -290,7 +297,9 @@ function normalizeAdapterEvidence(record, item, orderedAfter) {
   if (!/^[a-f0-9]{64}$/.test(item.grantFingerprint || '')) {
     throw new Error('Capability/grant binding is missing or malformed.');
   }
-  if (item.policyDecision !== record.policyDecision ||
+  const r3PatchPolicy = item.adapterType === 'FILESYSTEM_PATCH' && record.riskLevel === 'R3' &&
+    record.policyDecision === 'APPROVAL_REQUIRED' && item.policyDecision === 'ALLOWED';
+  if ((!r3PatchPolicy && item.policyDecision !== record.policyDecision) ||
       item.riskLevel !== record.riskLevel || item.lifecycleState !== 'PENDING') {
     throw new Error('Evidence policy, risk or lifecycle context mismatch.');
   }
@@ -320,7 +329,8 @@ function normalizeAdapterEvidence(record, item, orderedAfter) {
       beforeSha256: item.beforeSha256,
       replacementSha256: item.replacementSha256,
       afterSha256: item.afterSha256,
-      recovery: item.recovery
+      recovery: item.recovery,
+      approvalAuthorityFingerprint: item.approvalAuthorityFingerprint || null
     } : {})
   };
 }

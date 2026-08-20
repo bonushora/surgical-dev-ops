@@ -14,6 +14,7 @@ const filesystemReadAdapter = require('../../accelerator/adapters/filesystem-rea
 const gitReadAdapter = require('../../accelerator/adapters/git-read-adapter');
 const processValidationAdapter = require('../../accelerator/adapters/process-validation-adapter');
 const { evaluateCapabilityGrant } = require('../../accelerator/core/capability-grant');
+const { evaluateR3ApprovalAuthority } = require('../../accelerator/core/risk-classification');
 const { createOperationRecord } = require('../../accelerator/core/operation-record');
 const { createLifecycle } = require('../../accelerator/core/state-boundary');
 const {
@@ -73,6 +74,43 @@ function operationRecord(repo) {
       { type: 'state', operationId: 'op-1', timestamp: CREATED, status: 'PENDING' }
     ]
   }).record;
+}
+
+function r3Authority(repo, overrides = {}) {
+  const scope = { target: { path: 'target.js', beforeSha256:
+    crypto.createHash('sha256').update('const value = 1;\n').digest('hex') } };
+  return evaluateR3ApprovalAuthority({ approvalAuthorityId: 'approval-r3', operationId: 'op-1',
+    approver: { id: 'human-1', type: 'HUMAN' }, decision: 'APPROVED', riskLevel: 'R3',
+    capabilityType: 'FILESYSTEM_PATCH', action: 'PATCH_FILE', workspace: repo, scope,
+    policyDecision: 'APPROVAL_REQUIRED', timestamp: CREATED, expiresAt: EXPIRY,
+    ...overrides }).authority;
+}
+
+function r3Execution(repo, overrides = {}) {
+  const approvalAuthority = r3Authority(repo);
+  const scope = approvalAuthority.scope;
+  const common = { operationId: 'op-1', workspace: repo, policyDecision: 'APPROVAL_REQUIRED',
+    riskLevel: 'R3', lifecycleState: 'PENDING', capabilityType: 'FILESYSTEM_PATCH', scope,
+    idempotency: 'IDEMPOTENT', approvalAuthority };
+  const grantEvaluation = evaluateCapabilityGrant(
+    { ...common, expiresAt: EXPIRY }, { ...common, evaluatedAt: CREATED });
+  const operationRecord = createOperationRecord({ operationId: 'op-1',
+    requester: { id: 'requester-1', type: 'HUMAN' }, workspace: repo,
+    objective: 'Govern one bounded R3 patch authority.', policyDecision: 'APPROVAL_REQUIRED',
+    riskLevel: 'R3', idempotency: 'IDEMPOTENT', approvalAuthority,
+    capabilityType: 'FILESYSTEM_PATCH', action: 'PATCH_FILE', scope, observedAt: NOW,
+    events: [
+      { type: 'intent', operationId: 'op-1', timestamp: CREATED, objective: 'Govern one bounded R3 patch authority.' },
+      { type: 'policy', operationId: 'op-1', timestamp: CREATED, policyDecision: 'APPROVAL_REQUIRED', riskLevel: 'R3' },
+      { type: 'approval', operationId: 'op-1', timestamp: CREATED, approverId: 'human-1',
+        decision: 'APPROVED', approvalTimestamp: CREATED,
+        approvalAuthorityId: approvalAuthority.approvalAuthorityId,
+        approvalAuthorityFingerprint: approvalAuthority.fingerprint },
+      { type: 'state', operationId: 'op-1', timestamp: CREATED, status: 'PENDING' }
+    ] }).record;
+  return { adapter: 'FILESYSTEM_PATCH', action: 'PATCH_FILE', operationId: 'op-1',
+    workspace: repo, target: 'target.js', replacement: 'const value = 2;\n', observedAt: NOW,
+    grantEvaluation, operationRecord, lifecycle: lifecycle(repo), ...overrides };
 }
 
 function lifecycle(repo) {
@@ -238,13 +276,34 @@ test('unknown action is denied before preflight and dispatch', (context) => {
   assert.equal(discoveryCalls, 0);
 });
 
-test('FILESYSTEM_PATCH remains denied and disconnected', (context) => {
-  let calls = 0;
-  context.mock.method(filesystemReadAdapter, 'readFileWithGrant', () => { calls += 1; });
-  const result = orchestrate(input('/not/a/repo', { adapter: 'FILESYSTEM_PATCH', action: 'PATCH_FILE' }));
-  assert.equal(result.orchestration.status, 'DENIED');
-  assert.equal(calls, 0);
-});
+test('valid R3 authority is recognized while FILESYSTEM_PATCH remains physically disconnected', () =>
+  withFixture((repo) => {
+    const before = fs.readFileSync(path.join(repo, 'target.js'), 'utf8');
+    const request = r3Execution(repo);
+    const result = orchestrate(input(repo, request, { risk: 'ALTO',
+      policy: { decision: 'APPROVAL_REQUIRED', approvalAuthority: request.operationRecord.approvalAuthority } }));
+    assert.equal(result.orchestration.status, 'DENIED');
+    assert.equal(result.governed.approvalAuthorityRecognized, true, JSON.stringify(result.execution));
+    assert.equal(result.orchestration.executionAttempted, false);
+    assert.equal(fs.readFileSync(path.join(repo, 'target.js'), 'utf8'), before);
+    assert.equal(request.grantEvaluation.grant.approvalAuthorityFingerprint,
+      request.operationRecord.approvalAuthority.fingerprint);
+  }));
+
+test('boolean, missing or invalid R3 approval cannot authorize or self-approve', () =>
+  withFixture((repo) => {
+    const request = r3Execution(repo);
+    for (const policy of [
+      { decision: 'APPROVAL_REQUIRED', approved: true },
+      { decision: 'APPROVAL_REQUIRED' },
+      { decision: 'APPROVAL_REQUIRED', approvalAuthority: { ...request.operationRecord.approvalAuthority,
+        approver: { id: 'agent-1', type: 'AGENT' } } }
+    ]) {
+      const result = orchestrate(input(repo, request, { risk: 'ALTO', policy }));
+      assert.equal(result.orchestration.status, 'DENIED');
+      assert.notEqual(result.governed && result.governed.approvalAuthorityRecognized, true);
+    }
+  }));
 
 test('legacy execution reaches zero governed dispatch', (context) => {
   let calls = 0;

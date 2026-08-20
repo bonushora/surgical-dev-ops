@@ -7,6 +7,7 @@ const os = require('os');
 const path = require('path');
 const crypto = require('crypto');
 const { evaluateCapabilityGrant } = require('../../accelerator/core/capability-grant');
+const { evaluateR3ApprovalAuthority } = require('../../accelerator/core/risk-classification');
 
 const workspace = fs.mkdtempSync(path.join(os.tmpdir(), 'sdo-capability-'));
 fs.writeFileSync(path.join(workspace, 'target.txt'), 'read-only\n');
@@ -28,6 +29,24 @@ function authority(overrides = {}) {
     scope: { paths: ['target.txt'] }, evaluatedAt: '2026-08-20T12:00:00.000Z',
     idempotency: 'IDEMPOTENT', ...overrides
   };
+}
+
+function r3Approval(overrides = {}) {
+  return evaluateR3ApprovalAuthority({ approvalAuthorityId: 'approval-1', operationId: 'op-1',
+    approver: { id: 'human-1', type: 'HUMAN' }, decision: 'APPROVED', riskLevel: 'R3',
+    capabilityType: 'FILESYSTEM_PATCH', action: 'PATCH_FILE', workspace,
+    scope: { target: { path: 'target.txt', beforeSha256: crypto.createHash('sha256').update('read-only\n').digest('hex') } },
+    policyDecision: 'APPROVAL_REQUIRED', timestamp: '2026-08-20T12:00:00.000Z',
+    expiresAt: '2026-08-20T13:00:00.000Z', ...overrides }).authority;
+}
+
+function r3Grant(overrides = {}, authorityOverrides = {}) {
+  const approvalAuthority = r3Approval();
+  const scope = approvalAuthority.scope;
+  return evaluateCapabilityGrant(request({ policyDecision: 'APPROVAL_REQUIRED', riskLevel: 'R3',
+    capabilityType: 'FILESYSTEM_PATCH', scope, approvalAuthority, ...overrides }),
+  authority({ policyDecision: 'APPROVAL_REQUIRED', riskLevel: 'R3', capabilityType: 'FILESYSTEM_PATCH',
+    scope, approvalAuthority, ...authorityOverrides }));
 }
 
 test('default deny without authoritative policy', () => {
@@ -66,6 +85,26 @@ test('valid exact single-file patch grant is allowed', () => {
   );
   assert.equal(result.decision, 'ALLOWED');
   assert.equal(result.grant.scope.target.canonicalPath, path.join(workspace, 'target.txt'));
+});
+
+test('valid R3 patch grant binds human approval authority', () => {
+  const result = r3Grant();
+  assert.equal(result.decision, 'ALLOWED');
+  assert.equal(result.grant.approvalAuthorityFingerprint, r3Approval().fingerprint);
+});
+
+test('R3 patch grant denies missing or mismatched authority', () => {
+  assert.equal(r3Grant({ approvalAuthority: undefined }).decision, 'DENIED');
+  assert.equal(r3Grant({ operationId: 'other' }).decision, 'DENIED');
+  assert.equal(r3Grant({ workspace: os.tmpdir() }).decision, 'DENIED');
+  assert.equal(r3Grant({ scope: { target: { path: 'other.txt', beforeSha256: 'a'.repeat(64) } } }).decision, 'DENIED');
+  assert.equal(r3Grant({ approvalAuthority: { ...r3Approval(), fingerprint: 'f'.repeat(64) } }).decision, 'DENIED');
+});
+
+test('R3 patch grant denies action, capability and expired authority mismatch', () => {
+  assert.equal(r3Grant({ capabilityType: 'FILESYSTEM_READ' }).decision, 'DENIED');
+  assert.equal(r3Grant({ approvalAuthority: { ...r3Approval(), action: 'READ_FILE' } }).decision, 'DENIED');
+  assert.equal(r3Grant({}, { evaluatedAt: '2026-08-20T13:00:00.000Z' }).decision, 'DENIED');
 });
 
 test('filesystem patch scope cannot be broadened or made ambiguous', () => {

@@ -2,7 +2,32 @@
 
 const test = require('node:test');
 const assert = require('node:assert/strict');
-const { classifyScope } = require('../../accelerator/core/risk-classification');
+const fs = require('fs');
+const os = require('os');
+const path = require('path');
+const { classifyScope, evaluateR3ApprovalAuthority } = require('../../accelerator/core/risk-classification');
+
+const workspace = fs.mkdtempSync(path.join(os.tmpdir(), 'sdo-risk-'));
+test.after(() => fs.rmSync(workspace, { recursive: true, force: true }));
+
+function approval(overrides = {}) {
+  return evaluateR3ApprovalAuthority({
+    approvalAuthorityId: 'approval-1', operationId: 'op-r3',
+    approver: { id: 'human-1', type: 'HUMAN' }, decision: 'APPROVED', riskLevel: 'R3',
+    capabilityType: 'FILESYSTEM_PATCH', action: 'PATCH_FILE', workspace,
+    scope: { target: { path: 'target.js', beforeSha256: 'a'.repeat(64) } },
+    policyDecision: 'APPROVAL_REQUIRED', timestamp: '2026-08-20T12:00:00.000Z',
+    expiresAt: '2026-08-20T13:00:00.000Z', ...overrides
+  }).authority;
+}
+
+function r3Input(overrides = {}) {
+  const scope = { target: { path: 'target.js', beforeSha256: 'a'.repeat(64) } };
+  return input({ facts: { ...input().facts, critical: true }, operationId: 'op-r3', workspace,
+    capabilityType: 'FILESYSTEM_PATCH', action: 'PATCH_FILE', scope,
+    observedAt: '2026-08-20T12:30:00.000Z',
+    policy: { decision: 'APPROVAL_REQUIRED', approvalAuthority: approval() }, ...overrides });
+}
 
 function input(overrides = {}) {
   return {
@@ -97,15 +122,24 @@ test('missing or ambiguous policy is denied', () => {
 
 test('R3 without approval requires approval and cannot execute', () => {
   const facts = { ...input().facts, critical: true };
-  const result = classifyScope(input({ facts }));
-  assert.equal(result.policy.decision, 'APPROVAL_REQUIRED');
+  const result = classifyScope(input({ facts, policy: { decision: 'APPROVAL_REQUIRED' } }));
+  assert.equal(result.policy.decision, 'DENIED');
   assert.equal(result.classification.executionAllowed, false);
 });
 
 test('R3 with valid explicit human approval is allowed by policy', () => {
-  const facts = { ...input().facts, critical: true };
-  const policy = { decision: 'ALLOW', humanApproval: { approved: true, approverId: 'human-1' } };
-  const result = classifyScope(input({ facts, policy }));
+  const result = classifyScope(r3Input());
   assert.equal(result.policy.decision, 'ALLOWED');
   assert.equal(result.classification.executionAllowed, true);
+  assert.equal(result.policy.approvalAuthority.fingerprint, approval().fingerprint);
+});
+
+test('malformed or inexact R3 authority is denied', () => {
+  assert.equal(classifyScope(r3Input({ policy: { decision: 'APPROVAL_REQUIRED', approvalAuthority: { approved: true } } })).policy.decision, 'DENIED');
+  assert.equal(classifyScope(r3Input({ scope: { target: { path: 'other.js', beforeSha256: 'a'.repeat(64) } } })).policy.decision, 'DENIED');
+});
+
+test('approval authority cannot downgrade risk or rewrite policy', () => {
+  assert.equal(classifyScope(r3Input({ risk: 'R0' })).classification.level, 'R3');
+  assert.equal(classifyScope(r3Input({ policy: { decision: 'ALLOW', approvalAuthority: approval() } })).policy.decision, 'DENIED');
 });

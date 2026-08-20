@@ -10,11 +10,12 @@ const {
   appendAdapterEvidence,
   finalizeOperationRecord
 } = require('../../accelerator/core/operation-record');
+const { evaluateR3ApprovalAuthority } = require('../../accelerator/core/risk-classification');
 
 const TIME = '2026-08-20T12:00:00.000Z';
 const WORKSPACE = fs.realpathSync(os.tmpdir());
 
-function events(riskLevel = 'R0', operationId = 'op-1') {
+function events(riskLevel = 'R0', operationId = 'op-1', authority = null) {
   const result = [
     { type: 'intent', operationId, timestamp: TIME,
       objective: 'Record an authorized operation.' },
@@ -23,7 +24,9 @@ function events(riskLevel = 'R0', operationId = 'op-1') {
   ];
   if (riskLevel === 'R3') {
     result.push({ type: 'approval', operationId, timestamp: TIME,
-      approverId: 'human-1', decision: 'APPROVED', approvalTimestamp: TIME });
+      approverId: 'human-1', decision: 'APPROVED', approvalTimestamp: TIME,
+      approvalAuthorityId: authority && authority.approvalAuthorityId,
+      approvalAuthorityFingerprint: authority && authority.fingerprint });
   }
   result.push({ type: 'state', operationId, timestamp: TIME, status: 'RECORDED' });
   return result;
@@ -44,16 +47,20 @@ function input(overrides = {}) {
 }
 
 function r3(overrides = {}) {
+  const scope = { target: { path: 'target.js', beforeSha256: 'c'.repeat(64) } };
+  const approvalAuthority = evaluateR3ApprovalAuthority({
+    approvalAuthorityId: 'approval-1', operationId: 'op-1',
+    approver: { id: 'human-1', type: 'HUMAN' }, decision: 'APPROVED', riskLevel: 'R3',
+    capabilityType: 'FILESYSTEM_PATCH', action: 'PATCH_FILE', workspace: WORKSPACE, scope,
+    policyDecision: 'APPROVAL_REQUIRED', timestamp: TIME,
+    expiresAt: '2026-08-20T13:00:00.000Z'
+  }).authority;
   return input({
     policyDecision: 'APPROVAL_REQUIRED',
     riskLevel: 'R3',
-    approval: {
-      operationId: 'op-1',
-      approver: { id: 'human-1', type: 'HUMAN' },
-      decision: 'APPROVED',
-      timestamp: TIME
-    },
-    events: events('R3'),
+    approvalAuthority, capabilityType: 'FILESYSTEM_PATCH', action: 'PATCH_FILE', scope,
+    observedAt: '2026-08-20T12:30:00.000Z',
+    events: events('R3', 'op-1', approvalAuthority),
     ...overrides
   });
 }
@@ -64,6 +71,10 @@ function record(overrides = {}) {
 
 function patchRecord() {
   return record({ riskLevel: 'R1', events: events('R1') });
+}
+
+function r3PatchRecord() {
+  return createOperationRecord(r3()).record;
 }
 
 function frozen(value) {
@@ -126,36 +137,37 @@ test('valid R0 operation requires no approval', () => {
 test('valid R3 operation binds explicit approval', () => {
   const result = createOperationRecord(r3());
   assert.equal(result.decision, 'ALLOWED');
-  assert.equal(result.record.approval.operationId, 'op-1');
+  assert.equal(result.record.approvalAuthority.operationId, 'op-1');
+  assert.ok(Object.isFrozen(result.record.approvalAuthority));
 });
 
 test('R3 without approval is denied', () => {
-  assert.equal(createOperationRecord(r3({ approval: undefined })).decision, 'DENIED');
+  assert.equal(createOperationRecord(r3({ approvalAuthority: undefined })).decision, 'DENIED');
 });
 
 test('approval operationId mismatch is denied', () => {
-  const approval = { ...r3().approval, operationId: 'op-other' };
-  assert.equal(createOperationRecord(r3({ approval })).decision, 'DENIED');
+  const approvalAuthority = { ...r3().approvalAuthority, operationId: 'op-other' };
+  assert.equal(createOperationRecord(r3({ approvalAuthority })).decision, 'DENIED');
 });
 
 test('missing approver identity is denied', () => {
-  const approval = { ...r3().approval, approver: undefined };
-  assert.equal(createOperationRecord(r3({ approval })).decision, 'DENIED');
+  const approvalAuthority = { ...r3().approvalAuthority, approver: undefined };
+  assert.equal(createOperationRecord(r3({ approvalAuthority })).decision, 'DENIED');
 });
 
 test('non-human approver identity is denied', () => {
-  const approval = { ...r3().approval, approver: { id: 'agent-1', type: 'AGENT' } };
-  assert.equal(createOperationRecord(r3({ approval })).decision, 'DENIED');
+  const approvalAuthority = { ...r3().approvalAuthority, approver: { id: 'agent-1', type: 'AGENT' } };
+  assert.equal(createOperationRecord(r3({ approvalAuthority })).decision, 'DENIED');
 });
 
 test('malformed approval timestamp is denied', () => {
-  const approval = { ...r3().approval, timestamp: 'not-a-time' };
-  assert.equal(createOperationRecord(r3({ approval })).decision, 'DENIED');
+  const approvalAuthority = { ...r3().approvalAuthority, timestamp: 'not-a-time' };
+  assert.equal(createOperationRecord(r3({ approvalAuthority })).decision, 'DENIED');
 });
 
 test('approval cannot tamper with policy or risk', () => {
-  const approval = { ...r3().approval, policyDecision: 'ALLOWED', riskLevel: 'R0' };
-  assert.equal(createOperationRecord(r3({ approval })).decision, 'DENIED');
+  const approvalAuthority = { ...r3().approvalAuthority, policyDecision: 'ALLOWED', riskLevel: 'R0' };
+  assert.equal(createOperationRecord(r3({ approvalAuthority })).decision, 'DENIED');
 });
 
 test('operation evaluation, record and nested events are immutable', () => {
@@ -315,6 +327,37 @@ test('valid FILESYSTEM_PATCH evidence appends immutably', () => {
   assert.equal(next.adapterEvidence[0].action, 'PATCH_FILE');
   assert.ok(Object.isFrozen(next.adapterEvidence[0].target));
   assert.ok(Object.isFrozen(next.adapterEvidence[0].payload));
+});
+
+test('matching R3 patch evidence requires and preserves approval authority', () => {
+  const record = r3PatchRecord();
+  const item = evidence('FILESYSTEM_PATCH', { riskLevel: 'R3',
+    approvalAuthorityFingerprint: record.approvalAuthority.fingerprint });
+  const next = appendAdapterEvidence(record, item);
+  assert.equal(next.adapterEvidence[0].approvalAuthorityFingerprint,
+    record.approvalAuthority.fingerprint);
+  assert.ok(Object.isFrozen(next.approvalAuthority));
+});
+
+test('R3 patch evidence without matching approval authority is rejected', () => {
+  const record = r3PatchRecord();
+  assert.throws(() => appendAdapterEvidence(record, evidence('FILESYSTEM_PATCH', {
+    riskLevel: 'R3'
+  })), /malformed or inconsistently bound/);
+  assert.throws(() => appendAdapterEvidence(record, evidence('FILESYSTEM_PATCH', {
+    riskLevel: 'R3', approvalAuthorityFingerprint: 'f'.repeat(64)
+  })), /malformed or inconsistently bound/);
+});
+
+test('conflicting R3 approval authority replay fails closed', () => {
+  const record = r3PatchRecord();
+  const matching = evidence('FILESYSTEM_PATCH', { riskLevel: 'R3',
+    approvalAuthorityFingerprint: record.approvalAuthority.fingerprint });
+  const next = appendAdapterEvidence(record, matching);
+  assert.throws(() => appendAdapterEvidence(next, evidence('FILESYSTEM_PATCH', {
+    evidenceId: 'FILESYSTEM_PATCH-2', riskLevel: 'R3',
+    approvalAuthorityFingerprint: 'f'.repeat(64)
+  })), /malformed or inconsistently bound/);
 });
 
 test('filesystem-patch exact target binding is required', () => {
