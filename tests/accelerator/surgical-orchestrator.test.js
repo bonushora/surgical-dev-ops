@@ -384,7 +384,8 @@ test('valid verified R3 authority physically applies one exact FILESYSTEM_PATCH'
   }));
 
 test('journal failure matrix is zero-mutation before commit and recovery-required after commit', () => {
-  const preCommit = ['PREPARED', 'LOCKED', 'BEFORE_VERIFIED', 'MUTATION_STARTED'];
+  const preCommit = ['PREPARED', 'LOCKED', 'BEFORE_VERIFIED', 'MUTATION_STARTED',
+    'COMMIT_AUTHORITY_VERIFIED'];
   const postCommit = ['PHYSICAL_APPLIED', 'AFTER_VERIFIED',
     'EVIDENCE_RECORDED', 'FINALIZED_SUCCESS'];
   for (const stage of [...preCommit, ...postCommit]) {
@@ -558,6 +559,12 @@ test('patch recovery evidence finalizes only as FAILED', (context) => {
       context.mock.method(filesystemPatchAdapter, 'patchFileWithGrant', (_input, temporal) => {
         temporal.mutationTransaction.advance('BEFORE_VERIFIED');
         temporal.mutationTransaction.advance('MUTATION_STARTED');
+        const commitEvaluation = commitTemporal(request).evaluation;
+        const commitAuthority = temporal.mutationTransaction.verifyCommitAuthority({
+          policyDecision: 'ALLOWED', riskLevel: 'R3', capabilityType: 'FILESYSTEM_PATCH',
+          action: 'PATCH_FILE', scope: request.grantEvaluation.grant.scope,
+          authoritativeEvaluation: commitEvaluation
+        });
         temporal.mutationTransaction.advance('PHYSICAL_APPLIED');
         temporal.mutationTransaction.requireRecovery();
         if (recovery === 'RESTORED') temporal.mutationTransaction.advance('RECOVERED');
@@ -569,11 +576,15 @@ test('patch recovery evidence finalizes only as FAILED', (context) => {
           beforeSha256: request.grantEvaluation.grant.scope.target.beforeSha256,
           afterSha256: request.grantEvaluation.grant.scope.target.replacementSha256,
           outcome: 'FAILED', recovery, observedAt: NOW,
-          temporalAuthority: commitTemporal(request), transaction: {
+          temporalAuthority: frozen({ schema: 'sdo.mutation_commit_authority.v1',
+            commitBoundary: 'IMMEDIATELY_BEFORE_ATOMIC_REPLACEMENT',
+            physicalCommit: 'APPLIED', decision: 'ALLOWED', evaluation: commitEvaluation }),
+          commitAuthority, transaction: {
             transactionId: state.transaction.transactionId,
             journalId: state.journal.journalId,
             stage: state.transaction.stage,
             lockId: state.transaction.lock.lockId,
+            commitAuthorityFingerprint: commitAuthority.fingerprint,
             classification: state.transaction.stage === 'RECOVERY_REQUIRED'
               ? 'RECOVERY_REQUIRED' : 'IN_PROGRESS'
           } });

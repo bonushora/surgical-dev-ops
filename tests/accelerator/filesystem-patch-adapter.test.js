@@ -13,7 +13,8 @@ const { verifyHumanIdentityAssertion } = require('../../accelerator/adapters/ide
 const { patchFileWithGrant } = require('../../accelerator/adapters/filesystem-patch-adapter');
 const { createAuthoritativeClock } = require('../../accelerator/core/authoritative-clock');
 const {
-  createMutationTransaction, bindMutationLock, transitionMutationTransaction,
+  createMutationTransaction, bindMutationLock, createCommitAuthorityEvidence,
+  bindCommitAuthorityEvidence, transitionMutationTransaction,
   deriveMutationLockId
 } = require('../../accelerator/core/mutation-transaction');
 
@@ -103,8 +104,10 @@ function issue(overrides = {}) {
 
 function patch(overrides = {}) {
   const clock = overrides.authoritativeClock || clockAt();
+  const suppliedMutationTransaction = overrides.mutationTransaction;
   const request = { ...overrides };
   delete request.authoritativeClock;
+  delete request.mutationTransaction;
   const patchRequest = {
     operationId: 'op-patch', workspace, target: 'target.txt', replacement: 'after\n',
     grantEvaluation: issue(), observedAt: NOW, ...request
@@ -136,6 +139,12 @@ function patch(overrides = {}) {
         journal = frozen({ ...journal, transaction });
         return transaction;
       },
+      verifyCommitAuthority(input) {
+        const evidence = createCommitAuthorityEvidence(transaction, input);
+        transaction = bindCommitAuthorityEvidence(transaction, evidence);
+        journal = frozen({ ...journal, transaction });
+        return evidence;
+      },
       requireRecovery() {
         if (transaction.stage !== 'RECOVERY_REQUIRED') this.advance('RECOVERY_REQUIRED');
         return transaction;
@@ -143,12 +152,44 @@ function patch(overrides = {}) {
     };
   }
   return patchFileWithGrant(patchRequest,
-    { authoritativeClock: clock, mutationTransaction });
+    { authoritativeClock: clock,
+      mutationTransaction: suppliedMutationTransaction || mutationTransaction });
 }
 
 test('valid single-file replacement', () => {
-  assert.equal(patch().outcome, 'APPLIED');
+  const result = patch();
+  assert.equal(result.outcome, 'APPLIED');
+  assert.equal(result.transaction.commitAuthorityFingerprint,
+    result.commitAuthority.fingerprint);
+  assert.equal(result.transaction.stage, 'AFTER_VERIFIED');
   assert.equal(fs.readFileSync(targetPath, 'utf8'), 'after\n');
+});
+
+test('physical replacement requires durable commit-authority journal acceptance', () => {
+  const grant = issue().grant;
+  let transaction = createMutationTransaction({ operationId: 'op-patch', workspace,
+    target: grant.scope.target.canonicalPath, beforeSha256: grant.scope.target.beforeSha256,
+    replacementSha256: grant.scope.target.replacementSha256,
+    grantFingerprint: grant.fingerprint,
+    approvalAuthorityFingerprint: grant.approvalAuthorityFingerprint,
+    verifiedIdentityAssertionFingerprint: grant.verifiedIdentityAssertionFingerprint,
+    idempotencyKey: 'adapter-test' });
+  transaction = bindMutationLock(transaction, frozen({ schema: 'sdo.mutation_lock.v1',
+    adapter: 'FILESYSTEM_EXCLUSIVE_CREATE', version: 1,
+    lockId: deriveMutationLockId(workspace, grant.scope.target.canonicalPath),
+    transactionId: transaction.transactionId, operationId: transaction.operationId,
+    workspace, target: grant.scope.target.canonicalPath, ownerToken: 'a'.repeat(64),
+    ownerProcess: 'test:adapter', acquiredAt: NOW }));
+  let journal = frozen({ journalId: 'b'.repeat(64),
+    identity: { transactionId: transaction.transactionId }, transaction });
+  const coordinator = { current: () => frozen({ transaction, journal, lockRetained: true }),
+    advance(stage) { transaction = transitionMutationTransaction(transaction, stage);
+      journal = frozen({ ...journal, transaction }); return transaction; },
+    verifyCommitAuthority() { throw new Error('Injected commit-authority journal failure.'); } };
+  assert.throws(() => patch({ grantEvaluation: frozen({
+    schema: 'sdo.capability_grant_evaluation.v1', decision: 'ALLOWED', grant }),
+  mutationTransaction: coordinator }), /commit-authority journal failure/);
+  assert.equal(fs.readFileSync(targetPath, 'utf8'), 'before\n');
 });
 
 test('BEFORE hash mismatch fails closed', () => {

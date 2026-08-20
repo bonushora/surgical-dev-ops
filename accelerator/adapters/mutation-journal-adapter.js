@@ -8,6 +8,7 @@ const {
   STAGES,
   createMutationTransaction,
   bindMutationLock,
+  bindCommitAuthorityEvidence,
   transitionMutationTransaction,
   assertSameMutationTransaction
 } = require('../core/mutation-transaction');
@@ -148,6 +149,9 @@ function payloadFor(transaction) {
     return deepFreeze({ definition: definitionOf(transaction) });
   }
   if (transaction.stage === 'LOCKED') return deepFreeze({ lock: transaction.lock });
+  if (transaction.stage === 'COMMIT_AUTHORITY_VERIFIED') {
+    return deepFreeze({ commitAuthority: transaction.commitAuthority });
+  }
   return deepFreeze({});
 }
 
@@ -236,6 +240,12 @@ function reconstruct(records) {
       }
       deepFreeze(record.payload.lock);
       transaction = bindMutationLock(transaction, record.payload.lock);
+    } else if (record.stage === 'COMMIT_AUTHORITY_VERIFIED') {
+      if (Object.keys(record.payload).length !== 1 || !record.payload.commitAuthority) {
+        throw new Error('COMMIT_AUTHORITY_VERIFIED journal payload is malformed.');
+      }
+      deepFreeze(record.payload.commitAuthority);
+      transaction = bindCommitAuthorityEvidence(transaction, record.payload.commitAuthority);
     } else {
       if (Object.keys(record.payload).length !== 0) {
         throw new Error('Mutation journal stage payload is malformed.');

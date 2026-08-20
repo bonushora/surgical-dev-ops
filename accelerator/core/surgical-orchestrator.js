@@ -40,6 +40,8 @@ const { deriveCapabilityGrantFingerprint } = require('./capability-grant');
 const { classifyMutationAuthority } = require('./authoritative-clock');
 const {
   createMutationTransaction,
+  createCommitAuthorityEvidence,
+  bindCommitAuthorityEvidence,
   transitionMutationTransaction
 } = require('./mutation-transaction');
 const mutationLockAdapter = require('../adapters/mutation-lock-adapter');
@@ -401,6 +403,22 @@ function createMutationCoordinator(request, validation, runtime, idempotencyKey)
     return transaction;
   }
 
+  function verifyCommitAuthority(input) {
+    const evidence = createCommitAuthorityEvidence(transaction, input);
+    const candidate = bindCommitAuthorityEvidence(transaction, evidence);
+    const accepted = journalPort.append(candidate);
+    if (!accepted || accepted.journalId !== journal.journalId ||
+        !accepted.transaction || accepted.transaction.transactionId !== candidate.transactionId ||
+        accepted.transaction.stage !== 'COMMIT_AUTHORITY_VERIFIED' ||
+        !accepted.transaction.commitAuthority ||
+        accepted.transaction.commitAuthority.fingerprint !== evidence.fingerprint) {
+      throw new Error('Mutation journal did not durably accept exact commit-authority evidence.');
+    }
+    transaction = candidate;
+    journal = accepted;
+    return evidence;
+  }
+
   function requireRecovery() {
     if (transaction.stage === 'RECOVERY_REQUIRED' ||
         transaction.stage === 'RECOVERED' || transaction.stage === 'RECOVERY_UNRESOLVED') {
@@ -437,6 +455,7 @@ function createMutationCoordinator(request, validation, runtime, idempotencyKey)
   return {
     current: () => deepFreeze({ transaction, journal, lockRetained }),
     advance,
+    verifyCommitAuthority,
     requireRecovery,
     failBeforeCommit,
     releaseFinalized
@@ -479,7 +498,8 @@ function patchEvidenceItem(request, validation, evidenceId, payload, outcome = p
     identityVerificationEvidenceFingerprint:
       request.grantEvaluation.grant.identityVerificationEvidenceFingerprint,
     transactionId: payload.transaction && payload.transaction.transactionId,
-    journalId: payload.transaction && payload.transaction.journalId
+    journalId: payload.transaction && payload.transaction.journalId,
+    commitAuthorityFingerprint: payload.commitAuthority && payload.commitAuthority.fingerprint
   };
 }
 

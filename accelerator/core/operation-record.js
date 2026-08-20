@@ -5,6 +5,9 @@ const path = require('path');
 const { evaluateR3ApprovalAuthority } = require('./risk-classification');
 const { validateIdentityVerificationResult } = require('../adapters/identity-verification-adapter');
 const { classifyMutationAuthority } = require('./authoritative-clock');
+const {
+  deriveCommitAuthorityEvidenceFingerprint
+} = require('./mutation-transaction');
 
 const RISKS = new Set(['R0', 'R1', 'R2', 'R3']);
 const POLICY_DECISIONS = new Set(['ALLOWED', 'DENIED', 'APPROVAL_REQUIRED']);
@@ -299,6 +302,7 @@ function validatePayload(record, item) {
       record.scope.target.path === target.requested &&
       record.scope.target.beforeSha256 === item.beforeSha256;
     const temporal = item.payload.temporalAuthority;
+    const commitAuthority = item.payload.commitAuthority;
     const transaction = item.payload.transaction;
     const timeEvaluation = temporal && temporal.evaluation;
     let temporalIntegrity = false;
@@ -324,9 +328,28 @@ function validatePayload(record, item) {
       /^[a-f0-9]{64}$/.test(transaction.lockId || '') &&
       transaction.transactionId === item.transactionId &&
       transaction.journalId === item.journalId &&
-      ['LOCKED', 'BEFORE_VERIFIED', 'MUTATION_STARTED', 'PHYSICAL_APPLIED',
+      transaction.commitAuthorityFingerprint === item.commitAuthorityFingerprint &&
+      ['LOCKED', 'BEFORE_VERIFIED', 'MUTATION_STARTED', 'COMMIT_AUTHORITY_VERIFIED', 'PHYSICAL_APPLIED',
         'AFTER_VERIFIED', 'RECOVERY_REQUIRED', 'RECOVERED'].includes(transaction.stage) &&
       ['IN_PROGRESS', 'RECOVERY_REQUIRED'].includes(transaction.classification);
+    const durableAuthorityBound = commitAuthority && isDeepFrozen(commitAuthority) &&
+      commitAuthority.schema === 'sdo.mutation_commit_authority_evidence.v1' &&
+      commitAuthority.fingerprint === item.commitAuthorityFingerprint &&
+      deriveCommitAuthorityEvidenceFingerprint(commitAuthority) === commitAuthority.fingerprint &&
+      commitAuthority.transactionId === item.transactionId &&
+      commitAuthority.operationId === item.operationId &&
+      commitAuthority.workspace === item.workspace &&
+      commitAuthority.target === target.canonical &&
+      commitAuthority.beforeSha256 === item.beforeSha256 &&
+      commitAuthority.replacementSha256 === item.replacementSha256 &&
+      commitAuthority.verifiedIdentityAssertionFingerprint ===
+        item.verifiedIdentityAssertionFingerprint &&
+      commitAuthority.approvalAuthorityFingerprint === item.approvalAuthorityFingerprint &&
+      commitAuthority.grantFingerprint === item.grantFingerprint &&
+      commitAuthority.policyDecision === 'ALLOWED' && commitAuthority.riskLevel === 'R3' &&
+      commitAuthority.capabilityType === 'FILESYSTEM_PATCH' &&
+      commitAuthority.action === 'PATCH_FILE' &&
+      commitAuthority.authoritativeEvaluation === timeEvaluation;
     if ((!['R1', 'R2'].includes(item.riskLevel) && !r3Authorized) ||
         item.policyDecision !== 'ALLOWED' ||
         !target || !text(target.requested) || !text(target.canonical) ||
@@ -341,7 +364,8 @@ function validatePayload(record, item) {
         (item.outcome !== 'FAILED' && item.payload.afterSha256 !== item.replacementSha256) ||
         !['APPLIED', 'ALREADY_APPLIED', 'FAILED'].includes(item.outcome) ||
         item.payload.outcome !== item.outcome || item.payload.recovery !== item.recovery ||
-        (r3Authorized && (!temporalBound || !transactionBound))) {
+        (r3Authorized && (item.recovery !== 'NOT_STARTED_AUTHORITY_DENIED' &&
+          (!temporalBound || !transactionBound || !durableAuthorityBound)))) {
       throw new Error('Filesystem-patch evidence is malformed or inconsistently bound.');
     }
     const successful = item.outcome === 'APPLIED' || item.outcome === 'ALREADY_APPLIED';
@@ -429,7 +453,8 @@ function normalizeAdapterEvidence(record, item, orderedAfter) {
       identityVerificationEvidenceFingerprint:
         item.identityVerificationEvidenceFingerprint || null,
       transactionId: item.transactionId || null,
-      journalId: item.journalId || null
+      journalId: item.journalId || null,
+      commitAuthorityFingerprint: item.commitAuthorityFingerprint || null
     } : {})
   };
 }

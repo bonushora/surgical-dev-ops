@@ -15,6 +15,8 @@ const { evaluateVerifiedHumanIdentityAssertion } = require('../../accelerator/co
 const { verifyHumanIdentityAssertion } = require('../../accelerator/adapters/identity-verification-adapter');
 const { createAuthoritativeClock, classifyMutationAuthority } =
   require('../../accelerator/core/authoritative-clock');
+const { deriveCommitAuthorityEvidenceFingerprint } =
+  require('../../accelerator/core/mutation-transaction');
 
 const TIME = '2026-08-20T12:00:00.000Z';
 const WORKSPACE = fs.realpathSync(os.tmpdir());
@@ -158,6 +160,7 @@ function evidence(adapterType = 'FILESYSTEM_READ', overrides = {}) {
 
 function r3Evidence(record, overrides = {}) {
   const base = evidence('FILESYSTEM_PATCH');
+  const patchTarget = base.target;
   const evaluation = classifyMutationAuthority(clockAt().read(), {
     identity: { issuedAt: record.verifiedIdentityAssertion.issuedAt,
       expiresAt: record.verifiedIdentityAssertion.expiresAt,
@@ -172,14 +175,35 @@ function r3Evidence(record, overrides = {}) {
     decision: 'ALLOWED', evaluation });
   const transactionId = 'e'.repeat(64);
   const journalId = 'f'.repeat(64);
+  const commitAuthorityFields = {
+    schema: 'sdo.mutation_commit_authority_evidence.v1', version: 1,
+    transactionId, operationId: 'op-1', workspace: WORKSPACE,
+    target: patchTarget.canonical, beforeSha256: base.beforeSha256,
+    replacementSha256: base.replacementSha256,
+    verifiedIdentityAssertionFingerprint: record.verifiedIdentityAssertionFingerprint,
+    approvalAuthorityFingerprint: record.approvalAuthority.fingerprint,
+    grantFingerprint: GRANT, policyDecision: 'ALLOWED', riskLevel: 'R3',
+    capabilityType: 'FILESYSTEM_PATCH', action: 'PATCH_FILE',
+    scope: { target: { canonicalPath: patchTarget.canonical,
+      beforeSha256: base.beforeSha256, replacementSha256: base.replacementSha256 } },
+    identityValidity: evaluation.bounds.identity,
+    approvalValidity: evaluation.bounds.approval,
+    grantValidity: evaluation.bounds.grant,
+    authoritativeReading: evaluation.reading,
+    authoritativeEvaluation: evaluation
+  };
+  const commitAuthority = frozen({ ...commitAuthorityFields,
+    fingerprint: deriveCommitAuthorityEvidenceFingerprint(commitAuthorityFields) });
   const transaction = frozen({ transactionId, journalId, stage: 'AFTER_VERIFIED',
-    lockId: '9'.repeat(64), classification: 'IN_PROGRESS' });
+    lockId: '9'.repeat(64), commitAuthorityFingerprint: commitAuthority.fingerprint,
+    classification: 'IN_PROGRESS' });
   return evidence('FILESYSTEM_PATCH', { riskLevel: 'R3',
     approvalAuthorityFingerprint: record.approvalAuthority.fingerprint,
     verifiedIdentityAssertionFingerprint: record.verifiedIdentityAssertionFingerprint,
     identityVerificationEvidenceFingerprint: record.identityVerificationEvidenceFingerprint,
-    transactionId, journalId,
-    payload: frozen({ ...base.payload, observedAt: TIME, temporalAuthority, transaction }),
+    transactionId, journalId, commitAuthorityFingerprint: commitAuthority.fingerprint,
+    payload: frozen({ ...base.payload, observedAt: TIME, temporalAuthority,
+      commitAuthority, transaction }),
     ...overrides });
 }
 
@@ -421,6 +445,10 @@ test('matching R3 patch evidence requires and preserves approval authority', () 
   const next = appendAdapterEvidence(record, item);
   assert.equal(next.adapterEvidence[0].approvalAuthorityFingerprint,
     record.approvalAuthority.fingerprint);
+  assert.equal(next.adapterEvidence[0].commitAuthorityFingerprint,
+    item.payload.commitAuthority.fingerprint);
+  assert.equal(next.adapterEvidence[0].payload.commitAuthority.transactionId,
+    item.transactionId);
   assert.ok(Object.isFrozen(next.approvalAuthority));
   assert.equal(next.adapterEvidence[0].payload.temporalAuthority.decision, 'ALLOWED');
   assert.equal(next.adapterEvidence[0].payload.temporalAuthority.evaluation.reading.wallTime, TIME);

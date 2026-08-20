@@ -135,17 +135,20 @@ function transactionEvidence(context) {
     journalId: state.journal.journalId,
     stage: state.transaction.stage,
     lockId: state.transaction.lock && state.transaction.lock.lockId,
+    commitAuthorityFingerprint: state.transaction.commitAuthority &&
+      state.transaction.commitAuthority.fingerprint,
     classification: state.transaction.stage === 'RECOVERY_REQUIRED'
       ? 'RECOVERY_REQUIRED' : 'IN_PROGRESS'
   });
 }
 
 function evidence({ operationId, workspace, requested, canonical, beforeHash, afterHash,
-  outcome, recovery, observedAt, temporalAuthority, transaction }) {
+  outcome, recovery, observedAt, temporalAuthority, commitAuthority, transaction }) {
   return deepFreeze({
     schema: 'sdo.filesystem_patch_result.v1', operationId, workspace,
     target: { requested, canonical }, beforeSha256: beforeHash, afterSha256: afterHash,
-    outcome, recovery, observedAt, temporalAuthority, transaction
+    outcome, recovery, observedAt, temporalAuthority, commitAuthority: commitAuthority || null,
+    transaction
   });
 }
 
@@ -279,6 +282,23 @@ function patchFileWithGrant({
     commitBoundary: 'IMMEDIATELY_BEFORE_ATOMIC_REPLACEMENT',
     physicalCommit: 'APPLIED', decision: 'ALLOWED', evaluation: commitAuthority
   });
+  const durableCommitAuthority = transactionContext.verifyCommitAuthority({
+    policyDecision: grant.policyDecision,
+    riskLevel: grant.riskLevel,
+    capabilityType: grant.capabilityType,
+    action: 'PATCH_FILE',
+    scope: grant.scope,
+    authoritativeEvaluation: commitAuthority
+  });
+  const committedTransaction = transactionContext.current();
+  if (committedTransaction.transaction.stage !== 'COMMIT_AUTHORITY_VERIFIED' ||
+      committedTransaction.transaction.commitAuthority !== durableCommitAuthority ||
+      committedTransaction.journal.transaction.stage !== 'COMMIT_AUTHORITY_VERIFIED' ||
+      !committedTransaction.journal.transaction.commitAuthority ||
+      committedTransaction.journal.transaction.commitAuthority.fingerprint !==
+        durableCommitAuthority.fingerprint) {
+    throw new Error('Durable commit-authority journal proof is required before replacement.');
+  }
   atomicReplace(resolved.canonicalTarget, replacementBytes, Number(before.stat.mode));
   try {
     transactionContext.advance('PHYSICAL_APPLIED');
@@ -289,6 +309,7 @@ function patchFileWithGrant({
       requested, canonical: resolved.canonicalTarget, beforeHash, afterHash,
       outcome: 'FAILED', recovery: 'RECOVERY_REQUIRED_JOURNAL_AMBIGUITY',
       observedAt: commitAuthority.reading.wallTime, temporalAuthority: commitEvidence,
+      commitAuthority: durableCommitAuthority,
       transaction: transactionEvidence(transactionContext) });
     throw error;
   }
@@ -319,6 +340,7 @@ function patchFileWithGrant({
           requested, canonical: resolved.canonicalTarget, beforeHash, afterHash,
           outcome: 'FAILED', recovery: 'RESTORED',
           observedAt: commitAuthority.reading.wallTime, temporalAuthority: commitEvidence,
+          commitAuthority: durableCommitAuthority,
           transaction: transactionEvidence(transactionContext) });
         throw error;
       } catch (restoreError) {
@@ -330,6 +352,7 @@ function patchFileWithGrant({
       requested, canonical: resolved.canonicalTarget, beforeHash, afterHash,
       outcome: 'FAILED', recovery: 'NOT_ATTEMPTED_UNPROVEN_OWNERSHIP',
       observedAt: commitAuthority.reading.wallTime, temporalAuthority: commitEvidence,
+      commitAuthority: durableCommitAuthority,
       transaction: transactionEvidence(transactionContext) });
     throw error;
   }
@@ -342,6 +365,7 @@ function patchFileWithGrant({
       requested, canonical: resolved.canonicalTarget, beforeHash, afterHash,
       outcome: 'FAILED', recovery: 'RECOVERY_REQUIRED_JOURNAL_AMBIGUITY',
       observedAt: commitAuthority.reading.wallTime, temporalAuthority: commitEvidence,
+      commitAuthority: durableCommitAuthority,
       transaction: transactionEvidence(transactionContext) });
     throw error;
   }
@@ -349,6 +373,7 @@ function patchFileWithGrant({
     requested, canonical: resolved.canonicalTarget, beforeHash, afterHash,
     outcome: 'APPLIED', recovery: 'NOT_REQUIRED',
     observedAt: commitAuthority.reading.wallTime, temporalAuthority: commitEvidence,
+    commitAuthority: durableCommitAuthority,
     transaction: transactionEvidence(transactionContext) });
 }
 

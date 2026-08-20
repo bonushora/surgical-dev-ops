@@ -7,10 +7,14 @@ const os = require('node:os');
 const path = require('node:path');
 const { fork } = require('node:child_process');
 const test = require('node:test');
+const { createAuthoritativeClock, evaluateMutationAuthority } =
+  require('../../accelerator/core/authoritative-clock');
 
 const {
   createMutationTransaction,
   bindMutationLock,
+  createCommitAuthorityEvidence,
+  bindCommitAuthorityEvidence,
   deriveMutationLockId,
   transitionMutationTransaction
 } = require('../../accelerator/core/mutation-transaction');
@@ -65,8 +69,28 @@ function locked(transaction, token) {
   return bindMutationLock(transaction, lockMetadata(transaction, token));
 }
 
+function commitAuthority(transaction) {
+  const bound = (fingerprint) => ({ issuedAt: '2026-08-20T11:00:00.000Z',
+    expiresAt: '2026-08-20T13:00:00.000Z', fingerprint });
+  const bounds = { identity: bound(transaction.verifiedIdentityAssertionFingerprint),
+    approval: bound(transaction.approvalAuthorityFingerprint),
+    grant: bound(transaction.grantFingerprint) };
+  const clock = createAuthoritativeClock({ port: { read: () => ({
+    schema: 'sdo.system_clock_observation.v1', availability: 'AVAILABLE', source: 'TEST',
+    wallTime: '2026-08-20T12:00:00.000Z', monotonicNanoseconds: '1000'
+  }) } });
+  return createCommitAuthorityEvidence(transaction, {
+    policyDecision: 'ALLOWED', riskLevel: 'R3', capabilityType: 'FILESYSTEM_PATCH',
+    action: 'PATCH_FILE', scope: { target: { canonicalPath: transaction.target,
+      beforeSha256: transaction.beforeSha256, replacementSha256: transaction.replacementSha256 } },
+    authoritativeEvaluation: evaluateMutationAuthority(clock, bounds)
+  });
+}
+
 function advance(transaction, stages) {
-  return stages.reduce(transitionMutationTransaction, transaction);
+  return stages.reduce((current, stage) => stage === 'COMMIT_AUTHORITY_VERIFIED'
+    ? bindCommitAuthorityEvidence(current, commitAuthority(current))
+    : transitionMutationTransaction(current, stage), transaction);
 }
 
 function fixture(t) {
@@ -288,6 +312,26 @@ if (process.argv[2] === '--journal-child') {
     assert.throws(() => adapter.reopen(initial), /identity|hash|correlation/);
   });
 
+  test('commit-authority fingerprint substitution is detected on reopen', (t) => {
+    const setup = fixture(t);
+    const initial = prepared(setup);
+    const adapter = createMutationJournalAdapter({ storageRoot: setup.storageRoot });
+    adapter.create(initial);
+    let transaction = locked(initial);
+    adapter.append(transaction);
+    for (const stage of ['BEFORE_VERIFIED', 'MUTATION_STARTED',
+      'COMMIT_AUTHORITY_VERIFIED']) {
+      transaction = advance(transaction, [stage]);
+      adapter.append(transaction);
+    }
+    const state = adapter.reopen(initial);
+    const file = recordFile(setup, state, 5);
+    const record = JSON.parse(fs.readFileSync(file, 'utf8'));
+    record.payload.commitAuthority.grantFingerprint = '1'.repeat(64);
+    fs.writeFileSync(file, `${JSON.stringify(record)}\n`);
+    assert.throws(() => adapter.reopen(initial), /hash|authority|correlation/);
+  });
+
   test('missing record and sequence gap fail closed', (t) => {
     const setup = fixture(t);
     const initial = prepared(setup);
@@ -395,9 +439,9 @@ if (process.argv[2] === '--journal-child') {
     const held = locked(initial);
     adapter.append(held);
     let transaction = held;
-    for (const stage of ['BEFORE_VERIFIED', 'MUTATION_STARTED', 'PHYSICAL_APPLIED',
+    for (const stage of ['BEFORE_VERIFIED', 'MUTATION_STARTED', 'COMMIT_AUTHORITY_VERIFIED', 'PHYSICAL_APPLIED',
       'AFTER_VERIFIED', 'EVIDENCE_RECORDED']) {
-      transaction = transitionMutationTransaction(transaction, stage);
+      transaction = advance(transaction, [stage]);
       adapter.append(transaction);
     }
     const successful = transitionMutationTransaction(transaction, 'FINALIZED_SUCCESS');

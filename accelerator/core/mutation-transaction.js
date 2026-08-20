@@ -2,6 +2,7 @@
 
 const crypto = require('node:crypto');
 const path = require('node:path');
+const { classifyMutationAuthority } = require('./authoritative-clock');
 
 const SCHEMA = 'sdo.mutation_transaction.v1';
 const HASH = /^[a-f0-9]{64}$/;
@@ -17,6 +18,7 @@ const STAGES = Object.freeze([
   'LOCKED',
   'BEFORE_VERIFIED',
   'MUTATION_STARTED',
+  'COMMIT_AUTHORITY_VERIFIED',
   'PHYSICAL_APPLIED',
   'AFTER_VERIFIED',
   'EVIDENCE_RECORDED',
@@ -40,7 +42,8 @@ const TRANSITIONS = Object.freeze({
   PREPARED: new Set(['LOCKED', 'FINALIZED_FAILED']),
   LOCKED: new Set(['BEFORE_VERIFIED', 'FINALIZED_FAILED']),
   BEFORE_VERIFIED: new Set(['MUTATION_STARTED', 'FINALIZED_FAILED']),
-  MUTATION_STARTED: new Set(['PHYSICAL_APPLIED', 'FINALIZED_FAILED', 'RECOVERY_REQUIRED']),
+  MUTATION_STARTED: new Set(['COMMIT_AUTHORITY_VERIFIED', 'FINALIZED_FAILED', 'RECOVERY_REQUIRED']),
+  COMMIT_AUTHORITY_VERIFIED: new Set(['PHYSICAL_APPLIED', 'FINALIZED_FAILED', 'RECOVERY_REQUIRED']),
   PHYSICAL_APPLIED: new Set(['AFTER_VERIFIED', 'RECOVERY_REQUIRED']),
   AFTER_VERIFIED: new Set(['EVIDENCE_RECORDED', 'RECOVERY_REQUIRED']),
   EVIDENCE_RECORDED: new Set(['FINALIZED_SUCCESS', 'FINALIZED_FAILED', 'RECOVERY_REQUIRED']),
@@ -117,6 +120,19 @@ function digest(label, value) {
   return crypto.createHash('sha256').update(`${label}\0${canonicalJson(value)}`).digest('hex');
 }
 
+function commitAuthorityFingerprint(value) {
+  return digest('sdo.mutation_commit_authority_evidence.v1', value);
+}
+
+function deriveCommitAuthorityEvidenceFingerprint(evidence) {
+  requireObject(evidence, 'Commit-authority evidence');
+  if (Object.prototype.hasOwnProperty.call(evidence, 'fingerprint')) {
+    const { fingerprint, ...fields } = evidence;
+    return commitAuthorityFingerprint(fields);
+  }
+  return commitAuthorityFingerprint(evidence);
+}
+
 function normalizeDefinition(input) {
   exactInput(input);
   const workspace = requireCanonicalAbsolute(input.workspace, 'Workspace');
@@ -174,6 +190,7 @@ function createMutationTransaction(input) {
     ...definition,
     stage: 'PREPARED',
     lock: null,
+    commitAuthority: null,
     history: [{ sequence: 1, stage: 'PREPARED' }]
   });
 }
@@ -230,7 +247,11 @@ function requireTransaction(transaction) {
     const eventKeys = Object.keys(event);
     const lockedEvent = event.stage === 'LOCKED' && eventKeys.length === 3 &&
       transaction.lock && event.lockId === transaction.lock.lockId;
-    if ((!lockedEvent && eventKeys.length !== 2) || event.sequence !== index + 1 ||
+    const authorityEvent = event.stage === 'COMMIT_AUTHORITY_VERIFIED' &&
+      eventKeys.length === 3 && transaction.commitAuthority &&
+      event.commitAuthorityFingerprint === transaction.commitAuthority.fingerprint;
+    if ((!lockedEvent && !authorityEvent && eventKeys.length !== 2) ||
+        event.sequence !== index + 1 ||
         !STAGES.includes(event.stage) || !Object.isFrozen(event) ||
         (index === 0 && event.stage !== 'PREPARED') ||
         (index > 0 && !(TRANSITIONS[previous] || new Set()).has(event.stage))) {
@@ -247,7 +268,107 @@ function requireTransaction(transaction) {
   } else {
     requireLockMetadata(transaction, transaction.lock);
   }
+  const authorityEvent = transaction.history.find(
+    (event) => event.stage === 'COMMIT_AUTHORITY_VERIFIED'
+  );
+  if (!authorityEvent) {
+    if (transaction.commitAuthority !== null) {
+      throw new Error('Pre-commit transaction cannot carry commit-authority evidence.');
+    }
+  } else {
+    requireCommitAuthorityEvidence(transaction, transaction.commitAuthority);
+    if (authorityEvent.commitAuthorityFingerprint !== transaction.commitAuthority.fingerprint) {
+      throw new Error('Commit-authority history binding is malformed.');
+    }
+  }
   return transaction;
+}
+
+function requireCommitAuthorityEvidence(transaction, evidence) {
+  requireObject(evidence, 'Commit-authority evidence');
+  const { fingerprint, ...fields } = evidence;
+  const target = fields.scope && fields.scope.target;
+  const evaluation = fields.authoritativeEvaluation;
+  const bounds = evaluation && evaluation.bounds;
+  let authoritativeFingerprintValid = false;
+  try {
+    const progression = deepFreeze({ ...evaluation.progression, reading: evaluation.reading });
+    authoritativeFingerprintValid = classifyMutationAuthority(
+      evaluation.reading, evaluation.bounds, progression
+    ).fingerprint === evaluation.fingerprint;
+  } catch {}
+  if (evidence.schema !== 'sdo.mutation_commit_authority_evidence.v1' ||
+      evidence.version !== 1 || !Object.isFrozen(evidence) ||
+      evidence.transactionId !== transaction.transactionId ||
+      evidence.operationId !== transaction.operationId ||
+      evidence.workspace !== transaction.workspace || evidence.target !== transaction.target ||
+      evidence.beforeSha256 !== transaction.beforeSha256 ||
+      evidence.replacementSha256 !== transaction.replacementSha256 ||
+      evidence.grantFingerprint !== transaction.grantFingerprint ||
+      evidence.approvalAuthorityFingerprint !== transaction.approvalAuthorityFingerprint ||
+      evidence.verifiedIdentityAssertionFingerprint !==
+        transaction.verifiedIdentityAssertionFingerprint ||
+      evidence.policyDecision !== 'ALLOWED' || evidence.riskLevel !== 'R3' ||
+      evidence.capabilityType !== 'FILESYSTEM_PATCH' || evidence.action !== 'PATCH_FILE' ||
+      !target || target.canonicalPath !== transaction.target ||
+      target.beforeSha256 !== transaction.beforeSha256 ||
+      target.replacementSha256 !== transaction.replacementSha256 ||
+      !evaluation || evaluation.schema !== 'sdo.mutation_authority_time_evidence.v1' ||
+      evaluation.decision !== 'ALLOWED' || !authoritativeFingerprintValid || !bounds ||
+      bounds.identity.fingerprint !== transaction.verifiedIdentityAssertionFingerprint ||
+      bounds.approval.fingerprint !== transaction.approvalAuthorityFingerprint ||
+      bounds.grant.fingerprint !== transaction.grantFingerprint ||
+      canonicalJson(evidence.identityValidity) !== canonicalJson(bounds.identity) ||
+      canonicalJson(evidence.approvalValidity) !== canonicalJson(bounds.approval) ||
+      canonicalJson(evidence.grantValidity) !== canonicalJson(bounds.grant) ||
+      canonicalJson(evidence.authoritativeReading) !== canonicalJson(evaluation.reading) ||
+      !/^[a-f0-9]{64}$/.test(fingerprint || '') ||
+      commitAuthorityFingerprint(fields) !== fingerprint) {
+    throw new Error('Commit-authority evidence is malformed, altered, or mismatched.');
+  }
+  return evidence;
+}
+
+function createCommitAuthorityEvidence(transaction, input) {
+  const current = requireTransaction(transaction);
+  if (current.stage !== 'MUTATION_STARTED' || current.commitAuthority !== null) {
+    throw new Error('Commit authority may bind only at MUTATION_STARTED.');
+  }
+  requireObject(input, 'Commit-authority evidence input');
+  const evaluation = input.authoritativeEvaluation;
+  const bounds = evaluation && evaluation.bounds;
+  const fields = {
+    schema: 'sdo.mutation_commit_authority_evidence.v1', version: 1,
+    transactionId: current.transactionId, operationId: current.operationId,
+    workspace: current.workspace, target: current.target,
+    beforeSha256: current.beforeSha256, replacementSha256: current.replacementSha256,
+    verifiedIdentityAssertionFingerprint: current.verifiedIdentityAssertionFingerprint,
+    approvalAuthorityFingerprint: current.approvalAuthorityFingerprint,
+    grantFingerprint: current.grantFingerprint,
+    policyDecision: input.policyDecision, riskLevel: input.riskLevel,
+    capabilityType: input.capabilityType, action: input.action, scope: input.scope,
+    identityValidity: bounds && bounds.identity,
+    approvalValidity: bounds && bounds.approval,
+    grantValidity: bounds && bounds.grant,
+    authoritativeReading: evaluation && evaluation.reading,
+    authoritativeEvaluation: evaluation
+  };
+  const evidence = deepFreeze({ ...fields, fingerprint: commitAuthorityFingerprint(fields) });
+  return requireCommitAuthorityEvidence(current, evidence);
+}
+
+function bindCommitAuthorityEvidence(transaction, evidence) {
+  const current = requireTransaction(transaction);
+  if (current.stage !== 'MUTATION_STARTED') {
+    throw new Error('Commit-authority evidence must immediately precede physical commit.');
+  }
+  const authority = requireCommitAuthorityEvidence(current, evidence);
+  const version = current.version + 1;
+  return deepFreeze({
+    ...current, version, stage: 'COMMIT_AUTHORITY_VERIFIED', commitAuthority: authority,
+    history: [...current.history, { sequence: version, stage: 'COMMIT_AUTHORITY_VERIFIED',
+      commitAuthorityFingerprint: authority.fingerprint }]
+  });
 }
 
 function bindMutationLock(transaction, lockMetadata) {
@@ -272,6 +393,9 @@ function transitionMutationTransaction(transaction, nextStage) {
   if (nextStage === current.stage) throw new Error('Repeated mutation transaction stage is forbidden.');
   if (nextStage === 'LOCKED') {
     throw new Error('LOCKED transition requires immutable lock binding.');
+  }
+  if (nextStage === 'COMMIT_AUTHORITY_VERIFIED') {
+    throw new Error('COMMIT_AUTHORITY_VERIFIED requires immutable authority evidence binding.');
   }
   if (!(TRANSITIONS[current.stage] || new Set()).has(nextStage)) {
     throw new Error('Invalid or skipped mutation transaction stage.');
@@ -300,6 +424,9 @@ module.exports = {
   deriveMutationLockId,
   createMutationTransaction,
   bindMutationLock,
+  createCommitAuthorityEvidence,
+  bindCommitAuthorityEvidence,
+  deriveCommitAuthorityEvidenceFingerprint,
   transitionMutationTransaction,
   assertSameMutationTransaction
 };

@@ -3,12 +3,16 @@
 const assert = require('node:assert/strict');
 const test = require('node:test');
 const path = require('node:path');
+const { createAuthoritativeClock, evaluateMutationAuthority } =
+  require('../../accelerator/core/authoritative-clock');
 
 const {
   STAGES,
   deriveMutationLockId,
   createMutationTransaction,
   bindMutationLock,
+  createCommitAuthorityEvidence,
+  bindCommitAuthorityEvidence,
   transitionMutationTransaction,
   assertSameMutationTransaction
 } = require('../../accelerator/core/mutation-transaction');
@@ -31,8 +35,37 @@ function definition(overrides = {}) {
   };
 }
 
+function frozen(value) {
+  if (value && typeof value === 'object' && !Object.isFrozen(value)) {
+    Object.freeze(value);
+    for (const child of Object.values(value)) frozen(child);
+  }
+  return value;
+}
+
+function commitAuthority(transaction, overrides = {}) {
+  const bound = (fingerprint) => ({ issuedAt: '2026-08-20T11:00:00.000Z',
+    expiresAt: '2026-08-20T13:00:00.000Z', fingerprint });
+  const bounds = { identity: bound(transaction.verifiedIdentityAssertionFingerprint),
+    approval: bound(transaction.approvalAuthorityFingerprint),
+    grant: bound(transaction.grantFingerprint) };
+  const clock = createAuthoritativeClock({ port: { read: () => ({
+    schema: 'sdo.system_clock_observation.v1', availability: 'AVAILABLE', source: 'TEST',
+    wallTime: '2026-08-20T12:00:00.000Z', monotonicNanoseconds: '1000'
+  }) } });
+  const authoritativeEvaluation = evaluateMutationAuthority(clock, bounds);
+  return createCommitAuthorityEvidence(transaction, {
+    policyDecision: 'ALLOWED', riskLevel: 'R3', capabilityType: 'FILESYSTEM_PATCH',
+    action: 'PATCH_FILE', scope: { target: { canonicalPath: transaction.target,
+      beforeSha256: transaction.beforeSha256, replacementSha256: transaction.replacementSha256 } },
+    authoritativeEvaluation, ...overrides
+  });
+}
+
 function advance(transaction, stages) {
-  return stages.reduce(transitionMutationTransaction, transaction);
+  return stages.reduce((current, stage) => stage === 'COMMIT_AUTHORITY_VERIFIED'
+    ? bindCommitAuthorityEvidence(current, commitAuthority(current))
+    : transitionMutationTransaction(current, stage), transaction);
 }
 
 function lockMetadata(transaction, overrides = {}) {
@@ -164,15 +197,35 @@ test('created transaction and nested transition history are deeply immutable', (
 
 test('normal stage progression is ordered and reaches successful terminal state', () => {
   const completed = advance(locked(), [
-    'BEFORE_VERIFIED', 'MUTATION_STARTED', 'PHYSICAL_APPLIED',
+    'BEFORE_VERIFIED', 'MUTATION_STARTED', 'COMMIT_AUTHORITY_VERIFIED', 'PHYSICAL_APPLIED',
     'AFTER_VERIFIED', 'EVIDENCE_RECORDED', 'FINALIZED_SUCCESS'
   ]);
   assert.deepEqual(completed.history.map((event) => event.stage), [
-    'PREPARED', 'LOCKED', 'BEFORE_VERIFIED', 'MUTATION_STARTED',
+    'PREPARED', 'LOCKED', 'BEFORE_VERIFIED', 'MUTATION_STARTED', 'COMMIT_AUTHORITY_VERIFIED',
     'PHYSICAL_APPLIED', 'AFTER_VERIFIED', 'EVIDENCE_RECORDED', 'FINALIZED_SUCCESS'
   ]);
   assert.equal(completed.version, completed.history.length);
   assert.throws(() => transitionMutationTransaction(completed, 'FINALIZED_FAILED'), /Terminal/);
+});
+
+test('commit-authority evidence is internally fingerprinted immutable and transaction-bound', () => {
+  let transaction = advance(locked(), ['BEFORE_VERIFIED', 'MUTATION_STARTED']);
+  const authority = commitAuthority(transaction);
+  assert.ok(Object.isFrozen(authority));
+  assert.ok(Object.isFrozen(authority.authoritativeReading));
+  assert.equal(authority.transactionId, transaction.transactionId);
+  transaction = bindCommitAuthorityEvidence(transaction, authority);
+  assert.equal(transaction.stage, 'COMMIT_AUTHORITY_VERIFIED');
+  assert.equal(transaction.history.at(-1).commitAuthorityFingerprint, authority.fingerprint);
+  for (const field of ['verifiedIdentityAssertionFingerprint',
+    'approvalAuthorityFingerprint', 'grantFingerprint', 'target', 'beforeSha256',
+    'replacementSha256']) {
+    const substituted = frozen({ ...authority,
+      [field]: field === 'target' ? path.join(WORKSPACE, 'other.js') : '1'.repeat(64) });
+    assert.throws(() => bindCommitAuthorityEvidence(
+      advance(locked(), ['BEFORE_VERIFIED', 'MUTATION_STARTED']), substituted
+    ), /commit-authority/i);
+  }
 });
 
 test('unknown, skipped and repeated transitions fail closed', () => {
@@ -205,9 +258,9 @@ test('known zero-commit MUTATION_STARTED may finalize failed without claiming ap
 
 test('evidence-finalization ambiguity may transition to recovery required', () => {
   let transaction = locked(createMutationTransaction(definition()));
-  for (const stage of ['BEFORE_VERIFIED', 'MUTATION_STARTED', 'PHYSICAL_APPLIED',
+  for (const stage of ['BEFORE_VERIFIED', 'MUTATION_STARTED', 'COMMIT_AUTHORITY_VERIFIED', 'PHYSICAL_APPLIED',
     'AFTER_VERIFIED', 'EVIDENCE_RECORDED']) {
-    transaction = transitionMutationTransaction(transaction, stage);
+    transaction = advance(transaction, [stage]);
   }
   assert.equal(transitionMutationTransaction(transaction, 'RECOVERY_REQUIRED').stage,
     'RECOVERY_REQUIRED');
@@ -215,7 +268,7 @@ test('evidence-finalization ambiguity may transition to recovery required', () =
 
 test('recovery ordering requires explicit recovery and evidence stages', () => {
   const applied = advance(locked(), [
-    'BEFORE_VERIFIED', 'MUTATION_STARTED', 'PHYSICAL_APPLIED'
+    'BEFORE_VERIFIED', 'MUTATION_STARTED', 'COMMIT_AUTHORITY_VERIFIED', 'PHYSICAL_APPLIED'
   ]);
   assert.throws(() => transitionMutationTransaction(applied, 'RECOVERED'), /skipped/);
   const required = transitionMutationTransaction(applied, 'RECOVERY_REQUIRED');
@@ -250,6 +303,7 @@ test('lock binding is transaction-bound and deeply immutable', () => {
 test('contract exposes every ADR-007 foundation stage', () => {
   assert.deepEqual(STAGES, [
     'PREPARED', 'LOCKED', 'BEFORE_VERIFIED', 'MUTATION_STARTED',
+    'COMMIT_AUTHORITY_VERIFIED',
     'PHYSICAL_APPLIED', 'AFTER_VERIFIED', 'EVIDENCE_RECORDED',
     'FINALIZED_SUCCESS', 'FINALIZED_FAILED', 'RECOVERY_REQUIRED', 'RECOVERED',
     'RECOVERY_UNRESOLVED'
