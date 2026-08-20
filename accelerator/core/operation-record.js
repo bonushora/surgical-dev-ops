@@ -6,11 +6,27 @@ const path = require('path');
 const RISKS = new Set(['R0', 'R1', 'R2', 'R3']);
 const POLICY_DECISIONS = new Set(['ALLOWED', 'DENIED', 'APPROVAL_REQUIRED']);
 const IDEMPOTENCY = new Set(['IDEMPOTENT', 'NON_IDEMPOTENT']);
+const ADAPTER_ACTIONS = Object.freeze({
+  FILESYSTEM_READ: new Set(['READ_FILE']),
+  GIT_READ: new Set([
+    'REPOSITORY_ROOT', 'CURRENT_BRANCH', 'HEAD_COMMIT',
+    'WORKTREE_STATUS', 'TRACKED_FILES'
+  ]),
+  PROCESS_VALIDATION: new Set(['NODE_SYNTAX_CHECK'])
+});
 
 function deepFreeze(value) {
   if (!value || typeof value !== 'object' || Object.isFrozen(value)) return value;
   for (const child of Object.values(value)) deepFreeze(child);
   return Object.freeze(value);
+}
+
+function isDeepFrozen(value, seen = new Set()) {
+  if (!value || typeof value !== 'object') return true;
+  if (seen.has(value)) return true;
+  if (!Object.isFrozen(value)) return false;
+  seen.add(value);
+  return Object.values(value).every((child) => isDeepFrozen(child, seen));
 }
 
 function text(value) {
@@ -150,6 +166,7 @@ function createOperationRecord(input) {
     violations: [],
     record: {
       schema: 'sdo.operation_record.v1',
+      version: 1,
       operationId,
       requester: { id: input.requester.id.trim(), type: input.requester.type.trim() },
       workspace: input.workspace,
@@ -158,9 +175,182 @@ function createOperationRecord(input) {
       riskLevel: input.riskLevel,
       idempotency: input.idempotency,
       approval: input.riskLevel === 'R3' ? input.approval : null,
-      events: input.events
+      events: input.events,
+      adapterEvidence: [],
+      finalization: null
     }
   });
 }
 
-module.exports = { createOperationRecord };
+function requireRecord(record) {
+  if (!record || record.schema !== 'sdo.operation_record.v1' ||
+      !isDeepFrozen(record) || !Array.isArray(record.events) ||
+      !Array.isArray(record.adapterEvidence) || !Number.isInteger(record.version) ||
+      record.version < 1 || validateWorkspace(record.workspace) ||
+      !POLICY_DECISIONS.has(record.policyDecision) || !RISKS.has(record.riskLevel)) {
+    throw new Error('A valid immutable operation record is required.');
+  }
+  const eventError = validateEvents(record.events, record);
+  if (eventError) throw new Error(eventError);
+  const identities = new Set();
+  let previousTimestamp = record.events[record.events.length - 1].timestamp;
+  for (const entry of record.adapterEvidence) {
+    const normalized = normalizeAdapterEvidence(record, entry, previousTimestamp);
+    if (JSON.stringify(normalized) !== JSON.stringify(entry) ||
+        identities.has(entry.evidenceId)) {
+      throw new Error('Stored adapter evidence is malformed or duplicated.');
+    }
+    identities.add(entry.evidenceId);
+    previousTimestamp = entry.timestamp;
+  }
+  return record;
+}
+
+function validatePayload(item) {
+  if (!item.payload || typeof item.payload !== 'object' ||
+      Array.isArray(item.payload) || !isDeepFrozen(item.payload)) {
+    throw new Error('Adapter payload must be a deeply immutable object.');
+  }
+  const schemas = {
+    FILESYSTEM_READ: 'sdo.filesystem_read_result.v1',
+    GIT_READ: 'sdo.git_read_result.v1',
+    PROCESS_VALIDATION: 'sdo.process_validation_result.v1'
+  };
+  if (item.payload.schema !== schemas[item.adapterType] ||
+      item.payload.operationId !== item.operationId ||
+      item.payload.workspace !== item.workspace) {
+    throw new Error('Adapter payload is structurally malformed or unbound.');
+  }
+  if (item.adapterType === 'FILESYSTEM_READ' &&
+      (!item.payload.target || !text(item.payload.target.requested) ||
+       !item.payload.evidence || !Number.isInteger(item.payload.evidence.bytes))) {
+    throw new Error('Filesystem-read payload is structurally malformed.');
+  }
+  if (item.adapterType === 'GIT_READ' && item.payload.selector !== item.action) {
+    throw new Error('Git-read payload is structurally malformed.');
+  }
+  if (item.adapterType === 'PROCESS_VALIDATION') {
+    const validation = item.payload.validation;
+    if (item.payload.selector !== item.action ||
+        !validation || !['PASSED', 'FAILED'].includes(validation.status) ||
+        typeof validation.successfulCompletionEligible !== 'boolean' ||
+        (validation.status === 'FAILED' && validation.successfulCompletionEligible !== false) ||
+        item.outcome !== validation.status) {
+      throw new Error('Process-validation outcome is malformed or inconsistent.');
+    }
+  } else if (item.outcome !== 'SUCCEEDED') {
+    throw new Error('Read adapter outcome must be SUCCEEDED.');
+  }
+}
+
+function normalizeAdapterEvidence(record, item, orderedAfter) {
+  if (!item || typeof item !== 'object' || Array.isArray(item)) {
+    throw new Error('Adapter evidence is missing or malformed.');
+  }
+  const evidenceId = text(item.evidenceId);
+  if (!evidenceId) throw new Error('Adapter evidence identity is missing.');
+  if (item.operationId !== record.operationId) throw new Error('Evidence operationId mismatch.');
+  if (item.workspace !== record.workspace || validateWorkspace(item.workspace)) {
+    throw new Error('Evidence workspace mismatch.');
+  }
+  const actions = ADAPTER_ACTIONS[item.adapterType];
+  if (!actions || !actions.has(item.action)) {
+    throw new Error('Unknown or forbidden adapter/action.');
+  }
+  if (!/^[a-f0-9]{64}$/.test(item.grantFingerprint || '')) {
+    throw new Error('Capability/grant binding is missing or malformed.');
+  }
+  if (item.policyDecision !== record.policyDecision ||
+      item.riskLevel !== record.riskLevel || item.lifecycleState !== 'PENDING') {
+    throw new Error('Evidence policy, risk or lifecycle context mismatch.');
+  }
+  if (!timestamp(item.timestamp)) throw new Error('Evidence timestamp is missing or malformed.');
+  const previousTimestamp = orderedAfter || (record.adapterEvidence.length
+    ? record.adapterEvidence[record.adapterEvidence.length - 1].timestamp
+    : record.events[record.events.length - 1].timestamp);
+  if (Date.parse(item.timestamp) < Date.parse(previousTimestamp)) {
+    throw new Error('Adapter evidence timestamps are out of order.');
+  }
+  validatePayload(item);
+  return {
+    evidenceId,
+    operationId: item.operationId,
+    workspace: item.workspace,
+    adapterType: item.adapterType,
+    action: item.action,
+    grantFingerprint: item.grantFingerprint,
+    policyDecision: item.policyDecision,
+    riskLevel: item.riskLevel,
+    lifecycleState: item.lifecycleState,
+    outcome: item.outcome,
+    timestamp: item.timestamp,
+    payload: item.payload
+  };
+}
+
+function appendAdapterEvidence(record, item) {
+  const current = requireRecord(record);
+  if (current.finalization !== null) throw new Error('Evidence append after finalization is forbidden.');
+  const normalized = normalizeAdapterEvidence(current, item);
+  const replay = current.adapterEvidence.find(
+    (entry) => entry.evidenceId === normalized.evidenceId
+  );
+  if (replay) {
+    if (JSON.stringify(replay) !== JSON.stringify(normalized)) {
+      throw new Error('Conflicting duplicate adapter evidence identity.');
+    }
+    return current;
+  }
+  return deepFreeze({
+    ...current,
+    version: current.version + 1,
+    adapterEvidence: [...current.adapterEvidence, normalized]
+  });
+}
+
+function finalizeOperationRecord(record, finalState) {
+  const current = requireRecord(record);
+  if (current.finalization !== null) {
+    if (JSON.stringify(current.finalization) === JSON.stringify(finalState)) return current;
+    throw new Error('Operation record is already finalized.');
+  }
+  if (current.adapterEvidence.length === 0) {
+    throw new Error('Finalization requires controlled adapter evidence.');
+  }
+  if (!finalState || typeof finalState !== 'object' || Array.isArray(finalState) ||
+      finalState.operationId !== current.operationId ||
+      finalState.workspace !== current.workspace || !timestamp(finalState.timestamp) ||
+      !['COMPLETED', 'FAILED'].includes(finalState.lifecycleState) ||
+      !['SUCCESS', 'FAILED'].includes(finalState.outcome) ||
+      typeof finalState.successfulCompletionEligible !== 'boolean') {
+    throw new Error('Final operation state is malformed or inconsistent.');
+  }
+  const failedValidation = current.adapterEvidence.some(
+    (entry) => entry.adapterType === 'PROCESS_VALIDATION' && entry.outcome === 'FAILED'
+  );
+  const successful = finalState.lifecycleState === 'COMPLETED' &&
+    finalState.outcome === 'SUCCESS' && finalState.successfulCompletionEligible === true;
+  const failed = finalState.lifecycleState === 'FAILED' &&
+    finalState.outcome === 'FAILED' && finalState.successfulCompletionEligible === false;
+  if ((!successful && !failed) || (failedValidation && successful)) {
+    throw new Error('Final lifecycle/outcome is inconsistent with adapter evidence.');
+  }
+  return deepFreeze({
+    ...current,
+    version: current.version + 1,
+    finalization: {
+      operationId: finalState.operationId,
+      workspace: finalState.workspace,
+      lifecycleState: finalState.lifecycleState,
+      outcome: finalState.outcome,
+      successfulCompletionEligible: finalState.successfulCompletionEligible,
+      timestamp: finalState.timestamp
+    }
+  });
+}
+
+module.exports = {
+  createOperationRecord,
+  appendAdapterEvidence,
+  finalizeOperationRecord
+};
