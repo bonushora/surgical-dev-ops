@@ -57,6 +57,18 @@ Planned
 
 ---
 
+# Commercialization & Distribution Readiness
+
+Planned
+
+- Governed by [ADR-005](docs/adr/ADR-005-surgical-devops-commercial-distribution-strategy.md) and the revisionable [Commercial Baseline](docs/strategy/commercial-baseline.md)
+- Community and early-access validation
+- Technical launch and discovery
+- Marketplace eligibility and direct commercial channel
+- Enterprise and self-hosted readiness
+
+---
+
 # Version 2.0 — AI Governance Platform
 
 Vision
