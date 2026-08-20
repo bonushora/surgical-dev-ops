@@ -7,7 +7,9 @@ const {
   resolveInspectedFile
 } = require('./workspace-boundary');
 
-const ALLOWED_TYPES = new Set(['FILESYSTEM_READ', 'GIT_READ', 'PROCESS_VALIDATION']);
+const ALLOWED_TYPES = new Set([
+  'FILESYSTEM_READ', 'FILESYSTEM_PATCH', 'GIT_READ', 'PROCESS_VALIDATION'
+]);
 const GIT_READ_OPERATIONS = new Set(['status', 'diff', 'show', 'rev-parse', 'ls-files']);
 const VALIDATION_SELECTORS = new Set(['NODE_SYNTAX_CHECK']);
 const RISKS = new Set(['R0', 'R1', 'R2', 'R3']);
@@ -65,6 +67,10 @@ function isSubset(requested, authorized) {
   return requested.every((entry) => allowed.has(entry));
 }
 
+function sha256(value) {
+  return typeof value === 'string' && /^[a-f0-9]{64}$/.test(value) ? value : null;
+}
+
 function validateScope(type, scope, authorizedScope, workspace) {
   if (!scope || typeof scope !== 'object' || Array.isArray(scope) ||
       !authorizedScope || typeof authorizedScope !== 'object' || Array.isArray(authorizedScope)) {
@@ -86,6 +92,40 @@ function validateScope(type, scope, authorizedScope, workspace) {
       return { error: 'Filesystem scope is unresolved or outside the workspace.' };
     }
     return { scope: { paths: resolved } };
+  }
+
+  if (type === 'FILESYSTEM_PATCH') {
+    const target = scope.target;
+    const authorizedTarget = authorizedScope.target;
+    if (!target || typeof target !== 'object' || Array.isArray(target) ||
+        !authorizedTarget || typeof authorizedTarget !== 'object' || Array.isArray(authorizedTarget) ||
+        !text(target.path) || !text(authorizedTarget.path) ||
+        target.path !== authorizedTarget.path ||
+        !sha256(target.beforeSha256) || target.beforeSha256 !== authorizedTarget.beforeSha256 ||
+        Object.keys(scope).length !== 1 || Object.keys(authorizedScope).length !== 1 ||
+        Object.keys(target).some((key) => !['path', 'beforeSha256'].includes(key)) ||
+        Object.keys(authorizedTarget).some((key) => !['path', 'beforeSha256'].includes(key))) {
+      return { error: 'Filesystem patch scope is missing, ambiguous or broadened.' };
+    }
+    try {
+      const file = resolveInspectedFile(workspace, target.path);
+      const lexicalTarget = path.resolve(workspace, target.path);
+      const lexicalStat = fs.lstatSync(lexicalTarget);
+      if (lexicalStat.isSymbolicLink() || !lexicalStat.isFile()) {
+        return { error: 'Filesystem patch target must be an existing non-symlink regular file.' };
+      }
+      return {
+        scope: {
+          target: {
+            path: target.path,
+            canonicalPath: file.canonicalTarget,
+            beforeSha256: target.beforeSha256
+          }
+        }
+      };
+    } catch {
+      return { error: 'Filesystem patch target is unresolved or outside the workspace.' };
+    }
   }
 
   if (type === 'GIT_READ') {
@@ -156,13 +196,16 @@ function evaluateCapabilityGrant(request, authority) {
     return denied('Lifecycle state does not permit a capability grant.');
   }
   if (request.idempotency !== 'IDEMPOTENT' || authority.idempotency !== 'IDEMPOTENT') {
-    return denied('Read-only capability must be explicitly idempotent.');
+    return denied('Capability must be explicitly idempotent.');
   }
 
   const capabilityType = text(request.capabilityType);
   if (!capabilityType || capabilityType !== authority.capabilityType ||
       !ALLOWED_TYPES.has(capabilityType)) {
     return denied('Capability type is denied.');
+  }
+  if (capabilityType === 'FILESYSTEM_PATCH' && request.riskLevel === 'R0') {
+    return denied('A filesystem patch cannot be classified as read-only risk R0.');
   }
 
   const expiresAt = timestamp(request.expiresAt);
@@ -179,7 +222,9 @@ function evaluateCapabilityGrant(request, authority) {
   return deepFreeze({
     schema: 'sdo.capability_grant_evaluation.v1',
     decision: 'ALLOWED',
-    reason: 'Explicit bounded read-only capability granted.',
+    reason: capabilityType === 'FILESYSTEM_PATCH'
+      ? 'Explicit bounded single-file patch capability granted.'
+      : 'Explicit bounded read-only capability granted.',
     grant: {
       operationId,
       workspace,

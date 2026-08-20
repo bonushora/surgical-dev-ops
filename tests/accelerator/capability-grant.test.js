@@ -5,6 +5,7 @@ const assert = require('node:assert/strict');
 const fs = require('fs');
 const os = require('os');
 const path = require('path');
+const crypto = require('crypto');
 const { evaluateCapabilityGrant } = require('../../accelerator/core/capability-grant');
 
 const workspace = fs.mkdtempSync(path.join(os.tmpdir(), 'sdo-capability-'));
@@ -51,6 +52,41 @@ test('valid bounded process-validation grant is allowed', () => {
   assert.equal(evaluateCapabilityGrant(
     request({ capabilityType, scope }), authority({ capabilityType, scope })
   ).decision, 'ALLOWED');
+});
+
+test('valid exact single-file patch grant is allowed', () => {
+  const capabilityType = 'FILESYSTEM_PATCH';
+  const scope = { target: {
+    path: 'target.txt',
+    beforeSha256: crypto.createHash('sha256').update('read-only\n').digest('hex')
+  } };
+  const result = evaluateCapabilityGrant(
+    request({ capabilityType, riskLevel: 'R1', scope }),
+    authority({ capabilityType, riskLevel: 'R1', scope })
+  );
+  assert.equal(result.decision, 'ALLOWED');
+  assert.equal(result.grant.scope.target.canonicalPath, path.join(workspace, 'target.txt'));
+});
+
+test('filesystem patch scope cannot be broadened or made ambiguous', () => {
+  const capabilityType = 'FILESYSTEM_PATCH';
+  const target = { path: 'target.txt', beforeSha256: 'a'.repeat(64) };
+  assert.equal(evaluateCapabilityGrant(
+    request({ capabilityType, riskLevel: 'R1', scope: { target, paths: ['other.txt'] } }),
+    authority({ capabilityType, riskLevel: 'R1', scope: { target } })
+  ).decision, 'DENIED');
+  assert.equal(evaluateCapabilityGrant(
+    request({ capabilityType, riskLevel: 'R1', scope: { target: { ...target, path: 'other.txt' } } }),
+    authority({ capabilityType, riskLevel: 'R1', scope: { target } })
+  ).decision, 'DENIED');
+});
+
+test('filesystem patch cannot use read-only R0 risk', () => {
+  const capabilityType = 'FILESYSTEM_PATCH';
+  const scope = { target: { path: 'target.txt', beforeSha256: 'a'.repeat(64) } };
+  assert.equal(evaluateCapabilityGrant(
+    request({ capabilityType, scope }), authority({ capabilityType, scope })
+  ).decision, 'DENIED');
 });
 
 test('unknown process-validation selector is denied', () => {

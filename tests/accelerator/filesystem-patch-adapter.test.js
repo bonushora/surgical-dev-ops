@@ -1,0 +1,218 @@
+'use strict';
+
+const test = require('node:test');
+const assert = require('node:assert/strict');
+const crypto = require('crypto');
+const fs = require('fs');
+const os = require('os');
+const path = require('path');
+const { evaluateCapabilityGrant } = require('../../accelerator/core/capability-grant');
+const { patchFileWithGrant } = require('../../accelerator/adapters/filesystem-patch-adapter');
+
+const root = fs.mkdtempSync(path.join(os.tmpdir(), 'sdo-fs-patch-'));
+const workspace = path.join(root, 'repo');
+const sibling = path.join(root, 'repo-secret');
+fs.mkdirSync(workspace);
+fs.mkdirSync(sibling);
+const targetPath = path.join(workspace, 'target.txt');
+fs.writeFileSync(path.join(sibling, 'secret.txt'), 'secret\n');
+test.after(() => fs.rmSync(root, { recursive: true, force: true }));
+test.beforeEach(() => {
+  try { fs.rmSync(targetPath, { recursive: true, force: true }); } catch {}
+  fs.writeFileSync(targetPath, 'before\n');
+});
+
+const NOW = '2026-08-20T12:00:00.000Z';
+const EXPIRY = '2026-08-20T13:00:00.000Z';
+const digest = (value) => crypto.createHash('sha256').update(value).digest('hex');
+
+function issue(overrides = {}) {
+  const scope = overrides.scope || {
+    target: { path: 'target.txt', beforeSha256: digest('before\n') }
+  };
+  const common = {
+    operationId: 'op-patch', workspace, policyDecision: 'ALLOWED', riskLevel: 'R1',
+    lifecycleState: 'PENDING', capabilityType: 'FILESYSTEM_PATCH', scope,
+    idempotency: 'IDEMPOTENT'
+  };
+  return evaluateCapabilityGrant(
+    { ...common, expiresAt: EXPIRY, ...overrides.request },
+    { ...common, evaluatedAt: NOW, ...overrides.authority }
+  );
+}
+
+function patch(overrides = {}) {
+  return patchFileWithGrant({
+    operationId: 'op-patch', workspace, target: 'target.txt', replacement: 'after\n',
+    grantEvaluation: issue(), observedAt: NOW, ...overrides
+  });
+}
+
+test('valid single-file replacement', () => {
+  assert.equal(patch().outcome, 'APPLIED');
+  assert.equal(fs.readFileSync(targetPath, 'utf8'), 'after\n');
+});
+
+test('BEFORE hash mismatch fails closed', () => {
+  fs.writeFileSync(targetPath, 'stale\n');
+  assert.throws(() => patch(), /BEFORE hash mismatch/);
+  assert.equal(fs.readFileSync(targetPath, 'utf8'), 'stale\n');
+});
+
+test('missing grant fails closed', () => {
+  assert.throws(() => patch({ grantEvaluation: undefined }), /valid immutable ALLOWED/);
+});
+
+test('expired grant fails closed', () => {
+  assert.throws(() => patch({ observedAt: EXPIRY }), /expired/);
+});
+
+test('operationId mismatch fails closed', () => {
+  assert.throws(() => patch({ operationId: 'other' }), /operationId mismatch/);
+});
+
+test('workspace mismatch fails closed', () => {
+  assert.throws(() => patch({ workspace: fs.realpathSync(os.tmpdir()) }), /workspace mismatch/);
+});
+
+test('target outside exact scope fails closed', () => {
+  fs.writeFileSync(path.join(workspace, 'other.txt'), 'before\n');
+  assert.throws(() => patch({ target: 'other.txt' }), /outside the exact authorized/);
+});
+
+test('traversal attempt fails closed', () => {
+  assert.throws(() => patch({ target: '../repo-secret/secret.txt' }), /escapes authorized workspace/);
+});
+
+test('sibling-prefix escape fails closed', () => {
+  assert.throws(() => patch({ target: `${workspace}-secret/secret.txt` }), /escapes authorized workspace/);
+});
+
+test('symlink target fails closed', () => {
+  const link = path.join(workspace, 'link.txt');
+  fs.writeFileSync(link, 'before\n');
+  const grantEvaluation = issue({
+    scope: { target: { path: 'link.txt', beforeSha256: digest('before\n') } }
+  });
+  fs.unlinkSync(link);
+  fs.symlinkSync(targetPath, link);
+  assert.throws(
+    () => patch({ target: 'link.txt', grantEvaluation }),
+    /Symlink targets are forbidden/
+  );
+});
+
+test('directory target fails closed', () => {
+  fs.rmSync(targetPath);
+  fs.mkdirSync(targetPath);
+  assert.equal(issue().decision, 'DENIED');
+});
+
+test('nonexistent target creation attempt fails closed', () => {
+  fs.rmSync(targetPath);
+  assert.equal(issue().decision, 'DENIED');
+  assert.equal(fs.existsSync(targetPath), false);
+});
+
+test('multi-file or broadened scope is denied', () => {
+  const target = { path: 'target.txt', beforeSha256: digest('before\n') };
+  assert.equal(issue({ scope: { target, paths: ['other.txt'] } }).decision, 'DENIED');
+});
+
+test('stale concurrent target change before replacement fails closed', () => {
+  const original = fs.readFileSync;
+  let reads = 0;
+  fs.readFileSync = function (...args) {
+    reads += 1;
+    if (reads === 2) fs.writeFileSync(targetPath, 'concurrent\n');
+    return original.apply(this, args);
+  };
+  try {
+    assert.throws(() => patch(), /changed concurrently/);
+  } finally {
+    fs.readFileSync = original;
+  }
+  assert.equal(fs.readFileSync(targetPath, 'utf8'), 'concurrent\n');
+});
+
+test('AFTER hash and bound evidence are valid', () => {
+  const result = patch();
+  assert.equal(result.operationId, 'op-patch');
+  assert.equal(result.workspace, workspace);
+  assert.equal(result.target.canonical, targetPath);
+  assert.equal(result.beforeSha256, digest('before\n'));
+  assert.equal(result.afterSha256, digest('after\n'));
+});
+
+test('returned evidence is deeply immutable', () => {
+  const result = patch();
+  assert.ok(Object.isFrozen(result));
+  assert.ok(Object.isFrozen(result.target));
+  assert.throws(() => { result.outcome = 'FAILED'; }, TypeError);
+});
+
+test('identical replay returns deterministic idempotent result', () => {
+  const grantEvaluation = issue();
+  patch({ grantEvaluation });
+  const replay = patch({ grantEvaluation });
+  assert.equal(replay.outcome, 'ALREADY_APPLIED');
+  assert.equal(replay.afterSha256, digest('after\n'));
+});
+
+test('conflicting retry fails closed', () => {
+  const grantEvaluation = issue();
+  patch({ grantEvaluation });
+  assert.throws(() => patch({ grantEvaluation, replacement: 'different\n' }), /BEFORE hash mismatch/);
+});
+
+test('verification failure restores only provably owned output', () => {
+  const original = fs.readFileSync;
+  let reads = 0;
+  fs.readFileSync = function (...args) {
+    reads += 1;
+    if (reads === 3) return Buffer.from('invalid-observation\n');
+    return original.apply(this, args);
+  };
+  try {
+    assert.throws(() => patch(), (error) => error.evidence.recovery === 'RESTORED');
+  } finally {
+    fs.readFileSync = original;
+  }
+  assert.equal(fs.readFileSync(targetPath, 'utf8'), 'before\n');
+});
+
+test('verification failure does not restore unowned state', () => {
+  const original = fs.readFileSync;
+  let reads = 0;
+  fs.readFileSync = function (...args) {
+    reads += 1;
+    if (reads === 3) {
+      fs.writeFileSync(targetPath, 'external\n');
+      return Buffer.from('external\n');
+    }
+    return original.apply(this, args);
+  };
+  try {
+    assert.throws(() => patch(), (error) =>
+      error.evidence.recovery === 'NOT_ATTEMPTED_UNPROVEN_OWNERSHIP');
+  } finally {
+    fs.readFileSync = original;
+  }
+  assert.equal(fs.readFileSync(targetPath, 'utf8'), 'external\n');
+});
+
+test('general filesystem write remains denied', () => {
+  assert.equal(issue({ request: { capabilityType: 'FILESYSTEM_WRITE' },
+    authority: { capabilityType: 'FILESYSTEM_WRITE' } }).decision, 'DENIED');
+});
+
+test('Git process network credentials and package installation remain denied', () => {
+  for (const capabilityType of ['GIT_WRITE', 'PROCESS_EXECUTE', 'NETWORK_ACCESS',
+    'CREDENTIAL_ACCESS', 'PACKAGE_INSTALL']) {
+    assert.equal(issue({ request: { capabilityType }, authority: { capabilityType } }).decision, 'DENIED');
+  }
+  const source = fs.readFileSync(
+    path.join(__dirname, '../../accelerator/adapters/filesystem-patch-adapter.js'), 'utf8'
+  );
+  assert.doesNotMatch(source, /child_process|execFile|spawn|http|https|\.\/git/);
+});
