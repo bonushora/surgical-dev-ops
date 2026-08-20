@@ -31,6 +31,11 @@ const TERMINAL = new Set([
   'FINALIZED_SUCCESS', 'FINALIZED_FAILED', 'RECOVERY_UNRESOLVED'
 ]);
 
+const LOCK_FIELDS = new Set([
+  'schema', 'adapter', 'version', 'lockId', 'transactionId', 'operationId',
+  'workspace', 'target', 'ownerToken', 'ownerProcess', 'acquiredAt'
+]);
+
 const TRANSITIONS = Object.freeze({
   PREPARED: new Set(['LOCKED', 'FINALIZED_FAILED']),
   LOCKED: new Set(['BEFORE_VERIFIED', 'FINALIZED_FAILED']),
@@ -147,6 +152,18 @@ function identityFor(definition) {
   return { transactionId, replayIdentity };
 }
 
+function deriveMutationLockId(workspace, target) {
+  const canonicalWorkspace = requireCanonicalAbsolute(workspace, 'Workspace');
+  const canonicalTarget = requireContainedTarget(
+    canonicalWorkspace,
+    requireCanonicalAbsolute(target, 'Physical target')
+  );
+  return digest('sdo.mutation_target_lock.v1', {
+    workspace: canonicalWorkspace,
+    target: canonicalTarget
+  });
+}
+
 function createMutationTransaction(input) {
   const definition = normalizeDefinition(input);
   const identity = identityFor(definition);
@@ -156,8 +173,30 @@ function createMutationTransaction(input) {
     ...identity,
     ...definition,
     stage: 'PREPARED',
+    lock: null,
     history: [{ sequence: 1, stage: 'PREPARED' }]
   });
+}
+
+function requireLockMetadata(transaction, lock) {
+  requireObject(lock, 'Mutation lock metadata');
+  const keys = Object.keys(lock);
+  if (keys.length !== LOCK_FIELDS.size || keys.some((key) => !LOCK_FIELDS.has(key)) ||
+      lock.schema !== 'sdo.mutation_lock.v1' || lock.adapter !== 'FILESYSTEM_EXCLUSIVE_CREATE' ||
+      lock.version !== 1 || lock.transactionId !== transaction.transactionId ||
+      lock.operationId !== transaction.operationId || lock.workspace !== transaction.workspace ||
+      lock.target !== transaction.target ||
+      lock.lockId !== deriveMutationLockId(transaction.workspace, transaction.target) ||
+      typeof lock.ownerToken !== 'string' ||
+      !/^[a-f0-9]{32,128}$/.test(lock.ownerToken) ||
+      typeof lock.ownerProcess !== 'string' || !lock.ownerProcess ||
+      typeof lock.acquiredAt !== 'string' ||
+      !Number.isFinite(Date.parse(lock.acquiredAt)) ||
+      new Date(Date.parse(lock.acquiredAt)).toISOString() !== lock.acquiredAt ||
+      !Object.isFrozen(lock)) {
+    throw new Error('Mutation lock metadata is malformed or mismatched.');
+  }
+  return lock;
 }
 
 function expectedIdentity(transaction) {
@@ -188,7 +227,10 @@ function requireTransaction(transaction) {
   for (let index = 0; index < transaction.history.length; index += 1) {
     const event = transaction.history[index];
     requireObject(event, 'Transaction history event');
-    if (Object.keys(event).length !== 2 || event.sequence !== index + 1 ||
+    const eventKeys = Object.keys(event);
+    const lockedEvent = event.stage === 'LOCKED' && eventKeys.length === 3 &&
+      transaction.lock && event.lockId === transaction.lock.lockId;
+    if ((!lockedEvent && eventKeys.length !== 2) || event.sequence !== index + 1 ||
         !STAGES.includes(event.stage) || !Object.isFrozen(event) ||
         (index === 0 && event.stage !== 'PREPARED') ||
         (index > 0 && !(TRANSITIONS[previous] || new Set()).has(event.stage))) {
@@ -199,7 +241,28 @@ function requireTransaction(transaction) {
   if (previous !== transaction.stage) {
     throw new Error('Mutation transaction stage conflicts with its history.');
   }
+  const hasLockStage = transaction.history.some((event) => event.stage === 'LOCKED');
+  if (!hasLockStage) {
+    if (transaction.lock !== null) throw new Error('Pre-lock transaction cannot carry a lock.');
+  } else {
+    requireLockMetadata(transaction, transaction.lock);
+  }
   return transaction;
+}
+
+function bindMutationLock(transaction, lockMetadata) {
+  const current = requireTransaction(transaction);
+  if (current.stage !== 'PREPARED') {
+    throw new Error('Mutation lock may bind only to a PREPARED transaction.');
+  }
+  const lock = requireLockMetadata(current, lockMetadata);
+  return deepFreeze({
+    ...current,
+    version: 2,
+    stage: 'LOCKED',
+    lock,
+    history: [...current.history, { sequence: 2, stage: 'LOCKED', lockId: lock.lockId }]
+  });
 }
 
 function transitionMutationTransaction(transaction, nextStage) {
@@ -207,6 +270,9 @@ function transitionMutationTransaction(transaction, nextStage) {
   if (!STAGES.includes(nextStage)) throw new Error('Unknown mutation transaction stage.');
   if (TERMINAL.has(current.stage)) throw new Error('Terminal mutation transaction cannot transition.');
   if (nextStage === current.stage) throw new Error('Repeated mutation transaction stage is forbidden.');
+  if (nextStage === 'LOCKED') {
+    throw new Error('LOCKED transition requires immutable lock binding.');
+  }
   if (!(TRANSITIONS[current.stage] || new Set()).has(nextStage)) {
     throw new Error('Invalid or skipped mutation transaction stage.');
   }
@@ -231,7 +297,9 @@ function assertSameMutationTransaction(left, right) {
 
 module.exports = {
   STAGES,
+  deriveMutationLockId,
   createMutationTransaction,
+  bindMutationLock,
   transitionMutationTransaction,
   assertSameMutationTransaction
 };

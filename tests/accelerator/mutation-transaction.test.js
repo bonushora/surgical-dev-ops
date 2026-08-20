@@ -6,7 +6,9 @@ const path = require('node:path');
 
 const {
   STAGES,
+  deriveMutationLockId,
   createMutationTransaction,
+  bindMutationLock,
   transitionMutationTransaction,
   assertSameMutationTransaction
 } = require('../../accelerator/core/mutation-transaction');
@@ -31,6 +33,27 @@ function definition(overrides = {}) {
 
 function advance(transaction, stages) {
   return stages.reduce(transitionMutationTransaction, transaction);
+}
+
+function lockMetadata(transaction, overrides = {}) {
+  return Object.freeze({
+    schema: 'sdo.mutation_lock.v1',
+    adapter: 'FILESYSTEM_EXCLUSIVE_CREATE',
+    version: 1,
+    lockId: deriveMutationLockId(transaction.workspace, transaction.target),
+    transactionId: transaction.transactionId,
+    operationId: transaction.operationId,
+    workspace: transaction.workspace,
+    target: transaction.target,
+    ownerToken: '1'.repeat(64),
+    ownerProcess: 'test-process',
+    acquiredAt: '2026-08-20T12:00:00.000Z',
+    ...overrides
+  });
+}
+
+function locked(transaction = createMutationTransaction(definition()), overrides = {}) {
+  return bindMutationLock(transaction, lockMetadata(transaction, overrides));
 }
 
 test('equivalent canonical definitions derive deterministic identities', () => {
@@ -126,7 +149,7 @@ test('different human, approval and grant authority definitions conflict', () =>
 
 test('created transaction and nested transition history are deeply immutable', () => {
   const original = createMutationTransaction(definition());
-  const next = transitionMutationTransaction(original, 'LOCKED');
+  const next = locked(original);
   assert.ok(Object.isFrozen(original));
   assert.ok(Object.isFrozen(original.history));
   assert.ok(Object.isFrozen(original.history[0]));
@@ -140,8 +163,8 @@ test('created transaction and nested transition history are deeply immutable', (
 });
 
 test('normal stage progression is ordered and reaches successful terminal state', () => {
-  const completed = advance(createMutationTransaction(definition()), [
-    'LOCKED', 'BEFORE_VERIFIED', 'MUTATION_STARTED', 'PHYSICAL_APPLIED',
+  const completed = advance(locked(), [
+    'BEFORE_VERIFIED', 'MUTATION_STARTED', 'PHYSICAL_APPLIED',
     'AFTER_VERIFIED', 'EVIDENCE_RECORDED', 'FINALIZED_SUCCESS'
   ]);
   assert.deepEqual(completed.history.map((event) => event.stage), [
@@ -157,13 +180,14 @@ test('unknown, skipped and repeated transitions fail closed', () => {
   assert.throws(() => transitionMutationTransaction(prepared, 'UNKNOWN'), /Unknown/);
   assert.throws(() => transitionMutationTransaction(prepared, 'BEFORE_VERIFIED'), /skipped/);
   assert.throws(() => transitionMutationTransaction(prepared, 'PREPARED'), /Repeated/);
-  const locked = transitionMutationTransaction(prepared, 'LOCKED');
-  assert.throws(() => transitionMutationTransaction(locked, 'PHYSICAL_APPLIED'), /skipped/);
+  assert.throws(() => transitionMutationTransaction(prepared, 'LOCKED'), /lock binding/);
+  const held = locked(prepared);
+  assert.throws(() => transitionMutationTransaction(held, 'PHYSICAL_APPLIED'), /skipped/);
 });
 
 test('pre-mutation failure can finalize without claiming physical stages', () => {
   const failed = transitionMutationTransaction(
-    transitionMutationTransaction(createMutationTransaction(definition()), 'LOCKED'),
+    locked(),
     'FINALIZED_FAILED'
   );
   assert.equal(failed.stage, 'FINALIZED_FAILED');
@@ -171,8 +195,8 @@ test('pre-mutation failure can finalize without claiming physical stages', () =>
 });
 
 test('recovery ordering requires explicit recovery and evidence stages', () => {
-  const applied = advance(createMutationTransaction(definition()), [
-    'LOCKED', 'BEFORE_VERIFIED', 'MUTATION_STARTED', 'PHYSICAL_APPLIED'
+  const applied = advance(locked(), [
+    'BEFORE_VERIFIED', 'MUTATION_STARTED', 'PHYSICAL_APPLIED'
   ]);
   assert.throws(() => transitionMutationTransaction(applied, 'RECOVERED'), /skipped/);
   const required = transitionMutationTransaction(applied, 'RECOVERY_REQUIRED');
@@ -184,12 +208,24 @@ test('recovery ordering requires explicit recovery and evidence stages', () => {
 });
 
 test('unresolved recovery is terminal and cannot masquerade as success', () => {
-  const unresolved = advance(createMutationTransaction(definition()), [
-    'LOCKED', 'BEFORE_VERIFIED', 'MUTATION_STARTED', 'RECOVERY_REQUIRED',
+  const unresolved = advance(locked(), [
+    'BEFORE_VERIFIED', 'MUTATION_STARTED', 'RECOVERY_REQUIRED',
     'RECOVERY_UNRESOLVED'
   ]);
   assert.equal(unresolved.stage, 'RECOVERY_UNRESOLVED');
   assert.throws(() => transitionMutationTransaction(unresolved, 'FINALIZED_SUCCESS'), /Terminal/);
+});
+
+test('lock binding is transaction-bound and deeply immutable', () => {
+  const transaction = createMutationTransaction(definition());
+  const metadata = lockMetadata(transaction);
+  const bound = bindMutationLock(transaction, metadata);
+  assert.equal(bound.lock, metadata);
+  assert.ok(Object.isFrozen(bound.lock));
+  assert.equal(bound.history[1].lockId, metadata.lockId);
+  assert.throws(() => bindMutationLock(transaction,
+    lockMetadata(transaction, { transactionId: '9'.repeat(64) })), /mismatched/);
+  assert.throws(() => bindMutationLock(bound, metadata), /PREPARED/);
 });
 
 test('contract exposes every ADR-007 foundation stage', () => {
