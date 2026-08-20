@@ -7,6 +7,8 @@ const {
   canonicalizeAuthorizedRoot,
   resolveInspectedFile
 } = require('../core/workspace-boundary');
+const { deriveCapabilityGrantFingerprint } = require('../core/capability-grant');
+const { evaluateMutationAuthority } = require('../core/authoritative-clock');
 
 const MAX_BYTES = 1024 * 1024;
 
@@ -54,6 +56,9 @@ function validateGrant(evaluation) {
       !/^[a-f0-9]{64}$/.test(grant.approvalAuthorityFingerprint || '') ||
       !/^[a-f0-9]{64}$/.test(grant.verifiedIdentityAssertionFingerprint || '') ||
       !/^[a-f0-9]{64}$/.test(grant.identityVerificationEvidenceFingerprint || '') ||
+      !/^[a-f0-9]{64}$/.test(grant.fingerprint || '') ||
+      deriveCapabilityGrantFingerprint(grant) !== grant.fingerprint ||
+      !grant.temporalAuthority ||
       grant.lifecycleState !== 'PENDING' ||
       grant.idempotency !== 'IDEMPOTENT' || !target ||
       typeof target.path !== 'string' || !target.path ||
@@ -118,17 +123,53 @@ function atomicReplace(target, content, mode) {
   }
 }
 
-function evidence({ operationId, workspace, requested, canonical, beforeHash, afterHash, outcome, recovery, observedAt }) {
+function evidence({ operationId, workspace, requested, canonical, beforeHash, afterHash,
+  outcome, recovery, observedAt, temporalAuthority }) {
   return deepFreeze({
     schema: 'sdo.filesystem_patch_result.v1', operationId, workspace,
     target: { requested, canonical }, beforeSha256: beforeHash, afterSha256: afterHash,
-    outcome, recovery, observedAt
+    outcome, recovery, observedAt, temporalAuthority
   });
 }
 
+function authorityBounds(grant) {
+  const temporal = grant.temporalAuthority;
+  return {
+    identity: temporal.identity,
+    approval: temporal.approval,
+    grant: { ...temporal.grant, fingerprint: grant.fingerprint }
+  };
+}
+
+function observeAuthority(clock, grant, previousReading = null) {
+  try {
+    return evaluateMutationAuthority(clock, authorityBounds(grant), previousReading);
+  } catch {
+    return null;
+  }
+}
+
+function denyBeforeCommit(context, temporalAuthority, reason) {
+  const error = new Error(reason);
+  if (!temporalAuthority || !temporalAuthority.reading) throw error;
+  const reading = temporalAuthority && temporalAuthority.reading;
+  error.evidence = evidence({ ...context, afterHash: null, outcome: 'FAILED',
+    recovery: 'NOT_STARTED_AUTHORITY_DENIED',
+    observedAt: reading ? reading.wallTime : context.observedAt,
+    temporalAuthority: deepFreeze({
+      schema: 'sdo.mutation_commit_authority.v1',
+      commitBoundary: 'IMMEDIATELY_BEFORE_ATOMIC_REPLACEMENT',
+      physicalCommit: 'NOT_STARTED',
+      decision: 'DENIED',
+      evaluation: temporalAuthority
+    })
+  });
+  throw error;
+}
+
 function patchFileWithGrant({
-  operationId, workspace, target, replacement, grantEvaluation, observedAt
-}) {
+  operationId, workspace, target, replacement, grantEvaluation
+}, temporalRuntime = {}) {
   const grant = validateGrant(grantEvaluation);
   const normalizedOperationId = requireText(operationId, 'operationId');
   if (normalizedOperationId !== grant.operationId) throw new Error('Capability operationId mismatch.');
@@ -136,9 +177,15 @@ function patchFileWithGrant({
   if (canonicalWorkspace !== workspace || canonicalWorkspace !== grant.workspace) {
     throw new Error('Capability workspace mismatch.');
   }
-  const now = requireTimestamp(observedAt, 'observedAt');
-  if (Date.parse(now) >= Date.parse(requireTimestamp(grant.expiresAt, 'grant.expiresAt'))) {
-    throw new Error('Capability grant is expired.');
+  const entryAuthority = observeAuthority(
+    temporalRuntime.authoritativeClock, grant, temporalRuntime.previousReading || null
+  );
+  if (!entryAuthority || entryAuthority.decision !== 'ALLOWED') {
+    denyBeforeCommit({ operationId: normalizedOperationId, workspace: canonicalWorkspace,
+      requested: target, canonical: grant.scope.target.canonicalPath,
+      beforeHash: grant.scope.target.beforeSha256,
+      observedAt: entryAuthority && entryAuthority.reading.wallTime }, entryAuthority,
+    'Mutation authority is invalid before preparation.');
   }
   const requested = requireText(target, 'target');
   if (Array.isArray(replacement) || !(typeof replacement === 'string' || Buffer.isBuffer(replacement))) {
@@ -176,7 +223,13 @@ function patchFileWithGrant({
     if (beforeHash === afterHash) {
       return evidence({ operationId: normalizedOperationId, workspace: canonicalWorkspace,
         requested, canonical: resolved.canonicalTarget, beforeHash: authorized.beforeSha256,
-        afterHash, outcome: 'ALREADY_APPLIED', recovery: 'NOT_REQUIRED', observedAt: now });
+        afterHash, outcome: 'ALREADY_APPLIED', recovery: 'NOT_REQUIRED',
+        observedAt: entryAuthority.reading.wallTime,
+        temporalAuthority: deepFreeze({
+          schema: 'sdo.mutation_commit_authority.v1',
+          commitBoundary: 'ALREADY_PROVEN_APPLIED', physicalCommit: 'ALREADY_APPLIED',
+          decision: 'ALLOWED', evaluation: entryAuthority
+        }) });
     }
     throw new Error('BEFORE hash mismatch; target is stale or conflicting.');
   }
@@ -186,6 +239,21 @@ function patchFileWithGrant({
     throw new Error('Target changed concurrently before replacement.');
   }
 
+  const commitAuthority = observeAuthority(
+    temporalRuntime.authoritativeClock, grant, entryAuthority.reading
+  );
+  const commitContext = { operationId: normalizedOperationId, workspace: canonicalWorkspace,
+    requested, canonical: resolved.canonicalTarget, beforeHash,
+    observedAt: commitAuthority && commitAuthority.reading.wallTime };
+  if (!commitAuthority || commitAuthority.decision !== 'ALLOWED') {
+    denyBeforeCommit(commitContext, commitAuthority,
+      'Mutation authority expired or became anomalous before physical commit.');
+  }
+  const commitEvidence = deepFreeze({
+    schema: 'sdo.mutation_commit_authority.v1',
+    commitBoundary: 'IMMEDIATELY_BEFORE_ATOMIC_REPLACEMENT',
+    physicalCommit: 'APPLIED', decision: 'ALLOWED', evaluation: commitAuthority
+  });
   atomicReplace(resolved.canonicalTarget, replacementBytes, Number(before.stat.mode));
   try {
     const afterResolved = resolveInspectedFile(canonicalWorkspace, requested);
@@ -196,7 +264,8 @@ function patchFileWithGrant({
     }
     return evidence({ operationId: normalizedOperationId, workspace: canonicalWorkspace,
       requested, canonical: resolved.canonicalTarget, beforeHash, afterHash,
-      outcome: 'APPLIED', recovery: 'NOT_REQUIRED', observedAt: now });
+      outcome: 'APPLIED', recovery: 'NOT_REQUIRED',
+      observedAt: commitAuthority.reading.wallTime, temporalAuthority: commitEvidence });
   } catch (verificationError) {
     let owned = false;
     try {
@@ -211,7 +280,8 @@ function patchFileWithGrant({
         const error = new Error('AFTER verification failed; original content was restored.');
         error.evidence = evidence({ operationId: normalizedOperationId, workspace: canonicalWorkspace,
           requested, canonical: resolved.canonicalTarget, beforeHash, afterHash,
-          outcome: 'FAILED', recovery: 'RESTORED', observedAt: now });
+          outcome: 'FAILED', recovery: 'RESTORED',
+          observedAt: commitAuthority.reading.wallTime, temporalAuthority: commitEvidence });
         throw error;
       } catch (restoreError) {
         if (restoreError.evidence) throw restoreError;
@@ -220,7 +290,8 @@ function patchFileWithGrant({
     const error = new Error('AFTER verification failed; target ownership is unproven and was not restored.');
     error.evidence = evidence({ operationId: normalizedOperationId, workspace: canonicalWorkspace,
       requested, canonical: resolved.canonicalTarget, beforeHash, afterHash,
-      outcome: 'FAILED', recovery: 'NOT_ATTEMPTED_UNPROVEN_OWNERSHIP', observedAt: now });
+      outcome: 'FAILED', recovery: 'NOT_ATTEMPTED_UNPROVEN_OWNERSHIP',
+      observedAt: commitAuthority.reading.wallTime, temporalAuthority: commitEvidence });
     throw error;
   }
 }

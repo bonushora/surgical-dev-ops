@@ -4,6 +4,7 @@ const fs = require('fs');
 const path = require('path');
 const { evaluateR3ApprovalAuthority } = require('./risk-classification');
 const { validateIdentityVerificationResult } = require('../adapters/identity-verification-adapter');
+const { classifyMutationAuthority } = require('./authoritative-clock');
 
 const RISKS = new Set(['R0', 'R1', 'R2', 'R3']);
 const POLICY_DECISIONS = new Set(['ALLOWED', 'DENIED', 'APPROVAL_REQUIRED']);
@@ -76,20 +77,19 @@ function validateWorkspace(workspace) {
   return null;
 }
 
-function validateApproval(input, operationId) {
+function validateApproval(input, operationId, temporalAuthority = {}) {
   const evaluation = evaluateR3ApprovalAuthority(input.approvalAuthority, {
     operationId, workspace: input.workspace, capabilityType: input.capabilityType,
     action: input.action, scope: input.scope, riskLevel: 'R3',
     policyDecision: 'APPROVAL_REQUIRED', tenantId: input.tenantId || null,
-    projectId: input.projectId || null, observedAt: input.observedAt
-  });
+    projectId: input.projectId || null
+  }, temporalAuthority);
   if (evaluation.decision !== 'ALLOWED') return evaluation.reason;
   const identity = validateIdentityVerificationResult(input.identityVerification, {
     subjectId: evaluation.authority.approver.id, operationId, workspace: input.workspace,
     tenantId: input.tenantId || null, projectId: input.projectId || null,
-    fingerprint: evaluation.authority.verifiedIdentityAssertionFingerprint,
-    observedAt: input.observedAt
-  });
+    fingerprint: evaluation.authority.verifiedIdentityAssertionFingerprint
+  }, temporalAuthority);
   return identity ? null : 'Trusted identity verification evidence is missing or mismatched.';
 }
 
@@ -131,7 +131,7 @@ function validateEvents(events, input) {
   return null;
 }
 
-function createOperationRecord(input) {
+function createOperationRecord(input, authoritativeClock = null) {
   if (!input || typeof input !== 'object' || Array.isArray(input)) {
     return denied('Operation record input is missing.');
   }
@@ -149,7 +149,19 @@ function createOperationRecord(input) {
   if (input.policyDecision === 'DENIED') violations.push('Policy denied the operation.');
 
   if (input.riskLevel === 'R3') {
-    const approvalError = validateApproval(input, operationId);
+    let observation = null;
+    if (!authoritativeClock || typeof authoritativeClock.observe !== 'function') {
+      violations.push('Authoritative clock is required for an R3 operation record.');
+    } else {
+      try { observation = authoritativeClock.observe(); } catch {
+        violations.push('Authoritative clock is unavailable for an R3 operation record.');
+      }
+      if (observation && observation.decision !== 'ALLOWED') {
+        violations.push('Authoritative clock anomaly denied the R3 operation record.');
+      }
+    }
+    const approvalError = observation && validateApproval(input, operationId,
+      { reading: observation.reading, requireCurrent: true });
     if (approvalError) violations.push(approvalError);
   } else if (input.approvalAuthority !== undefined || input.approval !== undefined) {
     violations.push('Approval is not permitted to alter non-R3 treatment.');
@@ -183,7 +195,7 @@ function createOperationRecord(input) {
             operationId, workspace: input.workspace, capabilityType: input.capabilityType,
             action: input.action, scope: input.scope, riskLevel: 'R3',
             policyDecision: 'APPROVAL_REQUIRED', tenantId: input.tenantId || null,
-            projectId: input.projectId || null, observedAt: input.observedAt
+            projectId: input.projectId || null
           }).authority : null,
       verifiedIdentityAssertion: input.riskLevel === 'R3'
         ? input.approvalAuthority.verifiedIdentityAssertion : null,
@@ -220,7 +232,6 @@ function requireRecord(record) {
       capabilityType: record.capabilityType, action: record.action, scope: record.scope,
       riskLevel: 'R3', policyDecision: 'APPROVAL_REQUIRED',
       tenantId: record.tenantId, projectId: record.projectId,
-      observedAt: record.events[2].timestamp
     });
     if (approval.decision !== 'ALLOWED' ||
         record.verifiedIdentityAssertionFingerprint !==
@@ -230,8 +241,7 @@ function requireRecord(record) {
         !validateIdentityVerificationResult(record.identityVerification, {
           subjectId: approval.authority.approver.id, operationId: record.operationId,
           workspace: record.workspace, tenantId: record.tenantId, projectId: record.projectId,
-          fingerprint: record.verifiedIdentityAssertionFingerprint,
-          observedAt: record.events[2].timestamp
+          fingerprint: record.verifiedIdentityAssertionFingerprint
         }) || record.identityVerificationEvidenceFingerprint !==
           record.identityVerification.evidence.fingerprint) {
       throw new Error('Stored R3 verified identity binding is malformed or substituted.');
@@ -288,6 +298,25 @@ function validatePayload(record, item) {
       record.scope && record.scope.target &&
       record.scope.target.path === target.requested &&
       record.scope.target.beforeSha256 === item.beforeSha256;
+    const temporal = item.payload.temporalAuthority;
+    const timeEvaluation = temporal && temporal.evaluation;
+    let temporalIntegrity = false;
+    if (timeEvaluation) {
+      try {
+        const reconstructed = classifyMutationAuthority(timeEvaluation.reading,
+          timeEvaluation.bounds, timeEvaluation.progression);
+        temporalIntegrity = reconstructed.fingerprint === timeEvaluation.fingerprint &&
+          reconstructed.decision === timeEvaluation.decision;
+      } catch {}
+    }
+    const temporalBound = temporal && temporal.schema === 'sdo.mutation_commit_authority.v1' &&
+      temporalIntegrity && timeEvaluation.schema === 'sdo.mutation_authority_time_evidence.v1' &&
+      timeEvaluation.bounds &&
+      timeEvaluation.bounds.identity.fingerprint === record.verifiedIdentityAssertionFingerprint &&
+      record.approvalAuthority &&
+      timeEvaluation.bounds.approval.fingerprint === record.approvalAuthority.fingerprint &&
+      timeEvaluation.bounds.grant.fingerprint === item.grantFingerprint &&
+      item.payload.observedAt === timeEvaluation.reading.wallTime;
     if ((!['R1', 'R2'].includes(item.riskLevel) && !r3Authorized) ||
         item.policyDecision !== 'ALLOWED' ||
         !target || !text(target.requested) || !text(target.canonical) ||
@@ -299,17 +328,24 @@ function validatePayload(record, item) {
         payloadTarget.canonical !== target.canonical ||
         !sha256(item.beforeSha256) || item.payload.beforeSha256 !== item.beforeSha256 ||
         !sha256(item.replacementSha256) ||
-        item.payload.afterSha256 !== item.replacementSha256 ||
+        (item.outcome !== 'FAILED' && item.payload.afterSha256 !== item.replacementSha256) ||
         !['APPLIED', 'ALREADY_APPLIED', 'FAILED'].includes(item.outcome) ||
-        item.payload.outcome !== item.outcome || item.payload.recovery !== item.recovery) {
+        item.payload.outcome !== item.outcome || item.payload.recovery !== item.recovery ||
+        (r3Authorized && !temporalBound)) {
       throw new Error('Filesystem-patch evidence is malformed or inconsistently bound.');
     }
     const successful = item.outcome === 'APPLIED' || item.outcome === 'ALREADY_APPLIED';
     if ((successful && (item.afterSha256 !== item.replacementSha256 ||
         item.recovery !== 'NOT_REQUIRED')) ||
         (!successful && (item.afterSha256 !== null ||
-         !['RESTORED', 'NOT_ATTEMPTED_UNPROVEN_OWNERSHIP'].includes(item.recovery)))) {
+         !['RESTORED', 'NOT_ATTEMPTED_UNPROVEN_OWNERSHIP',
+           'NOT_STARTED_AUTHORITY_DENIED'].includes(item.recovery)))) {
       throw new Error('Filesystem-patch AFTER or recovery evidence is inconsistent.');
+    }
+    if (r3Authorized && ((successful && temporal.decision !== 'ALLOWED') ||
+        (item.recovery === 'NOT_STARTED_AUTHORITY_DENIED' &&
+         (temporal.decision !== 'DENIED' || temporal.physicalCommit !== 'NOT_STARTED')))) {
+      throw new Error('Filesystem-patch commit-time authority evidence is inconsistent.');
     }
     return;
   }

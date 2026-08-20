@@ -11,6 +11,7 @@ const { evaluateR3ApprovalAuthority } = require('../../accelerator/core/risk-cla
 const { evaluateVerifiedHumanIdentityAssertion } = require('../../accelerator/core/human-identity-assertion');
 const { verifyHumanIdentityAssertion } = require('../../accelerator/adapters/identity-verification-adapter');
 const { patchFileWithGrant } = require('../../accelerator/adapters/filesystem-patch-adapter');
+const { createAuthoritativeClock } = require('../../accelerator/core/authoritative-clock');
 
 const root = fs.mkdtempSync(path.join(os.tmpdir(), 'sdo-fs-patch-'));
 const workspace = path.join(root, 'repo');
@@ -28,6 +29,28 @@ test.beforeEach(() => {
 const NOW = '2026-08-20T12:00:00.000Z';
 const EXPIRY = '2026-08-20T13:00:00.000Z';
 const digest = (value) => crypto.createHash('sha256').update(value).digest('hex');
+
+function clockAt(start = NOW, stepMilliseconds = 1) {
+  let count = 0;
+  const startMs = Date.parse(start);
+  return createAuthoritativeClock({ port: { read: () => {
+    const offset = count++ * stepMilliseconds;
+    return { schema: 'sdo.system_clock_observation.v1', availability: 'AVAILABLE',
+      source: 'TEST', wallTime: new Date(startMs + offset).toISOString(),
+      monotonicNanoseconds: String(1000000000n + BigInt(offset) * 1000000n) };
+  } } });
+}
+
+function clockSequence(observations) {
+  let index = 0;
+  const clock = createAuthoritativeClock({ port: { read: () => {
+    const value = observations[Math.min(index++, observations.length - 1)];
+    if (value instanceof Error) throw value;
+    return { schema: 'sdo.system_clock_observation.v1', availability: 'AVAILABLE',
+      source: 'TEST', ...value };
+  } } });
+  return { clock, reads: () => index };
+}
 
 function issue(overrides = {}) {
   const scope = overrides.scope || {
@@ -53,9 +76,9 @@ function issue(overrides = {}) {
   const identityVerification = verifyHumanIdentityAssertion({ rawAssertion: { token: 'test' },
     trustedIssuers: ['issuer:test'], expected: { subjectId: 'human-1',
       audience: 'surgical-devops', operationId: 'op-patch', workspace,
-      tenantId: 'tenant-1', projectId: 'project-1', observedAt: NOW }
+      tenantId: 'tenant-1', projectId: 'project-1' }
   }, { verify() { return { status: 'VERIFIED', assertion: verifiedIdentityAssertion,
-    verifierId: 'test-port' }; } });
+    verifierId: 'test-port' }; } }, { reading: clockAt().read(), requireCurrent: true });
   const common = {
     operationId: 'op-patch', workspace, policyDecision: 'APPROVAL_REQUIRED', riskLevel: 'R3',
     lifecycleState: 'PENDING', capabilityType: 'FILESYSTEM_PATCH', scope,
@@ -64,15 +87,18 @@ function issue(overrides = {}) {
   };
   return evaluateCapabilityGrant(
     { ...common, expiresAt: EXPIRY, ...overrides.request },
-    { ...common, evaluatedAt: NOW, ...overrides.authority }
+    { ...common, evaluatedAt: NOW, ...overrides.authority }, overrides.clock || clockAt()
   );
 }
 
 function patch(overrides = {}) {
+  const clock = overrides.authoritativeClock || clockAt();
+  const request = { ...overrides };
+  delete request.authoritativeClock;
   return patchFileWithGrant({
     operationId: 'op-patch', workspace, target: 'target.txt', replacement: 'after\n',
-    grantEvaluation: issue(), observedAt: NOW, ...overrides
-  });
+    grantEvaluation: issue(), observedAt: NOW, ...request
+  }, { authoritativeClock: clock });
 }
 
 test('valid single-file replacement', () => {
@@ -91,7 +117,57 @@ test('missing grant fails closed', () => {
 });
 
 test('expired grant fails closed', () => {
-  assert.throws(() => patch({ observedAt: EXPIRY }), /expired/);
+  assert.throws(() => patch({ authoritativeClock: clockAt(EXPIRY) }), /authority/i);
+});
+
+test('authority expiring exactly at the physical commit boundary causes zero mutation', () => {
+  const start = new Date(Date.parse(EXPIRY) - 1).toISOString();
+  assert.throws(() => patch({ authoritativeClock: clockAt(start, 1) }), /before physical commit/);
+  assert.equal(fs.readFileSync(targetPath, 'utf8'), 'before\n');
+});
+
+test('all authority valid one instant before expiry permits physical commit', () => {
+  const start = new Date(Date.parse(EXPIRY) - 2).toISOString();
+  assert.equal(patch({ authoritativeClock: clockAt(start, 1) }).outcome, 'APPLIED');
+});
+
+test('post-commit expiry is not rechecked to erase authorized physical reality', () => {
+  const sequence = clockSequence([
+    { wallTime: new Date(Date.parse(EXPIRY) - 2).toISOString(), monotonicNanoseconds: '1000000000' },
+    { wallTime: new Date(Date.parse(EXPIRY) - 1).toISOString(), monotonicNanoseconds: '1001000000' },
+    { wallTime: EXPIRY, monotonicNanoseconds: '1002000000' }
+  ]);
+  const result = patch({ authoritativeClock: sequence.clock });
+  assert.equal(result.outcome, 'APPLIED');
+  assert.equal(sequence.reads(), 2);
+  assert.equal(result.temporalAuthority.decision, 'ALLOWED');
+  assert.equal(fs.readFileSync(targetPath, 'utf8'), 'after\n');
+});
+
+test('rollback suspicious-forward and unavailable clocks deny before replacement', () => {
+  const cases = [
+    clockSequence([
+      { wallTime: NOW, monotonicNanoseconds: '1000000000' },
+      { wallTime: '2026-08-20T11:59:59.999Z', monotonicNanoseconds: '1001000000' }
+    ]).clock,
+    clockSequence([
+      { wallTime: NOW, monotonicNanoseconds: '1000000000' },
+      { wallTime: '2026-08-20T12:00:05.000Z', monotonicNanoseconds: '1001000000' }
+    ]).clock,
+    clockSequence([
+      { wallTime: NOW, monotonicNanoseconds: '1000000000' }, new Error('unavailable')
+    ]).clock
+  ];
+  for (const authoritativeClock of cases) {
+    assert.throws(() => patch({ authoritativeClock }), /before physical commit/);
+    assert.equal(fs.readFileSync(targetPath, 'utf8'), 'before\n');
+  }
+});
+
+test('caller observedAt cannot keep expired mutation authority alive', () => {
+  assert.throws(() => patch({ observedAt: '2020-01-01T00:00:00.000Z',
+    authoritativeClock: clockAt(EXPIRY) }), /authority/i);
+  assert.equal(fs.readFileSync(targetPath, 'utf8'), 'before\n');
 });
 
 test('operationId mismatch fails closed', () => {

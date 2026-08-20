@@ -36,6 +36,8 @@ const gitReadAdapter = require('../adapters/git-read-adapter');
 const processValidationAdapter = require('../adapters/process-validation-adapter');
 const filesystemPatchAdapter = require('../adapters/filesystem-patch-adapter');
 const identityVerificationAdapter = require('../adapters/identity-verification-adapter');
+const { deriveCapabilityGrantFingerprint } = require('./capability-grant');
+const { classifyMutationAuthority } = require('./authoritative-clock');
 
 const CONTROLLED_ACTIONS = Object.freeze({
   FILESYSTEM_READ: Object.freeze({
@@ -128,10 +130,13 @@ function rejectUnsafeRequestShape(input) {
   if (Object.prototype.hasOwnProperty.call(request, 'grantFingerprint')) {
     return deniedAtBoundary('Caller-supplied grant fingerprints are forbidden.');
   }
+  if (request.adapter === 'FILESYSTEM_PATCH' && ['now', 'currentTime', 'validationTime'].some(
+    (key) => Object.prototype.hasOwnProperty.call(request, key)
+  )) return deniedAtBoundary('Caller-supplied current time cannot authorize mutation.');
   return null;
 }
 
-function validateControlledRequest(request, repositoryPath, expectedRisk, runtime = {}) {
+function validateControlledRequest(request, repositoryPath, expectedRisk, runtime = {}, options = {}) {
   if (!request || typeof request !== 'object' || Array.isArray(request)) {
     return executionDenial('Missing or malformed capability context.');
   }
@@ -154,7 +159,8 @@ function validateControlledRequest(request, repositoryPath, expectedRisk, runtim
   }
   const observed = Date.parse(request.observedAt);
   const expires = Date.parse(grant.expiresAt);
-  if (!Number.isFinite(observed) || !Number.isFinite(expires) || observed >= expires) {
+  if (!Number.isFinite(observed) || !Number.isFinite(expires) ||
+      (request.adapter !== 'FILESYSTEM_PATCH' && observed >= expires)) {
     return executionDenial('Capability grant is stale or expired.');
   }
   if (grant.policyDecision !== 'ALLOWED' || !/^R[0-3]$/.test(grant.riskLevel) ||
@@ -211,15 +217,33 @@ function validateControlledRequest(request, repositoryPath, expectedRisk, runtim
     return executionDenial('Operation record binding is missing or mismatched.');
   }
   if (r3Patch) {
+    if (deriveCapabilityGrantFingerprint(grant) !== grant.fingerprint) {
+      return executionDenial('Capability grant fingerprint is invalid.');
+    }
+    let observation = null;
+    if (!options.historicalReplay) {
+      if (!runtime.authoritativeClock || typeof runtime.authoritativeClock.observe !== 'function') {
+        return executionDenial('Authoritative clock is required for mutation dispatch.');
+      }
+      try { observation = runtime.authoritativeClock.observe(options.previousReading || null); } catch {
+        return executionDenial('Authoritative clock is unavailable.');
+      }
+      if (!observation || observation.decision !== 'ALLOWED') {
+        return executionDenial('Authoritative clock anomaly denied mutation dispatch.');
+      }
+    }
+    const temporal = observation
+      ? { reading: observation.reading, requireCurrent: true } : {};
     const approval = evaluateR3ApprovalAuthority(operationRecord.approvalAuthority, {
       operationId: request.operationId, workspace: repositoryPath,
       capabilityType: 'FILESYSTEM_PATCH', action: 'PATCH_FILE',
       scope: operationRecord.scope,
       riskLevel: 'R3', policyDecision: 'APPROVAL_REQUIRED',
-      tenantId: operationRecord.tenantId, projectId: operationRecord.projectId,
-      observedAt: request.observedAt
-    });
-    const identityVerification = identityVerificationAdapter.verifyHumanIdentityAssertion({
+      tenantId: operationRecord.tenantId, projectId: operationRecord.projectId
+    }, temporal);
+    const identityVerification = options.historicalReplay
+      ? operationRecord.identityVerification
+      : identityVerificationAdapter.verifyHumanIdentityAssertion({
       rawAssertion: request.rawIdentityAssertion,
       trustedIssuers: runtime.trustedIdentityIssuers,
       expected: {
@@ -229,10 +253,24 @@ function validateControlledRequest(request, repositoryPath, expectedRisk, runtim
         workspace: repositoryPath,
         tenantId: operationRecord.tenantId,
         projectId: operationRecord.projectId,
-        fingerprint: operationRecord.verifiedIdentityAssertionFingerprint,
-        observedAt: request.observedAt
+        fingerprint: operationRecord.verifiedIdentityAssertionFingerprint
       }
-    }, runtime.identityVerifierPort);
+    }, runtime.identityVerifierPort, temporal);
+    let authorityTimeEvidence = null;
+    if (observation) {
+      try {
+        authorityTimeEvidence = classifyMutationAuthority(observation.reading, {
+          identity: grant.temporalAuthority.identity,
+          approval: grant.temporalAuthority.approval,
+          grant: { ...grant.temporalAuthority.grant, fingerprint: grant.fingerprint }
+        }, observation);
+      } catch {
+        return executionDenial('Mutation temporal authority binding is malformed.');
+      }
+      if (authorityTimeEvidence.decision !== 'ALLOWED') {
+        return executionDenial('Mutation identity, approval or grant is expired.');
+      }
+    }
     if (approval.decision !== 'ALLOWED' || identityVerification.decision !== 'VERIFIED' ||
         approval.authority.fingerprint !== grant.approvalAuthorityFingerprint ||
         approval.authority.approvalAuthorityId !== grant.approvalAuthorityId ||
@@ -248,6 +286,7 @@ function validateControlledRequest(request, repositoryPath, expectedRisk, runtim
         request.projectId !== operationRecord.projectId) {
       return executionDenial('R3 approval authority is missing or mismatched.');
     }
+    runtime = { ...runtime, authorityTimeEvidence };
   }
   const lifecycle = request.lifecycle;
   if (!lifecycle || lifecycle.schema !== 'sdo.lifecycle.v1' ||
@@ -263,9 +302,10 @@ function validateControlledRequest(request, repositoryPath, expectedRisk, runtim
   }
   return {
     contract,
-    grantFingerprint: fingerprint(evaluation),
+    grantFingerprint: r3Patch ? grant.fingerprint : fingerprint(evaluation),
     operationRecord,
-    lifecycle
+    lifecycle,
+    authorityTimeEvidence: runtime.authorityTimeEvidence || null
   };
 }
 
@@ -313,12 +353,12 @@ function preserveControlledErrorEvidence(error, request) {
     adapterType: request.adapter,
     action: request.action,
     outcome: 'FAILED',
-    timestamp: request.observedAt,
+    timestamp: evidence.observedAt || request.observedAt,
     payload: evidence
   });
 }
 
-function invokeControlledAdapter(request) {
+function invokeControlledAdapter(request, runtime, validation) {
   const common = {
     operationId: request.operationId,
     workspace: request.workspace,
@@ -334,7 +374,8 @@ function invokeControlledAdapter(request) {
   if (request.adapter === 'FILESYSTEM_PATCH') {
     return filesystemPatchAdapter.patchFileWithGrant({
       ...common, target: request.target, replacement: request.replacement
-    });
+    }, { authoritativeClock: runtime.authoritativeClock,
+      previousReading: validation.authorityTimeEvidence.reading });
   }
   return processValidationAdapter.validateJavaScriptWithGrant({
     ...common, selector: request.action, target: request.target
@@ -350,7 +391,7 @@ function validateAdapterResult(request, result) {
   };
   if (!result || result.schema !== schemas[request.adapter] || !isDeepFrozen(result) ||
       result.operationId !== request.operationId || result.workspace !== request.workspace ||
-      result.observedAt !== request.observedAt) {
+      (request.adapter !== 'FILESYSTEM_PATCH' && result.observedAt !== request.observedAt)) {
     throw new Error('Controlled adapter returned malformed or unbound evidence.');
   }
   if (request.adapter === 'GIT_READ' && result.selector !== request.action) {
@@ -466,7 +507,7 @@ function orchestrate(input, runtime = {}) {
       input.execution.operationRecord &&
       input.execution.operationRecord.finalization !== null) {
     const replayValidation = validateControlledRequest(
-      input.execution, discovery.repository.path, 'R3', runtime
+      input.execution, discovery.repository.path, 'R3', runtime, { historicalReplay: true }
     );
     if (replayValidation.decision === 'DENIED') {
       return {
@@ -511,6 +552,12 @@ function orchestrate(input, runtime = {}) {
    * PHASE 4
    * Risk classification.
    */
+  let authorityObservation = null;
+  const patchRequested = input.execution && input.execution.adapter === 'FILESYSTEM_PATCH';
+  if (patchRequested && runtime.authoritativeClock &&
+      typeof runtime.authoritativeClock.observe === 'function') {
+    try { authorityObservation = runtime.authoritativeClock.observe(); } catch {}
+  }
   const classification = classifyScope({
     files: inspection.inspection.files,
     mode: task.task.mode,
@@ -539,9 +586,12 @@ function orchestrate(input, runtime = {}) {
     scope: input.execution && input.execution.operationRecord &&
       input.execution.operationRecord.scope,
     tenantId: input.execution && input.execution.tenantId,
-    projectId: input.execution && input.execution.projectId,
-    observedAt: input.execution && input.execution.observedAt
-  });
+    projectId: input.execution && input.execution.projectId
+  }, patchRequested ? {
+    reading: authorityObservation && authorityObservation.decision === 'ALLOWED'
+      ? authorityObservation.reading : null,
+    requireCurrent: true
+  } : {});
 
   /*
    * PHASE 5
@@ -663,7 +713,8 @@ function orchestrate(input, runtime = {}) {
 
   const request = input.execution;
   const validation = validateControlledRequest(
-    request, discovery.repository.path, classification.classification.level, runtime
+    request, discovery.repository.path, classification.classification.level, runtime,
+    { previousReading: authorityObservation && authorityObservation.reading }
   );
 
   if (validation.decision === 'DENIED') {
@@ -714,7 +765,7 @@ function orchestrate(input, runtime = {}) {
   let refreshedPhysical = null;
   if (!adapterResult) {
     try {
-      adapterResult = validateAdapterResult(request, invokeControlledAdapter(request));
+      adapterResult = validateAdapterResult(request, invokeControlledAdapter(request, runtime, validation));
       executionAttempted = true;
       if (request.adapter === 'FILESYSTEM_PATCH') {
         refreshedPhysical = physicalEvidence(repositoryDiscovery.discover(request.workspace));
@@ -735,7 +786,7 @@ function orchestrate(input, runtime = {}) {
         transitionId: evidenceId,
         operationId: request.operationId,
         type: 'FAIL',
-        occurredAt: request.observedAt,
+        occurredAt: (errorEvidence && errorEvidence.timestamp) || request.observedAt,
         failure: { reason: failureReason, physicalEvidence: failurePhysical }
       });
       let failedRecord = validation.operationRecord;
@@ -747,7 +798,7 @@ function orchestrate(input, runtime = {}) {
           grantFingerprint: validation.grantFingerprint,
           policyDecision: request.grantEvaluation.grant.policyDecision,
           riskLevel: 'R3', lifecycleState: 'PENDING', outcome: 'FAILED',
-          timestamp: request.observedAt, payload,
+          timestamp: errorEvidence.timestamp, payload,
           target: payload.target, beforeSha256: payload.beforeSha256,
           replacementSha256: request.grantEvaluation.grant.scope.target.replacementSha256,
           afterSha256: null, recovery: payload.recovery,
@@ -761,7 +812,7 @@ function orchestrate(input, runtime = {}) {
         failedRecord = finalizeOperationRecord(failedRecord, {
           operationId: request.operationId, workspace: request.workspace,
           lifecycleState: 'FAILED', outcome: 'FAILED',
-          successfulCompletionEligible: false, timestamp: request.observedAt
+          successfulCompletionEligible: false, timestamp: errorEvidence.timestamp
         });
       }
       const execution = deepFreeze({

@@ -24,11 +24,13 @@ function evidenceFingerprint(fields) {
     .update(JSON.stringify(canonicalize(fields))).digest('hex');
 }
 
-function validateIdentityVerificationResult(result, expected = {}) {
+function validateIdentityVerificationResult(result, expected = {}, temporalAuthority = {}) {
   if (!result || result.schema !== 'sdo.identity_verification_result.v1' ||
       result.decision !== 'VERIFIED' || !isDeepFrozen(result) ||
       !result.assertion || !result.evidence) return null;
-  const assertion = evaluateVerifiedHumanIdentityAssertion(result.assertion, expected);
+  const assertion = evaluateVerifiedHumanIdentityAssertion(
+    result.assertion, expected, temporalAuthority
+  );
   if (assertion.decision !== 'VERIFIED') return null;
   const evidence = result.evidence;
   const fields = {
@@ -47,7 +49,7 @@ function validateIdentityVerificationResult(result, expected = {}) {
   return result;
 }
 
-function verifyHumanIdentityAssertion(request, verifierPort) {
+function verifyHumanIdentityAssertion(request, verifierPort, temporalAuthority = {}) {
   if (!request || typeof request !== 'object' || Array.isArray(request) ||
       !request.rawAssertion || typeof request.rawAssertion !== 'object' ||
       !Array.isArray(request.trustedIssuers) || request.trustedIssuers.length === 0 ||
@@ -59,6 +61,9 @@ function verifyHumanIdentityAssertion(request, verifierPort) {
     : verifierPort && typeof verifierPort.verify === 'function'
       ? verifierPort.verify.bind(verifierPort) : null;
   if (!verify) return denied('A provider-neutral identity verifier port is required.');
+  if (!temporalAuthority.reading) {
+    return denied('Authoritative clock evidence is required for identity verification.');
+  }
 
   let output;
   try {
@@ -77,7 +82,11 @@ function verifyHumanIdentityAssertion(request, verifierPort) {
   if (!request.trustedIssuers.includes(output.assertion.issuer)) {
     return denied('Identity assertion issuer is not explicitly trusted.');
   }
-  const evaluation = evaluateVerifiedHumanIdentityAssertion(output.assertion, request.expected);
+  const evaluation = evaluateVerifiedHumanIdentityAssertion(
+    output.assertion,
+    request.expected,
+    { ...temporalAuthority, requireCurrent: true }
+  );
   if (evaluation.decision !== 'VERIFIED') return denied(evaluation.reason);
 
   const evidenceFields = {

@@ -9,6 +9,7 @@ const {
   evaluateVerifiedHumanIdentityAssertion,
   reconcileVerifiedHumanIdentityAssertion
 } = require('../../accelerator/core/human-identity-assertion');
+const { createAuthoritativeClock } = require('../../accelerator/core/authoritative-clock');
 
 const workspace = fs.mkdtempSync(path.join(os.tmpdir(), 'sdo-identity-'));
 test.after(() => fs.rmSync(workspace, { recursive: true, force: true }));
@@ -28,12 +29,19 @@ function assertion(overrides = {}) {
 
 function expected(overrides = {}) {
   return { subjectId: 'human-1', issuer: 'https://trusted.example', audience: 'surgical-devops',
-    operationId: 'op-1', workspace, tenantId: 'tenant-1', projectId: 'project-1',
-    observedAt: '2026-08-20T12:00:00.000Z', ...overrides };
+    operationId: 'op-1', workspace, tenantId: 'tenant-1', projectId: 'project-1', ...overrides };
+}
+
+function temporal(wallTime = '2026-08-20T12:00:00.000Z') {
+  const clock = createAuthoritativeClock({ port: { read: () => ({
+    schema: 'sdo.system_clock_observation.v1', availability: 'AVAILABLE', source: 'TEST',
+    wallTime, monotonicNanoseconds: '1000000000'
+  }) } });
+  return { reading: clock.read(), requireCurrent: true };
 }
 
 test('valid assertion is normalized, fingerprinted and deeply immutable', () => {
-  const result = evaluateVerifiedHumanIdentityAssertion(assertion(), expected());
+  const result = evaluateVerifiedHumanIdentityAssertion(assertion(), expected(), temporal());
   assert.equal(result.decision, 'VERIFIED');
   assert.match(result.assertion.fingerprint, /^[a-f0-9]{64}$/);
   assert.ok(Object.isFrozen(result.assertion));
@@ -46,9 +54,8 @@ test('malformed and unverified assertions fail closed', () => {
 });
 
 test('expired assertion fails closed', () => {
-  assert.equal(evaluateVerifiedHumanIdentityAssertion(assertion(), expected({
-    observedAt: '2026-08-20T13:00:00.000Z'
-  })).decision, 'DENIED');
+  assert.equal(evaluateVerifiedHumanIdentityAssertion(assertion(), expected(),
+    temporal('2026-08-20T13:00:00.000Z')).decision, 'DENIED');
 });
 
 test('wrong audience and operation fail closed', () => {

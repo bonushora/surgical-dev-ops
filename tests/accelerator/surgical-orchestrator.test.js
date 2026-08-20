@@ -20,6 +20,8 @@ const { evaluateR3ApprovalAuthority } = require('../../accelerator/core/risk-cla
 const { evaluateVerifiedHumanIdentityAssertion } = require('../../accelerator/core/human-identity-assertion');
 const { createOperationRecord } = require('../../accelerator/core/operation-record');
 const { createLifecycle } = require('../../accelerator/core/state-boundary');
+const { createAuthoritativeClock, classifyMutationAuthority } =
+  require('../../accelerator/core/authoritative-clock');
 const {
   orchestrate,
   evidenceIdentity,
@@ -30,6 +32,17 @@ const { execute } = require('../../accelerator/core/surgical-execution');
 const CREATED = '2026-08-20T11:59:00.000Z';
 const NOW = '2026-08-20T12:00:00.000Z';
 const EXPIRY = '2026-08-20T13:00:00.000Z';
+
+function clockAt(start = NOW, stepMilliseconds = 1) {
+  let count = 0;
+  const startMs = Date.parse(start);
+  return createAuthoritativeClock({ port: { read: () => {
+    const offset = count++ * stepMilliseconds;
+    return { schema: 'sdo.system_clock_observation.v1', availability: 'AVAILABLE',
+      source: 'TEST', wallTime: new Date(startMs + offset).toISOString(),
+      monotonicNanoseconds: String(1000000000n + BigInt(offset) * 1000000n) };
+  } } });
+}
 
 function runGit(repo, args) {
   return execFileSync('git', ['-C', repo, ...args], {
@@ -106,16 +119,17 @@ function r3Execution(repo, overrides = {}) {
   const identityVerification = identityVerificationAdapter.verifyHumanIdentityAssertion({
     rawAssertion: { token: 'test' }, trustedIssuers: ['issuer:test'], expected: {
       subjectId: 'human-1', audience: 'surgical-devops', operationId: 'op-1', workspace: repo,
-      tenantId: 'tenant-1', projectId: 'project-1', observedAt: NOW
+      tenantId: 'tenant-1', projectId: 'project-1'
     }
   }, { verify() { return { status: 'VERIFIED',
-    assertion: approvalAuthority.verifiedIdentityAssertion, verifierId: 'test-port' }; } });
+    assertion: approvalAuthority.verifiedIdentityAssertion, verifierId: 'test-port' }; } },
+  { reading: clockAt().read(), requireCurrent: true });
   const common = { operationId: 'op-1', workspace: repo, policyDecision: 'APPROVAL_REQUIRED',
     riskLevel: 'R3', lifecycleState: 'PENDING', capabilityType: 'FILESYSTEM_PATCH', scope,
     idempotency: 'IDEMPOTENT', approvalAuthority, identityVerification,
     tenantId: 'tenant-1', projectId: 'project-1' };
   const grantEvaluation = evaluateCapabilityGrant(
-    { ...common, expiresAt: EXPIRY }, { ...common, evaluatedAt: CREATED });
+    { ...common, expiresAt: EXPIRY }, { ...common, evaluatedAt: CREATED }, clockAt());
   const operationRecord = createOperationRecord({ operationId: 'op-1',
     requester: { id: 'requester-1', type: 'HUMAN' }, workspace: repo,
     objective: 'Govern one bounded R3 patch authority.', policyDecision: 'APPROVAL_REQUIRED',
@@ -132,7 +146,7 @@ function r3Execution(repo, overrides = {}) {
         approvalAuthorityFingerprint: approvalAuthority.fingerprint,
         verifiedIdentityAssertionFingerprint: approvalAuthority.verifiedIdentityAssertionFingerprint },
       { type: 'state', operationId: 'op-1', timestamp: CREATED, status: 'PENDING' }
-    ] }).record;
+    ] }, clockAt()).record;
   return { adapter: 'FILESYSTEM_PATCH', action: 'PATCH_FILE', operationId: 'op-1',
     workspace: repo, target: 'target.js', replacement: 'const value = 2;\n', observedAt: NOW,
     tenantId: 'tenant-1', projectId: 'project-1',
@@ -142,9 +156,22 @@ function r3Execution(repo, overrides = {}) {
 
 function r3Runtime(request, overrides = {}) {
   return { trustedIdentityIssuers: ['issuer:test'], identityAudience: 'surgical-devops',
+    authoritativeClock: clockAt(),
     identityVerifierPort: { verify() { return { status: 'VERIFIED',
       assertion: request.operationRecord.verifiedIdentityAssertion, verifierId: 'test-port' }; } },
     ...overrides };
+}
+
+function commitTemporal(request, decision = 'ALLOWED') {
+  const grant = request.grantEvaluation.grant;
+  const evaluation = classifyMutationAuthority(clockAt().read(), {
+    identity: grant.temporalAuthority.identity,
+    approval: grant.temporalAuthority.approval,
+    grant: { ...grant.temporalAuthority.grant, fingerprint: grant.fingerprint }
+  });
+  return frozen({ schema: 'sdo.mutation_commit_authority.v1',
+    commitBoundary: 'IMMEDIATELY_BEFORE_ATOMIC_REPLACEMENT', physicalCommit: 'APPLIED',
+    decision, evaluation });
 }
 
 function lifecycle(repo) {
@@ -329,6 +356,28 @@ test('valid verified R3 authority physically applies one exact FILESYSTEM_PATCH'
       request.operationRecord.approvalAuthority.fingerprint);
   }));
 
+test('expiry at final pre-commit recheck preserves zero physical mutation', () =>
+  withFixture((repo) => {
+    const request = r3Execution(repo);
+    const start = new Date(Date.parse(EXPIRY) - 3).toISOString();
+    const result = orchestrate(input(repo, request, { risk: 'ALTO', policy: {
+      decision: 'APPROVAL_REQUIRED', approvalAuthority: request.operationRecord.approvalAuthority
+    } }), r3Runtime(request, { authoritativeClock: clockAt(start, 1) }));
+    assert.equal(result.orchestration.status, 'FAILED');
+    assert.equal(result.execution.errorEvidence.payload.temporalAuthority.decision, 'DENIED');
+    assert.equal(result.governed.operationRecord.finalization.outcome, 'FAILED');
+    assert.equal(fs.readFileSync(path.join(repo, 'target.js'), 'utf8'), 'const value = 1;\n');
+  }));
+
+test('caller time cannot extend R3 mutation authority', () => withFixture((repo) => {
+  const request = r3Execution(repo, { now: '2020-01-01T00:00:00.000Z' });
+  const result = orchestrate(input(repo, request, { risk: 'ALTO', policy: {
+    decision: 'APPROVAL_REQUIRED', approvalAuthority: request.operationRecord.approvalAuthority
+  } }), r3Runtime(request, { authoritativeClock: clockAt(EXPIRY) }));
+  assert.equal(result.orchestration.status, 'DENIED');
+  assert.equal(fs.readFileSync(path.join(repo, 'target.js'), 'utf8'), 'const value = 1;\n');
+}));
+
 test('identical completed patch replay performs zero duplicate mutation', (context) =>
   withFixture((repo) => {
     const request = r3Execution(repo);
@@ -412,7 +461,7 @@ test('patch identity authority grant scope and lifecycle mismatches dispatch zer
       [{ ...request, projectId: 'other' }, r3Runtime(request)],
       [{ ...request, target: 'invalid.js' }, r3Runtime(request)],
       [{ ...request, grantEvaluation: null }, r3Runtime(request)],
-      [{ ...request, observedAt: EXPIRY }, r3Runtime(request)],
+      [request, r3Runtime(request, { authoritativeClock: clockAt(EXPIRY) })],
       [{ ...request, lifecycle: frozen({ ...request.lifecycle, status: 'NOT_EXECUTABLE' }) },
         r3Runtime(request)],
       [request, r3Runtime(request, { identityAudience: 'wrong-audience' })]
@@ -435,7 +484,8 @@ test('patch recovery evidence finalizes only as FAILED', (context) =>
           target: { requested: 'target.js', canonical: path.join(repo, 'target.js') },
           beforeSha256: request.grantEvaluation.grant.scope.target.beforeSha256,
           afterSha256: request.grantEvaluation.grant.scope.target.replacementSha256,
-          outcome: 'FAILED', recovery, observedAt: NOW });
+          outcome: 'FAILED', recovery, observedAt: NOW,
+          temporalAuthority: commitTemporal(request) });
         throw error;
       });
       const result = orchestrate(input(repo, request, { risk: 'ALTO', policy: {

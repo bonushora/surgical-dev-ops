@@ -182,15 +182,10 @@ test('deterministic fake clock injection advances wall and monotonic values sepa
     2000000000n);
 });
 
-test('clock foundation remains disconnected from authority and mutation paths', () => {
+test('clock integration remains disconnected from lock journal and recovery paths', () => {
   for (const relative of [
-    '../../accelerator/core/human-identity-assertion.js',
-    '../../accelerator/core/risk-classification.js',
-    '../../accelerator/core/capability-grant.js',
-    '../../accelerator/core/surgical-orchestrator.js',
     '../../accelerator/adapters/mutation-lock-adapter.js',
-    '../../accelerator/adapters/mutation-journal-adapter.js',
-    '../../accelerator/adapters/filesystem-patch-adapter.js'
+    '../../accelerator/adapters/mutation-journal-adapter.js'
   ]) {
     assert.doesNotMatch(fs.readFileSync(path.join(__dirname, relative), 'utf8'),
       /authoritative-clock|system-clock-adapter/);

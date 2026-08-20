@@ -10,10 +10,18 @@ const { evaluateCapabilityGrant } = require('../../accelerator/core/capability-g
 const { evaluateR3ApprovalAuthority } = require('../../accelerator/core/risk-classification');
 const { evaluateVerifiedHumanIdentityAssertion } = require('../../accelerator/core/human-identity-assertion');
 const { verifyHumanIdentityAssertion } = require('../../accelerator/adapters/identity-verification-adapter');
+const { createAuthoritativeClock } = require('../../accelerator/core/authoritative-clock');
 
 const workspace = fs.mkdtempSync(path.join(os.tmpdir(), 'sdo-capability-'));
 fs.writeFileSync(path.join(workspace, 'target.txt'), 'read-only\n');
 test.after(() => fs.rmSync(workspace, { recursive: true, force: true }));
+
+function clockAt(wallTime = '2026-08-20T12:00:00.000Z') {
+  return createAuthoritativeClock({ port: { read: () => ({
+    schema: 'sdo.system_clock_observation.v1', availability: 'AVAILABLE', source: 'TEST',
+    wallTime, monotonicNanoseconds: '1000000000'
+  }) } });
+}
 
 function request(overrides = {}) {
   return {
@@ -58,12 +66,13 @@ function identityVerification(approvalAuthority = r3Approval()) {
   return verifyHumanIdentityAssertion({ rawAssertion: { token: 'test' },
     trustedIssuers: ['issuer:test'], expected: {
       subjectId: 'human-1', audience: 'surgical-devops', operationId: 'op-1', workspace,
-      tenantId: 'tenant-1', projectId: 'project-1', observedAt: '2026-08-20T12:00:00.000Z'
+      tenantId: 'tenant-1', projectId: 'project-1'
     } }, { verify() { return { status: 'VERIFIED',
-    assertion: approvalAuthority.verifiedIdentityAssertion, verifierId: 'test-port' }; } });
+    assertion: approvalAuthority.verifiedIdentityAssertion, verifierId: 'test-port' }; } },
+  { reading: clockAt().read(), requireCurrent: true });
 }
 
-function r3Grant(overrides = {}, authorityOverrides = {}) {
+function r3Grant(overrides = {}, authorityOverrides = {}, clock = clockAt()) {
   const approvalAuthority = r3Approval();
   const verifiedIdentity = identityVerification(approvalAuthority);
   const scope = approvalAuthority.scope;
@@ -73,7 +82,7 @@ function r3Grant(overrides = {}, authorityOverrides = {}) {
     tenantId: 'tenant-1', projectId: 'project-1', ...overrides }),
   authority({ policyDecision: 'APPROVAL_REQUIRED', riskLevel: 'R3', capabilityType: 'FILESYSTEM_PATCH',
     scope, approvalAuthority, identityVerification: verifiedIdentity,
-    tenantId: 'tenant-1', projectId: 'project-1', ...authorityOverrides }));
+    tenantId: 'tenant-1', projectId: 'project-1', ...authorityOverrides }), clock);
 }
 
 test('default deny without authoritative policy', () => {
@@ -126,6 +135,20 @@ test('valid R3 patch grant binds human approval authority', () => {
     r3Approval().verifiedIdentityAssertionFingerprint);
   assert.equal(result.grant.identityVerificationEvidenceFingerprint,
     identityVerification().evidence.fingerprint);
+  assert.equal(result.grant.issuedAt, '2026-08-20T12:00:00.000Z');
+  assert.equal(result.grant.temporalAuthority.identity.expiresAt,
+    '2026-08-20T13:00:00.000Z');
+  assert.match(result.grant.fingerprint, /^[a-f0-9]{64}$/);
+});
+
+test('R3 grant requires authoritative time and denies exact expiry', () => {
+  assert.equal(r3Grant({}, {}, null).decision, 'DENIED');
+  assert.equal(r3Grant({}, {}, clockAt('2026-08-20T13:00:00.000Z')).decision, 'DENIED');
+});
+
+test('caller time cannot extend or rewrite an R3 grant validity decision', () => {
+  assert.equal(r3Grant({ now: '2020-01-01T00:00:00.000Z' }).decision, 'DENIED');
+  assert.equal(r3Grant({ currentTime: '2020-01-01T00:00:00.000Z' }).decision, 'DENIED');
 });
 
 test('R3 grant rejects verified identity or tenant substitution', () => {
@@ -147,7 +170,7 @@ test('R3 patch grant denies missing or mismatched authority', () => {
 test('R3 patch grant denies action, capability and expired authority mismatch', () => {
   assert.equal(r3Grant({ capabilityType: 'FILESYSTEM_READ' }).decision, 'DENIED');
   assert.equal(r3Grant({ approvalAuthority: { ...r3Approval(), action: 'READ_FILE' } }).decision, 'DENIED');
-  assert.equal(r3Grant({}, { evaluatedAt: '2026-08-20T13:00:00.000Z' }).decision, 'DENIED');
+  assert.equal(r3Grant({}, {}, clockAt('2026-08-20T13:00:00.000Z')).decision, 'DENIED');
 });
 
 test('filesystem patch scope cannot be broadened or made ambiguous', () => {

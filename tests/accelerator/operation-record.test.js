@@ -6,16 +6,30 @@ const fs = require('fs');
 const os = require('os');
 const path = require('path');
 const {
-  createOperationRecord,
+  createOperationRecord: createOperationRecordCore,
   appendAdapterEvidence,
   finalizeOperationRecord
 } = require('../../accelerator/core/operation-record');
 const { evaluateR3ApprovalAuthority } = require('../../accelerator/core/risk-classification');
 const { evaluateVerifiedHumanIdentityAssertion } = require('../../accelerator/core/human-identity-assertion');
 const { verifyHumanIdentityAssertion } = require('../../accelerator/adapters/identity-verification-adapter');
+const { createAuthoritativeClock, classifyMutationAuthority } =
+  require('../../accelerator/core/authoritative-clock');
 
 const TIME = '2026-08-20T12:00:00.000Z';
 const WORKSPACE = fs.realpathSync(os.tmpdir());
+
+function clockAt(wallTime = TIME) {
+  return createAuthoritativeClock({ port: { read: () => ({
+    schema: 'sdo.system_clock_observation.v1', availability: 'AVAILABLE', source: 'TEST',
+    wallTime, monotonicNanoseconds: '1000000000'
+  }) } });
+}
+
+function createOperationRecord(value, clock = null) {
+  return createOperationRecordCore(value,
+    value && value.riskLevel === 'R3' ? (clock || clockAt()) : clock);
+}
 
 function events(riskLevel = 'R0', operationId = 'op-1', authority = null) {
   const result = [
@@ -72,9 +86,9 @@ function r3(overrides = {}) {
   const identityVerification = verifyHumanIdentityAssertion({ rawAssertion: { token: 'test' },
     trustedIssuers: ['issuer:test'], expected: { subjectId: 'human-1',
       audience: 'surgical-devops', operationId: 'op-1', workspace: WORKSPACE,
-      tenantId: 'tenant-1', projectId: 'project-1', observedAt: TIME }
+      tenantId: 'tenant-1', projectId: 'project-1' }
   }, { verify() { return { status: 'VERIFIED', assertion: verifiedIdentityAssertion,
-    verifierId: 'test-port' }; } });
+    verifierId: 'test-port' }; } }, { reading: clockAt().read(), requireCurrent: true });
   return input({
     policyDecision: 'APPROVAL_REQUIRED',
     riskLevel: 'R3',
@@ -142,6 +156,27 @@ function evidence(adapterType = 'FILESYSTEM_READ', overrides = {}) {
   };
 }
 
+function r3Evidence(record, overrides = {}) {
+  const base = evidence('FILESYSTEM_PATCH');
+  const evaluation = classifyMutationAuthority(clockAt().read(), {
+    identity: { issuedAt: record.verifiedIdentityAssertion.issuedAt,
+      expiresAt: record.verifiedIdentityAssertion.expiresAt,
+      fingerprint: record.verifiedIdentityAssertionFingerprint },
+    approval: { issuedAt: record.approvalAuthority.timestamp,
+      expiresAt: record.approvalAuthority.expiresAt,
+      fingerprint: record.approvalAuthority.fingerprint },
+    grant: { issuedAt: TIME, expiresAt: '2026-08-20T13:00:00.000Z', fingerprint: GRANT }
+  });
+  const temporalAuthority = frozen({ schema: 'sdo.mutation_commit_authority.v1',
+    commitBoundary: 'IMMEDIATELY_BEFORE_ATOMIC_REPLACEMENT', physicalCommit: 'APPLIED',
+    decision: 'ALLOWED', evaluation });
+  return evidence('FILESYSTEM_PATCH', { riskLevel: 'R3',
+    approvalAuthorityFingerprint: record.approvalAuthority.fingerprint,
+    verifiedIdentityAssertionFingerprint: record.verifiedIdentityAssertionFingerprint,
+    identityVerificationEvidenceFingerprint: record.identityVerificationEvidenceFingerprint,
+    payload: frozen({ ...base.payload, observedAt: TIME, temporalAuthority }), ...overrides });
+}
+
 function finalState(overrides = {}) {
   return {
     operationId: 'op-1', workspace: WORKSPACE, lifecycleState: 'COMPLETED',
@@ -165,6 +200,12 @@ test('valid R3 operation binds explicit approval', () => {
     result.record.approvalAuthority.verifiedIdentityAssertionFingerprint);
   assert.equal(result.record.identityVerificationEvidenceFingerprint,
     result.record.identityVerification.evidence.fingerprint);
+});
+
+test('R3 operation record requires authoritative current-time validation', () => {
+  assert.equal(createOperationRecordCore(r3()).decision, 'DENIED');
+  assert.equal(createOperationRecordCore(r3(),
+    clockAt('2026-08-20T13:00:00.000Z')).decision, 'DENIED');
 });
 
 test('R3 without approval is denied', () => {
@@ -370,14 +411,14 @@ test('valid FILESYSTEM_PATCH evidence appends immutably', () => {
 
 test('matching R3 patch evidence requires and preserves approval authority', () => {
   const record = r3PatchRecord();
-  const item = evidence('FILESYSTEM_PATCH', { riskLevel: 'R3',
-    approvalAuthorityFingerprint: record.approvalAuthority.fingerprint,
-    verifiedIdentityAssertionFingerprint: record.verifiedIdentityAssertionFingerprint,
-    identityVerificationEvidenceFingerprint: record.identityVerificationEvidenceFingerprint });
+  const item = r3Evidence(record);
   const next = appendAdapterEvidence(record, item);
   assert.equal(next.adapterEvidence[0].approvalAuthorityFingerprint,
     record.approvalAuthority.fingerprint);
   assert.ok(Object.isFrozen(next.approvalAuthority));
+  assert.equal(next.adapterEvidence[0].payload.temporalAuthority.decision, 'ALLOWED');
+  assert.equal(next.adapterEvidence[0].payload.temporalAuthority.evaluation.reading.wallTime, TIME);
+  assert.ok(Object.isFrozen(next.adapterEvidence[0].payload.temporalAuthority));
 });
 
 test('R3 patch evidence without matching approval authority is rejected', () => {
@@ -392,10 +433,7 @@ test('R3 patch evidence without matching approval authority is rejected', () => 
 
 test('conflicting R3 approval authority replay fails closed', () => {
   const record = r3PatchRecord();
-  const matching = evidence('FILESYSTEM_PATCH', { riskLevel: 'R3',
-    approvalAuthorityFingerprint: record.approvalAuthority.fingerprint,
-    verifiedIdentityAssertionFingerprint: record.verifiedIdentityAssertionFingerprint,
-    identityVerificationEvidenceFingerprint: record.identityVerificationEvidenceFingerprint });
+  const matching = r3Evidence(record);
   const next = appendAdapterEvidence(record, matching);
   assert.throws(() => appendAdapterEvidence(next, evidence('FILESYSTEM_PATCH', {
     evidenceId: 'FILESYSTEM_PATCH-2', riskLevel: 'R3',

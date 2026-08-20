@@ -9,6 +9,7 @@ const {
   verifyHumanIdentityAssertion,
   validateIdentityVerificationResult
 } = require('../../accelerator/adapters/identity-verification-adapter');
+const { createAuthoritativeClock } = require('../../accelerator/core/authoritative-clock');
 
 const workspace = fs.mkdtempSync(path.join(os.tmpdir(), 'sdo-verifier-'));
 test.after(() => fs.rmSync(workspace, { recursive: true, force: true }));
@@ -26,8 +27,15 @@ function assertion(overrides = {}) {
 function request(overrides = {}) {
   return { rawAssertion: { compact: 'provider-neutral-token' }, trustedIssuers: ['issuer:test'],
     expected: { subjectId: 'human-1', audience: 'surgical-devops', operationId: 'op-1',
-      workspace, tenantId: 'tenant-1', projectId: 'project-1',
-      observedAt: '2026-08-20T12:00:00.000Z' }, ...overrides };
+      workspace, tenantId: 'tenant-1', projectId: 'project-1' }, ...overrides };
+}
+
+function temporal(wallTime = '2026-08-20T12:00:00.000Z') {
+  const clock = createAuthoritativeClock({ port: { read: () => ({
+    schema: 'sdo.system_clock_observation.v1', availability: 'AVAILABLE', source: 'TEST',
+    wallTime, monotonicNanoseconds: '1000000000'
+  }) } });
+  return { reading: clock.read(), requireCurrent: true };
 }
 
 function verifier(output = { status: 'VERIFIED', assertion: assertion(), verifierId: 'test-port' }) {
@@ -35,44 +43,44 @@ function verifier(output = { status: 'VERIFIED', assertion: assertion(), verifie
 }
 
 test('explicitly trusted issuer succeeds with immutable evidence', () => {
-  const result = verifyHumanIdentityAssertion(request(), verifier());
+  const result = verifyHumanIdentityAssertion(request(), verifier(), temporal());
   assert.equal(result.decision, 'VERIFIED');
   assert.ok(Object.isFrozen(result));
   assert.ok(Object.isFrozen(result.assertion));
   assert.ok(Object.isFrozen(result.evidence));
-  assert.strictEqual(validateIdentityVerificationResult(result, request().expected), result);
+  assert.strictEqual(validateIdentityVerificationResult(result, request().expected, temporal()), result);
 });
 
 test('verification evidence fingerprint substitution fails validation', () => {
-  const result = verifyHumanIdentityAssertion(request(), verifier());
+  const result = verifyHumanIdentityAssertion(request(), verifier(), temporal());
   const substituted = Object.freeze({ ...result, evidence: Object.freeze({ ...result.evidence,
     fingerprint: 'f'.repeat(64) }) });
-  assert.equal(validateIdentityVerificationResult(substituted, request().expected), null);
+  assert.equal(validateIdentityVerificationResult(substituted, request().expected, temporal()), null);
 });
 
 test('untrusted issuer fails closed', () => {
-  assert.equal(verifyHumanIdentityAssertion(request({ trustedIssuers: ['issuer:other'] }), verifier()).decision, 'DENIED');
+  assert.equal(verifyHumanIdentityAssertion(request({ trustedIssuers: ['issuer:other'] }), verifier(), temporal()).decision, 'DENIED');
 });
 
 test('verifier exception and negative result fail closed', () => {
-  assert.equal(verifyHumanIdentityAssertion(request(), { verify() { throw new Error('bad signature'); } }).decision, 'DENIED');
-  assert.equal(verifyHumanIdentityAssertion(request(), verifier({ status: 'DENIED' })).decision, 'DENIED');
+  assert.equal(verifyHumanIdentityAssertion(request(), { verify() { throw new Error('bad signature'); } }, temporal()).decision, 'DENIED');
+  assert.equal(verifyHumanIdentityAssertion(request(), verifier({ status: 'DENIED' }), temporal()).decision, 'DENIED');
 });
 
 test('malformed verified output fails closed', () => {
-  assert.equal(verifyHumanIdentityAssertion(request(), verifier({ status: 'VERIFIED', assertion: { approved: true } })).decision, 'DENIED');
+  assert.equal(verifyHumanIdentityAssertion(request(), verifier({ status: 'VERIFIED', assertion: { approved: true } }), temporal()).decision, 'DENIED');
 });
 
 test('context mismatches and expiry fail closed', () => {
-  assert.equal(verifyHumanIdentityAssertion(request({ expected: { ...request().expected, operationId: 'op-2' } }), verifier()).decision, 'DENIED');
-  assert.equal(verifyHumanIdentityAssertion(request({ expected: { ...request().expected, tenantId: 'other' } }), verifier()).decision, 'DENIED');
-  assert.equal(verifyHumanIdentityAssertion(request({ expected: { ...request().expected, observedAt: '2026-08-20T13:00:00.000Z' } }), verifier()).decision, 'DENIED');
+  assert.equal(verifyHumanIdentityAssertion(request({ expected: { ...request().expected, operationId: 'op-2' } }), verifier(), temporal()).decision, 'DENIED');
+  assert.equal(verifyHumanIdentityAssertion(request({ expected: { ...request().expected, tenantId: 'other' } }), verifier(), temporal()).decision, 'DENIED');
+  assert.equal(verifyHumanIdentityAssertion(request(), verifier(), temporal('2026-08-20T13:00:00.000Z')).decision, 'DENIED');
 });
 
 test('adapter has no hardcoded IdP and accepts a different explicitly trusted issuer', () => {
   const local = assertion({ issuer: 'local:offline-authority' });
   const result = verifyHumanIdentityAssertion(
-    request({ trustedIssuers: ['local:offline-authority'] }), verifier({ status: 'VERIFIED', assertion: local })
+    request({ trustedIssuers: ['local:offline-authority'] }), verifier({ status: 'VERIFIED', assertion: local }), temporal()
   );
   assert.equal(result.decision, 'VERIFIED');
   assert.equal(result.assertion.issuer, 'local:offline-authority');

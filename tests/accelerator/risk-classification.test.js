@@ -7,9 +7,17 @@ const os = require('os');
 const path = require('path');
 const { classifyScope, evaluateR3ApprovalAuthority } = require('../../accelerator/core/risk-classification');
 const { evaluateVerifiedHumanIdentityAssertion } = require('../../accelerator/core/human-identity-assertion');
+const { createAuthoritativeClock } = require('../../accelerator/core/authoritative-clock');
 
 const workspace = fs.mkdtempSync(path.join(os.tmpdir(), 'sdo-risk-'));
 test.after(() => fs.rmSync(workspace, { recursive: true, force: true }));
+
+function readingAt(wallTime) {
+  return createAuthoritativeClock({ port: { read: () => ({
+    schema: 'sdo.system_clock_observation.v1', availability: 'AVAILABLE', source: 'TEST',
+    wallTime, monotonicNanoseconds: '1000000000'
+  }) } }).read();
+}
 
 function approval(overrides = {}) {
   const verifiedIdentityAssertion = evaluateVerifiedHumanIdentityAssertion({
@@ -144,6 +152,14 @@ test('R3 with valid explicit human approval is allowed by policy', () => {
   assert.equal(result.policy.decision, 'ALLOWED');
   assert.equal(result.classification.executionAllowed, true);
   assert.equal(result.policy.approvalAuthority.fingerprint, approval().fingerprint);
+});
+
+test('R3 approval is denied at its authoritative exact-expiry boundary', () => {
+  const authority = approval();
+  const result = evaluateR3ApprovalAuthority(authority, {}, {
+    reading: readingAt('2026-08-20T13:00:00.000Z'), requireCurrent: true
+  });
+  assert.equal(result.decision, 'DENIED');
 });
 
 test('malformed or inexact R3 authority is denied', () => {

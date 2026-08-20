@@ -160,6 +160,67 @@ function classifyExpiry(reading, { issuedAt, expiresAt } = {}) {
   });
 }
 
+function authorityBound(value, label) {
+  if (!value || typeof value !== 'object' || Array.isArray(value) ||
+      Object.keys(value).length !== 3 ||
+      !/^[a-f0-9]{64}$/.test(value.fingerprint || '')) {
+    throw new Error(`${label} authority validity bound is malformed.`);
+  }
+  return deepFreeze({
+    issuedAt: canonicalTimestamp(value.issuedAt, `${label}.issuedAt`),
+    expiresAt: canonicalTimestamp(value.expiresAt, `${label}.expiresAt`),
+    fingerprint: value.fingerprint
+  });
+}
+
+function classifyMutationAuthority(reading, bounds, progression = null) {
+  const now = validateReading(reading);
+  if (!bounds || typeof bounds !== 'object' || Array.isArray(bounds) ||
+      Object.keys(bounds).length !== 3) {
+    throw new Error('Mutation authority validity bounds are malformed.');
+  }
+  const normalizedBounds = deepFreeze({
+    identity: authorityBound(bounds.identity, 'identity'),
+    approval: authorityBound(bounds.approval, 'approval'),
+    grant: authorityBound(bounds.grant, 'grant')
+  });
+  const normalizedProgression = progression === null ? deepFreeze({
+    schema: 'sdo.authoritative_clock_progression.v1',
+    decision: 'ALLOWED', classification: 'INITIAL',
+    reason: 'Initial authoritative clock observation.', reading: now
+  }) : progression;
+  if (!normalizedProgression || !Object.isFrozen(normalizedProgression) ||
+      normalizedProgression.reading !== now ||
+      !['ALLOWED', 'DENIED'].includes(normalizedProgression.decision)) {
+    throw new Error('Authoritative clock progression evidence is malformed.');
+  }
+  const evaluations = deepFreeze({
+    identity: classifyExpiry(now, normalizedBounds.identity),
+    approval: classifyExpiry(now, normalizedBounds.approval),
+    grant: classifyExpiry(now, normalizedBounds.grant)
+  });
+  const allowed = normalizedProgression.decision === 'ALLOWED' &&
+    Object.values(evaluations).every((evaluation) => evaluation.decision === 'ALLOWED');
+  const fields = {
+    schema: 'sdo.mutation_authority_time_evidence.v1',
+    decision: allowed ? 'ALLOWED' : 'DENIED',
+    reading: now,
+    progression: normalizedProgression,
+    bounds: normalizedBounds,
+    evaluations
+  };
+  return deepFreeze({ ...fields, fingerprint: crypto.createHash('sha256')
+    .update(`sdo.mutation_authority_time_evidence.v1\0${canonicalJson(fields)}`).digest('hex') });
+}
+
+function evaluateMutationAuthority(authoritativeClock, bounds, previousReading = null) {
+  if (!authoritativeClock || typeof authoritativeClock.observe !== 'function') {
+    throw new Error('Authoritative clock is required for mutation authority evaluation.');
+  }
+  const progression = authoritativeClock.observe(previousReading);
+  return classifyMutationAuthority(progression.reading, bounds, progression);
+}
+
 function createAuthoritativeClock({
   port,
   maximumForwardDriftMilliseconds = 1000,
@@ -208,5 +269,7 @@ function createAuthoritativeClock({
 module.exports = {
   createAuthoritativeClock,
   classifyClockProgression,
-  classifyExpiry
+  classifyExpiry,
+  classifyMutationAuthority,
+  evaluateMutationAuthority
 };

@@ -3,6 +3,7 @@
 const crypto = require('crypto');
 const fs = require('fs');
 const path = require('path');
+const { classifyExpiry } = require('./authoritative-clock');
 
 const SCHEMA = 'sdo.verified_human_identity_assertion.v1';
 
@@ -47,7 +48,7 @@ function denied(reason) {
   return deepFreeze({ schema: 'sdo.human_identity_assertion_evaluation.v1', decision: 'DENIED', reason, assertion: null });
 }
 
-function evaluateVerifiedHumanIdentityAssertion(candidate, expected = {}) {
+function evaluateVerifiedHumanIdentityAssertion(candidate, expected = {}, temporalAuthority = {}) {
   if (!candidate || typeof candidate !== 'object' || Array.isArray(candidate)) {
     return denied('Verified human identity assertion is missing.');
   }
@@ -94,10 +95,29 @@ function evaluateVerifiedHumanIdentityAssertion(candidate, expected = {}) {
     (!candidate.fingerprint || candidate.fingerprint === fingerprint);
   if (!valid) return denied('Verified human identity assertion is malformed or unverifiable.');
 
-  const observedAt = timestamp(expected.observedAt);
-  if (expected.observedAt !== undefined && !observedAt) return denied('Identity observation time is malformed.');
-  if (observedAt && Date.parse(observedAt) >= Date.parse(fields.expiresAt)) {
-    return denied('Verified human identity assertion is expired.');
+  for (const callerTime of ['now', 'currentTime', 'validationTime', 'observedAt']) {
+    if (Object.prototype.hasOwnProperty.call(expected, callerTime)) {
+      return denied('Caller-supplied current time cannot authorize human identity.');
+    }
+  }
+  if (temporalAuthority.requireCurrent === true && !temporalAuthority.reading) {
+    return denied('Authoritative clock evidence is required for human identity validity.');
+  }
+  if (temporalAuthority.reading) {
+    let expiry;
+    try {
+      expiry = classifyExpiry(temporalAuthority.reading, {
+        issuedAt: fields.issuedAt,
+        expiresAt: fields.expiresAt
+      });
+    } catch {
+      return denied('Authoritative human identity time evidence is malformed.');
+    }
+    if (expiry.decision !== 'ALLOWED') {
+      return denied(expiry.classification === 'ISSUED_IN_FUTURE'
+        ? 'Verified human identity assertion is not yet valid.'
+        : 'Verified human identity assertion is expired.');
+    }
   }
   const exact = {
     subjectId: fields.subject.id, issuer: fields.issuer, operationId: fields.operationId,
@@ -129,9 +149,9 @@ function identityAssertionFingerprint(value) {
   return evaluation.decision === 'VERIFIED' ? evaluation.assertion.fingerprint : null;
 }
 
-function reconcileVerifiedHumanIdentityAssertion(previous, candidate, expected = {}) {
-  const prior = evaluateVerifiedHumanIdentityAssertion(previous, expected);
-  const next = evaluateVerifiedHumanIdentityAssertion(candidate, expected);
+function reconcileVerifiedHumanIdentityAssertion(previous, candidate, expected = {}, temporalAuthority = {}) {
+  const prior = evaluateVerifiedHumanIdentityAssertion(previous, expected, temporalAuthority);
+  const next = evaluateVerifiedHumanIdentityAssertion(candidate, expected, temporalAuthority);
   if (prior.decision !== 'VERIFIED' || next.decision !== 'VERIFIED') {
     throw new Error('Verified identity replay is malformed.');
   }

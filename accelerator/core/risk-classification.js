@@ -6,6 +6,7 @@ const crypto = require('crypto');
 const fs = require('fs');
 const path = require('path');
 const { evaluateVerifiedHumanIdentityAssertion } = require('./human-identity-assertion');
+const { classifyExpiry } = require('./authoritative-clock');
 
 const LEVEL_ORDER = Object.freeze({ R0: 0, R1: 1, R2: 2, R3: 3 });
 const LEGACY_RISK = Object.freeze({ BAIXO: 'R1', MÉDIO: 'R2', ALTO: 'R3' });
@@ -29,7 +30,7 @@ function authorityFingerprint(fields) {
   return crypto.createHash('sha256').update(JSON.stringify(canonicalize(fields))).digest('hex');
 }
 
-function evaluateR3ApprovalAuthority(candidate, expected = {}) {
+function evaluateR3ApprovalAuthority(candidate, expected = {}, temporalAuthority = {}) {
   if (!candidate || typeof candidate !== 'object' || Array.isArray(candidate)) {
     return deepFreeze({ decision: 'DENIED', reason: 'R3 approval authority is missing.', authority: null });
   }
@@ -50,9 +51,9 @@ function evaluateR3ApprovalAuthority(candidate, expected = {}) {
       operationId: candidate.operationId,
       workspace,
       tenantId: candidate.tenantId === undefined ? null : candidate.tenantId,
-      projectId: candidate.projectId === undefined ? null : candidate.projectId,
-      observedAt: candidate.timestamp
-    }
+      projectId: candidate.projectId === undefined ? null : candidate.projectId
+    },
+    temporalAuthority
   );
   const verifiedIdentityAssertion = identityEvaluation.assertion;
   const fields = {
@@ -91,15 +92,36 @@ function evaluateR3ApprovalAuthority(candidate, expected = {}) {
   if (!valid) {
     return deepFreeze({ decision: 'DENIED', reason: 'R3 approval authority is malformed.', authority: null });
   }
+  for (const callerTime of ['now', 'currentTime', 'validationTime', 'observedAt']) {
+    if (Object.prototype.hasOwnProperty.call(expected, callerTime)) {
+      return deepFreeze({ decision: 'DENIED',
+        reason: 'Caller-supplied current time cannot authorize R3 approval.', authority: null });
+    }
+  }
   for (const [key, value] of Object.entries(expected)) {
-    if (key === 'observedAt') continue;
     if (value !== undefined && JSON.stringify(canonicalize(fields[key])) !==
         JSON.stringify(canonicalize(value))) {
       return deepFreeze({ decision: 'DENIED', reason: `R3 approval authority ${key} mismatch.`, authority: null });
     }
   }
-  if (expected.observedAt && Date.parse(expected.observedAt) >= expiresAt) {
-    return deepFreeze({ decision: 'DENIED', reason: 'R3 approval authority is expired.', authority: null });
+  if (temporalAuthority.requireCurrent === true && !temporalAuthority.reading) {
+    return deepFreeze({ decision: 'DENIED',
+      reason: 'Authoritative clock evidence is required for R3 approval.', authority: null });
+  }
+  if (temporalAuthority.reading) {
+    let expiry;
+    try {
+      expiry = classifyExpiry(temporalAuthority.reading, {
+        issuedAt: fields.timestamp,
+        expiresAt: fields.expiresAt
+      });
+    } catch {
+      return deepFreeze({ decision: 'DENIED',
+        reason: 'Authoritative R3 approval time evidence is malformed.', authority: null });
+    }
+    if (expiry.decision !== 'ALLOWED') {
+      return deepFreeze({ decision: 'DENIED', reason: 'R3 approval authority is expired or not yet valid.', authority: null });
+    }
   }
   return deepFreeze({
     decision: 'ALLOWED', reason: 'Bound R3 human approval authority is valid.',
@@ -217,7 +239,7 @@ function computedLevel(input, mode, signals, reasons) {
   return level;
 }
 
-function evaluatePolicy(policy, level, input) {
+function evaluatePolicy(policy, level, input, temporalAuthority) {
   if (!policy || typeof policy !== 'object' || Array.isArray(policy)) {
     return { decision: 'DENIED', reason: 'Policy is missing.' };
   }
@@ -239,8 +261,9 @@ function evaluatePolicy(policy, level, input) {
       operationId: input.operationId, workspace: input.workspace,
       capabilityType: input.capabilityType, action: input.action,
       scope: input.scope, riskLevel: 'R3', policyDecision: 'APPROVAL_REQUIRED',
-      observedAt: input.observedAt
-    });
+      tenantId: input.tenantId === undefined ? null : input.tenantId,
+      projectId: input.projectId === undefined ? null : input.projectId
+    }, temporalAuthority);
     if (evaluation.decision !== 'ALLOWED') {
       return { decision: 'DENIED', underlyingDecision: 'APPROVAL_REQUIRED',
         reason: evaluation.reason, approvalAuthority: null };
@@ -252,7 +275,7 @@ function evaluatePolicy(policy, level, input) {
   return { decision: 'ALLOWED', reason: 'Explicit policy requirements are satisfied.' };
 }
 
-function classifyScope(input) {
+function classifyScope(input, temporalAuthority = {}) {
   if (!input || typeof input !== 'object' || Array.isArray(input)) {
     return denied('Classification input is missing or invalid.');
   }
@@ -282,7 +305,7 @@ function classifyScope(input) {
     return denied('Mutating operations require a clean worktree.', { level, mode, signals });
   }
 
-  const policy = evaluatePolicy(input.policy, level, input);
+  const policy = evaluatePolicy(input.policy, level, input, temporalAuthority);
   const allowed = policy.decision === 'ALLOWED';
   return {
     schema: 'sdo.risk_policy.v1',

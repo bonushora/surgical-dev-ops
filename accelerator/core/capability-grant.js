@@ -1,5 +1,6 @@
 'use strict';
 
+const crypto = require('node:crypto');
 const fs = require('fs');
 const path = require('path');
 const {
@@ -8,6 +9,7 @@ const {
 } = require('./workspace-boundary');
 const { evaluateR3ApprovalAuthority } = require('./risk-classification');
 const { validateIdentityVerificationResult } = require('../adapters/identity-verification-adapter');
+const { classifyExpiry } = require('./authoritative-clock');
 
 const ALLOWED_TYPES = new Set([
   'FILESYSTEM_READ', 'FILESYSTEM_PATCH', 'GIT_READ', 'PROCESS_VALIDATION'
@@ -71,6 +73,19 @@ function isSubset(requested, authorized) {
 
 function sha256(value) {
   return typeof value === 'string' && /^[a-f0-9]{64}$/.test(value) ? value : null;
+}
+
+function canonicalize(value) {
+  if (Array.isArray(value)) return value.map(canonicalize);
+  if (!value || typeof value !== 'object') return value;
+  return Object.fromEntries(Object.keys(value).sort().map((key) => [key, canonicalize(value[key])]));
+}
+
+function deriveCapabilityGrantFingerprint(grant) {
+  if (!grant || typeof grant !== 'object' || Array.isArray(grant)) return null;
+  const { fingerprint, ...fields } = grant;
+  return crypto.createHash('sha256')
+    .update(`sdo.capability_grant.v1\0${JSON.stringify(canonicalize(fields))}`).digest('hex');
 }
 
 function validateScope(type, scope, authorizedScope, workspace) {
@@ -171,7 +186,7 @@ function validateScope(type, scope, authorizedScope, workspace) {
   return { error: 'Capability type is denied.' };
 }
 
-function evaluateCapabilityGrant(request, authority) {
+function evaluateCapabilityGrant(request, authority, authoritativeClock = null) {
   if (!request || typeof request !== 'object' || Array.isArray(request)) {
     return denied('Capability request is missing or invalid.');
   }
@@ -212,7 +227,26 @@ function evaluateCapabilityGrant(request, authority) {
 
   const r3Patch = capabilityType === 'FILESYSTEM_PATCH' && request.riskLevel === 'R3';
   let approvalAuthority = null;
+  let authoritativeReading = null;
+  let temporalAuthority = null;
   if (r3Patch) {
+    for (const source of [request, authority]) {
+      if (['now', 'currentTime', 'validationTime', 'observedAt'].some(
+        (key) => Object.prototype.hasOwnProperty.call(source, key)
+      )) return denied('Caller-supplied current time cannot authorize a mutation grant.');
+    }
+    if (!authoritativeClock || typeof authoritativeClock.observe !== 'function') {
+      return denied('Authoritative clock is required for an R3 mutation grant.');
+    }
+    let observation;
+    try { observation = authoritativeClock.observe(); } catch {
+      return denied('Authoritative clock is unavailable for an R3 mutation grant.');
+    }
+    if (!observation || observation.decision !== 'ALLOWED') {
+      return denied('Authoritative clock anomaly denied the R3 mutation grant.');
+    }
+    authoritativeReading = observation.reading;
+    const currentTime = { reading: authoritativeReading, requireCurrent: true };
     const tenantId = request.tenantId === undefined ? null : text(request.tenantId);
     const authoritativeTenantId = authority.tenantId === undefined ? null : text(authority.tenantId);
     const projectId = request.projectId === undefined ? null : text(request.projectId);
@@ -228,14 +262,12 @@ function evaluateCapabilityGrant(request, authority) {
     }
     const requestApproval = evaluateR3ApprovalAuthority(request.approvalAuthority, {
       operationId, workspace, capabilityType, action: 'PATCH_FILE', scope: request.scope,
-      riskLevel: 'R3', policyDecision: 'APPROVAL_REQUIRED', tenantId, projectId,
-      observedAt: authority.evaluatedAt
-    });
+      riskLevel: 'R3', policyDecision: 'APPROVAL_REQUIRED', tenantId, projectId
+    }, currentTime);
     const authorityApproval = evaluateR3ApprovalAuthority(authority.approvalAuthority, {
       operationId, workspace, capabilityType, action: 'PATCH_FILE', scope: authority.scope,
-      riskLevel: 'R3', policyDecision: 'APPROVAL_REQUIRED', tenantId, projectId,
-      observedAt: authority.evaluatedAt
-    });
+      riskLevel: 'R3', policyDecision: 'APPROVAL_REQUIRED', tenantId, projectId
+    }, currentTime);
     if (requestApproval.decision !== 'ALLOWED' || authorityApproval.decision !== 'ALLOWED' ||
         requestApproval.authority.fingerprint !== authorityApproval.authority.fingerprint) {
       return denied('Valid matching R3 approval authority is required.');
@@ -243,14 +275,13 @@ function evaluateCapabilityGrant(request, authority) {
     approvalAuthority = requestApproval.authority;
     const identityExpected = {
       subjectId: approvalAuthority.approver.id, operationId, workspace, tenantId, projectId,
-      fingerprint: approvalAuthority.verifiedIdentityAssertionFingerprint,
-      observedAt: authority.evaluatedAt
+      fingerprint: approvalAuthority.verifiedIdentityAssertionFingerprint
     };
     const requestIdentity = validateIdentityVerificationResult(
-      request.identityVerification, identityExpected
+      request.identityVerification, identityExpected, currentTime
     );
     const authorityIdentity = validateIdentityVerificationResult(
-      authority.identityVerification, identityExpected
+      authority.identityVerification, identityExpected, currentTime
     );
     if (!requestIdentity || !authorityIdentity ||
         requestIdentity.evidence.fingerprint !== authorityIdentity.evidence.fingerprint) {
@@ -261,9 +292,40 @@ function evaluateCapabilityGrant(request, authority) {
   }
 
   const expiresAt = timestamp(request.expiresAt);
-  const evaluatedAt = timestamp(authority.evaluatedAt);
+  const evaluatedAt = r3Patch ? authoritativeReading.wallTime : timestamp(authority.evaluatedAt);
   if (!expiresAt || !evaluatedAt || Date.parse(expiresAt) <= Date.parse(evaluatedAt)) {
     return denied('Capability grant is expired or has invalid expiry evidence.');
+  }
+  if (r3Patch) {
+    let grantExpiry;
+    try {
+      grantExpiry = classifyExpiry(authoritativeReading, {
+        issuedAt: authoritativeReading.wallTime,
+        expiresAt
+      });
+    } catch {
+      return denied('Authoritative capability-grant validity is malformed.');
+    }
+    if (grantExpiry.decision !== 'ALLOWED') {
+      return denied('Capability grant is expired according to authoritative time.');
+    }
+    temporalAuthority = deepFreeze({
+      issuanceReading: authoritativeReading,
+      identity: {
+        issuedAt: approvalAuthority.verifiedIdentityAssertion.issuedAt,
+        expiresAt: approvalAuthority.verifiedIdentityAssertion.expiresAt,
+        fingerprint: approvalAuthority.verifiedIdentityAssertionFingerprint
+      },
+      approval: {
+        issuedAt: approvalAuthority.timestamp,
+        expiresAt: approvalAuthority.expiresAt,
+        fingerprint: approvalAuthority.fingerprint
+      },
+      grant: {
+        issuedAt: authoritativeReading.wallTime,
+        expiresAt
+      }
+    });
   }
 
   const scopeResult = validateScope(
@@ -271,13 +333,7 @@ function evaluateCapabilityGrant(request, authority) {
   );
   if (scopeResult.error) return denied(scopeResult.error);
 
-  return deepFreeze({
-    schema: 'sdo.capability_grant_evaluation.v1',
-    decision: 'ALLOWED',
-    reason: capabilityType === 'FILESYSTEM_PATCH'
-      ? 'Explicit bounded single-file patch capability granted.'
-      : 'Explicit bounded read-only capability granted.',
-    grant: {
+  const grantFields = {
       operationId,
       workspace,
       policyDecision: 'ALLOWED',
@@ -286,6 +342,7 @@ function evaluateCapabilityGrant(request, authority) {
       lifecycleState: request.lifecycleState,
       capabilityType,
       scope: scopeResult.scope,
+      issuedAt: r3Patch ? authoritativeReading.wallTime : evaluatedAt,
       expiresAt,
       idempotency: request.idempotency,
       approvalAuthorityFingerprint: approvalAuthority ? approvalAuthority.fingerprint : null,
@@ -295,9 +352,21 @@ function evaluateCapabilityGrant(request, authority) {
       tenantId: approvalAuthority ? approvalAuthority.tenantId : null,
       projectId: approvalAuthority ? approvalAuthority.projectId : null,
       identityVerificationEvidenceFingerprint: approvalAuthority
-        ? request.identityVerification.evidence.fingerprint : null
-    }
+        ? request.identityVerification.evidence.fingerprint : null,
+      temporalAuthority
+  };
+  const grant = deepFreeze({
+    ...grantFields,
+    fingerprint: deriveCapabilityGrantFingerprint(grantFields)
+  });
+  return deepFreeze({
+    schema: 'sdo.capability_grant_evaluation.v1',
+    decision: 'ALLOWED',
+    reason: capabilityType === 'FILESYSTEM_PATCH'
+      ? 'Explicit bounded single-file patch capability granted.'
+      : 'Explicit bounded read-only capability granted.',
+    grant
   });
 }
 
-module.exports = { evaluateCapabilityGrant };
+module.exports = { evaluateCapabilityGrant, deriveCapabilityGrantFingerprint };
