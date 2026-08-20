@@ -45,6 +45,22 @@ test('valid bounded Git-read grant is allowed', () => {
   ).decision, 'ALLOWED');
 });
 
+test('valid bounded process-validation grant is allowed', () => {
+  const capabilityType = 'PROCESS_VALIDATION';
+  const scope = { selectors: ['NODE_SYNTAX_CHECK'], paths: ['target.txt'] };
+  assert.equal(evaluateCapabilityGrant(
+    request({ capabilityType, scope }), authority({ capabilityType, scope })
+  ).decision, 'ALLOWED');
+});
+
+test('unknown process-validation selector is denied', () => {
+  const capabilityType = 'PROCESS_VALIDATION';
+  const scope = { selectors: ['PACKAGE_TEST'], paths: ['target.txt'] };
+  assert.equal(evaluateCapabilityGrant(
+    request({ capabilityType, scope }), authority({ capabilityType, scope })
+  ).decision, 'DENIED');
+});
+
 test('missing policy is denied', () => {
   assert.equal(evaluateCapabilityGrant(request({ policyDecision: undefined }), authority()).decision, 'DENIED');
 });

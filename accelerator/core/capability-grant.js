@@ -7,8 +7,9 @@ const {
   resolveInspectedFile
 } = require('./workspace-boundary');
 
-const ALLOWED_TYPES = new Set(['FILESYSTEM_READ', 'GIT_READ']);
+const ALLOWED_TYPES = new Set(['FILESYSTEM_READ', 'GIT_READ', 'PROCESS_VALIDATION']);
 const GIT_READ_OPERATIONS = new Set(['status', 'diff', 'show', 'rev-parse', 'ls-files']);
+const VALIDATION_SELECTORS = new Set(['NODE_SYNTAX_CHECK']);
 const RISKS = new Set(['R0', 'R1', 'R2', 'R3']);
 
 function deepFreeze(value) {
@@ -96,6 +97,30 @@ function validateScope(type, scope, authorizedScope, workspace) {
       return { error: 'Capability scope broadening is forbidden.' };
     }
     return { scope: { operations: [...operations] } };
+  }
+
+  if (type === 'PROCESS_VALIDATION') {
+    const selectors = stringList(scope.selectors);
+    const authorizedSelectors = stringList(authorizedScope.selectors);
+    const paths = stringList(scope.paths);
+    const authorizedPaths = stringList(authorizedScope.paths);
+    if (!selectors || !authorizedSelectors || !paths || !authorizedPaths) {
+      return { error: 'Process-validation scope is missing or ambiguous.' };
+    }
+    if (selectors.some((selector) => !VALIDATION_SELECTORS.has(selector)) ||
+        !isSubset(selectors, authorizedSelectors) || !isSubset(paths, authorizedPaths)) {
+      return { error: 'Capability scope broadening is forbidden.' };
+    }
+    const resolved = [];
+    try {
+      for (const target of paths) {
+        const file = resolveInspectedFile(workspace, target);
+        resolved.push({ path: target, canonicalPath: file.canonicalTarget });
+      }
+    } catch {
+      return { error: 'Validation scope is unresolved or outside the workspace.' };
+    }
+    return { scope: { selectors: [...selectors], paths: resolved } };
   }
 
   return { error: 'Capability type is denied.' };
