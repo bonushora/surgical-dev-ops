@@ -62,6 +62,10 @@ function record(overrides = {}) {
   return createOperationRecord(input(overrides)).record;
 }
 
+function patchRecord() {
+  return record({ riskLevel: 'R1', events: events('R1') });
+}
+
 function frozen(value) {
   if (!value || typeof value !== 'object' || Object.isFrozen(value)) return value;
   for (const child of Object.values(value)) frozen(child);
@@ -72,22 +76,36 @@ const GRANT = 'a'.repeat(64);
 
 function evidence(adapterType = 'FILESYSTEM_READ', overrides = {}) {
   const action = adapterType === 'GIT_READ' ? 'HEAD_COMMIT'
-    : adapterType === 'PROCESS_VALIDATION' ? 'NODE_SYNTAX_CHECK' : 'READ_FILE';
+    : adapterType === 'PROCESS_VALIDATION' ? 'NODE_SYNTAX_CHECK'
+      : adapterType === 'FILESYSTEM_PATCH' ? 'PATCH_FILE' : 'READ_FILE';
+  const beforeSha256 = 'c'.repeat(64);
+  const replacementSha256 = 'd'.repeat(64);
+  const patchTarget = { requested: 'target.js', canonical: `${WORKSPACE}/target.js` };
   const payload = adapterType === 'GIT_READ'
     ? { schema: 'sdo.git_read_result.v1', operationId: 'op-1', workspace: WORKSPACE,
         selector: action, result: 'a'.repeat(40) }
     : adapterType === 'PROCESS_VALIDATION'
       ? { schema: 'sdo.process_validation_result.v1', operationId: 'op-1', workspace: WORKSPACE,
           selector: action, validation: { status: 'PASSED', successfulCompletionEligible: true } }
+      : adapterType === 'FILESYSTEM_PATCH'
+        ? { schema: 'sdo.filesystem_patch_result.v1', operationId: 'op-1', workspace: WORKSPACE,
+            target: patchTarget, beforeSha256, afterSha256: replacementSha256,
+            outcome: 'APPLIED', recovery: 'NOT_REQUIRED' }
       : { schema: 'sdo.filesystem_read_result.v1', operationId: 'op-1', workspace: WORKSPACE,
           target: { requested: 'target.js', canonical: `${WORKSPACE}/target.js` },
           evidence: { bytes: 1, sha256: 'b'.repeat(64), content: 'x' } };
   return {
     evidenceId: `${adapterType}-1`, operationId: 'op-1', workspace: WORKSPACE,
     adapterType, action, grantFingerprint: GRANT, policyDecision: 'ALLOWED',
-    riskLevel: 'R0', lifecycleState: 'PENDING',
-    outcome: adapterType === 'PROCESS_VALIDATION' ? 'PASSED' : 'SUCCEEDED',
-    timestamp: TIME, payload: frozen(payload), ...overrides
+    riskLevel: adapterType === 'FILESYSTEM_PATCH' ? 'R1' : 'R0', lifecycleState: 'PENDING',
+    outcome: adapterType === 'PROCESS_VALIDATION' ? 'PASSED'
+      : adapterType === 'FILESYSTEM_PATCH' ? 'APPLIED' : 'SUCCEEDED',
+    timestamp: TIME, payload: frozen(payload),
+    ...(adapterType === 'FILESYSTEM_PATCH' ? {
+      target: patchTarget, beforeSha256, replacementSha256,
+      afterSha256: replacementSha256, recovery: 'NOT_REQUIRED'
+    } : {}),
+    ...overrides
   };
 }
 
@@ -292,9 +310,99 @@ test('invalid finalization fails closed', () => {
   })), /inconsistent/);
 });
 
-test('FILESYSTEM_PATCH evidence is rejected for now', () => {
-  assert.throws(() => appendAdapterEvidence(record(), evidence('FILESYSTEM_PATCH')),
-    /Unknown or forbidden/);
+test('valid FILESYSTEM_PATCH evidence appends immutably', () => {
+  const next = appendAdapterEvidence(patchRecord(), evidence('FILESYSTEM_PATCH'));
+  assert.equal(next.adapterEvidence[0].action, 'PATCH_FILE');
+  assert.ok(Object.isFrozen(next.adapterEvidence[0].target));
+  assert.ok(Object.isFrozen(next.adapterEvidence[0].payload));
+});
+
+test('filesystem-patch exact target binding is required', () => {
+  assert.throws(() => appendAdapterEvidence(patchRecord(), evidence('FILESYSTEM_PATCH', {
+    target: { requested: 'other.js', canonical: `${WORKSPACE}/other.js` }
+  })), /malformed or inconsistently bound/);
+});
+
+test('filesystem-patch BEFORE and replacement hashes are validated', () => {
+  for (const override of [{ beforeSha256: 'bad' }, { replacementSha256: 'bad' }]) {
+    assert.throws(() => appendAdapterEvidence(patchRecord(), evidence('FILESYSTEM_PATCH', override)),
+      /malformed or inconsistently bound/);
+  }
+});
+
+test('filesystem-patch AFTER hash must equal the authorized replacement on success', () => {
+  assert.throws(() => appendAdapterEvidence(patchRecord(), evidence('FILESYSTEM_PATCH', {
+    afterSha256: 'e'.repeat(64)
+  })), /AFTER or recovery/);
+});
+
+test('same filesystem-patch replacement replay is deterministic', () => {
+  const item = evidence('FILESYSTEM_PATCH');
+  const next = appendAdapterEvidence(patchRecord(), item);
+  assert.strictEqual(appendAdapterEvidence(next, item), next);
+  assert.strictEqual(appendAdapterEvidence(next, evidence('FILESYSTEM_PATCH', {
+    evidenceId: 'FILESYSTEM_PATCH-replay', timestamp: '2026-08-20T12:00:01.000Z'
+  })), next);
+});
+
+test('different filesystem-patch replacement hash is a conflicting replay', () => {
+  const next = appendAdapterEvidence(patchRecord(), evidence('FILESYSTEM_PATCH'));
+  const replacementSha256 = 'e'.repeat(64);
+  const payload = frozen({
+    ...evidence('FILESYSTEM_PATCH').payload,
+    afterSha256: replacementSha256
+  });
+  assert.throws(() => appendAdapterEvidence(next, evidence('FILESYSTEM_PATCH', {
+    evidenceId: 'FILESYSTEM_PATCH-2', replacementSha256,
+    afterSha256: replacementSha256, payload
+  })), /replacement replay/);
+});
+
+test('stale filesystem-patch BEFORE evidence fails closed', () => {
+  const next = appendAdapterEvidence(patchRecord(), evidence('FILESYSTEM_PATCH'));
+  const beforeSha256 = 'e'.repeat(64);
+  const payload = frozen({ ...evidence('FILESYSTEM_PATCH').payload, beforeSha256 });
+  assert.throws(() => appendAdapterEvidence(next, evidence('FILESYSTEM_PATCH', {
+    evidenceId: 'FILESYSTEM_PATCH-2', beforeSha256, payload
+  })), /BEFORE evidence/);
+});
+
+test('malformed filesystem-patch recovery evidence fails closed', () => {
+  assert.throws(() => appendAdapterEvidence(patchRecord(), evidence('FILESYSTEM_PATCH', {
+    recovery: 'BEST_EFFORT'
+  })), /inconsistently bound/);
+});
+
+function failedPatch(recovery) {
+  const base = evidence('FILESYSTEM_PATCH');
+  return evidence('FILESYSTEM_PATCH', {
+    outcome: 'FAILED', afterSha256: null, recovery,
+    payload: frozen({ ...base.payload, outcome: 'FAILED', recovery })
+  });
+}
+
+test('verification failure and compensating restore remain explicit failure evidence', () => {
+  const next = appendAdapterEvidence(patchRecord(), failedPatch('RESTORED'));
+  assert.equal(next.adapterEvidence[0].outcome, 'FAILED');
+  assert.equal(next.adapterEvidence[0].recovery, 'RESTORED');
+  assert.throws(() => finalizeOperationRecord(next, finalState()), /inconsistent/);
+});
+
+test('unprovable recovery remains explicit failure evidence', () => {
+  const next = appendAdapterEvidence(
+    patchRecord(), failedPatch('NOT_ATTEMPTED_UNPROVEN_OWNERSHIP')
+  );
+  assert.equal(next.adapterEvidence[0].outcome, 'FAILED');
+  assert.equal(finalizeOperationRecord(next, finalState({
+    lifecycleState: 'FAILED', outcome: 'FAILED', successfulCompletionEligible: false
+  })).finalization.outcome, 'FAILED');
+});
+
+test('filesystem-patch append after finalization is denied', () => {
+  const next = appendAdapterEvidence(patchRecord(), evidence('FILESYSTEM_PATCH'));
+  const completed = finalizeOperationRecord(next, finalState());
+  assert.throws(() => appendAdapterEvidence(completed, evidence('FILESYSTEM_PATCH')),
+    /after finalization/);
 });
 
 test('discovery and inspection cannot masquerade as controlled evidence', () => {

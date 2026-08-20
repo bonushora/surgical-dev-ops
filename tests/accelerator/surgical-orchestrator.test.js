@@ -16,7 +16,11 @@ const processValidationAdapter = require('../../accelerator/adapters/process-val
 const { evaluateCapabilityGrant } = require('../../accelerator/core/capability-grant');
 const { createOperationRecord } = require('../../accelerator/core/operation-record');
 const { createLifecycle } = require('../../accelerator/core/state-boundary');
-const { orchestrate } = require('../../accelerator/core/surgical-orchestrator');
+const {
+  orchestrate,
+  evidenceIdentity,
+  preserveControlledErrorEvidence
+} = require('../../accelerator/core/surgical-orchestrator');
 const { execute } = require('../../accelerator/core/surgical-execution');
 
 const CREATED = '2026-08-20T11:59:00.000Z';
@@ -48,6 +52,12 @@ function physical(repo) {
     commit, shortCommit: runGit(repo, ['rev-parse', '--short', 'HEAD']),
     clean: true, changedFiles: []
   };
+}
+
+function frozen(value) {
+  if (!value || typeof value !== 'object' || Object.isFrozen(value)) return value;
+  for (const child of Object.values(value)) frozen(child);
+  return Object.freeze(value);
 }
 
 function operationRecord(repo) {
@@ -300,6 +310,49 @@ test('adapter failure cannot become successful completion', (context) => withFix
   const result = orchestrate(input(repo, execution(repo, 'GIT_READ')));
   assert.equal(result.orchestration.status, 'FAILED');
   assert.equal(result.governed.lifecycle.status, 'FAILED');
+}));
+
+test('structured adapter error evidence is preserved and remains failure-only',
+  (context) => withFixture((repo) => {
+    context.mock.method(gitReadAdapter, 'readGitWithGrant', (request) => {
+      const error = new Error('verification failed');
+      error.evidence = frozen({
+        schema: 'sdo.controlled_failure.v1', operationId: request.operationId,
+        workspace: request.workspace, outcome: 'FAILED', recovery: 'RESTORED'
+      });
+      throw error;
+    });
+    const result = orchestrate(input(repo, execution(repo, 'GIT_READ')));
+    assert.equal(result.orchestration.status, 'FAILED');
+    assert.equal(result.execution.errorEvidence.outcome, 'FAILED');
+    assert.equal(result.execution.errorEvidence.payload.recovery, 'RESTORED');
+    assert.ok(Object.isFrozen(result.execution.errorEvidence));
+  }));
+
+test('mutable or unbound structured error evidence fails closed', () => withFixture((repo) => {
+  const error = Object.assign(new Error('failed'), {
+    evidence: { operationId: 'op-1', workspace: repo }
+  });
+  assert.throws(() => preserveControlledErrorEvidence(error, execution(repo, 'GIT_READ')),
+    /mutable or unbound/);
+}));
+
+test('filesystem-patch replay identity includes replacement hash', () => withFixture((repo) => {
+  const base = execution(repo, 'FILESYSTEM_READ');
+  const grantEvaluation = frozen({
+    schema: 'sdo.capability_grant_evaluation.v1', decision: 'ALLOWED',
+    grant: { scope: { target: { beforeSha256: 'a'.repeat(64) } } }
+  });
+  const patch = {
+    ...base, adapter: 'FILESYSTEM_PATCH', action: 'PATCH_FILE', grantEvaluation,
+    target: 'target.js', replacement: 'after\n'
+  };
+  const identical = { ...patch, replacement: 'after\n' };
+  const conflicting = { ...patch, replacement: 'different\n' };
+  assert.equal(evidenceIdentity(patch, 'b'.repeat(64)),
+    evidenceIdentity(identical, 'b'.repeat(64)));
+  assert.notEqual(evidenceIdentity(patch, 'b'.repeat(64)),
+    evidenceIdentity(conflicting, 'b'.repeat(64)));
 }));
 
 test('valid non-execution orchestration remains unchanged', () => withFixture((repo) => {

@@ -12,7 +12,8 @@ const ADAPTER_ACTIONS = Object.freeze({
     'REPOSITORY_ROOT', 'CURRENT_BRANCH', 'HEAD_COMMIT',
     'WORKTREE_STATUS', 'TRACKED_FILES'
   ]),
-  PROCESS_VALIDATION: new Set(['NODE_SYNTAX_CHECK'])
+  PROCESS_VALIDATION: new Set(['NODE_SYNTAX_CHECK']),
+  FILESYSTEM_PATCH: new Set(['PATCH_FILE'])
 });
 
 function deepFreeze(value) {
@@ -206,7 +207,7 @@ function requireRecord(record) {
   return record;
 }
 
-function validatePayload(item) {
+function validatePayload(record, item) {
   if (!item.payload || typeof item.payload !== 'object' ||
       Array.isArray(item.payload) || !isDeepFrozen(item.payload)) {
     throw new Error('Adapter payload must be a deeply immutable object.');
@@ -214,7 +215,8 @@ function validatePayload(item) {
   const schemas = {
     FILESYSTEM_READ: 'sdo.filesystem_read_result.v1',
     GIT_READ: 'sdo.git_read_result.v1',
-    PROCESS_VALIDATION: 'sdo.process_validation_result.v1'
+    PROCESS_VALIDATION: 'sdo.process_validation_result.v1',
+    FILESYSTEM_PATCH: 'sdo.filesystem_patch_result.v1'
   };
   if (item.payload.schema !== schemas[item.adapterType] ||
       item.payload.operationId !== item.operationId ||
@@ -228,6 +230,34 @@ function validatePayload(item) {
   }
   if (item.adapterType === 'GIT_READ' && item.payload.selector !== item.action) {
     throw new Error('Git-read payload is structurally malformed.');
+  }
+  if (item.adapterType === 'FILESYSTEM_PATCH') {
+    const sha256 = (value) => typeof value === 'string' && /^[a-f0-9]{64}$/.test(value);
+    const target = item.target;
+    const payloadTarget = item.payload.target;
+    if (!['R1', 'R2'].includes(item.riskLevel) || item.policyDecision !== 'ALLOWED' ||
+        !target || !text(target.requested) || !text(target.canonical) ||
+        !path.isAbsolute(target.canonical) ||
+        path.resolve(record.workspace, target.requested) !== target.canonical ||
+        (target.canonical !== record.workspace &&
+         !target.canonical.startsWith(`${record.workspace}${path.sep}`)) ||
+        !payloadTarget || payloadTarget.requested !== target.requested ||
+        payloadTarget.canonical !== target.canonical ||
+        !sha256(item.beforeSha256) || item.payload.beforeSha256 !== item.beforeSha256 ||
+        !sha256(item.replacementSha256) ||
+        item.payload.afterSha256 !== item.replacementSha256 ||
+        !['APPLIED', 'ALREADY_APPLIED', 'FAILED'].includes(item.outcome) ||
+        item.payload.outcome !== item.outcome || item.payload.recovery !== item.recovery) {
+      throw new Error('Filesystem-patch evidence is malformed or inconsistently bound.');
+    }
+    const successful = item.outcome === 'APPLIED' || item.outcome === 'ALREADY_APPLIED';
+    if ((successful && (item.afterSha256 !== item.replacementSha256 ||
+        item.recovery !== 'NOT_REQUIRED')) ||
+        (!successful && (item.afterSha256 !== null ||
+         !['RESTORED', 'NOT_ATTEMPTED_UNPROVEN_OWNERSHIP'].includes(item.recovery)))) {
+      throw new Error('Filesystem-patch AFTER or recovery evidence is inconsistent.');
+    }
+    return;
   }
   if (item.adapterType === 'PROCESS_VALIDATION') {
     const validation = item.payload.validation;
@@ -271,7 +301,7 @@ function normalizeAdapterEvidence(record, item, orderedAfter) {
   if (Date.parse(item.timestamp) < Date.parse(previousTimestamp)) {
     throw new Error('Adapter evidence timestamps are out of order.');
   }
-  validatePayload(item);
+  validatePayload(record, item);
   return {
     evidenceId,
     operationId: item.operationId,
@@ -284,7 +314,14 @@ function normalizeAdapterEvidence(record, item, orderedAfter) {
     lifecycleState: item.lifecycleState,
     outcome: item.outcome,
     timestamp: item.timestamp,
-    payload: item.payload
+    payload: item.payload,
+    ...(item.adapterType === 'FILESYSTEM_PATCH' ? {
+      target: { requested: item.target.requested, canonical: item.target.canonical },
+      beforeSha256: item.beforeSha256,
+      replacementSha256: item.replacementSha256,
+      afterSha256: item.afterSha256,
+      recovery: item.recovery
+    } : {})
   };
 }
 
@@ -292,6 +329,20 @@ function appendAdapterEvidence(record, item) {
   const current = requireRecord(record);
   if (current.finalization !== null) throw new Error('Evidence append after finalization is forbidden.');
   const normalized = normalizeAdapterEvidence(current, item);
+  if (normalized.adapterType === 'FILESYSTEM_PATCH') {
+    const priorPatch = current.adapterEvidence.find((entry) =>
+      entry.adapterType === 'FILESYSTEM_PATCH' &&
+      entry.operationId === normalized.operationId &&
+      entry.target.canonical === normalized.target.canonical
+    );
+    if (priorPatch && priorPatch.beforeSha256 !== normalized.beforeSha256) {
+      throw new Error('Stale or conflicting filesystem-patch BEFORE evidence.');
+    }
+    if (priorPatch && priorPatch.replacementSha256 !== normalized.replacementSha256) {
+      throw new Error('Conflicting filesystem-patch replacement replay.');
+    }
+    if (priorPatch) return current;
+  }
   const replay = current.adapterEvidence.find(
     (entry) => entry.evidenceId === normalized.evidenceId
   );
@@ -325,14 +376,14 @@ function finalizeOperationRecord(record, finalState) {
       typeof finalState.successfulCompletionEligible !== 'boolean') {
     throw new Error('Final operation state is malformed or inconsistent.');
   }
-  const failedValidation = current.adapterEvidence.some(
-    (entry) => entry.adapterType === 'PROCESS_VALIDATION' && entry.outcome === 'FAILED'
+  const failedEvidence = current.adapterEvidence.some(
+    (entry) => entry.outcome === 'FAILED'
   );
   const successful = finalState.lifecycleState === 'COMPLETED' &&
     finalState.outcome === 'SUCCESS' && finalState.successfulCompletionEligible === true;
   const failed = finalState.lifecycleState === 'FAILED' &&
     finalState.outcome === 'FAILED' && finalState.successfulCompletionEligible === false;
-  if ((!successful && !failed) || (failedValidation && successful)) {
+  if ((!successful && !failed) || (failedEvidence && successful)) {
     throw new Error('Final lifecycle/outcome is inconsistent with adapter evidence.');
   }
   return deepFreeze({

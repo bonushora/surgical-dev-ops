@@ -68,6 +68,14 @@ function fingerprint(value) {
   return crypto.createHash('sha256').update(JSON.stringify(value)).digest('hex');
 }
 
+function replacementDigest(request) {
+  if (!request || request.adapter !== 'FILESYSTEM_PATCH') return null;
+  if (!(typeof request.replacement === 'string' || Buffer.isBuffer(request.replacement))) {
+    throw new Error('Filesystem-patch replacement must be structured bytes.');
+  }
+  return crypto.createHash('sha256').update(request.replacement).digest('hex');
+}
+
 function executionDenial(reason) {
   return Object.freeze({
     schema: 'sdo.execution_denial.v1', decision: 'DENIED', reason
@@ -220,7 +228,31 @@ function evidenceIdentity(request, grantFingerprint) {
     adapter: request.adapter,
     action: request.action,
     target: request.target || null,
+    ...(request.adapter === 'FILESYSTEM_PATCH' ? {
+      beforeSha256: request.grantEvaluation && request.grantEvaluation.grant &&
+        request.grantEvaluation.grant.scope && request.grantEvaluation.grant.scope.target
+        ? request.grantEvaluation.grant.scope.target.beforeSha256 : null,
+      replacementSha256: replacementDigest(request)
+    } : {}),
     grantFingerprint
+  });
+}
+
+function preserveControlledErrorEvidence(error, request) {
+  if (!error || !error.evidence) return null;
+  const evidence = error.evidence;
+  if (!isDeepFrozen(evidence) || evidence.operationId !== request.operationId ||
+      evidence.workspace !== request.workspace) {
+    throw new Error('Controlled adapter error evidence is mutable or unbound.');
+  }
+  return deepFreeze({
+    operationId: request.operationId,
+    workspace: request.workspace,
+    adapterType: request.adapter,
+    action: request.action,
+    outcome: 'FAILED',
+    timestamp: request.observedAt,
+    payload: evidence
   });
 }
 
@@ -549,19 +581,30 @@ function orchestrate(input) {
       adapterResult = validateAdapterResult(request, invokeControlledAdapter(request));
       executionAttempted = true;
     } catch (error) {
+      let errorEvidence = null;
+      let failureReason = error.message;
+      try {
+        errorEvidence = preserveControlledErrorEvidence(error, request);
+      } catch (evidenceError) {
+        failureReason = evidenceError.message;
+      }
       const failedLifecycle = transitionLifecycle(validation.lifecycle, {
         transitionId: evidenceId,
         operationId: request.operationId,
         type: 'FAIL',
         occurredAt: request.observedAt,
-        failure: { reason: error.message, physicalEvidence: physicalEvidence(discovery) }
+        failure: { reason: failureReason, physicalEvidence: physicalEvidence(discovery) }
+      });
+      const execution = deepFreeze({
+        ...executionDenial(`Controlled adapter failed closed: ${failureReason}`),
+        errorEvidence
       });
       return {
         schema: 'sdo.orchestration.v1',
         orchestration: { status: 'FAILED', executionAttempted: true, executionAllowed: true },
         repository: discovery.repository, worktree: discovery.worktree,
         pipeline: { preAuthorizationPreflight, discovery, task, inspection, classification, changePlan },
-        execution: executionDenial(`Controlled adapter failed closed: ${error.message}`),
+        execution,
         governed: { operationRecord: validation.operationRecord, lifecycle: failedLifecycle },
         nextStep: 'Inspect controlled adapter failure evidence; successful completion is forbidden.'
       };
@@ -726,5 +769,7 @@ module.exports = {
   orchestrate,
   validateInput,
   validateControlledRequest,
-  rejectUnsafeRequestShape
+  rejectUnsafeRequestShape,
+  evidenceIdentity,
+  preserveControlledErrorEvidence
 };
