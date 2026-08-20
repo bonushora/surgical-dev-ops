@@ -123,12 +123,29 @@ function atomicReplace(target, content, mode) {
   }
 }
 
+function transactionEvidence(context) {
+  const state = context && context.current();
+  if (!state || !Object.isFrozen(state.transaction) || !state.journal ||
+      state.transaction.transactionId !== state.journal.identity.transactionId ||
+      state.transaction.stage !== state.journal.transaction.stage) {
+    throw new Error('Mutation transaction/journal context is malformed or inconsistent.');
+  }
+  return deepFreeze({
+    transactionId: state.transaction.transactionId,
+    journalId: state.journal.journalId,
+    stage: state.transaction.stage,
+    lockId: state.transaction.lock && state.transaction.lock.lockId,
+    classification: state.transaction.stage === 'RECOVERY_REQUIRED'
+      ? 'RECOVERY_REQUIRED' : 'IN_PROGRESS'
+  });
+}
+
 function evidence({ operationId, workspace, requested, canonical, beforeHash, afterHash,
-  outcome, recovery, observedAt, temporalAuthority }) {
+  outcome, recovery, observedAt, temporalAuthority, transaction }) {
   return deepFreeze({
     schema: 'sdo.filesystem_patch_result.v1', operationId, workspace,
     target: { requested, canonical }, beforeSha256: beforeHash, afterSha256: afterHash,
-    outcome, recovery, observedAt, temporalAuthority
+    outcome, recovery, observedAt, temporalAuthority, transaction
   });
 }
 
@@ -149,7 +166,7 @@ function observeAuthority(clock, grant, previousReading = null) {
   }
 }
 
-function denyBeforeCommit(context, temporalAuthority, reason) {
+function denyBeforeCommit(context, temporalAuthority, reason, transactionContext) {
   const error = new Error(reason);
   if (!temporalAuthority || !temporalAuthority.reading) throw error;
   const reading = temporalAuthority && temporalAuthority.reading;
@@ -162,7 +179,8 @@ function denyBeforeCommit(context, temporalAuthority, reason) {
       physicalCommit: 'NOT_STARTED',
       decision: 'DENIED',
       evaluation: temporalAuthority
-    })
+    }),
+    transaction: transactionEvidence(transactionContext)
   });
   throw error;
 }
@@ -177,6 +195,12 @@ function patchFileWithGrant({
   if (canonicalWorkspace !== workspace || canonicalWorkspace !== grant.workspace) {
     throw new Error('Capability workspace mismatch.');
   }
+  const transactionContext = temporalRuntime.mutationTransaction;
+  const initialTransaction = transactionContext && transactionContext.current();
+  if (!initialTransaction || initialTransaction.transaction.stage !== 'LOCKED' ||
+      !initialTransaction.transaction.lock) {
+    throw new Error('Exact-target mutation lock and journaled LOCKED transaction are required.');
+  }
   const entryAuthority = observeAuthority(
     temporalRuntime.authoritativeClock, grant, temporalRuntime.previousReading || null
   );
@@ -185,7 +209,7 @@ function patchFileWithGrant({
       requested: target, canonical: grant.scope.target.canonicalPath,
       beforeHash: grant.scope.target.beforeSha256,
       observedAt: entryAuthority && entryAuthority.reading.wallTime }, entryAuthority,
-    'Mutation authority is invalid before preparation.');
+    'Mutation authority is invalid before preparation.', transactionContext);
   }
   const requested = requireText(target, 'target');
   if (Array.isArray(replacement) || !(typeof replacement === 'string' || Buffer.isBuffer(replacement))) {
@@ -221,15 +245,7 @@ function patchFileWithGrant({
   const afterHash = replacementHash;
   if (beforeHash !== authorized.beforeSha256) {
     if (beforeHash === afterHash) {
-      return evidence({ operationId: normalizedOperationId, workspace: canonicalWorkspace,
-        requested, canonical: resolved.canonicalTarget, beforeHash: authorized.beforeSha256,
-        afterHash, outcome: 'ALREADY_APPLIED', recovery: 'NOT_REQUIRED',
-        observedAt: entryAuthority.reading.wallTime,
-        temporalAuthority: deepFreeze({
-          schema: 'sdo.mutation_commit_authority.v1',
-          commitBoundary: 'ALREADY_PROVEN_APPLIED', physicalCommit: 'ALREADY_APPLIED',
-          decision: 'ALLOWED', evaluation: entryAuthority
-        }) });
+      throw new Error('ALREADY_APPLIED requires a previously FINALIZED_SUCCESS journal.');
     }
     throw new Error('BEFORE hash mismatch; target is stale or conflicting.');
   }
@@ -238,16 +254,25 @@ function patchFileWithGrant({
   if (!sameIdentity(before.stat, checked.stat) || hash(checked.content) !== beforeHash) {
     throw new Error('Target changed concurrently before replacement.');
   }
+  transactionContext.advance('BEFORE_VERIFIED');
 
-  const commitAuthority = observeAuthority(
+  const preparationAuthority = observeAuthority(
     temporalRuntime.authoritativeClock, grant, entryAuthority.reading
   );
   const commitContext = { operationId: normalizedOperationId, workspace: canonicalWorkspace,
     requested, canonical: resolved.canonicalTarget, beforeHash,
-    observedAt: commitAuthority && commitAuthority.reading.wallTime };
+    observedAt: preparationAuthority && preparationAuthority.reading.wallTime };
+  if (!preparationAuthority || preparationAuthority.decision !== 'ALLOWED') {
+    denyBeforeCommit(commitContext, preparationAuthority,
+      'Mutation authority expired or became anomalous before physical commit.', transactionContext);
+  }
+  transactionContext.advance('MUTATION_STARTED');
+  const commitAuthority = observeAuthority(
+    temporalRuntime.authoritativeClock, grant, preparationAuthority.reading
+  );
   if (!commitAuthority || commitAuthority.decision !== 'ALLOWED') {
     denyBeforeCommit(commitContext, commitAuthority,
-      'Mutation authority expired or became anomalous before physical commit.');
+      'Mutation authority expired or became anomalous at physical commit.', transactionContext);
   }
   const commitEvidence = deepFreeze({
     schema: 'sdo.mutation_commit_authority.v1',
@@ -256,17 +281,28 @@ function patchFileWithGrant({
   });
   atomicReplace(resolved.canonicalTarget, replacementBytes, Number(before.stat.mode));
   try {
-    const afterResolved = resolveInspectedFile(canonicalWorkspace, requested);
-    const after = readRegularNoFollow(afterResolved.canonicalTarget);
+    transactionContext.advance('PHYSICAL_APPLIED');
+  } catch (stageError) {
+    try { transactionContext.requireRecovery(); } catch {}
+    const error = new Error(`Physical mutation applied but PHYSICAL_APPLIED journal failed: ${stageError.message}`);
+    error.evidence = evidence({ operationId: normalizedOperationId, workspace: canonicalWorkspace,
+      requested, canonical: resolved.canonicalTarget, beforeHash, afterHash,
+      outcome: 'FAILED', recovery: 'RECOVERY_REQUIRED_JOURNAL_AMBIGUITY',
+      observedAt: commitAuthority.reading.wallTime, temporalAuthority: commitEvidence,
+      transaction: transactionEvidence(transactionContext) });
+    throw error;
+  }
+  let afterResolved;
+  let after;
+  try {
+    afterResolved = resolveInspectedFile(canonicalWorkspace, requested);
+    after = readRegularNoFollow(afterResolved.canonicalTarget);
     if (afterResolved.canonicalTarget !== resolved.canonicalTarget ||
         hash(after.content) !== afterHash || !after.content.equals(replacementBytes)) {
       throw new Error('AFTER verification failed.');
     }
-    return evidence({ operationId: normalizedOperationId, workspace: canonicalWorkspace,
-      requested, canonical: resolved.canonicalTarget, beforeHash, afterHash,
-      outcome: 'APPLIED', recovery: 'NOT_REQUIRED',
-      observedAt: commitAuthority.reading.wallTime, temporalAuthority: commitEvidence });
   } catch (verificationError) {
+    try { transactionContext.requireRecovery(); } catch {}
     let owned = false;
     try {
       const current = readRegularNoFollow(resolved.canonicalTarget);
@@ -277,11 +313,13 @@ function patchFileWithGrant({
         atomicReplace(resolved.canonicalTarget, before.content, Number(before.stat.mode));
         const restored = readRegularNoFollow(resolved.canonicalTarget);
         if (hash(restored.content) !== beforeHash) throw new Error('Restore verification failed.');
+        try { transactionContext.advance('RECOVERED'); } catch {}
         const error = new Error('AFTER verification failed; original content was restored.');
         error.evidence = evidence({ operationId: normalizedOperationId, workspace: canonicalWorkspace,
           requested, canonical: resolved.canonicalTarget, beforeHash, afterHash,
           outcome: 'FAILED', recovery: 'RESTORED',
-          observedAt: commitAuthority.reading.wallTime, temporalAuthority: commitEvidence });
+          observedAt: commitAuthority.reading.wallTime, temporalAuthority: commitEvidence,
+          transaction: transactionEvidence(transactionContext) });
         throw error;
       } catch (restoreError) {
         if (restoreError.evidence) throw restoreError;
@@ -291,9 +329,45 @@ function patchFileWithGrant({
     error.evidence = evidence({ operationId: normalizedOperationId, workspace: canonicalWorkspace,
       requested, canonical: resolved.canonicalTarget, beforeHash, afterHash,
       outcome: 'FAILED', recovery: 'NOT_ATTEMPTED_UNPROVEN_OWNERSHIP',
-      observedAt: commitAuthority.reading.wallTime, temporalAuthority: commitEvidence });
+      observedAt: commitAuthority.reading.wallTime, temporalAuthority: commitEvidence,
+      transaction: transactionEvidence(transactionContext) });
     throw error;
   }
+  try {
+    transactionContext.advance('AFTER_VERIFIED');
+  } catch (stageError) {
+    try { transactionContext.requireRecovery(); } catch {}
+    const error = new Error(`AFTER verified but journal append failed: ${stageError.message}`);
+    error.evidence = evidence({ operationId: normalizedOperationId, workspace: canonicalWorkspace,
+      requested, canonical: resolved.canonicalTarget, beforeHash, afterHash,
+      outcome: 'FAILED', recovery: 'RECOVERY_REQUIRED_JOURNAL_AMBIGUITY',
+      observedAt: commitAuthority.reading.wallTime, temporalAuthority: commitEvidence,
+      transaction: transactionEvidence(transactionContext) });
+    throw error;
+  }
+  return evidence({ operationId: normalizedOperationId, workspace: canonicalWorkspace,
+    requested, canonical: resolved.canonicalTarget, beforeHash, afterHash,
+    outcome: 'APPLIED', recovery: 'NOT_REQUIRED',
+    observedAt: commitAuthority.reading.wallTime, temporalAuthority: commitEvidence,
+    transaction: transactionEvidence(transactionContext) });
 }
 
-module.exports = { patchFileWithGrant };
+function verifyAppliedFile({ workspace, target, expectedSha256 }) {
+  const canonicalWorkspace = canonicalizeAuthorizedRoot(workspace);
+  if (canonicalWorkspace !== workspace || !/^[a-f0-9]{64}$/.test(expectedSha256 || '')) {
+    throw new Error('Completed mutation verification input is malformed.');
+  }
+  const resolved = resolveInspectedFile(canonicalWorkspace, requireText(target, 'target'));
+  const current = readRegularNoFollow(resolved.canonicalTarget);
+  const currentSha256 = hash(current.content);
+  return deepFreeze({
+    schema: 'sdo.filesystem_patch_replay_verification.v1',
+    workspace: canonicalWorkspace,
+    target: resolved.canonicalTarget,
+    expectedSha256,
+    currentSha256,
+    decision: currentSha256 === expectedSha256 ? 'PROVEN_APPLIED' : 'CONFLICT'
+  });
+}
+
+module.exports = { patchFileWithGrant, verifyAppliedFile };

@@ -306,12 +306,14 @@ if (process.argv[2] === '--lock-child') {
     assert.deepEqual(fs.readFileSync(target), before);
   });
 
-  test('lock foundation remains disconnected from mutation dispatch', () => {
+  test('orchestrator integrates lock while patch adapter receives only bound context', () => {
     const patch = fs.readFileSync(path.join(__dirname,
       '../../accelerator/adapters/filesystem-patch-adapter.js'), 'utf8');
     const orchestrator = fs.readFileSync(path.join(__dirname,
       '../../accelerator/core/surgical-orchestrator.js'), 'utf8');
     assert.doesNotMatch(patch, /mutation-lock-adapter/);
-    assert.doesNotMatch(orchestrator, /mutation-lock-adapter/);
+    assert.match(orchestrator, /mutation-lock-adapter/);
+    assert.match(orchestrator, /acquireMutationLock/);
+    assert.match(orchestrator, /releaseFinalized/);
   });
 }

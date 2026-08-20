@@ -299,6 +299,7 @@ function validatePayload(record, item) {
       record.scope.target.path === target.requested &&
       record.scope.target.beforeSha256 === item.beforeSha256;
     const temporal = item.payload.temporalAuthority;
+    const transaction = item.payload.transaction;
     const timeEvaluation = temporal && temporal.evaluation;
     let temporalIntegrity = false;
     if (timeEvaluation) {
@@ -317,6 +318,15 @@ function validatePayload(record, item) {
       timeEvaluation.bounds.approval.fingerprint === record.approvalAuthority.fingerprint &&
       timeEvaluation.bounds.grant.fingerprint === item.grantFingerprint &&
       item.payload.observedAt === timeEvaluation.reading.wallTime;
+    const transactionBound = transaction &&
+      /^[a-f0-9]{64}$/.test(transaction.transactionId || '') &&
+      /^[a-f0-9]{64}$/.test(transaction.journalId || '') &&
+      /^[a-f0-9]{64}$/.test(transaction.lockId || '') &&
+      transaction.transactionId === item.transactionId &&
+      transaction.journalId === item.journalId &&
+      ['LOCKED', 'BEFORE_VERIFIED', 'MUTATION_STARTED', 'PHYSICAL_APPLIED',
+        'AFTER_VERIFIED', 'RECOVERY_REQUIRED', 'RECOVERED'].includes(transaction.stage) &&
+      ['IN_PROGRESS', 'RECOVERY_REQUIRED'].includes(transaction.classification);
     if ((!['R1', 'R2'].includes(item.riskLevel) && !r3Authorized) ||
         item.policyDecision !== 'ALLOWED' ||
         !target || !text(target.requested) || !text(target.canonical) ||
@@ -331,7 +341,7 @@ function validatePayload(record, item) {
         (item.outcome !== 'FAILED' && item.payload.afterSha256 !== item.replacementSha256) ||
         !['APPLIED', 'ALREADY_APPLIED', 'FAILED'].includes(item.outcome) ||
         item.payload.outcome !== item.outcome || item.payload.recovery !== item.recovery ||
-        (r3Authorized && !temporalBound)) {
+        (r3Authorized && (!temporalBound || !transactionBound))) {
       throw new Error('Filesystem-patch evidence is malformed or inconsistently bound.');
     }
     const successful = item.outcome === 'APPLIED' || item.outcome === 'ALREADY_APPLIED';
@@ -339,7 +349,8 @@ function validatePayload(record, item) {
         item.recovery !== 'NOT_REQUIRED')) ||
         (!successful && (item.afterSha256 !== null ||
          !['RESTORED', 'NOT_ATTEMPTED_UNPROVEN_OWNERSHIP',
-           'NOT_STARTED_AUTHORITY_DENIED'].includes(item.recovery)))) {
+           'NOT_STARTED_AUTHORITY_DENIED',
+           'RECOVERY_REQUIRED_JOURNAL_AMBIGUITY'].includes(item.recovery)))) {
       throw new Error('Filesystem-patch AFTER or recovery evidence is inconsistent.');
     }
     if (r3Authorized && ((successful && temporal.decision !== 'ALLOWED') ||
@@ -416,7 +427,9 @@ function normalizeAdapterEvidence(record, item, orderedAfter) {
       approvalAuthorityFingerprint: item.approvalAuthorityFingerprint || null,
       verifiedIdentityAssertionFingerprint: item.verifiedIdentityAssertionFingerprint || null,
       identityVerificationEvidenceFingerprint:
-        item.identityVerificationEvidenceFingerprint || null
+        item.identityVerificationEvidenceFingerprint || null,
+      transactionId: item.transactionId || null,
+      journalId: item.journalId || null
     } : {})
   };
 }
@@ -482,6 +495,31 @@ function finalizeOperationRecord(record, finalState) {
   if ((!successful && !failed) || (failedEvidence && successful)) {
     throw new Error('Final lifecycle/outcome is inconsistent with adapter evidence.');
   }
+  const patchEvidence = current.adapterEvidence.find(
+    (entry) => entry.adapterType === 'FILESYSTEM_PATCH' && entry.riskLevel === 'R3'
+  );
+  let mutationTransaction = null;
+  if (patchEvidence) {
+    const candidate = finalState.mutationTransaction;
+    if (!candidate || candidate.transactionId !== patchEvidence.transactionId ||
+        candidate.journalId !== patchEvidence.journalId ||
+        !['RELEASED', 'RETAINED'].includes(candidate.lockDisposition) ||
+        (successful && candidate.stage !== 'FINALIZED_SUCCESS') ||
+        (failed && !['FINALIZED_FAILED', 'RECOVERY_UNRESOLVED',
+          'RECOVERY_REQUIRED', 'RECOVERED', 'MUTATION_STARTED',
+          'PHYSICAL_APPLIED', 'AFTER_VERIFIED', 'EVIDENCE_RECORDED',
+          'FINALIZED_SUCCESS'].includes(candidate.stage)) ||
+        (failed && !['FINALIZED_FAILED', 'RECOVERY_UNRESOLVED'].includes(candidate.stage) &&
+          candidate.lockDisposition !== 'RETAINED')) {
+      throw new Error('Final mutation transaction/journal state is malformed or inconsistent.');
+    }
+    mutationTransaction = {
+      transactionId: candidate.transactionId,
+      journalId: candidate.journalId,
+      stage: candidate.stage,
+      lockDisposition: candidate.lockDisposition
+    };
+  }
   return deepFreeze({
     ...current,
     version: current.version + 1,
@@ -491,7 +529,8 @@ function finalizeOperationRecord(record, finalState) {
       lifecycleState: finalState.lifecycleState,
       outcome: finalState.outcome,
       successfulCompletionEligible: finalState.successfulCompletionEligible,
-      timestamp: finalState.timestamp
+      timestamp: finalState.timestamp,
+      mutationTransaction
     }
   });
 }

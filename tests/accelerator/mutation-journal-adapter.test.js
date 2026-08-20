@@ -119,6 +119,10 @@ function childRequest(payload) {
 
 function waitExit(child) {
   return new Promise((resolve, reject) => {
+    if (child.exitCode !== null) {
+      child.exitCode === 0 ? resolve() : reject(new Error(`Journal child exited ${child.exitCode}.`));
+      return;
+    }
     const timer = setTimeout(() => {
       child.kill();
       reject(new Error('Bounded journal child exit timed out.'));
@@ -403,7 +407,7 @@ if (process.argv[2] === '--journal-child') {
     assert.throws(() => adapter.append(conflicting), /Conflicting/);
   });
 
-  test('RECOVERED is journal-terminal for ordinary appends', (t) => {
+  test('RECOVERED proceeds through evidence to failed finalization', (t) => {
     const setup = fixture(t);
     const initial = prepared(setup);
     const adapter = createMutationJournalAdapter({ storageRoot: setup.storageRoot });
@@ -414,8 +418,10 @@ if (process.argv[2] === '--journal-child') {
       transaction = transitionMutationTransaction(transaction, stage);
       adapter.append(transaction);
     }
-    const later = transitionMutationTransaction(transaction, 'EVIDENCE_RECORDED');
-    assert.throws(() => adapter.append(later), /Terminal/);
+    transaction = transitionMutationTransaction(transaction, 'EVIDENCE_RECORDED');
+    adapter.append(transaction);
+    transaction = transitionMutationTransaction(transaction, 'FINALIZED_FAILED');
+    assert.equal(adapter.append(transaction).transaction.stage, 'FINALIZED_FAILED');
   });
 
   test('unexpected or partial pending entries make journal ambiguous', (t) => {
@@ -434,7 +440,7 @@ if (process.argv[2] === '--journal-child') {
     assert.ok(Object.isFrozen(adapter));
   });
 
-  test('journal remains disconnected and defers fsync, clock and recovery integration', () => {
+  test('journal port is integrated while fsync and restart recovery remain deferred', () => {
     const source = fs.readFileSync(path.join(__dirname,
       '../../accelerator/adapters/mutation-journal-adapter.js'), 'utf8');
     const orchestrator = fs.readFileSync(path.join(__dirname,
@@ -444,6 +450,7 @@ if (process.argv[2] === '--journal-child') {
     const lock = fs.readFileSync(path.join(__dirname,
       '../../accelerator/adapters/mutation-lock-adapter.js'), 'utf8');
     assert.doesNotMatch(source, /fsyncSync|fdatasyncSync|Date\.now|new Date/);
+    assert.match(orchestrator, /mutationJournalAdapter/);
     assert.doesNotMatch(orchestrator, /mutation-journal-adapter/);
     assert.doesNotMatch(patch, /mutation-journal-adapter/);
     assert.doesNotMatch(lock, /mutation-journal-adapter/);

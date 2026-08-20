@@ -15,6 +15,8 @@ const gitReadAdapter = require('../../accelerator/adapters/git-read-adapter');
 const processValidationAdapter = require('../../accelerator/adapters/process-validation-adapter');
 const identityVerificationAdapter = require('../../accelerator/adapters/identity-verification-adapter');
 const filesystemPatchAdapter = require('../../accelerator/adapters/filesystem-patch-adapter');
+const { createMutationJournalAdapter } =
+  require('../../accelerator/adapters/mutation-journal-adapter');
 const { evaluateCapabilityGrant } = require('../../accelerator/core/capability-grant');
 const { evaluateR3ApprovalAuthority } = require('../../accelerator/core/risk-classification');
 const { evaluateVerifiedHumanIdentityAssertion } = require('../../accelerator/core/human-identity-assertion');
@@ -32,6 +34,10 @@ const { execute } = require('../../accelerator/core/surgical-execution');
 const CREATED = '2026-08-20T11:59:00.000Z';
 const NOW = '2026-08-20T12:00:00.000Z';
 const EXPIRY = '2026-08-20T13:00:00.000Z';
+const journalRoots = [];
+test.after(() => {
+  for (const root of journalRoots) fs.rmSync(root, { recursive: true, force: true });
+});
 
 function clockAt(start = NOW, stepMilliseconds = 1) {
   let count = 0;
@@ -155,11 +161,28 @@ function r3Execution(repo, overrides = {}) {
 }
 
 function r3Runtime(request, overrides = {}) {
+  const journalRoot = fs.mkdtempSync(path.join(os.tmpdir(), 'sdo-orchestrator-journal-'));
+  journalRoots.push(journalRoot);
   return { trustedIdentityIssuers: ['issuer:test'], identityAudience: 'surgical-devops',
     authoritativeClock: clockAt(),
+    mutationJournalAdapter: createMutationJournalAdapter({ storageRoot: journalRoot }),
     identityVerifierPort: { verify() { return { status: 'VERIFIED',
       assertion: request.operationRecord.verifiedIdentityAssertion, verifierId: 'test-port' }; } },
     ...overrides };
+}
+
+function failingJournal(base, stage) {
+  return {
+    create(transaction) {
+      if (stage === 'PREPARED') throw new Error('Injected PREPARED journal failure.');
+      return base.create(transaction);
+    },
+    append(transaction) {
+      if (transaction.stage === stage) throw new Error(`Injected ${stage} journal failure.`);
+      return base.append(transaction);
+    },
+    reopen(transaction) { return base.reopen(transaction); }
+  };
 }
 
 function commitTemporal(request, decision = 'ALLOWED') {
@@ -354,6 +377,60 @@ test('valid verified R3 authority physically applies one exact FILESYSTEM_PATCH'
     assert.equal(fs.readFileSync(path.join(repo, 'target.js'), 'utf8'), 'const value = 2;\n');
     assert.equal(request.grantEvaluation.grant.approvalAuthorityFingerprint,
       request.operationRecord.approvalAuthority.fingerprint);
+    assert.equal(result.governed.operationRecord.finalization.mutationTransaction.stage,
+      'FINALIZED_SUCCESS');
+    assert.equal(result.governed.operationRecord.finalization.mutationTransaction.lockDisposition,
+      'RELEASED');
+  }));
+
+test('journal failure matrix is zero-mutation before commit and recovery-required after commit', () => {
+  const preCommit = ['PREPARED', 'LOCKED', 'BEFORE_VERIFIED', 'MUTATION_STARTED'];
+  const postCommit = ['PHYSICAL_APPLIED', 'AFTER_VERIFIED',
+    'EVIDENCE_RECORDED', 'FINALIZED_SUCCESS'];
+  for (const stage of [...preCommit, ...postCommit]) {
+    withFixture((repo) => {
+      const request = r3Execution(repo);
+      const baseRuntime = r3Runtime(request);
+      const runtime = { ...baseRuntime,
+        mutationJournalAdapter: failingJournal(baseRuntime.mutationJournalAdapter, stage) };
+      const result = orchestrate(input(repo, request, { risk: 'ALTO', policy: {
+        decision: 'APPROVAL_REQUIRED',
+        approvalAuthority: request.operationRecord.approvalAuthority
+      } }), runtime);
+      assert.equal(result.orchestration.status, 'FAILED', stage);
+      const content = fs.readFileSync(path.join(repo, 'target.js'), 'utf8');
+      assert.equal(content, preCommit.includes(stage)
+        ? 'const value = 1;\n' : 'const value = 2;\n', stage);
+      if (postCommit.includes(stage)) {
+        assert.notEqual(result.governed.operationRecord.finalization &&
+          result.governed.operationRecord.finalization.outcome, 'SUCCESS', stage);
+        assert.equal(result.governed.operationRecord.finalization.mutationTransaction.lockDisposition,
+          'RETAINED', stage);
+        assert.equal(result.governed.operationRecord.finalization.mutationTransaction.stage,
+          'RECOVERY_REQUIRED', stage);
+      }
+    });
+  }
+});
+
+test('FINALIZED_FAILED journal failure retains the exact-target lock', (context) =>
+  withFixture((repo) => {
+    const request = r3Execution(repo);
+    const baseRuntime = r3Runtime(request);
+    context.mock.method(filesystemPatchAdapter, 'patchFileWithGrant', () => {
+      throw new Error('Injected pre-commit adapter denial.');
+    });
+    const result = orchestrate(input(repo, request, { risk: 'ALTO', policy: {
+      decision: 'APPROVAL_REQUIRED', approvalAuthority: request.operationRecord.approvalAuthority
+    } }), { ...baseRuntime,
+      mutationJournalAdapter: failingJournal(baseRuntime.mutationJournalAdapter, 'FINALIZED_FAILED') });
+    assert.equal(result.orchestration.status, 'FAILED');
+    assert.equal(fs.readFileSync(path.join(repo, 'target.js'), 'utf8'), 'const value = 1;\n');
+    const second = orchestrate(input(repo, request, { risk: 'ALTO', policy: {
+      decision: 'APPROVAL_REQUIRED', approvalAuthority: request.operationRecord.approvalAuthority
+    } }), baseRuntime);
+    assert.equal(second.orchestration.status, 'FAILED');
+    assert.match(second.execution.reason, /journal|contended/i);
   }));
 
 test('expiry at final pre-commit recheck preserves zero physical mutation', () =>
@@ -384,14 +461,15 @@ test('identical completed patch replay performs zero duplicate mutation', (conte
     const governedInput = input(repo, request, { risk: 'ALTO', policy: {
       decision: 'APPROVAL_REQUIRED', approvalAuthority: request.operationRecord.approvalAuthority
     } });
-    const first = orchestrate(governedInput, r3Runtime(request));
+    const runtime = r3Runtime(request);
+    const first = orchestrate(governedInput, runtime);
     let calls = 0;
     context.mock.method(filesystemPatchAdapter, 'patchFileWithGrant', () => { calls += 1; });
     const replayRequest = { ...request, operationRecord: first.governed.operationRecord,
       lifecycle: first.governed.lifecycle };
     const replay = orchestrate(input(repo, replayRequest, { risk: 'ALTO', policy: {
       decision: 'APPROVAL_REQUIRED', approvalAuthority: request.operationRecord.approvalAuthority
-    } }), r3Runtime(replayRequest));
+    } }), runtime);
     assert.equal(replay.orchestration.status, 'COMPLETED');
     assert.equal(replay.orchestration.executionAttempted, false);
     assert.equal(replay.governed.replay, true);
@@ -473,11 +551,17 @@ test('patch identity authority grant scope and lifecycle mismatches dispatch zer
     assert.equal(calls, 0);
   }));
 
-test('patch recovery evidence finalizes only as FAILED', (context) =>
-  withFixture((repo) => {
-    for (const recovery of ['RESTORED', 'NOT_ATTEMPTED_UNPROVEN_OWNERSHIP']) {
+test('patch recovery evidence finalizes only as FAILED', (context) => {
+  for (const recovery of ['RESTORED', 'NOT_ATTEMPTED_UNPROVEN_OWNERSHIP']) {
+    withFixture((repo) => {
       const request = r3Execution(repo);
-      context.mock.method(filesystemPatchAdapter, 'patchFileWithGrant', () => {
+      context.mock.method(filesystemPatchAdapter, 'patchFileWithGrant', (_input, temporal) => {
+        temporal.mutationTransaction.advance('BEFORE_VERIFIED');
+        temporal.mutationTransaction.advance('MUTATION_STARTED');
+        temporal.mutationTransaction.advance('PHYSICAL_APPLIED');
+        temporal.mutationTransaction.requireRecovery();
+        if (recovery === 'RESTORED') temporal.mutationTransaction.advance('RECOVERED');
+        const state = temporal.mutationTransaction.current();
         const error = new Error('AFTER verification failed');
         error.evidence = frozen({ schema: 'sdo.filesystem_patch_result.v1',
           operationId: 'op-1', workspace: repo,
@@ -485,7 +569,14 @@ test('patch recovery evidence finalizes only as FAILED', (context) =>
           beforeSha256: request.grantEvaluation.grant.scope.target.beforeSha256,
           afterSha256: request.grantEvaluation.grant.scope.target.replacementSha256,
           outcome: 'FAILED', recovery, observedAt: NOW,
-          temporalAuthority: commitTemporal(request) });
+          temporalAuthority: commitTemporal(request), transaction: {
+            transactionId: state.transaction.transactionId,
+            journalId: state.journal.journalId,
+            stage: state.transaction.stage,
+            lockId: state.transaction.lock.lockId,
+            classification: state.transaction.stage === 'RECOVERY_REQUIRED'
+              ? 'RECOVERY_REQUIRED' : 'IN_PROGRESS'
+          } });
         throw error;
       });
       const result = orchestrate(input(repo, request, { risk: 'ALTO', policy: {
@@ -493,10 +584,15 @@ test('patch recovery evidence finalizes only as FAILED', (context) =>
       } }), r3Runtime(request));
       assert.equal(result.orchestration.status, 'FAILED');
       assert.equal(result.governed.lifecycle.status, 'FAILED');
-      assert.equal(result.governed.operationRecord.finalization.successfulCompletionEligible, false);
+      assert.equal(result.governed.operationRecord.finalization &&
+        result.governed.operationRecord.finalization.successfulCompletionEligible, false,
+      JSON.stringify(result.execution));
+      assert.equal(result.governed.operationRecord.finalization.mutationTransaction.lockDisposition,
+        recovery === 'RESTORED' ? 'RELEASED' : 'RETAINED');
       context.mock.restoreAll();
-    }
-  }));
+    });
+  }
+});
 
 test('boolean, missing or invalid R3 approval cannot authorize or self-approve', (context) =>
   withFixture((repo) => {

@@ -38,6 +38,11 @@ const filesystemPatchAdapter = require('../adapters/filesystem-patch-adapter');
 const identityVerificationAdapter = require('../adapters/identity-verification-adapter');
 const { deriveCapabilityGrantFingerprint } = require('./capability-grant');
 const { classifyMutationAuthority } = require('./authoritative-clock');
+const {
+  createMutationTransaction,
+  transitionMutationTransaction
+} = require('./mutation-transaction');
+const mutationLockAdapter = require('../adapters/mutation-lock-adapter');
 
 const CONTROLLED_ACTIONS = Object.freeze({
   FILESYSTEM_READ: Object.freeze({
@@ -340,6 +345,104 @@ function evidenceIdentity(request, grantFingerprint) {
   });
 }
 
+function createMutationCoordinator(request, validation, runtime, idempotencyKey) {
+  const journalPort = runtime.mutationJournalAdapter;
+  const lockPort = runtime.mutationLockAdapter || mutationLockAdapter;
+  if (!journalPort || typeof journalPort.create !== 'function' ||
+      typeof journalPort.append !== 'function' || typeof journalPort.reopen !== 'function') {
+    throw new Error('Trusted mutation journal adapter is required.');
+  }
+  if (!lockPort || typeof lockPort.acquireMutationLock !== 'function' ||
+      typeof lockPort.releaseMutationLock !== 'function') {
+    throw new Error('Exact-target mutation lock adapter is required.');
+  }
+  const grant = request.grantEvaluation.grant;
+  let transaction = createMutationTransaction({
+    operationId: request.operationId,
+    workspace: request.workspace,
+    target: grant.scope.target.canonicalPath,
+    beforeSha256: grant.scope.target.beforeSha256,
+    replacementSha256: grant.scope.target.replacementSha256,
+    grantFingerprint: validation.grantFingerprint,
+    approvalAuthorityFingerprint: grant.approvalAuthorityFingerprint,
+    verifiedIdentityAssertionFingerprint: grant.verifiedIdentityAssertionFingerprint,
+    idempotencyKey
+  });
+  let journal;
+  try {
+    journal = journalPort.reopen(transaction);
+    if (journal.transaction.stage !== 'PREPARED') {
+      throw new Error(`Existing mutation journal is ${journal.transaction.stage}; recovery or replay proof is required.`);
+    }
+  } catch (error) {
+    if (!/does not exist/.test(error.message)) throw error;
+    journal = journalPort.create(transaction);
+  }
+  const acquired = lockPort.acquireMutationLock({
+    transaction, workspace: request.workspace, target: request.target
+  });
+  if (!acquired || acquired.decision !== 'ACQUIRED') {
+    throw new Error('Exact-target mutation lock is contended; mutation is denied.');
+  }
+  transaction = acquired.transaction;
+  let lockRetained = true;
+  try {
+    journal = journalPort.append(transaction);
+  } catch (error) {
+    error.lockRetained = true;
+    throw error;
+  }
+
+  function advance(stage) {
+    const candidate = transitionMutationTransaction(transaction, stage);
+    const accepted = journalPort.append(candidate);
+    transaction = candidate;
+    journal = accepted;
+    return transaction;
+  }
+
+  function requireRecovery() {
+    if (transaction.stage === 'RECOVERY_REQUIRED' ||
+        transaction.stage === 'RECOVERED' || transaction.stage === 'RECOVERY_UNRESOLVED') {
+      return transaction;
+    }
+    return advance('RECOVERY_REQUIRED');
+  }
+
+  function failBeforeCommit() {
+    if (!['PREPARED', 'LOCKED', 'BEFORE_VERIFIED', 'MUTATION_STARTED'].includes(transaction.stage)) {
+      return false;
+    }
+    try {
+      advance('FINALIZED_FAILED');
+      const released = lockPort.releaseMutationLock({ transaction, lock: transaction.lock });
+      lockRetained = released.decision !== 'RELEASED';
+      return !lockRetained;
+    } catch {
+      lockRetained = Boolean(transaction.lock);
+      return false;
+    }
+  }
+
+  function releaseFinalized() {
+    if (!['FINALIZED_SUCCESS', 'FINALIZED_FAILED', 'RECOVERY_UNRESOLVED'].includes(transaction.stage)) {
+      throw new Error('Mutation lock release requires a durable terminal journal state.');
+    }
+    const released = lockPort.releaseMutationLock({ transaction, lock: transaction.lock });
+    if (released.decision !== 'RELEASED') throw new Error('Mutation lock release is ambiguous.');
+    lockRetained = false;
+    return released;
+  }
+
+  return {
+    current: () => deepFreeze({ transaction, journal, lockRetained }),
+    advance,
+    requireRecovery,
+    failBeforeCommit,
+    releaseFinalized
+  };
+}
+
 function preserveControlledErrorEvidence(error, request) {
   if (!error || !error.evidence) return null;
   const evidence = error.evidence;
@@ -358,7 +461,40 @@ function preserveControlledErrorEvidence(error, request) {
   });
 }
 
-function invokeControlledAdapter(request, runtime, validation) {
+function patchEvidenceItem(request, validation, evidenceId, payload, outcome = payload.outcome) {
+  return {
+    evidenceId, operationId: request.operationId, workspace: request.workspace,
+    adapterType: 'FILESYSTEM_PATCH', action: 'PATCH_FILE',
+    grantFingerprint: validation.grantFingerprint,
+    policyDecision: request.grantEvaluation.grant.policyDecision,
+    riskLevel: 'R3', lifecycleState: 'PENDING', outcome,
+    timestamp: payload.observedAt, payload,
+    target: payload.target, beforeSha256: payload.beforeSha256,
+    replacementSha256: request.grantEvaluation.grant.scope.target.replacementSha256,
+    afterSha256: outcome === 'FAILED' ? null : payload.afterSha256,
+    recovery: payload.recovery,
+    approvalAuthorityFingerprint: request.grantEvaluation.grant.approvalAuthorityFingerprint,
+    verifiedIdentityAssertionFingerprint:
+      request.grantEvaluation.grant.verifiedIdentityAssertionFingerprint,
+    identityVerificationEvidenceFingerprint:
+      request.grantEvaluation.grant.identityVerificationEvidenceFingerprint,
+    transactionId: payload.transaction && payload.transaction.transactionId,
+    journalId: payload.transaction && payload.transaction.journalId
+  };
+}
+
+function mutationFinalization(coordinator) {
+  if (!coordinator) return null;
+  const state = coordinator.current();
+  return {
+    transactionId: state.transaction.transactionId,
+    journalId: state.journal.journalId,
+    stage: state.transaction.stage,
+    lockDisposition: state.lockRetained ? 'RETAINED' : 'RELEASED'
+  };
+}
+
+function invokeControlledAdapter(request, runtime, validation, mutationCoordinator = null) {
   const common = {
     operationId: request.operationId,
     workspace: request.workspace,
@@ -375,7 +511,8 @@ function invokeControlledAdapter(request, runtime, validation) {
     return filesystemPatchAdapter.patchFileWithGrant({
       ...common, target: request.target, replacement: request.replacement
     }, { authoritativeClock: runtime.authoritativeClock,
-      previousReading: validation.authorityTimeEvidence.reading });
+      previousReading: validation.authorityTimeEvidence.reading,
+      mutationTransaction: mutationCoordinator });
   }
   return processValidationAdapter.validateJavaScriptWithGrant({
     ...common, selector: request.action, target: request.target
@@ -526,7 +663,33 @@ function orchestrate(input, runtime = {}) {
       prior.grantFingerprint === replayValidation.grantFingerprint &&
       replayValidation.operationRecord.finalization.lifecycleState === 'COMPLETED' &&
       replayValidation.lifecycle.status === 'COMPLETED';
-    if (!completed) {
+    let journalProven = false;
+    if (completed && runtime.mutationJournalAdapter &&
+        typeof runtime.mutationJournalAdapter.reopen === 'function') {
+      try {
+        const grant = input.execution.grantEvaluation.grant;
+        const transaction = createMutationTransaction({
+          operationId: input.execution.operationId,
+          workspace: input.execution.workspace,
+          target: grant.scope.target.canonicalPath,
+          beforeSha256: grant.scope.target.beforeSha256,
+          replacementSha256: grant.scope.target.replacementSha256,
+          grantFingerprint: replayValidation.grantFingerprint,
+          approvalAuthorityFingerprint: grant.approvalAuthorityFingerprint,
+          verifiedIdentityAssertionFingerprint: grant.verifiedIdentityAssertionFingerprint,
+          idempotencyKey: replayId
+        });
+        const journal = runtime.mutationJournalAdapter.reopen(transaction);
+        const physical = filesystemPatchAdapter.verifyAppliedFile({
+          workspace: input.execution.workspace, target: input.execution.target,
+          expectedSha256: grant.scope.target.replacementSha256
+        });
+        journalProven = journal.transaction.stage === 'FINALIZED_SUCCESS' &&
+          prior.transactionId === journal.transaction.transactionId &&
+          prior.journalId === journal.journalId && physical.decision === 'PROVEN_APPLIED';
+      } catch {}
+    }
+    if (!completed || !journalProven) {
       const denial = executionDenial('Conflicting finalized filesystem-patch replay.');
       return {
         schema: 'sdo.orchestration.v1',
@@ -763,12 +926,25 @@ function orchestrate(input, runtime = {}) {
   let adapterResult = priorForAction ? priorForAction.payload : null;
   let executionAttempted = false;
   let refreshedPhysical = null;
+  let mutationCoordinator = null;
+  let coordinatedRecord = null;
   if (!adapterResult) {
     try {
-      adapterResult = validateAdapterResult(request, invokeControlledAdapter(request, runtime, validation));
+      if (request.adapter === 'FILESYSTEM_PATCH') {
+        mutationCoordinator = createMutationCoordinator(
+          request, validation, runtime, evidenceId
+        );
+      }
       executionAttempted = true;
+      adapterResult = validateAdapterResult(request,
+        invokeControlledAdapter(request, runtime, validation, mutationCoordinator));
       if (request.adapter === 'FILESYSTEM_PATCH') {
         refreshedPhysical = physicalEvidence(repositoryDiscovery.discover(request.workspace));
+        coordinatedRecord = appendAdapterEvidence(validation.operationRecord,
+          patchEvidenceItem(request, validation, evidenceId, adapterResult));
+        mutationCoordinator.advance('EVIDENCE_RECORDED');
+        mutationCoordinator.advance('FINALIZED_SUCCESS');
+        mutationCoordinator.releaseFinalized();
       }
     } catch (error) {
       let errorEvidence = null;
@@ -789,30 +965,38 @@ function orchestrate(input, runtime = {}) {
         occurredAt: (errorEvidence && errorEvidence.timestamp) || request.observedAt,
         failure: { reason: failureReason, physicalEvidence: failurePhysical }
       });
-      let failedRecord = validation.operationRecord;
+      let failedRecord = coordinatedRecord || validation.operationRecord;
       if (request.adapter === 'FILESYSTEM_PATCH' && errorEvidence) {
         const payload = errorEvidence.payload;
-        failedRecord = appendAdapterEvidence(failedRecord, {
-          evidenceId, operationId: request.operationId, workspace: request.workspace,
-          adapterType: 'FILESYSTEM_PATCH', action: 'PATCH_FILE',
-          grantFingerprint: validation.grantFingerprint,
-          policyDecision: request.grantEvaluation.grant.policyDecision,
-          riskLevel: 'R3', lifecycleState: 'PENDING', outcome: 'FAILED',
-          timestamp: errorEvidence.timestamp, payload,
-          target: payload.target, beforeSha256: payload.beforeSha256,
-          replacementSha256: request.grantEvaluation.grant.scope.target.replacementSha256,
-          afterSha256: null, recovery: payload.recovery,
-          approvalAuthorityFingerprint:
-            request.grantEvaluation.grant.approvalAuthorityFingerprint,
-          verifiedIdentityAssertionFingerprint:
-            request.grantEvaluation.grant.verifiedIdentityAssertionFingerprint,
-          identityVerificationEvidenceFingerprint:
-            request.grantEvaluation.grant.identityVerificationEvidenceFingerprint
-        });
+        failedRecord = appendAdapterEvidence(coordinatedRecord || failedRecord,
+          patchEvidenceItem(request, validation, evidenceId, payload, 'FAILED'));
+      }
+      if (request.adapter === 'FILESYSTEM_PATCH' && mutationCoordinator) {
+        const currentStage = mutationCoordinator.current().transaction.stage;
+        if (['LOCKED', 'BEFORE_VERIFIED'].includes(currentStage) ||
+            (currentStage === 'MUTATION_STARTED' && errorEvidence &&
+             errorEvidence.payload.recovery === 'NOT_STARTED_AUTHORITY_DENIED')) {
+          mutationCoordinator.failBeforeCommit();
+        } else if (currentStage === 'RECOVERED' && errorEvidence) {
+          try {
+            mutationCoordinator.advance('EVIDENCE_RECORDED');
+            mutationCoordinator.advance('FINALIZED_FAILED');
+            mutationCoordinator.releaseFinalized();
+          } catch {}
+        } else if (!['FINALIZED_FAILED', 'FINALIZED_SUCCESS',
+          'RECOVERY_REQUIRED', 'RECOVERY_UNRESOLVED'].includes(currentStage)) {
+          try { mutationCoordinator.requireRecovery(); } catch {}
+        }
+      }
+      if (request.adapter === 'FILESYSTEM_PATCH' &&
+          failedRecord.adapterEvidence.length > 0 && failedRecord.finalization === null) {
+        const failureTimestamp = (errorEvidence && errorEvidence.timestamp) ||
+          (adapterResult && adapterResult.observedAt) || request.observedAt;
         failedRecord = finalizeOperationRecord(failedRecord, {
           operationId: request.operationId, workspace: request.workspace,
           lifecycleState: 'FAILED', outcome: 'FAILED',
-          successfulCompletionEligible: false, timestamp: errorEvidence.timestamp
+          successfulCompletionEligible: false, timestamp: failureTimestamp,
+          mutationTransaction: mutationFinalization(mutationCoordinator)
         });
       }
       const execution = deepFreeze({
@@ -821,7 +1005,7 @@ function orchestrate(input, runtime = {}) {
       });
       return {
         schema: 'sdo.orchestration.v1',
-        orchestration: { status: 'FAILED', executionAttempted: true, executionAllowed: true },
+        orchestration: { status: 'FAILED', executionAttempted, executionAllowed: true },
         repository: discovery.repository, worktree: discovery.worktree,
         pipeline: { preAuthorizationPreflight, discovery, task, inspection, classification, changePlan },
         execution,
@@ -836,7 +1020,7 @@ function orchestrate(input, runtime = {}) {
     : request.adapter === 'FILESYSTEM_PATCH' ? adapterResult.outcome : 'SUCCEEDED';
   let operationRecord = validation.operationRecord;
   if (!priorForAction) {
-    operationRecord = appendAdapterEvidence(operationRecord, {
+    operationRecord = coordinatedRecord || appendAdapterEvidence(operationRecord, {
       evidenceId,
       operationId: request.operationId,
       workspace: request.workspace,
@@ -860,7 +1044,9 @@ function orchestrate(input, runtime = {}) {
         verifiedIdentityAssertionFingerprint:
           request.grantEvaluation.grant.verifiedIdentityAssertionFingerprint,
         identityVerificationEvidenceFingerprint:
-          request.grantEvaluation.grant.identityVerificationEvidenceFingerprint
+          request.grantEvaluation.grant.identityVerificationEvidenceFingerprint,
+        transactionId: adapterResult.transaction && adapterResult.transaction.transactionId,
+        journalId: adapterResult.transaction && adapterResult.transaction.journalId
       } : {})
     });
   }
@@ -913,7 +1099,10 @@ function orchestrate(input, runtime = {}) {
     lifecycleState: failed ? 'FAILED' : 'COMPLETED',
     outcome: failed ? 'FAILED' : 'SUCCESS',
     successfulCompletionEligible: !failed,
-    timestamp: adapterResult.observedAt
+    timestamp: adapterResult.observedAt,
+    ...(request.adapter === 'FILESYSTEM_PATCH' ? {
+      mutationTransaction: mutationFinalization(mutationCoordinator)
+    } : {})
   });
 
   return {

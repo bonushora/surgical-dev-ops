@@ -27,7 +27,7 @@ const DEFINITION_FIELDS = [
   'verifiedIdentityAssertionFingerprint', 'idempotencyKey'
 ];
 const JOURNAL_TERMINAL = new Set([
-  'FINALIZED_SUCCESS', 'FINALIZED_FAILED', 'RECOVERED', 'RECOVERY_UNRESOLVED'
+  'FINALIZED_SUCCESS', 'FINALIZED_FAILED', 'RECOVERY_UNRESOLVED'
 ]);
 const ZERO_HASH = '0'.repeat(64);
 const RECORD_NAME = /^(\d{8})\.json$/;

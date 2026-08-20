@@ -194,6 +194,25 @@ test('pre-mutation failure can finalize without claiming physical stages', () =>
   assert.throws(() => transitionMutationTransaction(failed, 'RECOVERY_REQUIRED'), /Terminal/);
 });
 
+test('known zero-commit MUTATION_STARTED may finalize failed without claiming application', () => {
+  let transaction = locked(createMutationTransaction(definition()));
+  transaction = transitionMutationTransaction(transaction, 'BEFORE_VERIFIED');
+  transaction = transitionMutationTransaction(transaction, 'MUTATION_STARTED');
+  const failed = transitionMutationTransaction(transaction, 'FINALIZED_FAILED');
+  assert.equal(failed.stage, 'FINALIZED_FAILED');
+  assert.equal(failed.history.some((event) => event.stage === 'PHYSICAL_APPLIED'), false);
+});
+
+test('evidence-finalization ambiguity may transition to recovery required', () => {
+  let transaction = locked(createMutationTransaction(definition()));
+  for (const stage of ['BEFORE_VERIFIED', 'MUTATION_STARTED', 'PHYSICAL_APPLIED',
+    'AFTER_VERIFIED', 'EVIDENCE_RECORDED']) {
+    transaction = transitionMutationTransaction(transaction, stage);
+  }
+  assert.equal(transitionMutationTransaction(transaction, 'RECOVERY_REQUIRED').stage,
+    'RECOVERY_REQUIRED');
+});
+
 test('recovery ordering requires explicit recovery and evidence stages', () => {
   const applied = advance(locked(), [
     'BEFORE_VERIFIED', 'MUTATION_STARTED', 'PHYSICAL_APPLIED'

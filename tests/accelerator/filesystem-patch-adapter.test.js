@@ -12,6 +12,10 @@ const { evaluateVerifiedHumanIdentityAssertion } = require('../../accelerator/co
 const { verifyHumanIdentityAssertion } = require('../../accelerator/adapters/identity-verification-adapter');
 const { patchFileWithGrant } = require('../../accelerator/adapters/filesystem-patch-adapter');
 const { createAuthoritativeClock } = require('../../accelerator/core/authoritative-clock');
+const {
+  createMutationTransaction, bindMutationLock, transitionMutationTransaction,
+  deriveMutationLockId
+} = require('../../accelerator/core/mutation-transaction');
 
 const root = fs.mkdtempSync(path.join(os.tmpdir(), 'sdo-fs-patch-'));
 const workspace = path.join(root, 'repo');
@@ -29,6 +33,12 @@ test.beforeEach(() => {
 const NOW = '2026-08-20T12:00:00.000Z';
 const EXPIRY = '2026-08-20T13:00:00.000Z';
 const digest = (value) => crypto.createHash('sha256').update(value).digest('hex');
+
+function frozen(value) {
+  if (!value || typeof value !== 'object' || Object.isFrozen(value)) return value;
+  for (const child of Object.values(value)) frozen(child);
+  return Object.freeze(value);
+}
 
 function clockAt(start = NOW, stepMilliseconds = 1) {
   let count = 0;
@@ -95,10 +105,45 @@ function patch(overrides = {}) {
   const clock = overrides.authoritativeClock || clockAt();
   const request = { ...overrides };
   delete request.authoritativeClock;
-  return patchFileWithGrant({
+  const patchRequest = {
     operationId: 'op-patch', workspace, target: 'target.txt', replacement: 'after\n',
     grantEvaluation: issue(), observedAt: NOW, ...request
-  }, { authoritativeClock: clock });
+  };
+  const grant = patchRequest.grantEvaluation && patchRequest.grantEvaluation.grant;
+  let mutationTransaction = null;
+  if (grant) {
+    let transaction = createMutationTransaction({ operationId: patchRequest.operationId,
+      workspace, target: grant.scope.target.canonicalPath,
+      beforeSha256: grant.scope.target.beforeSha256,
+      replacementSha256: grant.scope.target.replacementSha256,
+      grantFingerprint: grant.fingerprint,
+      approvalAuthorityFingerprint: grant.approvalAuthorityFingerprint,
+      verifiedIdentityAssertionFingerprint: grant.verifiedIdentityAssertionFingerprint,
+      idempotencyKey: 'adapter-test' });
+    const lock = Object.freeze({ schema: 'sdo.mutation_lock.v1',
+      adapter: 'FILESYSTEM_EXCLUSIVE_CREATE', version: 1,
+      lockId: deriveMutationLockId(workspace, grant.scope.target.canonicalPath),
+      transactionId: transaction.transactionId, operationId: transaction.operationId,
+      workspace, target: grant.scope.target.canonicalPath,
+      ownerToken: 'a'.repeat(64), ownerProcess: 'test:adapter', acquiredAt: NOW });
+    transaction = bindMutationLock(transaction, lock);
+    let journal = frozen({ journalId: 'b'.repeat(64),
+      identity: { transactionId: transaction.transactionId }, transaction });
+    mutationTransaction = {
+      current: () => frozen({ transaction, journal, lockRetained: true }),
+      advance(stage) {
+        transaction = transitionMutationTransaction(transaction, stage);
+        journal = frozen({ ...journal, transaction });
+        return transaction;
+      },
+      requireRecovery() {
+        if (transaction.stage !== 'RECOVERY_REQUIRED') this.advance('RECOVERY_REQUIRED');
+        return transaction;
+      }
+    };
+  }
+  return patchFileWithGrant(patchRequest,
+    { authoritativeClock: clock, mutationTransaction });
 }
 
 test('valid single-file replacement', () => {
@@ -121,25 +166,26 @@ test('expired grant fails closed', () => {
 });
 
 test('authority expiring exactly at the physical commit boundary causes zero mutation', () => {
-  const start = new Date(Date.parse(EXPIRY) - 1).toISOString();
-  assert.throws(() => patch({ authoritativeClock: clockAt(start, 1) }), /before physical commit/);
+  const start = new Date(Date.parse(EXPIRY) - 2).toISOString();
+  assert.throws(() => patch({ authoritativeClock: clockAt(start, 1) }), /physical commit/);
   assert.equal(fs.readFileSync(targetPath, 'utf8'), 'before\n');
 });
 
 test('all authority valid one instant before expiry permits physical commit', () => {
-  const start = new Date(Date.parse(EXPIRY) - 2).toISOString();
+  const start = new Date(Date.parse(EXPIRY) - 3).toISOString();
   assert.equal(patch({ authoritativeClock: clockAt(start, 1) }).outcome, 'APPLIED');
 });
 
 test('post-commit expiry is not rechecked to erase authorized physical reality', () => {
   const sequence = clockSequence([
-    { wallTime: new Date(Date.parse(EXPIRY) - 2).toISOString(), monotonicNanoseconds: '1000000000' },
-    { wallTime: new Date(Date.parse(EXPIRY) - 1).toISOString(), monotonicNanoseconds: '1001000000' },
-    { wallTime: EXPIRY, monotonicNanoseconds: '1002000000' }
+    { wallTime: new Date(Date.parse(EXPIRY) - 3).toISOString(), monotonicNanoseconds: '1000000000' },
+    { wallTime: new Date(Date.parse(EXPIRY) - 2).toISOString(), monotonicNanoseconds: '1001000000' },
+    { wallTime: new Date(Date.parse(EXPIRY) - 1).toISOString(), monotonicNanoseconds: '1002000000' },
+    { wallTime: EXPIRY, monotonicNanoseconds: '1003000000' }
   ]);
   const result = patch({ authoritativeClock: sequence.clock });
   assert.equal(result.outcome, 'APPLIED');
-  assert.equal(sequence.reads(), 2);
+  assert.equal(sequence.reads(), 3);
   assert.equal(result.temporalAuthority.decision, 'ALLOWED');
   assert.equal(fs.readFileSync(targetPath, 'utf8'), 'after\n');
 });
@@ -256,12 +302,11 @@ test('returned evidence is deeply immutable', () => {
   assert.throws(() => { result.outcome = 'FAILED'; }, TypeError);
 });
 
-test('identical replay returns deterministic idempotent result', () => {
+test('standalone already-applied state requires finalized journal proof', () => {
   const grantEvaluation = issue();
   patch({ grantEvaluation });
-  const replay = patch({ grantEvaluation });
-  assert.equal(replay.outcome, 'ALREADY_APPLIED');
-  assert.equal(replay.afterSha256, digest('after\n'));
+  assert.throws(() => patch({ grantEvaluation }), /FINALIZED_SUCCESS journal/);
+  assert.equal(fs.readFileSync(targetPath, 'utf8'), 'after\n');
 });
 
 test('conflicting retry fails closed', () => {

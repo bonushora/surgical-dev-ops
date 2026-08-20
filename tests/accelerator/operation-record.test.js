@@ -170,11 +170,17 @@ function r3Evidence(record, overrides = {}) {
   const temporalAuthority = frozen({ schema: 'sdo.mutation_commit_authority.v1',
     commitBoundary: 'IMMEDIATELY_BEFORE_ATOMIC_REPLACEMENT', physicalCommit: 'APPLIED',
     decision: 'ALLOWED', evaluation });
+  const transactionId = 'e'.repeat(64);
+  const journalId = 'f'.repeat(64);
+  const transaction = frozen({ transactionId, journalId, stage: 'AFTER_VERIFIED',
+    lockId: '9'.repeat(64), classification: 'IN_PROGRESS' });
   return evidence('FILESYSTEM_PATCH', { riskLevel: 'R3',
     approvalAuthorityFingerprint: record.approvalAuthority.fingerprint,
     verifiedIdentityAssertionFingerprint: record.verifiedIdentityAssertionFingerprint,
     identityVerificationEvidenceFingerprint: record.identityVerificationEvidenceFingerprint,
-    payload: frozen({ ...base.payload, observedAt: TIME, temporalAuthority }), ...overrides });
+    transactionId, journalId,
+    payload: frozen({ ...base.payload, observedAt: TIME, temporalAuthority, transaction }),
+    ...overrides });
 }
 
 function finalState(overrides = {}) {
@@ -419,6 +425,22 @@ test('matching R3 patch evidence requires and preserves approval authority', () 
   assert.equal(next.adapterEvidence[0].payload.temporalAuthority.decision, 'ALLOWED');
   assert.equal(next.adapterEvidence[0].payload.temporalAuthority.evaluation.reading.wallTime, TIME);
   assert.ok(Object.isFrozen(next.adapterEvidence[0].payload.temporalAuthority));
+});
+
+test('R3 patch finalization correlates terminal journal and transaction identity', () => {
+  const record = r3PatchRecord();
+  const next = appendAdapterEvidence(record, r3Evidence(record));
+  const evidenceItem = next.adapterEvidence[0];
+  const completed = finalizeOperationRecord(next, finalState({
+    mutationTransaction: { transactionId: evidenceItem.transactionId,
+      journalId: evidenceItem.journalId, stage: 'FINALIZED_SUCCESS',
+      lockDisposition: 'RELEASED' }
+  }));
+  assert.equal(completed.finalization.mutationTransaction.stage, 'FINALIZED_SUCCESS');
+  assert.throws(() => finalizeOperationRecord(next, finalState({
+    mutationTransaction: { transactionId: evidenceItem.transactionId,
+      journalId: '0'.repeat(64), stage: 'FINALIZED_SUCCESS', lockDisposition: 'RELEASED' }
+  })), /transaction\/journal/);
 });
 
 test('R3 patch evidence without matching approval authority is rejected', () => {
