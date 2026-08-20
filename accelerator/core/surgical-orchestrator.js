@@ -2,6 +2,7 @@
 
 'use strict';
 
+const crypto = require('crypto');
 const path = require('path');
 
 const repositoryDiscovery = require('./repository-discovery');
@@ -22,17 +23,50 @@ const {
 
 const {
   createStateBoundary,
-  assertTransition
+  assertTransition,
+  transitionLifecycle
 } = require('./state-boundary');
+const {
+  appendAdapterEvidence,
+  finalizeOperationRecord
+} = require('./operation-record');
+const filesystemReadAdapter = require('../adapters/filesystem-read-adapter');
+const gitReadAdapter = require('../adapters/git-read-adapter');
+const processValidationAdapter = require('../adapters/process-validation-adapter');
 
 const CONTROLLED_ACTIONS = Object.freeze({
-  PROCESS_VALIDATION: Object.freeze({
-    action: 'VALIDATE_JAVASCRIPT', capabilityType: 'PROCESS_VALIDATION'
+  FILESYSTEM_READ: Object.freeze({
+    actions: new Set(['READ_FILE']), capabilityType: 'FILESYSTEM_READ'
   }),
-  FILESYSTEM_PATCH: Object.freeze({
-    action: 'PATCH_FILE', capabilityType: 'FILESYSTEM_PATCH'
+  GIT_READ: Object.freeze({
+    actions: new Set([
+      'REPOSITORY_ROOT', 'CURRENT_BRANCH', 'HEAD_COMMIT',
+      'WORKTREE_STATUS', 'TRACKED_FILES'
+    ]),
+    capabilityType: 'GIT_READ'
+  }),
+  PROCESS_VALIDATION: Object.freeze({
+    actions: new Set(['NODE_SYNTAX_CHECK']), capabilityType: 'PROCESS_VALIDATION'
   })
 });
+
+function deepFreeze(value) {
+  if (!value || typeof value !== 'object' || Object.isFrozen(value)) return value;
+  for (const child of Object.values(value)) deepFreeze(child);
+  return Object.freeze(value);
+}
+
+function isDeepFrozen(value, seen = new Set()) {
+  if (!value || typeof value !== 'object') return true;
+  if (seen.has(value)) return true;
+  if (!Object.isFrozen(value)) return false;
+  seen.add(value);
+  return Object.values(value).every((child) => isDeepFrozen(child, seen));
+}
+
+function fingerprint(value) {
+  return crypto.createHash('sha256').update(JSON.stringify(value)).digest('hex');
+}
 
 function executionDenial(reason) {
   return Object.freeze({
@@ -69,7 +103,7 @@ function rejectUnsafeRequestShape(input) {
     return deniedAtBoundary('Unknown or malformed controlled adapter/action.');
   }
   const contract = CONTROLLED_ACTIONS[request.adapter];
-  if (!contract || request.action !== contract.action) {
+  if (!contract || !contract.actions.has(request.action)) {
     return deniedAtBoundary('Unknown controlled adapter or action.');
   }
   if (['command', 'args', 'executable'].some(
@@ -77,22 +111,25 @@ function rejectUnsafeRequestShape(input) {
   )) {
     return deniedAtBoundary('Generic execution fields are forbidden in controlled requests.');
   }
+  if (Object.prototype.hasOwnProperty.call(request, 'grantFingerprint')) {
+    return deniedAtBoundary('Caller-supplied grant fingerprints are forbidden.');
+  }
   return null;
 }
 
-function validateControlledRequest(request, repositoryPath) {
+function validateControlledRequest(request, repositoryPath, expectedRisk) {
   if (!request || typeof request !== 'object' || Array.isArray(request)) {
     return executionDenial('Missing or malformed capability context.');
   }
   const contract = CONTROLLED_ACTIONS[request.adapter];
-  if (!contract || request.action !== contract.action) {
+  if (!contract || !contract.actions.has(request.action)) {
     return executionDenial('Unknown controlled adapter or action.');
   }
   const evaluation = request.grantEvaluation;
   const grant = evaluation && evaluation.grant;
   if (!evaluation || evaluation.schema !== 'sdo.capability_grant_evaluation.v1' ||
       evaluation.decision !== 'ALLOWED' || !grant ||
-      !Object.isFrozen(evaluation) || !Object.isFrozen(grant)) {
+      !isDeepFrozen(evaluation)) {
     return executionDenial('Missing or malformed capability context.');
   }
   if (request.operationId !== grant.operationId) {
@@ -107,26 +144,126 @@ function validateControlledRequest(request, repositoryPath) {
     return executionDenial('Capability grant is stale or expired.');
   }
   if (grant.policyDecision !== 'ALLOWED' || !/^R[0-3]$/.test(grant.riskLevel) ||
-      grant.lifecycleState !== 'PENDING') {
+      grant.lifecycleState !== 'PENDING' || grant.idempotency !== 'IDEMPOTENT') {
     return executionDenial('Capability policy, risk or lifecycle state is invalid.');
+  }
+  if (expectedRisk && grant.riskLevel !== expectedRisk) {
+    return executionDenial('Capability risk does not match authorized orchestration risk.');
   }
   if (grant.capabilityType !== contract.capabilityType) {
     return executionDenial('Capability scope or type mismatch.');
   }
-  if (request.adapter === 'PROCESS_VALIDATION') {
+  if (request.adapter === 'FILESYSTEM_READ') {
+    const paths = grant.scope && grant.scope.paths;
+    if (!Array.isArray(paths) || !paths.some((entry) => entry.path === request.target)) {
+      return executionDenial('Capability scope mismatch.');
+    }
+  } else if (request.adapter === 'GIT_READ') {
+    const operations = grant.scope && grant.scope.operations;
+    const operation = {
+      REPOSITORY_ROOT: 'rev-parse', CURRENT_BRANCH: 'rev-parse',
+      HEAD_COMMIT: 'rev-parse', WORKTREE_STATUS: 'status', TRACKED_FILES: 'ls-files'
+    }[request.action];
+    if (!Array.isArray(operations) || !operations.includes(operation)) {
+      return executionDenial('Capability scope mismatch.');
+    }
+  } else if (request.adapter === 'PROCESS_VALIDATION') {
     const paths = grant.scope && grant.scope.paths;
     const selectors = grant.scope && grant.scope.selectors;
     if (!Array.isArray(paths) || !paths.some((entry) => entry.path === request.target) ||
-        !Array.isArray(selectors) || !selectors.includes(request.selector)) {
+        !Array.isArray(selectors) || !selectors.includes(request.action)) {
       return executionDenial('Capability scope mismatch.');
     }
-  } else if (!grant.scope || !grant.scope.target ||
-      grant.scope.target.path !== request.target) {
-    return executionDenial('Capability scope mismatch.');
   }
-  return executionDenial(
-    'Controlled adapters are authoritative but disconnected from the orchestrator.'
-  );
+  const operationRecord = request.operationRecord;
+  if (!operationRecord || operationRecord.schema !== 'sdo.operation_record.v1' ||
+      !isDeepFrozen(operationRecord) || operationRecord.operationId !== request.operationId ||
+      operationRecord.workspace !== repositoryPath ||
+      operationRecord.policyDecision !== grant.policyDecision ||
+      operationRecord.riskLevel !== grant.riskLevel) {
+    return executionDenial('Operation record binding is missing or mismatched.');
+  }
+  const lifecycle = request.lifecycle;
+  if (!lifecycle || lifecycle.schema !== 'sdo.lifecycle.v1' ||
+      !isDeepFrozen(lifecycle) || lifecycle.operationId !== request.operationId ||
+      !['PENDING', 'COMPLETED', 'FAILED'].includes(lifecycle.status) ||
+      !lifecycle.evidence || !lifecycle.evidence.before ||
+      lifecycle.evidence.before.path !== repositoryPath ||
+      !lifecycle.temporal || Date.parse(request.observedAt) < Date.parse(lifecycle.temporal.createdAt)) {
+    return executionDenial('Lifecycle binding is missing or invalid.');
+  }
+  if (operationRecord.finalization === null && lifecycle.status !== 'PENDING') {
+    return executionDenial('Lifecycle state does not permit dispatch.');
+  }
+  return {
+    contract,
+    grantFingerprint: fingerprint(evaluation),
+    operationRecord,
+    lifecycle
+  };
+}
+
+function physicalEvidence(discovery) {
+  return {
+    path: discovery.repository.path,
+    branch: discovery.repository.branch,
+    commit: discovery.repository.commit,
+    shortCommit: discovery.repository.shortCommit,
+    clean: discovery.worktree.clean,
+    changedFiles: discovery.worktree.changedFiles
+  };
+}
+
+function evidenceIdentity(request, grantFingerprint) {
+  return fingerprint({
+    operationId: request.operationId,
+    adapter: request.adapter,
+    action: request.action,
+    target: request.target || null,
+    grantFingerprint
+  });
+}
+
+function invokeControlledAdapter(request) {
+  const common = {
+    operationId: request.operationId,
+    workspace: request.workspace,
+    grantEvaluation: request.grantEvaluation,
+    observedAt: request.observedAt
+  };
+  if (request.adapter === 'FILESYSTEM_READ') {
+    return filesystemReadAdapter.readFileWithGrant({ ...common, target: request.target });
+  }
+  if (request.adapter === 'GIT_READ') {
+    return gitReadAdapter.readGitWithGrant({ ...common, selector: request.action });
+  }
+  return processValidationAdapter.validateJavaScriptWithGrant({
+    ...common, selector: request.action, target: request.target
+  });
+}
+
+function validateAdapterResult(request, result) {
+  const schemas = {
+    FILESYSTEM_READ: 'sdo.filesystem_read_result.v1',
+    GIT_READ: 'sdo.git_read_result.v1',
+    PROCESS_VALIDATION: 'sdo.process_validation_result.v1'
+  };
+  if (!result || result.schema !== schemas[request.adapter] || !isDeepFrozen(result) ||
+      result.operationId !== request.operationId || result.workspace !== request.workspace ||
+      result.observedAt !== request.observedAt) {
+    throw new Error('Controlled adapter returned malformed or unbound evidence.');
+  }
+  if (request.adapter === 'GIT_READ' && result.selector !== request.action) {
+    throw new Error('Controlled Git evidence action mismatch.');
+  }
+  if (request.adapter === 'PROCESS_VALIDATION' &&
+      (result.selector !== request.action || !result.validation ||
+       !['PASSED', 'FAILED'].includes(result.validation.status) ||
+       (result.validation.status === 'FAILED' &&
+        result.validation.successfulCompletionEligible !== false))) {
+    throw new Error('Controlled validation evidence is inconsistent.');
+  }
+  return result;
 }
 
 function validateInput(input) {
@@ -209,6 +346,13 @@ function orchestrate(input) {
     }
   );
 
+  const preAuthorizationPreflight = Object.freeze({
+    classification: 'PRE_AUTHORIZATION_PREFLIGHT',
+    governedAdapterEvidence: false,
+    capabilityAuthorization: false,
+    proofOfGovernedExecution: false
+  });
+
   /*
    * PHASE 4
    * Risk classification.
@@ -268,6 +412,7 @@ function orchestrate(input) {
       worktree: discovery.worktree,
 
       pipeline: {
+        preAuthorizationPreflight,
         discovery,
         task,
         inspection,
@@ -329,6 +474,7 @@ function orchestrate(input) {
       worktree: discovery.worktree,
 
       pipeline: {
+        preAuthorizationPreflight,
         discovery,
         task,
         inspection,
@@ -348,15 +494,158 @@ function orchestrate(input) {
     };
   }
 
-  const execution = validateControlledRequest(input.execution, repositoryPath);
+  const request = input.execution;
+  const validation = validateControlledRequest(
+    request, discovery.repository.path, classification.classification.level
+  );
+
+  if (validation.decision === 'DENIED') {
+    return {
+      schema: 'sdo.orchestration.v1',
+      orchestration: { status: 'DENIED', executionAttempted: false, executionAllowed: false },
+      repository: discovery.repository,
+      worktree: discovery.worktree,
+      pipeline: { preAuthorizationPreflight, discovery, task, inspection, classification, changePlan },
+      execution: validation,
+      state: { boundary: stateBoundary, transition: pendingTransition },
+      nextStep: validation.reason
+    };
+  }
+
+  const evidenceId = evidenceIdentity(request, validation.grantFingerprint);
+  const priorForAction = validation.operationRecord.adapterEvidence.find(
+    (entry) => entry.adapterType === request.adapter && entry.action === request.action
+  );
+  if (priorForAction && (priorForAction.evidenceId !== evidenceId ||
+      priorForAction.grantFingerprint !== validation.grantFingerprint)) {
+    const denial = executionDenial('Conflicting governed adapter replay.');
+    return {
+      schema: 'sdo.orchestration.v1',
+      orchestration: { status: 'DENIED', executionAttempted: false, executionAllowed: false },
+      repository: discovery.repository, worktree: discovery.worktree,
+      pipeline: { preAuthorizationPreflight, discovery, task, inspection, classification, changePlan },
+      execution: denial,
+      state: { boundary: stateBoundary, transition: pendingTransition },
+      nextStep: denial.reason
+    };
+  }
+  if (!priorForAction && validation.operationRecord.finalization !== null) {
+    const denial = executionDenial('Finalized operation record has no matching replay evidence.');
+    return {
+      schema: 'sdo.orchestration.v1',
+      orchestration: { status: 'DENIED', executionAttempted: false, executionAllowed: false },
+      repository: discovery.repository, worktree: discovery.worktree,
+      pipeline: { preAuthorizationPreflight, discovery, task, inspection, classification, changePlan },
+      execution: denial,
+      governed: { operationRecord: validation.operationRecord, lifecycle: validation.lifecycle },
+      nextStep: denial.reason
+    };
+  }
+
+  let adapterResult = priorForAction ? priorForAction.payload : null;
+  let executionAttempted = false;
+  if (!adapterResult) {
+    try {
+      adapterResult = validateAdapterResult(request, invokeControlledAdapter(request));
+      executionAttempted = true;
+    } catch (error) {
+      const failedLifecycle = transitionLifecycle(validation.lifecycle, {
+        transitionId: evidenceId,
+        operationId: request.operationId,
+        type: 'FAIL',
+        occurredAt: request.observedAt,
+        failure: { reason: error.message, physicalEvidence: physicalEvidence(discovery) }
+      });
+      return {
+        schema: 'sdo.orchestration.v1',
+        orchestration: { status: 'FAILED', executionAttempted: true, executionAllowed: true },
+        repository: discovery.repository, worktree: discovery.worktree,
+        pipeline: { preAuthorizationPreflight, discovery, task, inspection, classification, changePlan },
+        execution: executionDenial(`Controlled adapter failed closed: ${error.message}`),
+        governed: { operationRecord: validation.operationRecord, lifecycle: failedLifecycle },
+        nextStep: 'Inspect controlled adapter failure evidence; successful completion is forbidden.'
+      };
+    }
+  }
+
+  const outcome = request.adapter === 'PROCESS_VALIDATION'
+    ? adapterResult.validation.status : 'SUCCEEDED';
+  let operationRecord = validation.operationRecord;
+  if (!priorForAction) {
+    operationRecord = appendAdapterEvidence(operationRecord, {
+      evidenceId,
+      operationId: request.operationId,
+      workspace: request.workspace,
+      adapterType: request.adapter,
+      action: request.action,
+      grantFingerprint: validation.grantFingerprint,
+      policyDecision: request.grantEvaluation.grant.policyDecision,
+      riskLevel: request.grantEvaluation.grant.riskLevel,
+      lifecycleState: 'PENDING',
+      outcome,
+      timestamp: adapterResult.observedAt,
+      payload: adapterResult
+    });
+  }
+
+  if (operationRecord.finalization !== null) {
+    const expectedStatus = outcome === 'FAILED' ? 'FAILED' : 'COMPLETED';
+    if (operationRecord.finalization.lifecycleState !== expectedStatus ||
+        validation.lifecycle.status !== expectedStatus) {
+      const denial = executionDenial('Conflicting finalized governed replay.');
+      return {
+        schema: 'sdo.orchestration.v1',
+        orchestration: { status: 'DENIED', executionAttempted: false, executionAllowed: false },
+        repository: discovery.repository, worktree: discovery.worktree,
+        pipeline: { preAuthorizationPreflight, discovery, task, inspection, classification, changePlan },
+        execution: denial, governed: { operationRecord, lifecycle: validation.lifecycle },
+        nextStep: denial.reason
+      };
+    }
+    return {
+      schema: 'sdo.orchestration.v1',
+      orchestration: { status: expectedStatus, executionAttempted: false, executionAllowed: true },
+      repository: discovery.repository, worktree: discovery.worktree,
+      pipeline: { preAuthorizationPreflight, discovery, task, inspection, classification, changePlan },
+      execution: adapterResult,
+      governed: { operationRecord, lifecycle: validation.lifecycle, replay: true },
+      nextStep: 'Identical governed evidence replayed without physical execution.'
+    };
+  }
+
+  const failed = outcome === 'FAILED';
+  const lifecycle = transitionLifecycle(validation.lifecycle, failed ? {
+    transitionId: evidenceId,
+    operationId: request.operationId,
+    type: 'FAIL',
+    occurredAt: adapterResult.observedAt,
+    failure: {
+      reason: 'Controlled process validation failed.',
+      physicalEvidence: physicalEvidence(discovery)
+    }
+  } : {
+    transitionId: evidenceId,
+    operationId: request.operationId,
+    type: 'COMPLETE',
+    occurredAt: adapterResult.observedAt,
+    after: physicalEvidence(discovery)
+  });
+  operationRecord = finalizeOperationRecord(operationRecord, {
+    operationId: request.operationId,
+    workspace: request.workspace,
+    lifecycleState: failed ? 'FAILED' : 'COMPLETED',
+    outcome: failed ? 'FAILED' : 'SUCCESS',
+    successfulCompletionEligible: !failed,
+    timestamp: adapterResult.observedAt
+  });
 
   return {
     schema: 'sdo.orchestration.v1',
 
     orchestration: {
-      status: 'DENIED',
-      executionAttempted: false,
-      executionAllowed: false
+      status: failed ? 'FAILED' : 'COMPLETED',
+      executionAttempted,
+      executionAllowed: true
     },
 
     repository: discovery.repository,
@@ -364,6 +653,7 @@ function orchestrate(input) {
     worktree: discovery.worktree,
 
     pipeline: {
+      preAuthorizationPreflight,
       discovery,
       task,
       inspection,
@@ -371,14 +661,18 @@ function orchestrate(input) {
       changePlan
     },
 
-    execution,
+    execution: adapterResult,
 
     state: {
       boundary: stateBoundary,
       transition: pendingTransition
     },
 
-    nextStep: execution.reason
+    governed: { operationRecord, lifecycle, replay: false },
+
+    nextStep: failed
+      ? 'Validation failed; successful completion is forbidden.'
+      : 'Governed adapter evidence recorded and finalized.'
   };
 }
 
