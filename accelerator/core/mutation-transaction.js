@@ -3,6 +3,7 @@
 const crypto = require('node:crypto');
 const path = require('node:path');
 const { classifyMutationAuthority } = require('./authoritative-clock');
+const { deriveMutationRecoveryFingerprint } = require('./mutation-recovery');
 
 const SCHEMA = 'sdo.mutation_transaction.v1';
 const HASH = /^[a-f0-9]{64}$/;
@@ -39,9 +40,9 @@ const LOCK_FIELDS = new Set([
 ]);
 
 const TRANSITIONS = Object.freeze({
-  PREPARED: new Set(['LOCKED', 'FINALIZED_FAILED']),
-  LOCKED: new Set(['BEFORE_VERIFIED', 'FINALIZED_FAILED']),
-  BEFORE_VERIFIED: new Set(['MUTATION_STARTED', 'FINALIZED_FAILED']),
+  PREPARED: new Set(['LOCKED', 'FINALIZED_FAILED', 'RECOVERY_REQUIRED']),
+  LOCKED: new Set(['BEFORE_VERIFIED', 'FINALIZED_FAILED', 'RECOVERY_REQUIRED']),
+  BEFORE_VERIFIED: new Set(['MUTATION_STARTED', 'FINALIZED_FAILED', 'RECOVERY_REQUIRED']),
   MUTATION_STARTED: new Set(['COMMIT_AUTHORITY_VERIFIED', 'FINALIZED_FAILED', 'RECOVERY_REQUIRED']),
   COMMIT_AUTHORITY_VERIFIED: new Set(['PHYSICAL_APPLIED', 'FINALIZED_FAILED', 'RECOVERY_REQUIRED']),
   PHYSICAL_APPLIED: new Set(['AFTER_VERIFIED', 'RECOVERY_REQUIRED']),
@@ -191,6 +192,7 @@ function createMutationTransaction(input) {
     stage: 'PREPARED',
     lock: null,
     commitAuthority: null,
+    recoveryEvidence: null,
     history: [{ sequence: 1, stage: 'PREPARED' }]
   });
 }
@@ -250,7 +252,10 @@ function requireTransaction(transaction) {
     const authorityEvent = event.stage === 'COMMIT_AUTHORITY_VERIFIED' &&
       eventKeys.length === 3 && transaction.commitAuthority &&
       event.commitAuthorityFingerprint === transaction.commitAuthority.fingerprint;
-    if ((!lockedEvent && !authorityEvent && eventKeys.length !== 2) ||
+    const recoveryEvent = ['RECOVERED', 'RECOVERY_UNRESOLVED'].includes(event.stage) &&
+      eventKeys.length === 3 && transaction.recoveryEvidence &&
+      event.recoveryEvidenceFingerprint === transaction.recoveryEvidence.fingerprint;
+    if ((!lockedEvent && !authorityEvent && !recoveryEvent && eventKeys.length !== 2) ||
         event.sequence !== index + 1 ||
         !STAGES.includes(event.stage) || !Object.isFrozen(event) ||
         (index === 0 && event.stage !== 'PREPARED') ||
@@ -280,6 +285,22 @@ function requireTransaction(transaction) {
     if (authorityEvent.commitAuthorityFingerprint !== transaction.commitAuthority.fingerprint) {
       throw new Error('Commit-authority history binding is malformed.');
     }
+  }
+  const recoveryEvent = transaction.history.find(
+    (event) => ['RECOVERED', 'RECOVERY_UNRESOLVED'].includes(event.stage)
+  );
+  if (!recoveryEvent) {
+    if (transaction.recoveryEvidence !== null) {
+      throw new Error('Transaction cannot carry unjournaled recovery evidence.');
+    }
+  } else if (transaction.recoveryEvidence !== null && (
+      transaction.recoveryEvidence.transactionId !== transaction.transactionId ||
+      transaction.recoveryEvidence.operationId !== transaction.operationId ||
+      transaction.recoveryEvidence.workspace !== transaction.workspace ||
+      transaction.recoveryEvidence.target !== transaction.target ||
+      deriveMutationRecoveryFingerprint(transaction.recoveryEvidence) !==
+        transaction.recoveryEvidence.fingerprint || !Object.isFrozen(transaction.recoveryEvidence))) {
+    throw new Error('Mutation recovery evidence is malformed or mismatched.');
   }
   return transaction;
 }
@@ -371,6 +392,22 @@ function bindCommitAuthorityEvidence(transaction, evidence) {
   });
 }
 
+function bindMutationRecoveryEvidence(transaction, evidence) {
+  const current = requireTransaction(transaction);
+  if (current.stage !== 'RECOVERY_REQUIRED' || !evidence || !Object.isFrozen(evidence) ||
+      evidence.transactionId !== current.transactionId || evidence.operationId !== current.operationId ||
+      evidence.workspace !== current.workspace || evidence.target !== current.target ||
+      deriveMutationRecoveryFingerprint(evidence) !== evidence.fingerprint) {
+    throw new Error('Recovery evidence may bind only to its exact RECOVERY_REQUIRED transaction.');
+  }
+  const stage = evidence.recoveryClassification === 'RECOVERY_UNRESOLVED'
+    ? 'RECOVERY_UNRESOLVED' : 'RECOVERED';
+  const version = current.version + 1;
+  return deepFreeze({ ...current, version, stage, recoveryEvidence: evidence,
+    history: [...current.history, { sequence: version, stage,
+      recoveryEvidenceFingerprint: evidence.fingerprint }] });
+}
+
 function bindMutationLock(transaction, lockMetadata) {
   const current = requireTransaction(transaction);
   if (current.stage !== 'PREPARED') {
@@ -426,6 +463,7 @@ module.exports = {
   bindMutationLock,
   createCommitAuthorityEvidence,
   bindCommitAuthorityEvidence,
+  bindMutationRecoveryEvidence,
   deriveCommitAuthorityEvidenceFingerprint,
   transitionMutationTransaction,
   assertSameMutationTransaction

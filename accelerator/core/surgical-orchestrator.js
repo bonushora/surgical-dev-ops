@@ -29,6 +29,7 @@ const {
 } = require('./state-boundary');
 const {
   appendAdapterEvidence,
+  appendMutationRecoveryEvidence,
   finalizeOperationRecord
 } = require('./operation-record');
 const filesystemReadAdapter = require('../adapters/filesystem-read-adapter');
@@ -45,6 +46,7 @@ const {
   transitionMutationTransaction
 } = require('./mutation-transaction');
 const mutationLockAdapter = require('../adapters/mutation-lock-adapter');
+const { createMutationRecoveryAdapter } = require('../adapters/mutation-recovery-adapter');
 
 const CONTROLLED_ACTIONS = Object.freeze({
   FILESYSTEM_READ: Object.freeze({
@@ -1204,6 +1206,24 @@ function main() {
   }
 }
 
+function recoverGovernedMutation(input, runtime = {}) {
+  if (!input || !input.transaction || !runtime.mutationJournalAdapter ||
+      !runtime.authoritativeClock) {
+    throw new Error('Explicit immutable mutation recovery context is required.');
+  }
+  const adapter = runtime.mutationRecoveryAdapter || createMutationRecoveryAdapter({
+    journalAdapter: runtime.mutationJournalAdapter,
+    lockAdapter: runtime.mutationLockAdapter || mutationLockAdapter,
+    authoritativeClock: runtime.authoritativeClock,
+    ownerTerminationPort: runtime.ownerTerminationPort
+  });
+  const recovery = adapter.recover({ transaction: input.transaction });
+  const operationRecord = input.operationRecord && recovery.fingerprint
+    ? appendMutationRecoveryEvidence(input.operationRecord, recovery) : input.operationRecord || null;
+  return deepFreeze({ schema: 'sdo.mutation_recovery_result.v1', recovery, operationRecord,
+    physicalMutationAttempted: false });
+}
+
 if (require.main === module) {
   main();
 }
@@ -1214,5 +1234,6 @@ module.exports = {
   validateControlledRequest,
   rejectUnsafeRequestShape,
   evidenceIdentity,
-  preserveControlledErrorEvidence
+  preserveControlledErrorEvidence,
+  recoverGovernedMutation
 };

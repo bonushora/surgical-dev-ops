@@ -9,6 +9,7 @@ const {
   createMutationTransaction,
   bindMutationLock,
   bindCommitAuthorityEvidence,
+  bindMutationRecoveryEvidence,
   transitionMutationTransaction,
   assertSameMutationTransaction
 } = require('../core/mutation-transaction');
@@ -152,6 +153,10 @@ function payloadFor(transaction) {
   if (transaction.stage === 'COMMIT_AUTHORITY_VERIFIED') {
     return deepFreeze({ commitAuthority: transaction.commitAuthority });
   }
+  if (['RECOVERED', 'RECOVERY_UNRESOLVED'].includes(transaction.stage) &&
+      transaction.recoveryEvidence) {
+    return deepFreeze({ recoveryEvidence: transaction.recoveryEvidence });
+  }
   return deepFreeze({});
 }
 
@@ -246,6 +251,13 @@ function reconstruct(records) {
       }
       deepFreeze(record.payload.commitAuthority);
       transaction = bindCommitAuthorityEvidence(transaction, record.payload.commitAuthority);
+    } else if (['RECOVERED', 'RECOVERY_UNRESOLVED'].includes(record.stage) &&
+        record.payload.recoveryEvidence) {
+      if (Object.keys(record.payload).length !== 1) {
+        throw new Error('Mutation recovery journal payload is malformed.');
+      }
+      deepFreeze(record.payload.recoveryEvidence);
+      transaction = bindMutationRecoveryEvidence(transaction, record.payload.recoveryEvidence);
     } else {
       if (Object.keys(record.payload).length !== 0) {
         throw new Error('Mutation journal stage payload is malformed.');

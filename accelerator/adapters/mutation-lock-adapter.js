@@ -77,6 +77,10 @@ function lockPath(lockId) {
   return path.join(lockRoot(), `${lockId}.lock`);
 }
 
+function recoveryClaimPath(lockId) {
+  return path.join(lockRoot(), `${lockId}.recovery`);
+}
+
 function serialize(metadata) {
   return `${JSON.stringify(metadata)}\n`;
 }
@@ -229,8 +233,68 @@ function releaseMutationLock({ transaction, lock }) {
   return deepFreeze({ decision: 'RELEASED', lockId: expected.lockId });
 }
 
+function inspectMutationLock({ transaction }) {
+  if (!transaction || !Object.isFrozen(transaction) || !transaction.lock) {
+    return deepFreeze({ classification: 'MISSING', lock: null });
+  }
+  try {
+    const lock = readLockFile(lockPath(transaction.lock.lockId));
+    validateMetadata(lock, transaction.lock);
+    return deepFreeze({ classification: 'MATCHED', lock });
+  } catch (error) {
+    if (error.code === 'ENOENT') return deepFreeze({ classification: 'MISSING', lock: null });
+    return deepFreeze({ classification: 'CORRUPT', lock: null, reason: error.message });
+  }
+}
+
+function acquireMutationRecoveryClaim({ transaction, terminationEvidence }) {
+  if (!transaction || !transaction.lock || !Object.isFrozen(transaction) ||
+      !terminationEvidence || terminationEvidence.decision !== 'TERMINATED' ||
+      terminationEvidence.ownerProcess !== transaction.lock.ownerProcess ||
+      !Object.isFrozen(terminationEvidence)) {
+    throw new Error('Trusted owner-termination evidence is required for recovery ownership.');
+  }
+  const file = recoveryClaimPath(transaction.lock.lockId);
+  const claim = deepFreeze({ schema: 'sdo.mutation_recovery_claim.v1',
+    transactionId: transaction.transactionId, operationId: transaction.operationId,
+    lockId: transaction.lock.lockId, ownerToken: crypto.randomBytes(32).toString('hex') });
+  let descriptor;
+  try {
+    descriptor = fs.openSync(file, fs.constants.O_WRONLY | fs.constants.O_CREAT |
+      fs.constants.O_EXCL, 0o600);
+    fs.writeFileSync(descriptor, serialize(claim));
+  } catch (error) {
+    if (error.code === 'EEXIST') return deepFreeze({ decision: 'CONTENDED' });
+    throw error;
+  } finally {
+    if (descriptor !== undefined) fs.closeSync(descriptor);
+  }
+  return deepFreeze({ decision: 'ACQUIRED', claim });
+}
+
+function releaseMutationRecoveryClaim({ transaction, claim }) {
+  if (!transaction || !claim || claim.transactionId !== transaction.transactionId ||
+      claim.lockId !== transaction.lock.lockId) {
+    throw new Error('Recovery claim ownership mismatch.');
+  }
+  const file = recoveryClaimPath(claim.lockId);
+  let current;
+  try { current = JSON.parse(fs.readFileSync(file, 'utf8')); } catch (error) {
+    if (error.code === 'ENOENT') return deepFreeze({ decision: 'NOT_HELD' });
+    throw new Error('Recovery claim is corrupt or ambiguous.');
+  }
+  if (JSON.stringify(current) !== JSON.stringify(claim)) {
+    throw new Error('Recovery claim ownership mismatch.');
+  }
+  fs.unlinkSync(file);
+  return deepFreeze({ decision: 'RELEASED' });
+}
+
 module.exports = {
   resolveMutationLockIdentity,
   acquireMutationLock,
-  releaseMutationLock
+  releaseMutationLock,
+  inspectMutationLock,
+  acquireMutationRecoveryClaim,
+  releaseMutationRecoveryClaim
 };

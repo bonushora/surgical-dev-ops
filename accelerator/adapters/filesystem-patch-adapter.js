@@ -395,4 +395,27 @@ function verifyAppliedFile({ workspace, target, expectedSha256 }) {
   });
 }
 
-module.exports = { patchFileWithGrant, verifyAppliedFile };
+function inspectMutationTarget({ transaction }) {
+  if (!transaction || !Object.isFrozen(transaction) ||
+      !/^[a-f0-9]{64}$/.test(transaction.transactionId || '')) {
+    throw new Error('Immutable mutation transaction is required for physical recovery inspection.');
+  }
+  try {
+    const relativeTarget = path.relative(transaction.workspace, transaction.target);
+    const resolved = resolveInspectedFile(transaction.workspace, relativeTarget);
+    const current = readRegularNoFollow(resolved.canonicalTarget);
+    const sha256 = hash(current.content);
+    return deepFreeze({ schema: 'sdo.mutation_recovery_physical_observation.v1',
+      transactionId: transaction.transactionId, workspace: transaction.workspace,
+      target: transaction.target, sha256,
+      classification: sha256 === transaction.beforeSha256 ? 'BEFORE'
+        : sha256 === transaction.replacementSha256 ? 'REPLACEMENT' : 'OTHER' });
+  } catch (error) {
+    return deepFreeze({ schema: 'sdo.mutation_recovery_physical_observation.v1',
+      transactionId: transaction.transactionId, workspace: transaction.workspace,
+      target: transaction.target, sha256: null, classification: 'UNAVAILABLE',
+      reason: error.message });
+  }
+}
+
+module.exports = { patchFileWithGrant, verifyAppliedFile, inspectMutationTarget };

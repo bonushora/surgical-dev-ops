@@ -8,6 +8,7 @@ const { classifyMutationAuthority } = require('./authoritative-clock');
 const {
   deriveCommitAuthorityEvidenceFingerprint
 } = require('./mutation-transaction');
+const { deriveMutationRecoveryFingerprint } = require('./mutation-recovery');
 
 const RISKS = new Set(['R0', 'R1', 'R2', 'R3']);
 const POLICY_DECISIONS = new Set(['ALLOWED', 'DENIED', 'APPROVAL_REQUIRED']);
@@ -214,6 +215,7 @@ function createOperationRecord(input, authoritativeClock = null) {
       scope: input.riskLevel === 'R3' ? input.scope : null,
       events: input.events,
       adapterEvidence: [],
+      mutationRecoveryEvidence: [],
       finalization: null
     }
   });
@@ -222,7 +224,8 @@ function createOperationRecord(input, authoritativeClock = null) {
 function requireRecord(record) {
   if (!record || record.schema !== 'sdo.operation_record.v1' ||
       !isDeepFrozen(record) || !Array.isArray(record.events) ||
-      !Array.isArray(record.adapterEvidence) || !Number.isInteger(record.version) ||
+      !Array.isArray(record.adapterEvidence) || !Array.isArray(record.mutationRecoveryEvidence) ||
+      !Number.isInteger(record.version) ||
       record.version < 1 || validateWorkspace(record.workspace) ||
       !POLICY_DECISIONS.has(record.policyDecision) || !RISKS.has(record.riskLevel)) {
     throw new Error('A valid immutable operation record is required.');
@@ -261,7 +264,47 @@ function requireRecord(record) {
     identities.add(entry.evidenceId);
     previousTimestamp = entry.timestamp;
   }
+  for (const entry of record.mutationRecoveryEvidence) {
+    if (!isDeepFrozen(entry) || entry.operationId !== record.operationId ||
+        entry.workspace !== record.workspace ||
+        deriveMutationRecoveryFingerprint(entry) !== entry.fingerprint) {
+      throw new Error('Stored mutation recovery evidence is malformed or substituted.');
+    }
+  }
   return record;
+}
+
+function appendMutationRecoveryEvidence(record, evidence) {
+  const current = requireRecord(record);
+  if (!evidence || !isDeepFrozen(evidence) || evidence.operationId !== current.operationId ||
+      evidence.workspace !== current.workspace ||
+      deriveMutationRecoveryFingerprint(evidence) !== evidence.fingerprint ||
+      !/^[a-f0-9]{64}$/.test(evidence.transactionId || '') ||
+      !/^[a-f0-9]{64}$/.test(evidence.journalId || '') ||
+      !['NOT_APPLIED', 'RESTORED', 'PREVIOUSLY_AUTHORIZED_APPLIED',
+        'RECOVERY_UNRESOLVED'].includes(evidence.recoveryClassification)) {
+    throw new Error('Mutation recovery evidence is malformed or unbound.');
+  }
+  const scopeTarget = current.scope && current.scope.target;
+  if (current.riskLevel !== 'R3' || !current.approvalAuthority ||
+      evidence.approvalAuthorityFingerprint !== current.approvalAuthority.fingerprint ||
+      evidence.verifiedIdentityAssertionFingerprint !==
+        current.verifiedIdentityAssertionFingerprint || !scopeTarget ||
+      path.resolve(current.workspace, scopeTarget.path) !== evidence.target ||
+      scopeTarget.beforeSha256 !== evidence.beforeSha256 ||
+      scopeTarget.replacementSha256 !== evidence.replacementSha256) {
+    throw new Error('Mutation recovery authority, target, or hash binding is mismatched.');
+  }
+  const replay = current.mutationRecoveryEvidence.find(
+    (entry) => entry.fingerprint === evidence.fingerprint
+  );
+  if (replay) return current;
+  if (current.mutationRecoveryEvidence.some((entry) =>
+    entry.transactionId === evidence.transactionId && entry.fingerprint !== evidence.fingerprint)) {
+    throw new Error('Conflicting mutation recovery evidence replay.');
+  }
+  return deepFreeze({ ...current, version: current.version + 1,
+    mutationRecoveryEvidence: [...current.mutationRecoveryEvidence, evidence] });
 }
 
 function validatePayload(record, item) {
@@ -563,5 +606,6 @@ function finalizeOperationRecord(record, finalState) {
 module.exports = {
   createOperationRecord,
   appendAdapterEvidence,
+  appendMutationRecoveryEvidence,
   finalizeOperationRecord
 };

@@ -8,6 +8,7 @@ const path = require('path');
 const {
   createOperationRecord: createOperationRecordCore,
   appendAdapterEvidence,
+  appendMutationRecoveryEvidence,
   finalizeOperationRecord
 } = require('../../accelerator/core/operation-record');
 const { evaluateR3ApprovalAuthority } = require('../../accelerator/core/risk-classification');
@@ -17,6 +18,8 @@ const { createAuthoritativeClock, classifyMutationAuthority } =
   require('../../accelerator/core/authoritative-clock');
 const { deriveCommitAuthorityEvidenceFingerprint } =
   require('../../accelerator/core/mutation-transaction');
+const { deriveMutationRecoveryFingerprint } =
+  require('../../accelerator/core/mutation-recovery');
 
 const TIME = '2026-08-20T12:00:00.000Z';
 const WORKSPACE = fs.realpathSync(os.tmpdir());
@@ -583,4 +586,29 @@ test('discovery and inspection cannot masquerade as controlled evidence', () => 
   for (const adapterType of ['DISCOVERY', 'DECLARATIVE_INSPECTION']) {
     assert.throws(() => appendAdapterEvidence(record(), evidence(adapterType)), /Unknown or forbidden/);
   }
+});
+
+test('operation record preserves immutable transaction-correlated recovery evidence', () => {
+  const current = r3PatchRecord();
+  const patch = r3Evidence(current);
+  const fields = { schema: 'sdo.mutation_recovery_evidence.v1', version: 1,
+    transactionId: patch.transactionId, operationId: current.operationId,
+    journalId: patch.journalId, workspace: current.workspace,
+    target: patch.target.canonical, beforeSha256: patch.beforeSha256,
+    replacementSha256: patch.replacementSha256,
+    verifiedIdentityAssertionFingerprint: patch.verifiedIdentityAssertionFingerprint,
+    approvalAuthorityFingerprint: patch.approvalAuthorityFingerprint,
+    grantFingerprint: patch.grantFingerprint,
+    commitAuthorityFingerprint: patch.commitAuthorityFingerprint,
+    previousJournalStage: 'COMMIT_AUTHORITY_VERIFIED',
+    observedHash: patch.replacementSha256, physicalClassification: 'REPLACEMENT',
+    lockClassification: 'MATCHED', recoveryClassification: 'PREVIOUSLY_AUTHORIZED_APPLIED',
+    terminalStage: 'FINALIZED_SUCCESS', outcome: 'SUCCESS',
+    finalRecoveryState: 'FINALIZED_SUCCESS', lockDisposition: 'RELEASED',
+    authoritativeObservation: clockAt().observe() };
+  const recovery = frozen({ ...fields, fingerprint: deriveMutationRecoveryFingerprint(fields) });
+  const next = appendMutationRecoveryEvidence(current, recovery);
+  assert.equal(next.mutationRecoveryEvidence[0].transactionId, patch.transactionId);
+  assert.ok(Object.isFrozen(next.mutationRecoveryEvidence[0]));
+  assert.equal(appendMutationRecoveryEvidence(next, recovery), next);
 });
