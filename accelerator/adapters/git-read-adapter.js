@@ -1,0 +1,196 @@
+'use strict';
+
+const childProcess = require('child_process');
+const fs = require('fs');
+const path = require('path');
+const { canonicalizeAuthorizedRoot } = require('../core/workspace-boundary');
+
+const TIMEOUT_MS = 2000;
+const MAX_OUTPUT_BYTES = 64 * 1024;
+const REQUEST_KEYS = new Set([
+  'operationId', 'workspace', 'selector', 'grantEvaluation', 'observedAt'
+]);
+const SELECTORS = Object.freeze({
+  REPOSITORY_ROOT: Object.freeze({ operation: 'rev-parse', args: ['rev-parse', '--show-toplevel'] }),
+  CURRENT_BRANCH: Object.freeze({ operation: 'rev-parse', args: ['rev-parse', '--abbrev-ref', 'HEAD'] }),
+  HEAD_COMMIT: Object.freeze({ operation: 'rev-parse', args: ['rev-parse', '--verify', 'HEAD'] }),
+  WORKTREE_STATUS: Object.freeze({ operation: 'status', args: ['status', '--porcelain=v1', '-z', '--untracked-files=all'] }),
+  TRACKED_FILES: Object.freeze({ operation: 'ls-files', args: ['ls-files', '-z'] })
+});
+const FIXED_CONFIG = Object.freeze([
+  '-c', 'credential.helper=',
+  '-c', 'core.fsmonitor=false',
+  '-c', 'core.hooksPath=/dev/null',
+  '-c', 'diff.external=',
+  '-c', 'diff.trustExitCode=false',
+  '-c', 'pager.status=false',
+  '-c', 'pager.diff=false',
+  '-c', 'pager.show=false'
+]);
+
+function deepFreeze(value) {
+  if (!value || typeof value !== 'object' || Object.isFrozen(value)) return value;
+  for (const child of Object.values(value)) deepFreeze(child);
+  return Object.freeze(value);
+}
+
+function isDeepFrozen(value, seen = new Set()) {
+  if (!value || typeof value !== 'object') return true;
+  if (seen.has(value)) return true;
+  if (!Object.isFrozen(value)) return false;
+  seen.add(value);
+  return Object.values(value).every((child) => isDeepFrozen(child, seen));
+}
+
+function requireText(value, name) {
+  if (typeof value !== 'string' || !value.trim()) {
+    throw new Error(`${name} must be a non-empty string.`);
+  }
+  return value.trim();
+}
+
+function requireTimestamp(value, name) {
+  const timestamp = requireText(value, name);
+  const parsed = Date.parse(timestamp);
+  if (!Number.isFinite(parsed) || new Date(parsed).toISOString() !== timestamp) {
+    throw new Error(`${name} must be a canonical ISO timestamp.`);
+  }
+  return timestamp;
+}
+
+function validateRequestShape(request) {
+  if (!request || typeof request !== 'object' || Array.isArray(request)) {
+    throw new Error('Git read request is missing or malformed.');
+  }
+  if (Object.keys(request).some((key) => !REQUEST_KEYS.has(key))) {
+    throw new Error('Caller-controlled Git arguments, options or environment are forbidden.');
+  }
+}
+
+function validateGrant(evaluation) {
+  if (!evaluation || typeof evaluation !== 'object' ||
+      evaluation.schema !== 'sdo.capability_grant_evaluation.v1' ||
+      evaluation.decision !== 'ALLOWED' || !evaluation.grant ||
+      !isDeepFrozen(evaluation)) {
+    throw new Error('A valid immutable ALLOWED Git-read grant is required.');
+  }
+  const grant = evaluation.grant;
+  if (grant.capabilityType !== 'GIT_READ' || grant.policyDecision !== 'ALLOWED' ||
+      grant.lifecycleState !== 'PENDING' || grant.idempotency !== 'IDEMPOTENT' ||
+      !grant.scope || !Array.isArray(grant.scope.operations) ||
+      grant.scope.operations.length === 0) {
+    throw new Error('Capability grant does not permit bounded Git read.');
+  }
+  return grant;
+}
+
+function sanitizedEnvironment() {
+  return {
+    PATH: process.env.PATH || '',
+    LANG: 'C',
+    LC_ALL: 'C',
+    GIT_TERMINAL_PROMPT: '0',
+    GIT_OPTIONAL_LOCKS: '0',
+    GIT_CONFIG_NOSYSTEM: '1',
+    GIT_CONFIG_GLOBAL: '/dev/null',
+    GIT_PAGER: 'cat',
+    PAGER: 'cat',
+    NO_PROXY: '*',
+    no_proxy: '*'
+  };
+}
+
+function normalizeOutput(selector, stdout, workspace) {
+  if (selector === 'WORKTREE_STATUS' || selector === 'TRACKED_FILES') {
+    const entries = stdout.split('\0').filter(Boolean);
+    if (entries.some((entry) => entry.includes('\0'))) {
+      throw new Error('Git produced malformed NUL-delimited output.');
+    }
+    return entries;
+  }
+  const value = stdout.trim();
+  if (!value || value.includes('\0') || value.includes('\n')) {
+    throw new Error('Git produced malformed scalar output.');
+  }
+  if (selector === 'REPOSITORY_ROOT' && value !== workspace) {
+    throw new Error('Git repository root does not match the authorized workspace.');
+  }
+  if (selector === 'HEAD_COMMIT' && !/^(?:[0-9a-f]{40}|[0-9a-f]{64})$/.test(value)) {
+    throw new Error('Git produced a malformed HEAD object ID.');
+  }
+  return value;
+}
+
+function readGitWithGrant(request) {
+  validateRequestShape(request);
+  const grant = validateGrant(request.grantEvaluation);
+  const operationId = requireText(request.operationId, 'operationId');
+  if (operationId !== grant.operationId) throw new Error('Git capability operationId mismatch.');
+
+  const workspace = canonicalizeAuthorizedRoot(request.workspace);
+  if (workspace !== request.workspace || workspace !== grant.workspace) {
+    throw new Error('Git capability workspace mismatch.');
+  }
+  if (!fs.existsSync(path.join(workspace, '.git')) ||
+      !fs.statSync(path.join(workspace, '.git')).isDirectory()) {
+    throw new Error('Authorized workspace is not a supported local Git repository.');
+  }
+
+  const observedAt = requireTimestamp(request.observedAt, 'observedAt');
+  const expiresAt = requireTimestamp(grant.expiresAt, 'grant.expiresAt');
+  if (Date.parse(observedAt) >= Date.parse(expiresAt)) throw new Error('Git capability grant is expired.');
+
+  const selector = requireText(request.selector, 'selector').toUpperCase();
+  const template = SELECTORS[selector];
+  if (!template) throw new Error(`Unknown or forbidden Git selector: ${selector}`);
+  if (!grant.scope.operations.includes(template.operation)) {
+    throw new Error('Git selector is outside the authorized capability scope.');
+  }
+
+  const args = [...FIXED_CONFIG, ...template.args];
+  const result = childProcess.spawnSync('git', args, {
+    cwd: workspace,
+    shell: false,
+    input: Buffer.alloc(0),
+    encoding: 'utf8',
+    timeout: TIMEOUT_MS,
+    maxBuffer: MAX_OUTPUT_BYTES,
+    windowsHide: true,
+    env: sanitizedEnvironment()
+  });
+
+  if (result.error) {
+    if (result.error.code === 'ETIMEDOUT') throw new Error('Git read timed out.');
+    if (result.error.code === 'ENOBUFS') throw new Error('Git read exceeded output limit.');
+    throw new Error('Git read process failed closed.');
+  }
+  if (result.signal) throw new Error(`Git read terminated by signal: ${result.signal}`);
+  if (result.status !== 0) throw new Error('Git read returned a nonzero exit status.');
+  const stdout = typeof result.stdout === 'string' ? result.stdout : '';
+  const stderr = typeof result.stderr === 'string' ? result.stderr : '';
+  if (Buffer.byteLength(stdout) > MAX_OUTPUT_BYTES || Buffer.byteLength(stderr) > MAX_OUTPUT_BYTES) {
+    throw new Error('Git read exceeded output limit.');
+  }
+  if (stderr.trim()) throw new Error('Git read produced unexpected stderr output.');
+
+  return deepFreeze({
+    schema: 'sdo.git_read_result.v1',
+    operationId,
+    workspace,
+    selector,
+    observedAt,
+    result: normalizeOutput(selector, stdout, workspace),
+    execution: {
+      executable: 'git',
+      arguments: [...args],
+      shell: false,
+      exitCode: result.status,
+      signal: null,
+      timeoutMs: TIMEOUT_MS,
+      maxOutputBytes: MAX_OUTPUT_BYTES,
+      environmentKeys: Object.keys(sanitizedEnvironment()).sort()
+    }
+  });
+}
+
+module.exports = { readGitWithGrant };
