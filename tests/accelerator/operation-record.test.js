@@ -135,7 +135,7 @@ function evidence(adapterType = 'FILESYSTEM_READ', overrides = {}) {
       : adapterType === 'FILESYSTEM_PATCH' ? 'PATCH_FILE' : 'READ_FILE';
   const beforeSha256 = 'c'.repeat(64);
   const replacementSha256 = 'd'.repeat(64);
-  const patchTarget = { requested: 'target.js', canonical: `${WORKSPACE}/target.js` };
+  const patchTarget = { requested: 'target.js', canonical: path.join(WORKSPACE, 'target.js') };
   const payload = adapterType === 'GIT_READ'
     ? { schema: 'sdo.git_read_result.v1', operationId: 'op-1', workspace: WORKSPACE,
         selector: action, result: 'a'.repeat(40) }
@@ -147,7 +147,7 @@ function evidence(adapterType = 'FILESYSTEM_READ', overrides = {}) {
             target: patchTarget, beforeSha256, afterSha256: replacementSha256,
             outcome: 'APPLIED', recovery: 'NOT_REQUIRED' }
       : { schema: 'sdo.filesystem_read_result.v1', operationId: 'op-1', workspace: WORKSPACE,
-          target: { requested: 'target.js', canonical: `${WORKSPACE}/target.js` },
+          target: { requested: 'target.js', canonical: path.join(WORKSPACE, 'target.js') },
           evidence: { bytes: 1, sha256: 'b'.repeat(64), content: 'x' } };
   return {
     evidenceId: `${adapterType}-1`, operationId: 'op-1', workspace: WORKSPACE,
@@ -499,7 +499,7 @@ test('conflicting R3 approval authority replay fails closed', () => {
 
 test('filesystem-patch exact target binding is required', () => {
   assert.throws(() => appendAdapterEvidence(patchRecord(), evidence('FILESYSTEM_PATCH', {
-    target: { requested: 'other.js', canonical: `${WORKSPACE}/other.js` }
+    target: { requested: 'other.js', canonical: path.join(WORKSPACE, 'other.js') }
   })), /malformed or inconsistently bound/);
 });
 
