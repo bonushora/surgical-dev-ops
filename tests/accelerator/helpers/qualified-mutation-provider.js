@@ -20,6 +20,38 @@ function frozen(value) {
 
 const digest = (value) => crypto.createHash('sha256').update(value).digest('hex');
 
+function identityMatches(stat, identity) {
+  return stat && identity &&
+    String(stat.dev) === identity.dev &&
+    String(stat.ino) === identity.ino &&
+    String(stat.size) === identity.size &&
+    String(stat.mtimeNs) === identity.mtimeNs &&
+    String(stat.ctimeNs) === identity.ctimeNs;
+}
+
+function ancestorIdentityChainMatches(chain) {
+  if (!Array.isArray(chain) || chain.length === 0) return false;
+
+  for (const ancestor of chain) {
+    if (!ancestor || typeof ancestor.path !== 'string' || !ancestor.identity) return false;
+
+    let stat;
+    try {
+      stat = fs.statSync(ancestor.path, { bigint: true });
+    } catch {
+      return false;
+    }
+
+    if (!stat.isDirectory() ||
+        String(stat.dev) !== ancestor.identity.dev ||
+        String(stat.ino) !== ancestor.identity.ino) {
+      return false;
+    }
+  }
+
+  return true;
+}
+
 function createQualifiedTestMutationProvider(hooks = {}) {
   let boundary;
   boundary = createInternalMutationProviderBoundary({
@@ -37,11 +69,12 @@ function createQualifiedTestMutationProvider(hooks = {}) {
         current = fs.readFileSync(descriptor);
       } finally { fs.closeSync(descriptor); }
       const identity = request.expectedIdentity;
-      const matches = stat.isFile() && String(stat.dev) === identity.dev &&
-        String(stat.ino) === identity.ino && String(stat.size) === identity.size &&
-        String(stat.mtimeNs) === identity.mtimeNs && String(stat.ctimeNs) === identity.ctimeNs &&
+      const matches = stat.isFile() && identityMatches(stat, identity) &&
         digest(current) === request.beforeSha256;
       if (!matches) return result(request, boundary, 'MISMATCH');
+      if (!ancestorIdentityChainMatches(request.expectedAncestorIdentityChain)) {
+        return result(request, boundary, 'FAILED_PRECOMMIT');
+      }
       const replacement = Buffer.from(request.replacementBase64, 'base64');
       if (digest(replacement) !== request.replacementSha256) {
         return result(request, boundary, 'FAILED_PRECOMMIT');
@@ -60,6 +93,9 @@ function createQualifiedTestMutationProvider(hooks = {}) {
         fs.closeSync(temporaryDescriptor);
         temporaryDescriptor = undefined;
         if (hooks.beforePublish) hooks.beforePublish(request);
+        if (!ancestorIdentityChainMatches(request.expectedAncestorIdentityChain)) {
+          return result(request, boundary, 'FAILED_PRECOMMIT');
+        }
         fs.renameSync(temporary, request.target);
         try {
           const renameBoundary = durability.confirmRename(path.dirname(request.target));

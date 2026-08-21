@@ -402,6 +402,44 @@ test('stale concurrent target change before replacement fails closed', () => {
   assert.equal(fs.readFileSync(targetPath, 'utf8'), 'concurrent\n');
 });
 
+test('ancestor directory replacement immediately before publish fails closed with zero mutation', () => {
+  const nested = path.join(workspace, 'ancestor-a', 'ancestor-b');
+  const nestedTarget = path.join(nested, 'target.txt');
+  const displaced = path.join(workspace, 'ancestor-a-displaced');
+
+  fs.mkdirSync(nested, { recursive: true });
+  fs.writeFileSync(nestedTarget, 'before\n');
+
+  const grantEvaluation = issue({
+    scope: { target: { path: 'ancestor-a/ancestor-b/target.txt',
+      beforeSha256: digest('before\n'),
+      replacementSha256: digest('after\n') } }
+  });
+
+  const mutationProvider = createQualifiedTestMutationProvider({
+    beforePublish() {
+      fs.renameSync(path.join(workspace, 'ancestor-a'), displaced);
+      fs.mkdirSync(nested, { recursive: true });
+      fs.writeFileSync(nestedTarget, 'attacker\n');
+    }
+  });
+
+  try {
+    assert.throws(() => patch({
+      target: 'ancestor-a/ancestor-b/target.txt',
+      grantEvaluation,
+      mutationProvider
+    }), /FAILED_PRECOMMIT/);
+
+    assert.equal(fs.readFileSync(
+      path.join(displaced, 'ancestor-b', 'target.txt'), 'utf8'), 'before\n');
+    assert.equal(fs.readFileSync(nestedTarget, 'utf8'), 'attacker\n');
+  } finally {
+    fs.rmSync(path.join(workspace, 'ancestor-a'), { recursive: true, force: true });
+    fs.rmSync(displaced, { recursive: true, force: true });
+  }
+});
+
 test('AFTER hash and bound evidence are valid', () => {
   const result = patch();
   assert.equal(result.operationId, 'op-patch');

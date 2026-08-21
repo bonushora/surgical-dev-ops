@@ -89,6 +89,56 @@ test('ambiguous owner is not reclaimed without trusted termination proof', (t) =
   assert.equal(lockAdapter.inspectMutationLock({ transaction: s.transaction }).classification, 'MATCHED');
 });
 
+test('trusted terminated-owner recovery releases orphan lock and permits new acquisition', (t) => {
+  const s = setup(t);
+
+  const originalLock = s.transaction.lock;
+  const originalLockId = originalLock.lockId;
+
+  const result = recovery(s).recover({ transaction: s.initial });
+
+  assert.equal(result.recoveryClassification, 'NOT_APPLIED');
+  assert.equal(result.finalRecoveryState, 'FINALIZED_FAILED');
+
+  const afterRecovery = lockAdapter.inspectMutationLock({
+    transaction: s.transaction
+  });
+
+  assert.equal(afterRecovery.classification, 'MISSING');
+
+  const replacementTransaction = createMutationTransaction({
+    operationId: 'op-recovery-next',
+    workspace: s.workspace,
+    target: s.target,
+    beforeSha256: digest('before\n'),
+    replacementSha256: digest('next\n'),
+    grantFingerprint: digest('grant-next'),
+    approvalAuthorityFingerprint: digest('approval-next'),
+    verifiedIdentityAssertionFingerprint: digest('human-next'),
+    idempotencyKey: 'recover-next'
+  });
+
+  const reacquired = lockAdapter.acquireMutationLock({
+    transaction: replacementTransaction,
+    workspace: s.workspace,
+    target: 'target.txt'
+  });
+
+  try {
+    assert.equal(reacquired.decision, 'ACQUIRED');
+    assert.equal(reacquired.lock.lockId, originalLockId);
+    assert.notEqual(reacquired.lock.ownerToken, originalLock.ownerToken);
+    assert.notEqual(reacquired.transaction.transactionId, s.transaction.transactionId);
+  } finally {
+    if (reacquired.decision === 'ACQUIRED') {
+      lockAdapter.releaseMutationLock({
+        transaction: reacquired.transaction,
+        lock: reacquired.lock
+      });
+    }
+  }
+});
+
 test('recovery ownership is cross-process exclusive and non-owner claims contend', (t) => {
   const s = setup(t); const termination = Object.freeze({ decision: 'TERMINATED',
     ownerProcess: s.transaction.lock.ownerProcess });

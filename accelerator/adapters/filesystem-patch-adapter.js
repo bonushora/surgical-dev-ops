@@ -97,6 +97,50 @@ function sameIdentity(left, right) {
     left.mtimeNs === right.mtimeNs && left.ctimeNs === right.ctimeNs;
 }
 
+function filesystemIdentity(stat) {
+  return {
+    dev: String(stat.dev),
+    ino: String(stat.ino),
+    size: String(stat.size),
+    mtimeNs: String(stat.mtimeNs),
+    ctimeNs: String(stat.ctimeNs)
+  };
+}
+
+function directoryIdentity(stat) {
+  return {
+    dev: String(stat.dev),
+    ino: String(stat.ino)
+  };
+}
+
+function captureAncestorIdentityChain(workspace, target) {
+  const parent = path.dirname(target);
+  const relative = path.relative(workspace, parent);
+  const chain = [];
+  let current = workspace;
+
+  const capture = (candidate) => {
+    const stat = fs.statSync(candidate, { bigint: true });
+    if (!stat.isDirectory()) throw new Error('Mutation ancestor is not a directory.');
+    chain.push({
+      path: candidate,
+      identity: directoryIdentity(stat)
+    });
+  };
+
+  capture(current);
+
+  if (relative) {
+    for (const segment of relative.split(path.sep)) {
+      current = path.join(current, segment);
+      capture(current);
+    }
+  }
+
+  return deepFreeze(chain);
+}
+
 function transactionEvidence(context) {
   const state = context && context.current();
   if (!state || !Object.isFrozen(state.transaction) || !state.journal ||
@@ -284,11 +328,9 @@ function patchFileWithGrant({
       transactionId: committedTransaction.transaction.transactionId,
       operationId: normalizedOperationId, workspace: canonicalWorkspace,
       target: resolved.canonicalTarget,
-      expectedIdentity: {
-        dev: String(before.stat.dev), ino: String(before.stat.ino),
-        size: String(before.stat.size), mtimeNs: String(before.stat.mtimeNs),
-        ctimeNs: String(before.stat.ctimeNs)
-      },
+      expectedIdentity: filesystemIdentity(before.stat),
+      expectedAncestorIdentityChain:
+        captureAncestorIdentityChain(canonicalWorkspace, resolved.canonicalTarget),
       beforeSha256: beforeHash, replacementSha256: afterHash,
       replacementBase64: replacementBytes.toString('base64'),
       mode: Number(before.stat.mode),
@@ -358,9 +400,9 @@ function patchFileWithGrant({
           transactionId: committedTransaction.transaction.transactionId,
           operationId: normalizedOperationId, workspace: canonicalWorkspace,
           target: resolved.canonicalTarget,
-          expectedIdentity: { dev: String(current.stat.dev), ino: String(current.stat.ino),
-            size: String(current.stat.size), mtimeNs: String(current.stat.mtimeNs),
-            ctimeNs: String(current.stat.ctimeNs) },
+          expectedIdentity: filesystemIdentity(current.stat),
+          expectedAncestorIdentityChain:
+            captureAncestorIdentityChain(canonicalWorkspace, resolved.canonicalTarget),
           beforeSha256: afterHash, replacementSha256: beforeHash,
           replacementBase64: before.content.toString('base64'), mode: Number(before.stat.mode),
           commitAuthorityFingerprint: durableCommitAuthority.fingerprint
