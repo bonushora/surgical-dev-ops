@@ -47,6 +47,11 @@ jobs:
         continue-on-error: true
         run: npm test > native-test.log 2>&1
 
+      - name: Observe targeted P.3 native contract
+        if: always()
+        continue-on-error: true
+        run: node --test --test-reporter=spec tests/accelerator/mutation-journal-physical-root-platform.test.js
+
       - name: Emit native failure diagnostics
         if: steps.conformance.outcome == 'failure'
         run: |
