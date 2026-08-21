@@ -13,8 +13,17 @@ permissions:
 
 jobs:
   accelerator-conformance:
-    name: Canonical Accelerator Conformance
-    runs-on: ubuntu-latest
+    name: Canonical Accelerator Conformance — ${{ matrix.os }}
+
+    strategy:
+      fail-fast: false
+      matrix:
+        os:
+          - ubuntu-latest
+          - windows-latest
+          - macos-latest
+
+    runs-on: ${{ matrix.os }}
 
     steps:
       - name: Checkout repository
@@ -28,6 +37,9 @@ jobs:
 
       - name: Install dependencies
         run: npm ci
+
+      - name: Show native execution identity
+        run: node -e "console.log(JSON.stringify({ platform: process.platform, arch: process.arch, node: process.version }))"
 
       - name: Run canonical conformance suite
         run: npm test
