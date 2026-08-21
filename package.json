@@ -4,5 +4,8 @@
   },
   "scripts": {
     "test": "node --test tests/accelerator/*.test.js"
+  },
+  "bin": {
+    "surgical": "accelerator/cli/surgical.js"
   }
 }
