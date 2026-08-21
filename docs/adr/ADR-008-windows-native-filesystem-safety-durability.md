@@ -147,3 +147,31 @@ Approved and frozen by project authority on 2026-08-21.
 
 Implementation may refine internal names and native mechanics only while
 preserving every invariant and evidence requirement in this ADR.
+
+## 12. Qualified Helper Boundary
+
+The first qualified implementation candidate SHALL keep Windows-specific
+process creation outside the durability adapter itself. A dedicated bridge MAY
+launch only the repository-fixed `sdo-fs-durability.exe` helper with a fixed
+operation vocabulary, `shell: false`, bounded output and timeout controls.
+Caller-selected executable paths or arbitrary command arguments are forbidden.
+
+The helper is intentionally narrower than a general process adapter. Its first
+qualified operation is `flush-directory`, implemented with a Win32 directory
+handle opened through `CreateFileW` using `FILE_FLAG_BACKUP_SEMANTICS` and
+`FILE_FLAG_OPEN_REPARSE_POINT`, followed by `FlushFileBuffers`. The helper MUST
+reject a final-component reparse point and MUST emit immutable, operation-bound
+identity evidence back to the JavaScript bridge.
+
+Regular-file data flush remains bound to the already-open Node.js file
+descriptor through `fsyncSync`; the Windows helper is not permitted to reopen a
+caller-selected file and silently substitute a different file identity.
+
+The helper source SHALL remain versioned and auditable. The executable is a
+build artifact and SHALL be built before native Windows conformance. If the
+helper cannot be built, cannot be found, cannot open the qualified directory
+handle, or cannot complete `FlushFileBuffers`, Windows durability remains
+unsupported and fails closed.
+
+This section does not claim power-loss qualification. It qualifies only the
+explicit native persistence primitives that are actually invoked and evidenced.

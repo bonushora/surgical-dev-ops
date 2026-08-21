@@ -21,6 +21,25 @@ function fakePort(events, failure = null) {
   };
 }
 
+function fakeWindowsBridge(events, available = true, failure = false) {
+  return Object.freeze({
+    available() { return available; },
+    flushDirectory(directory) {
+      events.push(`winflush:${directory}`);
+      if (failure) throw new Error('injected native directory flush failure');
+      return Object.freeze({
+        schema: 'sdo.windows_native_durability_helper.v1',
+        decision: 'CONFIRMED',
+        operation: 'FLUSH_DIRECTORY',
+        primitive: 'CreateFileW+FlushFileBuffers',
+        volumeSerialNumber: 1,
+        fileIndex: '2',
+        subject: directory
+      });
+    }
+  });
+}
+
 test('supported adapter exposes immutable explicit capabilities without power-loss claim', () => {
   const adapter = createFilesystemDurabilityAdapter({ platform: 'linux', fsPort: fakePort([]) });
   assert.ok(Object.isFrozen(adapter));
@@ -29,7 +48,7 @@ test('supported adapter exposes immutable explicit capabilities without power-lo
   assert.equal(adapter.capabilities.powerLossValidated, false);
 });
 
-test('file data flush uses the platform port and returns immutable evidence', () => {
+test('file data flush uses the platform file descriptor and returns immutable evidence', () => {
   const events = [];
   const adapter = createFilesystemDurabilityAdapter({ platform: 'linux', fsPort: fakePort(events) });
   const result = adapter.flushFile(7, 'temporary replacement');
@@ -38,7 +57,7 @@ test('file data flush uses the platform port and returns immutable evidence', ()
   assert.equal(result.operation, 'FLUSH_FILE_DATA');
 });
 
-test('directory, rename, journal, finalization and lock boundaries flush their directory', () => {
+test('POSIX directory, rename, journal, finalization and lock boundaries fsync their directory', () => {
   const events = [];
   const adapter = createFilesystemDurabilityAdapter({ platform: 'darwin', fsPort: fakePort(events) });
   assert.equal(adapter.flushDirectory('/trusted').operation, 'FLUSH_DIRECTORY');
@@ -50,6 +69,23 @@ test('directory, rename, journal, finalization and lock boundaries flush their d
   assert.equal(events.filter((event) => event.startsWith('close:')).length, 5);
 });
 
+test('Windows uses Node file fsync plus qualified native directory flush evidence', () => {
+  const events = [];
+  const adapter = createFilesystemDurabilityAdapter({
+    platform: 'win32',
+    fsPort: fakePort(events),
+    windowsBridge: fakeWindowsBridge(events)
+  });
+  assert.equal(adapter.capabilities.supported, true);
+  assert.equal(adapter.capabilities.provider, 'NODE_FSYNC_PLUS_WIN32_DIRECTORY_FLUSH_V1');
+  assert.equal(adapter.flushFile(9, 'lock-record').operation, 'FLUSH_FILE_DATA');
+  const directory = adapter.confirmJournal('C:\\trusted', false);
+  assert.equal(directory.operation, 'DURABLE_JOURNAL_APPEND');
+  assert.equal(directory.nativeEvidence.primitive, 'CreateFileW+FlushFileBuffers');
+  assert.ok(Object.isFrozen(directory.nativeEvidence));
+  assert.deepEqual(events, ['fsync:9', 'winflush:C:\\trusted']);
+});
+
 test('flush failures propagate and never produce a confirmation receipt', () => {
   const adapter = createFilesystemDurabilityAdapter({
     platform: 'linux', fsPort: fakePort([], 'fsync')
@@ -58,7 +94,7 @@ test('flush failures propagate and never produce a confirmation receipt', () => 
   assert.throws(() => adapter.confirmRename('/trusted'), /injected fsync failure/);
 });
 
-test('directory descriptor is closed when fsync fails', () => {
+test('POSIX directory descriptor is closed when fsync fails', () => {
   const events = [];
   const adapter = createFilesystemDurabilityAdapter({
     platform: 'linux', fsPort: fakePort(events, 'fsync')
@@ -67,12 +103,27 @@ test('directory descriptor is closed when fsync fails', () => {
   assert.deepEqual(events, ['open:/trusted', 'fsync:41', 'close:41']);
 });
 
-test('unsupported platform fails closed rather than silently downgrading', () => {
-  const adapter = createFilesystemDurabilityAdapter({ platform: 'win32', fsPort: fakePort([]) });
-  assert.equal(adapter.capabilities.supported, false);
-  assert.equal(adapter.capabilities.powerLossValidated, false);
-  assert.throws(() => adapter.flushFile(3), /UNSUPPORTED/);
-  assert.throws(() => adapter.confirmRename('C:\\trusted'), /UNSUPPORTED/);
+test('Windows native directory failure propagates and never becomes success', () => {
+  const events = [];
+  const adapter = createFilesystemDurabilityAdapter({
+    platform: 'win32',
+    fsPort: fakePort(events),
+    windowsBridge: fakeWindowsBridge(events, true, true)
+  });
+  assert.throws(() => adapter.confirmLock('C:\\trusted'), /native directory flush failure/);
+});
+
+test('unsupported platform and missing Windows helper fail closed rather than downgrade', () => {
+  const unknown = createFilesystemDurabilityAdapter({ platform: 'aix', fsPort: fakePort([]) });
+  assert.equal(unknown.capabilities.supported, false);
+  assert.throws(() => unknown.flushFile(3), /UNSUPPORTED/);
+
+  const windows = createFilesystemDurabilityAdapter({
+    platform: 'win32', fsPort: fakePort([]), windowsBridge: fakeWindowsBridge([], false)
+  });
+  assert.equal(windows.capabilities.supported, false);
+  assert.throws(() => windows.flushFile(3), /UNSUPPORTED/);
+  assert.throws(() => windows.confirmRename('C:\\trusted'), /UNSUPPORTED/);
 });
 
 test('malformed descriptors fail closed before platform invocation', () => {
@@ -82,11 +133,7 @@ test('malformed descriptors fail closed before platform invocation', () => {
   assert.deepEqual(events, []);
 });
 
-test('platform integration hooks are explicit and never use shell fallback', () => {
-  for (const platform of ['linux', 'darwin', 'win32']) {
-    const adapter = createFilesystemDurabilityAdapter({ platform, fsPort: fakePort([]) });
-    assert.equal(adapter.capabilities.platform, platform);
-  }
+test('durability adapter itself introduces no generic process or shell authority', () => {
   const source = require('node:fs').readFileSync(require.resolve(
     '../../accelerator/adapters/filesystem-durability-adapter'), 'utf8');
   assert.doesNotMatch(source, /child_process|execFile|spawn|execSync/);

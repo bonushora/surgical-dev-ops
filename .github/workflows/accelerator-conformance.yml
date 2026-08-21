@@ -42,6 +42,11 @@ jobs:
         run: |
           node -e "console.log(JSON.stringify({ platform: process.platform, arch: process.arch, node: process.version }))"
 
+      - name: Build qualified Windows native durability helper
+        if: matrix.os == 'windows-latest'
+        shell: cmd
+        run: accelerator\native\windows\build-helper.cmd
+
       - name: Run canonical conformance suite
         id: conformance
         continue-on-error: true

@@ -5,6 +5,9 @@ const fs = require('node:fs');
 const os = require('node:os');
 const path = require('node:path');
 const childProcess = require('node:child_process');
+const {
+  createWindowsNativeDurabilityBridge
+} = require('../../accelerator/adapters/windows-native-durability-bridge');
 
 function outcome(run) {
   try {
@@ -64,6 +67,12 @@ test('Windows native filesystem and Git primitives are observable without changi
     ? outcome(() => fs.realpathSync(gitRoot.value))
     : { ok: false, code: 'NOT_ATTEMPTED', message: 'Git root unavailable.' };
 
+  const nativeBridge = createWindowsNativeDurabilityBridge();
+  const nativeDirectoryFlush = outcome(() => {
+    if (!nativeBridge.available()) throw new Error('Windows native durability helper unavailable.');
+    return nativeBridge.flushDirectory(base);
+  });
+
   const evidence = {
     schema: 'sdo.windows_native_primitives_probe.v1',
     platform: process.platform,
@@ -76,6 +85,7 @@ test('Windows native filesystem and Git primitives are observable without changi
       ? fs.constants.O_NOFOLLOW : null,
     fileFsync,
     directoryFsync,
+    nativeDirectoryFlush,
     gitRoot,
     gitRootPhysical,
     stackUsesBackslash: (new Error().stack || '').includes('\\')
