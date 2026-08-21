@@ -3,8 +3,10 @@
 'use strict';
 
 const crypto = require('crypto');
-const fs = require('fs');
 const path = require('path');
+const {
+  canonicalizeAuthorizedRoot
+} = require('./workspace-boundary');
 const { evaluateVerifiedHumanIdentityAssertion } = require('./human-identity-assertion');
 const { classifyExpiry } = require('./authoritative-clock');
 
@@ -34,13 +36,15 @@ function evaluateR3ApprovalAuthority(candidate, expected = {}, temporalAuthority
   if (!candidate || typeof candidate !== 'object' || Array.isArray(candidate)) {
     return deepFreeze({ decision: 'DENIED', reason: 'R3 approval authority is missing.', authority: null });
   }
-  const workspace = typeof candidate.workspace === 'string' ? candidate.workspace.trim() : '';
+  const workspaceInput = typeof candidate.workspace === 'string' ? candidate.workspace.trim() : '';
   let canonicalWorkspace = null;
   try {
-    canonicalWorkspace = path.isAbsolute(workspace) && path.normalize(workspace) === workspace &&
-      fs.realpathSync(workspace) === workspace && fs.statSync(workspace).isDirectory()
-      ? workspace : null;
+    canonicalWorkspace = path.isAbsolute(workspaceInput) &&
+      path.normalize(workspaceInput) === workspaceInput
+      ? canonicalizeAuthorizedRoot(workspaceInput)
+      : null;
   } catch {}
+  const workspace = canonicalWorkspace;
   const timestamp = Date.parse(candidate.timestamp);
   const expiresAt = Date.parse(candidate.expiresAt);
   const approver = candidate.approver;

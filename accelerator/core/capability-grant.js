@@ -51,7 +51,7 @@ function canonicalWorkspace(value) {
   }
   try {
     const canonical = canonicalizeAuthorizedRoot(workspace);
-    return canonical === workspace && fs.statSync(canonical).isDirectory()
+    return fs.statSync(canonical).isDirectory()
       ? canonical
       : null;
   } catch {

@@ -2,6 +2,9 @@
 
 const fs = require('fs');
 const path = require('path');
+const {
+  canonicalizeAuthorizedRoot
+} = require('./workspace-boundary');
 const { evaluateR3ApprovalAuthority } = require('./risk-classification');
 const { validateIdentityVerificationResult } = require('../adapters/identity-verification-adapter');
 const { classifyMutationAuthority } = require('./authoritative-clock');
@@ -69,19 +72,25 @@ function validateIdentity(identity, label) {
   return null;
 }
 
-function validateWorkspace(workspace) {
+function canonicalWorkspace(workspace) {
   const value = text(workspace);
   if (!value || !path.isAbsolute(value) || path.normalize(value) !== value) {
-    return 'Canonical workspace must be an absolute normalized path.';
+    return null;
   }
   try {
-    if (fs.realpathSync(value) !== value || !fs.statSync(value).isDirectory()) {
-      return 'Workspace is not a canonical physical directory.';
-    }
+    const canonical = canonicalizeAuthorizedRoot(value);
+    return fs.statSync(canonical).isDirectory()
+      ? canonical
+      : null;
   } catch {
-    return 'Workspace is not a canonical physical directory.';
+    return null;
   }
-  return null;
+}
+
+function validateWorkspace(workspace) {
+  return canonicalWorkspace(workspace)
+    ? null
+    : 'Workspace is not a canonical physical directory.';
 }
 
 function validateApproval(input, operationId, temporalAuthority = {}) {
@@ -191,7 +200,7 @@ function createOperationRecord(input, authoritativeClock = null) {
       version: 1,
       operationId,
       requester: { id: input.requester.id.trim(), type: input.requester.type.trim() },
-      workspace: input.workspace,
+      workspace: canonicalWorkspace(input.workspace),
       objective: input.objective.trim(),
       policyDecision: input.policyDecision,
       riskLevel: input.riskLevel,

@@ -1,7 +1,9 @@
 'use strict';
 
 const crypto = require('crypto');
-const fs = require('fs');
+const {
+  canonicalizeAuthorizedRoot
+} = require('./workspace-boundary');
 const path = require('path');
 const { classifyExpiry } = require('./authoritative-clock');
 
@@ -37,8 +39,7 @@ function canonicalWorkspace(value) {
   const workspace = text(value);
   if (!workspace || !path.isAbsolute(workspace) || path.normalize(workspace) !== workspace) return null;
   try {
-    return fs.realpathSync(workspace) === workspace && fs.statSync(workspace).isDirectory()
-      ? workspace : null;
+    return canonicalizeAuthorizedRoot(workspace);
   } catch {
     return null;
   }
