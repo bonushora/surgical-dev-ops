@@ -43,4 +43,15 @@ jobs:
           node -e "console.log(JSON.stringify({ platform: process.platform, arch: process.arch, node: process.version }))"
 
       - name: Run canonical conformance suite
-        run: npm test
+        id: conformance
+        continue-on-error: true
+        run: npm test > native-test.log 2>&1
+
+      - name: Emit native failure diagnostics
+        if: steps.conformance.outcome == 'failure'
+        run: |
+          node -e "const fs=require('fs'); const log=fs.readFileSync('native-test.log','utf8'); console.log(log); const lines=log.split(/\r?\n/); const selected=lines.filter((line)=>/✖|not ok|AssertionError|ERR_ASSERTION|UNSUPPORTED|unsafe or ambiguous|O_NOFOLLOW|ENOENT|EINVAL|EPERM|EACCES|workspace mismatch|canonical|durability|journal|lock/i.test(line)); const diagnostic=(selected.length?selected.slice(-120):lines.slice(-120)).join(' | '); const escaped=diagnostic.replace(/%/g,'%25').replace(/\r/g,'%0D').replace(/\n/g,'%0A'); console.log('::error title=Native conformance diagnostics::'+escaped);"
+
+      - name: Enforce canonical conformance result
+        if: steps.conformance.outcome == 'failure'
+        run: node -e "process.exit(1)"
