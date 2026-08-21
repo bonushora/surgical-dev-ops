@@ -3,7 +3,10 @@
 const childProcess = require('child_process');
 const fs = require('fs');
 const path = require('path');
-const { canonicalizeAuthorizedRoot } = require('../core/workspace-boundary');
+const {
+  createPathIdentityAuthority,
+  canonicalizeAuthorizedRoot
+} = require('../core/workspace-boundary');
 
 const TIMEOUT_MS = 2000;
 const MAX_OUTPUT_BYTES = 64 * 1024;
@@ -168,8 +171,23 @@ function normalizeOutput(selector, stdout, workspace) {
   if (!value || value.includes('\0') || /[\r\n\u0000-\u0008\u000b\u000c\u000e-\u001f\u007f\u001b]/u.test(value)) {
     throw new Error('Git produced malformed scalar output.');
   }
-  if (selector === 'REPOSITORY_ROOT' && value !== workspace) {
-    throw new Error('Git repository root does not match the authorized workspace.');
+  if (selector === 'REPOSITORY_ROOT') {
+    let repositoryRoot;
+
+    try {
+      repositoryRoot = canonicalizeAuthorizedRoot(value);
+    } catch {
+      throw new Error('Git repository root does not match the authorized workspace.');
+    }
+
+    const pathIdentity =
+      createPathIdentityAuthority(process.platform);
+
+    if (!pathIdentity.sameIdentity(repositoryRoot, workspace)) {
+      throw new Error('Git repository root does not match the authorized workspace.');
+    }
+
+    return repositoryRoot;
   }
   if (selector === 'HEAD_COMMIT' && !/^(?:[0-9a-f]{40}|[0-9a-f]{64})$/.test(value)) {
     throw new Error('Git produced a malformed HEAD object ID.');

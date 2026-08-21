@@ -118,7 +118,7 @@ function validateStorageRoot(configuredRoot) {
   } catch {
     throw new Error('Trusted mutation journal root cannot be resolved.');
   }
-  if (!stat.isDirectory() || stat.isSymbolicLink() || canonical !== configuredRoot) {
+  if (!stat.isDirectory() || stat.isSymbolicLink()) {
     throw new Error('Trusted mutation journal root is unsafe or ambiguous.');
   }
   if (typeof process.getuid === 'function' && stat.uid !== process.getuid()) {
