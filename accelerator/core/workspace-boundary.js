@@ -93,6 +93,41 @@ function canonicalizeAuthorizedRoot(rootPath) {
   return canonicalRoot;
 }
 
+function samePhysicalWorkspaceIdentity(left, right, platform = process.platform) {
+  const pathIdentity = createPathIdentityAuthority(platform);
+
+  let leftRoot;
+  let rightRoot;
+
+  try {
+    leftRoot = canonicalizeAuthorizedRoot(left);
+    rightRoot = canonicalizeAuthorizedRoot(right);
+  } catch {
+    return false;
+  }
+
+  try {
+    const leftStat = fs.statSync(leftRoot, { bigint: true });
+    const rightStat = fs.statSync(rightRoot, { bigint: true });
+
+    if (!leftStat.isDirectory() || !rightStat.isDirectory()) {
+      return false;
+    }
+
+    if (leftStat.dev === rightStat.dev && leftStat.ino === rightStat.ino) {
+      return true;
+    }
+  } catch {
+    return false;
+  }
+
+  try {
+    return pathIdentity.sameIdentity(leftRoot, rightRoot);
+  } catch {
+    return false;
+  }
+}
+
 function containsTraversal(targetPath) {
   return targetPath
     .split(/[\\/]+/)
@@ -146,5 +181,6 @@ function resolveInspectedFile(authorizedRoot, targetPath) {
 module.exports = {
   createPathIdentityAuthority,
   canonicalizeAuthorizedRoot,
+  samePhysicalWorkspaceIdentity,
   resolveInspectedFile
 };

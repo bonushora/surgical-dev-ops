@@ -3,6 +3,7 @@
 const childProcess = require('child_process');
 const fs = require('fs');
 const path = require('path');
+const { openVerifiedRegularRead } = require('./filesystem-safe-read-adapter');
 const {
   createPathIdentityAuthority,
   canonicalizeAuthorizedRoot,
@@ -73,24 +74,17 @@ function validateGrant(evaluation) {
 }
 
 function readBoundedSource(canonicalTarget) {
-  if (typeof fs.constants.O_NOFOLLOW !== 'number') {
-    throw new Error('Platform cannot guarantee no-follow validation reads.');
-  }
-  let descriptor;
+  let opened;
   try {
-    descriptor = fs.openSync(
-      canonicalTarget,
-      fs.constants.O_RDONLY | fs.constants.O_NOFOLLOW
-    );
-    const stat = fs.fstatSync(descriptor);
-    if (!stat.isFile()) throw new Error('Validation target is not a regular file.');
-    if (stat.size > MAX_INPUT_BYTES) throw new Error('Validation target exceeds input limit.');
-    return fs.readFileSync(descriptor);
+    opened = openVerifiedRegularRead(canonicalTarget, { maxBytes: MAX_INPUT_BYTES });
+    return fs.readFileSync(opened.descriptor);
   } catch (error) {
-    if (/exceeds input limit/.test(error.message)) throw error;
+    if (/exceeds protected read size bound/.test(error.message)) {
+      throw new Error('Validation target exceeds input limit.');
+    }
     throw new Error('Validation target read failed closed.');
   } finally {
-    if (descriptor !== undefined) fs.closeSync(descriptor);
+    if (opened) fs.closeSync(opened.descriptor);
   }
 }
 

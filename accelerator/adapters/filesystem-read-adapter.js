@@ -2,6 +2,7 @@
 
 const crypto = require('crypto');
 const fs = require('fs');
+const { openVerifiedRegularRead } = require('./filesystem-safe-read-adapter');
 const {
   createPathIdentityAuthority,
   canonicalizeAuthorizedRoot,
@@ -96,25 +97,15 @@ function readFileWithGrant({
     throw new Error('Requested target is outside the authorized capability scope.');
   }
 
-  if (typeof fs.constants.O_NOFOLLOW !== 'number') {
-    throw new Error('Platform cannot guarantee no-follow filesystem reads.');
-  }
-
-  let descriptor;
+  let opened;
   let content;
   try {
-    descriptor = fs.openSync(
-      resolved.canonicalTarget,
-      fs.constants.O_RDONLY | fs.constants.O_NOFOLLOW
-    );
-    if (!fs.fstatSync(descriptor).isFile()) {
-      throw new Error('Opened target is not a regular file.');
-    }
-    content = fs.readFileSync(descriptor);
+    opened = openVerifiedRegularRead(resolved.canonicalTarget);
+    content = fs.readFileSync(opened.descriptor);
   } catch {
     throw new Error('Authorized filesystem read failed closed.');
   } finally {
-    if (descriptor !== undefined) fs.closeSync(descriptor);
+    if (opened) fs.closeSync(opened.descriptor);
   }
 
   return deepFreeze({

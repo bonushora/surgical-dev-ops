@@ -2,7 +2,7 @@
 
 'use strict';
 
-const { createPathIdentityAuthority } = require('./workspace-boundary');
+const { samePhysicalWorkspaceIdentity } = require('./workspace-boundary');
 
 const crypto = require('crypto');
 const path = require('path');
@@ -177,19 +177,10 @@ function validateControlledRequest(request, repositoryPath, expectedRisk, runtim
   if (request.operationId !== grant.operationId) {
     return executionDenial('Capability operationId mismatch.');
   }
-  const pathIdentityAuthority = createPathIdentityAuthority();
-
-  let requestWorkspaceMatches;
-  let grantWorkspaceMatches;
-
-  try {
-    requestWorkspaceMatches =
-      pathIdentityAuthority.sameIdentity(request.workspace, repositoryPath);
-    grantWorkspaceMatches =
-      pathIdentityAuthority.sameIdentity(grant.workspace, repositoryPath);
-  } catch {
-    return executionDenial('Capability workspace mismatch.');
-  }
+  const requestWorkspaceMatches =
+    samePhysicalWorkspaceIdentity(request.workspace, repositoryPath);
+  const grantWorkspaceMatches =
+    samePhysicalWorkspaceIdentity(grant.workspace, repositoryPath);
 
   if (!requestWorkspaceMatches || !grantWorkspaceMatches) {
     return executionDenial('Capability workspace mismatch.');
@@ -246,15 +237,9 @@ function validateControlledRequest(request, repositoryPath, expectedRisk, runtim
   const recordPolicyMatches = r3Patch
     ? operationRecord && operationRecord.policyDecision === 'APPROVAL_REQUIRED'
     : operationRecord && operationRecord.policyDecision === grant.policyDecision;
-  let operationRecordWorkspaceMatches = false;
-
-  try {
-    operationRecordWorkspaceMatches =
-      Boolean(operationRecord) &&
-      pathIdentityAuthority.sameIdentity(operationRecord.workspace, repositoryPath);
-  } catch {
-    operationRecordWorkspaceMatches = false;
-  }
+  const operationRecordWorkspaceMatches =
+    Boolean(operationRecord) &&
+    samePhysicalWorkspaceIdentity(operationRecord.workspace, repositoryPath);
 
   if (!operationRecord || operationRecord.schema !== 'sdo.operation_record.v1' ||
       !isDeepFrozen(operationRecord) || operationRecord.operationId !== request.operationId ||
@@ -340,7 +325,7 @@ function validateControlledRequest(request, repositoryPath, expectedRisk, runtim
       !isDeepFrozen(lifecycle) || lifecycle.operationId !== request.operationId ||
       !['PENDING', 'COMPLETED', 'FAILED'].includes(lifecycle.status) ||
       !lifecycle.evidence || !lifecycle.evidence.before ||
-      lifecycle.evidence.before.path !== repositoryPath ||
+      !samePhysicalWorkspaceIdentity(lifecycle.evidence.before.path, repositoryPath) ||
       !lifecycle.temporal || Date.parse(request.observedAt) < Date.parse(lifecycle.temporal.createdAt)) {
     return executionDenial('Lifecycle binding is missing or invalid.');
   }
@@ -727,7 +712,10 @@ function orchestrate(input, runtime = {}) {
         execution: replayValidation, nextStep: replayValidation.reason
       };
     }
-    const replayId = evidenceIdentity(input.execution, replayValidation.grantFingerprint);
+    const replayRequest = input.execution.workspace === discovery.repository.path
+      ? input.execution
+      : deepFreeze({ ...input.execution, workspace: discovery.repository.path });
+    const replayId = evidenceIdentity(replayRequest, replayValidation.grantFingerprint);
     const prior = replayValidation.operationRecord.adapterEvidence.find(
       (entry) => entry.adapterType === 'FILESYSTEM_PATCH' && entry.action === 'PATCH_FILE'
     );
@@ -739,10 +727,10 @@ function orchestrate(input, runtime = {}) {
     if (completed && runtime.mutationJournalAdapter &&
         typeof runtime.mutationJournalAdapter.reopen === 'function') {
       try {
-        const grant = input.execution.grantEvaluation.grant;
+        const grant = replayRequest.grantEvaluation.grant;
         const transaction = createMutationTransaction({
-          operationId: input.execution.operationId,
-          workspace: input.execution.workspace,
+          operationId: replayRequest.operationId,
+          workspace: replayRequest.workspace,
           target: grant.scope.target.canonicalPath,
           beforeSha256: grant.scope.target.beforeSha256,
           replacementSha256: grant.scope.target.replacementSha256,
@@ -753,7 +741,7 @@ function orchestrate(input, runtime = {}) {
         });
         const journal = runtime.mutationJournalAdapter.reopen(transaction);
         const physical = filesystemPatchAdapter.verifyAppliedFile({
-          workspace: input.execution.workspace, target: input.execution.target,
+          workspace: replayRequest.workspace, target: replayRequest.target,
           expectedSha256: grant.scope.target.replacementSha256
         });
         journalProven = journal.transaction.stage === 'FINALIZED_SUCCESS' &&
@@ -946,7 +934,7 @@ function orchestrate(input, runtime = {}) {
     };
   }
 
-  const request = input.execution;
+  let request = input.execution;
   const validation = validateControlledRequest(
     request, discovery.repository.path, classification.classification.level, runtime,
     { previousReading: authorityObservation && authorityObservation.reading }
@@ -963,6 +951,10 @@ function orchestrate(input, runtime = {}) {
       state: { boundary: stateBoundary, transition: pendingTransition },
       nextStep: validation.reason
     };
+  }
+
+  if (request.workspace !== discovery.repository.path) {
+    request = deepFreeze({ ...request, workspace: discovery.repository.path });
   }
 
   if (request.adapter === 'FILESYSTEM_PATCH') {

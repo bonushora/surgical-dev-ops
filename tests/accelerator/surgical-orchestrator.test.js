@@ -876,3 +876,30 @@ test('workspace identity boundary accepts equivalent native identity without wea
     assert.equal(result.execution.workspace, request.workspace);
     assert.equal(result.governed.operationRecord.workspace, request.workspace);
   }));
+
+
+test('orchestrator accepts a lexical workspace alias only when it resolves to the authorized physical repository',
+  (context) => withFixture((repo) => {
+    const aliasParent = fs.mkdtempSync(path.join(os.tmpdir(), 'sdo-orchestrator-alias-parent-'));
+    const alias = path.join(aliasParent, 'repository-link');
+
+    context.after(() => {
+      fs.rmSync(aliasParent, { recursive: true, force: true });
+    });
+
+    try {
+      fs.symlinkSync(repo, alias, 'dir');
+    } catch (error) {
+      if (['EPERM', 'EACCES', 'ENOTSUP'].includes(error.code)) {
+        return context.skip('Symlink creation is unavailable on this platform.');
+      }
+      throw error;
+    }
+
+    const request = execution(alias, 'FILESYSTEM_READ', { lifecycle: lifecycle(repo) });
+    const result = orchestrate(input(alias, request));
+
+    assert.equal(result.orchestration.status, 'COMPLETED');
+    assert.equal(fs.realpathSync(request.workspace), repo);
+    assert.equal(result.governed.operationRecord.workspace, repo);
+  }));

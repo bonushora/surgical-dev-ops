@@ -3,6 +3,7 @@
 const crypto = require('crypto');
 const fs = require('fs');
 const path = require('path');
+const { openVerifiedRegularRead } = require('./filesystem-safe-read-adapter');
 const {
   createPathIdentityAuthority,
   canonicalizeAuthorizedRoot,
@@ -77,19 +78,18 @@ function validateGrant(evaluation) {
 }
 
 function readRegularNoFollow(target) {
-  if (typeof fs.constants.O_NOFOLLOW !== 'number') {
-    throw new Error('Platform cannot guarantee no-follow filesystem access.');
-  }
-  let descriptor;
+  let opened;
   try {
-    descriptor = fs.openSync(target, fs.constants.O_RDONLY | fs.constants.O_NOFOLLOW);
-    const stat = fs.fstatSync(descriptor, { bigint: true });
-    if (!stat.isFile()) throw new Error('Target is not a regular file.');
-    if (stat.size > BigInt(MAX_BYTES)) throw new Error('Target exceeds the bounded patch size.');
-    const content = fs.readFileSync(descriptor);
-    return { content, stat };
+    opened = openVerifiedRegularRead(target, { maxBytes: MAX_BYTES });
+    const content = fs.readFileSync(opened.descriptor);
+    return { content, stat: opened.stat };
+  } catch (error) {
+    if (/exceeds protected read size bound/.test(error.message)) {
+      throw new Error('Target exceeds the bounded patch size.');
+    }
+    throw error;
   } finally {
-    if (descriptor !== undefined) fs.closeSync(descriptor);
+    if (opened) fs.closeSync(opened.descriptor);
   }
 }
 
