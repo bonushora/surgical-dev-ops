@@ -1,5 +1,8 @@
 {
   "devDependencies": {
     "prisma": "^7.9.0"
+  },
+  "scripts": {
+    "test": "node --test tests/accelerator/*.test.js"
   }
 }
