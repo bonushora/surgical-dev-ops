@@ -550,3 +550,97 @@ It consolidates the approved decisions that:
 - human authority, least privilege, auditability, worktree preservation and fail-closed behavior remain mandatory.
 
 The implementation details may evolve. The frozen invariants in this ADR may not change without a superseding architectural decision.
+
+---
+
+## Amendment 2026-08-21 — Surgical Human Experience Levels
+
+**Status: APPROVED / FROZEN**
+
+This amendment freezes the human-experience evolution model for Surgical DevOps.
+
+### Canonical human entrypoint
+
+The canonical human-facing entrypoint SHALL be:
+
+`surgical`
+
+The `surgical` command SHALL activate the Surgical DevOps environment for the current authorized workspace.
+
+The command is a human interaction layer over the Surgical DevOps Orchestrator. It SHALL NOT create a second execution authority or bypass the existing trust boundary.
+
+### Full Orchestrator capability from Level 1
+
+All capabilities available in the Surgical DevOps Orchestrator SHALL be available from Level 1 whenever their policy, authorization, capability, provider and platform requirements are satisfied.
+
+Experience levels SHALL primarily represent progressive improvement of the human user experience.
+
+They SHALL NOT be used to artificially postpone, hide or disable existing Orchestrator capabilities.
+
+### Level 1 — Surgical CLI
+
+Level 1 SHALL provide a simple interactive terminal experience through the canonical `surgical` entrypoint.
+
+Level 1 SHALL expose the complete available capability of the Surgical DevOps Orchestrator through a human-oriented interface.
+
+It SHALL support:
+
+- standalone operation with zero development providers;
+- single-provider operation;
+- multi-provider operation;
+- provider and orchestrator composition through explicit contracts;
+- repository discovery;
+- Declarative Inspection;
+- risk classification and policy evaluation;
+- change planning;
+- governed reads;
+- governed validation;
+- governed mutations when independently authorized and qualified;
+- lifecycle management;
+- operation records and evidence;
+- snapshot and delivery semantics;
+- deterministic fail-closed behavior.
+
+The absence of an AI or development provider SHALL NOT prevent Surgical DevOps from starting or from performing capabilities that do not require a provider.
+
+### Level 2 — Assisted Workspace
+
+Level 2 SHALL preserve all Level 1 capabilities.
+
+Its primary evolution SHALL be improvement of the human experience, including streaming interaction, interactive diffs, richer approval flows, improved repository context, session history, resumable interaction, improved provider-composition feedback and richer validation presentation.
+
+### Level 3 — Orchestration Workspace
+
+Level 3 SHALL preserve all previous capabilities and the canonical `surgical` entrypoint.
+
+Its primary evolution SHALL be toward an advanced Development Orchestration Workspace, including multi-agent interaction, multi-orchestrator composition, parallel task decomposition, dependency-aware execution, cross-provider validation, advanced context management, richer session persistence and human supervision of concurrent governed work.
+
+### Provider independence
+
+Providers, AI systems, coding agents, tools and external orchestrators are plug-in capabilities.
+
+They SHALL NOT be prerequisites for Surgical DevOps activation.
+
+The supported composition model SHALL include standalone operation with zero development providers, single-provider operation and multi-provider operation with two or more providers, agents, tools or orchestrators.
+
+All modes remain governed by the Surgical DevOps Orchestrator.
+
+Provider participation SHALL NOT grant direct authority over the workspace.
+
+### Human Experience Layer
+
+The Human Experience Layer SHALL simplify interaction with the Surgical DevOps Orchestrator while preserving BH-SEP, BH-SDP, policy and risk evaluation, capability grants, provider composition, lifecycle and evidence, controlled adapters and the existing trust boundary.
+
+It SHALL NOT become a second policy engine, a second trust boundary or an independent execution authority.
+
+### Stable experience contract
+
+The `surgical` entrypoint SHOULD remain stable across Levels 1, 2 and 3.
+
+Internal complexity involving providers, grants, adapters, lifecycle, evidence and orchestration SHOULD remain hidden from the ordinary user unless disclosure is required for authorization, explanation, audit or advanced configuration.
+
+The governing objective is:
+
+> Improve the human experience over time while preserving the complete deterministic capability and trust model of the Surgical DevOps Orchestrator.
+
+**Decision: APPROVED AND FROZEN.**
