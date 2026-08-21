@@ -15,6 +15,8 @@ const gitReadAdapter = require('../../accelerator/adapters/git-read-adapter');
 const processValidationAdapter = require('../../accelerator/adapters/process-validation-adapter');
 const identityVerificationAdapter = require('../../accelerator/adapters/identity-verification-adapter');
 const filesystemPatchAdapter = require('../../accelerator/adapters/filesystem-patch-adapter');
+const { createQualifiedTestMutationProvider, createTestBoundary, bindMutationProviderRuntime } =
+  require('./helpers/qualified-mutation-provider');
 const { createMutationJournalAdapter } =
   require('../../accelerator/adapters/mutation-journal-adapter');
 const { evaluateCapabilityGrant } = require('../../accelerator/core/capability-grant');
@@ -163,12 +165,17 @@ function r3Execution(repo, overrides = {}) {
 function r3Runtime(request, overrides = {}) {
   const journalRoot = fs.mkdtempSync(path.join(os.tmpdir(), 'sdo-orchestrator-journal-'));
   journalRoots.push(journalRoot);
-  return { trustedIdentityIssuers: ['issuer:test'], identityAudience: 'surgical-devops',
+  const provider = overrides.mutationProvider || createQualifiedTestMutationProvider();
+  const runtime = { trustedIdentityIssuers: ['issuer:test'], identityAudience: 'surgical-devops',
     authoritativeClock: clockAt(),
     mutationJournalAdapter: createMutationJournalAdapter({ storageRoot: journalRoot }),
     identityVerifierPort: { verify() { return { status: 'VERIFIED',
       assertion: request.operationRecord.verifiedIdentityAssertion, verifierId: 'test-port' }; } },
     ...overrides };
+  delete runtime.mutationProvider;
+  if (overrides.useQualified !== false) bindMutationProviderRuntime(runtime, provider);
+  delete runtime.useQualified;
+  return runtime;
 }
 
 function failingJournal(base, stage) {
@@ -253,6 +260,63 @@ function assertNoDispatch(context, repo, request, pattern) {
   assert.match(result.execution.reason, pattern);
   assert.equal(calls, 0);
 }
+
+test('default production provider state denies patch with immutable zero-dispatch evidence', () =>
+  withFixture((repo) => {
+    const request = r3Execution(repo);
+    const runtime = r3Runtime(request, { useQualified: false });
+    const result = orchestrate(input(repo, request, { risk: 'ALTO', policy: {
+      decision: 'APPROVAL_REQUIRED', approvalAuthority: request.operationRecord.approvalAuthority
+    } }), runtime);
+    assert.equal(result.orchestration.status, 'DENIED');
+    assert.equal(result.orchestration.executionAttempted, false);
+    assert.equal(fs.readFileSync(path.join(repo, 'target.js'), 'utf8'), 'const value = 1;\n');
+    assert.equal(result.execution.providerEvidence.qualificationState, 'UNQUALIFIED');
+    assert.equal(result.execution.providerEvidence.zeroDispatch, true);
+    assert.equal(result.governed.operationRecord.mutationProviderEvidence.length, 1);
+  }));
+
+test('trusted non-qualified provider states deny before physical provider dispatch', () =>
+  withFixture((repo) => {
+    for (const state of ['UNQUALIFIED', 'UNSUPPORTED', 'FAILED']) {
+      const request = r3Execution(repo);
+      const mutationProvider = createTestBoundary(state);
+      const result = orchestrate(input(repo, request, { risk: 'ALTO', policy: {
+        decision: 'APPROVAL_REQUIRED', approvalAuthority: request.operationRecord.approvalAuthority
+      } }), r3Runtime(request, { mutationProvider }));
+      assert.equal(result.orchestration.status, 'DENIED');
+      assert.equal(result.orchestration.executionAttempted, false);
+      assert.equal(result.execution.providerEvidence.qualificationState, state);
+    }
+    assert.equal(fs.readFileSync(path.join(repo, 'target.js'), 'utf8'), 'const value = 1;\n');
+  }));
+
+test('caller runtime provider injection is ignored and remains zero-dispatch', () =>
+  withFixture((repo) => {
+    const request = r3Execution(repo);
+    const runtime = r3Runtime(request, { useQualified: false });
+    runtime.mutationProvider = { qualification: { state: 'QUALIFIED', providerId: 'forged' },
+      compareAndReplace() { throw new Error('must not run'); } };
+    const result = orchestrate(input(repo, request, { risk: 'ALTO', policy: {
+      decision: 'APPROVAL_REQUIRED', approvalAuthority: request.operationRecord.approvalAuthority
+    } }), runtime);
+    assert.equal(result.orchestration.status, 'DENIED');
+    assert.equal(result.execution.providerEvidence.zeroDispatch, true);
+    assert.equal(fs.readFileSync(path.join(repo, 'target.js'), 'utf8'), 'const value = 1;\n');
+  }));
+
+test('caller provider selection and qualification fields are rejected at request-shape boundary', () => {
+  for (const forged of [
+    { providerId: 'forged' }, { qualificationState: 'QUALIFIED' },
+    { mutationProvider: {} }, { provider: {} }, { compareAndReplace() {} }
+  ]) {
+    const result = orchestrate({ ...input('/unreachable', forged), execution: {
+      adapter: 'FILESYSTEM_PATCH', action: 'PATCH_FILE', ...forged
+    } });
+    assert.equal(result.state.status, 'NOT_EXECUTABLE');
+    assert.match(result.execution.reason, /provider selection is forbidden/);
+  }
+});
 
 test('governed filesystem read succeeds with bound evidence', () => withFixture((repo) => {
   const result = orchestrate(input(repo, execution(repo, 'FILESYSTEM_READ')));
@@ -392,8 +456,9 @@ test('journal failure matrix is zero-mutation before commit and recovery-require
     withFixture((repo) => {
       const request = r3Execution(repo);
       const baseRuntime = r3Runtime(request);
-      const runtime = { ...baseRuntime,
-        mutationJournalAdapter: failingJournal(baseRuntime.mutationJournalAdapter, stage) };
+      const runtime = bindMutationProviderRuntime({ ...baseRuntime,
+        mutationJournalAdapter: failingJournal(baseRuntime.mutationJournalAdapter, stage) },
+      createQualifiedTestMutationProvider());
       const result = orchestrate(input(repo, request, { risk: 'ALTO', policy: {
         decision: 'APPROVAL_REQUIRED',
         approvalAuthority: request.operationRecord.approvalAuthority
@@ -423,8 +488,9 @@ test('FINALIZED_FAILED journal failure retains the exact-target lock', (context)
     });
     const result = orchestrate(input(repo, request, { risk: 'ALTO', policy: {
       decision: 'APPROVAL_REQUIRED', approvalAuthority: request.operationRecord.approvalAuthority
-    } }), { ...baseRuntime,
-      mutationJournalAdapter: failingJournal(baseRuntime.mutationJournalAdapter, 'FINALIZED_FAILED') });
+    } }), bindMutationProviderRuntime({ ...baseRuntime,
+      mutationJournalAdapter: failingJournal(baseRuntime.mutationJournalAdapter, 'FINALIZED_FAILED') },
+    createQualifiedTestMutationProvider()));
     assert.equal(result.orchestration.status, 'FAILED');
     assert.equal(fs.readFileSync(path.join(repo, 'target.js'), 'utf8'), 'const value = 1;\n');
     const second = orchestrate(input(repo, request, { risk: 'ALTO', policy: {

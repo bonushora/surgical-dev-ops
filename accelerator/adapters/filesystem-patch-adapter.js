@@ -9,8 +9,11 @@ const {
 } = require('../core/workspace-boundary');
 const { deriveCapabilityGrantFingerprint } = require('../core/capability-grant');
 const { evaluateMutationAuthority } = require('../core/authoritative-clock');
-const { defaultFilesystemDurabilityAdapter } = require('./filesystem-durability-adapter');
-const { requireDurabilityReceipt, durabilityClaims } = require('../core/mutation-durability');
+const { durabilityClaims } = require('../core/mutation-durability');
+const {
+  requireQualifiedMutationProvider,
+  validateMutationProviderResult
+} = require('../core/mutation-provider');
 
 const MAX_BYTES = 1024 * 1024;
 
@@ -94,52 +97,6 @@ function sameIdentity(left, right) {
     left.mtimeNs === right.mtimeNs && left.ctimeNs === right.ctimeNs;
 }
 
-function writeTemporary(directory, mode, content, durabilityAdapter) {
-  const temporary = path.join(directory, `.sdo-patch-${crypto.randomUUID()}.tmp`);
-  let descriptor;
-  try {
-    descriptor = fs.openSync(
-      temporary,
-      fs.constants.O_WRONLY | fs.constants.O_CREAT | fs.constants.O_EXCL | fs.constants.O_NOFOLLOW,
-      mode & 0o777
-    );
-    fs.writeFileSync(descriptor, content);
-    const flushed = durabilityAdapter.flushFile(descriptor, `replacement-temp:${temporary}`);
-    requireDurabilityReceipt(flushed, 'FLUSH_FILE_DATA');
-    fs.closeSync(descriptor);
-    descriptor = undefined;
-    return temporary;
-  } catch (error) {
-    if (descriptor !== undefined) fs.closeSync(descriptor);
-    try { fs.unlinkSync(temporary); } catch {}
-    throw error;
-  }
-}
-
-function atomicReplace(target, content, mode, durabilityAdapter) {
-  const temporary = writeTemporary(path.dirname(target), mode, content, durabilityAdapter);
-  const verified = readRegularNoFollow(temporary);
-  if (!verified.content.equals(content)) {
-    try { fs.unlinkSync(temporary); } catch {}
-    throw new Error('Durably flushed replacement temporary file failed identity verification.');
-  }
-  try {
-    fs.renameSync(temporary, target);
-    try {
-      const durableRename = durabilityAdapter.confirmRename(path.dirname(target));
-      requireDurabilityReceipt(durableRename, 'DURABLE_RENAME_BOUNDARY');
-      return deepFreeze({ tempData: 'CONFIRMED', renameBoundary: durableRename,
-        claims: durabilityClaims() });
-    } catch (error) {
-      error.physicalCommitOccurred = true;
-      throw error;
-    }
-  } catch (error) {
-    try { fs.unlinkSync(temporary); } catch {}
-    throw error;
-  }
-}
-
 function transactionEvidence(context) {
   const state = context && context.current();
   if (!state || !Object.isFrozen(state.transaction) || !state.journal ||
@@ -161,12 +118,12 @@ function transactionEvidence(context) {
 
 function evidence({ operationId, workspace, requested, canonical, beforeHash, afterHash,
   outcome, recovery, observedAt, temporalAuthority, commitAuthority, transaction,
-  durability = null }) {
+  durability = null, mutationProvider = null }) {
   return deepFreeze({
     schema: 'sdo.filesystem_patch_result.v1', operationId, workspace,
     target: { requested, canonical }, beforeSha256: beforeHash, afterSha256: afterHash,
     outcome, recovery, observedAt, temporalAuthority, commitAuthority: commitAuthority || null,
-    transaction, durability
+    transaction, durability, mutationProvider
   });
 }
 
@@ -209,6 +166,7 @@ function denyBeforeCommit(context, temporalAuthority, reason, transactionContext
 function patchFileWithGrant({
   operationId, workspace, target, replacement, grantEvaluation
 }, temporalRuntime = {}) {
+  const qualifiedProvider = requireQualifiedMutationProvider(temporalRuntime.mutationProvider);
   const grant = validateGrant(grantEvaluation);
   const normalizedOperationId = requireText(operationId, 'operationId');
   if (normalizedOperationId !== grant.operationId) throw new Error('Capability operationId mismatch.');
@@ -217,8 +175,6 @@ function patchFileWithGrant({
     throw new Error('Capability workspace mismatch.');
   }
   const transactionContext = temporalRuntime.mutationTransaction;
-  const durabilityAdapter = temporalRuntime.durabilityAdapter ||
-    defaultFilesystemDurabilityAdapter;
   const initialTransaction = transactionContext && transactionContext.current();
   if (!initialTransaction || initialTransaction.transaction.stage !== 'LOCKED' ||
       !initialTransaction.transaction.lock) {
@@ -320,9 +276,35 @@ function patchFileWithGrant({
     throw new Error('Durable commit-authority journal proof is required before replacement.');
   }
   let physicalDurability;
+  let providerEvidence;
   try {
-    physicalDurability = atomicReplace(resolved.canonicalTarget, replacementBytes,
-      Number(before.stat.mode), durabilityAdapter);
+    const providerRequest = deepFreeze({
+      schema: 'sdo.compare_and_replace_request.v1',
+      operation: 'COMPARE_AND_REPLACE', phase: 'AUTHORIZED_PATCH',
+      transactionId: committedTransaction.transaction.transactionId,
+      operationId: normalizedOperationId, workspace: canonicalWorkspace,
+      target: resolved.canonicalTarget,
+      expectedIdentity: {
+        dev: String(before.stat.dev), ino: String(before.stat.ino),
+        size: String(before.stat.size), mtimeNs: String(before.stat.mtimeNs),
+        ctimeNs: String(before.stat.ctimeNs)
+      },
+      beforeSha256: beforeHash, replacementSha256: afterHash,
+      replacementBase64: replacementBytes.toString('base64'),
+      mode: Number(before.stat.mode),
+      commitAuthorityFingerprint: durableCommitAuthority.fingerprint
+    });
+    providerEvidence = validateMutationProviderResult(
+      qualifiedProvider.boundary.compareAndReplace(providerRequest, {
+        durabilityAdapter: temporalRuntime.durabilityAdapter
+      }), providerRequest, qualifiedProvider.decision
+    );
+    if (providerEvidence.outcome !== 'APPLIED') {
+      const providerError = new Error(`Qualified compare-and-replace ${providerEvidence.outcome}.`);
+      providerError.physicalCommitOccurred = providerEvidence.outcome === 'AMBIGUOUS_POSTCOMMIT';
+      throw providerError;
+    }
+    physicalDurability = providerEvidence.durability || null;
   } catch (commitError) {
     if (!commitError.physicalCommitOccurred) throw commitError;
     try { transactionContext.requireRecovery(); } catch {}
@@ -369,8 +351,26 @@ function patchFileWithGrant({
     } catch {}
     if (owned) {
       try {
-        atomicReplace(resolved.canonicalTarget, before.content, Number(before.stat.mode),
-          durabilityAdapter);
+        const current = readRegularNoFollow(resolved.canonicalTarget);
+        const restoreRequest = deepFreeze({
+          schema: 'sdo.compare_and_replace_request.v1', operation: 'COMPARE_AND_REPLACE',
+          phase: 'BOUNDED_COMPENSATING_RESTORE',
+          transactionId: committedTransaction.transaction.transactionId,
+          operationId: normalizedOperationId, workspace: canonicalWorkspace,
+          target: resolved.canonicalTarget,
+          expectedIdentity: { dev: String(current.stat.dev), ino: String(current.stat.ino),
+            size: String(current.stat.size), mtimeNs: String(current.stat.mtimeNs),
+            ctimeNs: String(current.stat.ctimeNs) },
+          beforeSha256: afterHash, replacementSha256: beforeHash,
+          replacementBase64: before.content.toString('base64'), mode: Number(before.stat.mode),
+          commitAuthorityFingerprint: durableCommitAuthority.fingerprint
+        });
+        const restoredResult = validateMutationProviderResult(
+          qualifiedProvider.boundary.compareAndReplace(restoreRequest, {
+            durabilityAdapter: temporalRuntime.durabilityAdapter
+          }), restoreRequest, qualifiedProvider.decision
+        );
+        if (restoredResult.outcome !== 'APPLIED') throw new Error('Restore compare-and-replace failed.');
         const restored = readRegularNoFollow(resolved.canonicalTarget);
         if (hash(restored.content) !== beforeHash) throw new Error('Restore verification failed.');
         try { transactionContext.advance('RECOVERED'); } catch {}
@@ -413,7 +413,8 @@ function patchFileWithGrant({
     outcome: 'APPLIED', recovery: 'NOT_REQUIRED',
     observedAt: commitAuthority.reading.wallTime, temporalAuthority: commitEvidence,
     commitAuthority: durableCommitAuthority,
-    transaction: transactionEvidence(transactionContext), durability: physicalDurability });
+    transaction: transactionEvidence(transactionContext), durability: physicalDurability,
+    mutationProvider: providerEvidence });
 }
 
 function verifyAppliedFile({ workspace, target, expectedSha256 }) {

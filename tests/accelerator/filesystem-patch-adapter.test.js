@@ -12,6 +12,8 @@ const { evaluateVerifiedHumanIdentityAssertion } = require('../../accelerator/co
 const { verifyHumanIdentityAssertion } = require('../../accelerator/adapters/identity-verification-adapter');
 const { patchFileWithGrant } = require('../../accelerator/adapters/filesystem-patch-adapter');
 const { createAuthoritativeClock } = require('../../accelerator/core/authoritative-clock');
+const { createQualifiedTestMutationProvider } =
+  require('./helpers/qualified-mutation-provider');
 const {
   createMutationTransaction, bindMutationLock, createCommitAuthorityEvidence,
   bindCommitAuthorityEvidence, transitionMutationTransaction,
@@ -106,10 +108,13 @@ function patch(overrides = {}) {
   const clock = overrides.authoritativeClock || clockAt();
   const suppliedMutationTransaction = overrides.mutationTransaction;
   const durabilityAdapter = overrides.durabilityAdapter;
+  const mutationProvider = Object.prototype.hasOwnProperty.call(overrides, 'mutationProvider')
+    ? overrides.mutationProvider : createQualifiedTestMutationProvider();
   const request = { ...overrides };
   delete request.authoritativeClock;
   delete request.mutationTransaction;
   delete request.durabilityAdapter;
+  delete request.mutationProvider;
   const patchRequest = {
     operationId: 'op-patch', workspace, target: 'target.txt', replacement: 'after\n',
     grantEvaluation: issue(), observedAt: NOW, ...request
@@ -156,6 +161,7 @@ function patch(overrides = {}) {
   return patchFileWithGrant(patchRequest,
     { authoritativeClock: clock,
       durabilityAdapter,
+      mutationProvider,
       mutationTransaction: suppliedMutationTransaction || mutationTransaction });
 }
 
@@ -181,6 +187,19 @@ test('valid single-file replacement', () => {
     result.commitAuthority.fingerprint);
   assert.equal(result.transaction.stage, 'AFTER_VERIFIED');
   assert.equal(fs.readFileSync(targetPath, 'utf8'), 'after\n');
+});
+
+test('direct patch adapter invocation without trusted qualified provider is denied before mutation', () => {
+  assert.throws(() => patch({ mutationProvider: null }), /provider boundary.*untrusted/i);
+  assert.equal(fs.readFileSync(targetPath, 'utf8'), 'before\n');
+});
+
+test('malformed qualified provider response causes zero physical mutation', () => {
+  const mutationProvider = createQualifiedTestMutationProvider({
+    compareAndReplace() { return { schema: 'malformed' }; }
+  });
+  assert.throws(() => patch({ mutationProvider }), /malformed or unbound/);
+  assert.equal(fs.readFileSync(targetPath, 'utf8'), 'before\n');
 });
 
 test('physical replacement requires durable commit-authority journal acceptance', () => {

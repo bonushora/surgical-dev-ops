@@ -29,6 +29,7 @@ const {
 } = require('./state-boundary');
 const {
   appendAdapterEvidence,
+  appendMutationProviderEvidence,
   appendMutationRecoveryEvidence,
   finalizeOperationRecord
 } = require('./operation-record');
@@ -48,6 +49,11 @@ const {
 } = require('./mutation-transaction');
 const mutationLockAdapter = require('../adapters/mutation-lock-adapter');
 const { createMutationRecoveryAdapter } = require('../adapters/mutation-recovery-adapter');
+const {
+  defaultMutationProviderBoundary,
+  evaluateMutationProvider
+} = require('./mutation-provider');
+const { resolveMutationProviderRuntime } = require('./mutation-provider-internal');
 
 const CONTROLLED_ACTIONS = Object.freeze({
   FILESYSTEM_READ: Object.freeze({
@@ -140,6 +146,11 @@ function rejectUnsafeRequestShape(input) {
   if (Object.prototype.hasOwnProperty.call(request, 'grantFingerprint')) {
     return deniedAtBoundary('Caller-supplied grant fingerprints are forbidden.');
   }
+  if (['provider', 'providerId', 'mutationProvider', 'providerQualification',
+    'qualificationState', 'compareAndReplace'].some(
+    (key) => Object.prototype.hasOwnProperty.call(input, key) ||
+      Object.prototype.hasOwnProperty.call(request, key)
+  )) return deniedAtBoundary('Caller-controlled mutation provider selection is forbidden.');
   if (request.adapter === 'FILESYSTEM_PATCH' && ['now', 'currentTime', 'validationTime'].some(
     (key) => Object.prototype.hasOwnProperty.call(request, key)
   )) return deniedAtBoundary('Caller-supplied current time cannot authorize mutation.');
@@ -546,6 +557,7 @@ function invokeControlledAdapter(request, runtime, validation, mutationCoordinat
     }, { authoritativeClock: runtime.authoritativeClock,
       previousReading: validation.authorityTimeEvidence.reading,
       durabilityAdapter: runtime.durabilityAdapter,
+      mutationProvider: resolveMutationProviderRuntime(runtime),
       mutationTransaction: mutationCoordinator });
   }
   return processValidationAdapter.validateJavaScriptWithGrant({
@@ -925,6 +937,29 @@ function orchestrate(input, runtime = {}) {
       state: { boundary: stateBoundary, transition: pendingTransition },
       nextStep: validation.reason
     };
+  }
+
+  if (request.adapter === 'FILESYSTEM_PATCH') {
+    const providerEvidence = evaluateMutationProvider(
+      resolveMutationProviderRuntime(runtime) || defaultMutationProviderBoundary,
+      { operationId: request.operationId, workspace: request.workspace, action: request.action }
+    );
+    if (providerEvidence.decision !== 'ALLOWED') {
+      const operationRecord = appendMutationProviderEvidence(
+        validation.operationRecord, providerEvidence
+      );
+      const denial = executionDenial(providerEvidence.reason);
+      return {
+        schema: 'sdo.orchestration.v1',
+        orchestration: { status: 'DENIED', executionAttempted: false, executionAllowed: false },
+        repository: discovery.repository, worktree: discovery.worktree,
+        pipeline: { preAuthorizationPreflight, discovery, task, inspection, classification, changePlan },
+        execution: deepFreeze({ ...denial, providerEvidence }),
+        governed: { operationRecord, lifecycle: validation.lifecycle },
+        state: { boundary: stateBoundary, transition: pendingTransition },
+        nextStep: providerEvidence.reason
+      };
+    }
   }
 
   const evidenceId = evidenceIdentity(request, validation.grantFingerprint);

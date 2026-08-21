@@ -9,6 +9,9 @@ const {
   deriveCommitAuthorityEvidenceFingerprint
 } = require('./mutation-transaction');
 const { deriveMutationRecoveryFingerprint } = require('./mutation-recovery');
+const {
+  deriveMutationProviderDecisionFingerprint
+} = require('./mutation-provider');
 
 const RISKS = new Set(['R0', 'R1', 'R2', 'R3']);
 const POLICY_DECISIONS = new Set(['ALLOWED', 'DENIED', 'APPROVAL_REQUIRED']);
@@ -215,6 +218,7 @@ function createOperationRecord(input, authoritativeClock = null) {
       scope: input.riskLevel === 'R3' ? input.scope : null,
       events: input.events,
       adapterEvidence: [],
+      mutationProviderEvidence: [],
       mutationRecoveryEvidence: [],
       finalization: null
     }
@@ -224,7 +228,8 @@ function createOperationRecord(input, authoritativeClock = null) {
 function requireRecord(record) {
   if (!record || record.schema !== 'sdo.operation_record.v1' ||
       !isDeepFrozen(record) || !Array.isArray(record.events) ||
-      !Array.isArray(record.adapterEvidence) || !Array.isArray(record.mutationRecoveryEvidence) ||
+      !Array.isArray(record.adapterEvidence) || !Array.isArray(record.mutationProviderEvidence) ||
+      !Array.isArray(record.mutationRecoveryEvidence) ||
       !Number.isInteger(record.version) ||
       record.version < 1 || validateWorkspace(record.workspace) ||
       !POLICY_DECISIONS.has(record.policyDecision) || !RISKS.has(record.riskLevel)) {
@@ -264,6 +269,13 @@ function requireRecord(record) {
     identities.add(entry.evidenceId);
     previousTimestamp = entry.timestamp;
   }
+  for (const entry of record.mutationProviderEvidence) {
+    if (!isDeepFrozen(entry) || entry.operationId !== record.operationId ||
+        entry.workspace !== record.workspace || entry.action !== 'PATCH_FILE' ||
+        deriveMutationProviderDecisionFingerprint(entry) !== entry.fingerprint) {
+      throw new Error('Stored mutation provider evidence is malformed or substituted.');
+    }
+  }
   for (const entry of record.mutationRecoveryEvidence) {
     if (!isDeepFrozen(entry) || entry.operationId !== record.operationId ||
         entry.workspace !== record.workspace ||
@@ -272,6 +284,30 @@ function requireRecord(record) {
     }
   }
   return record;
+}
+
+function appendMutationProviderEvidence(record, evidence) {
+  const current = requireRecord(record);
+  if (!evidence || evidence.schema !== 'sdo.mutation_provider_decision.v1' ||
+      !isDeepFrozen(evidence) || !/^[a-f0-9]{64}$/.test(evidence.fingerprint || '') ||
+      evidence.operationId !== current.operationId || evidence.workspace !== current.workspace ||
+      evidence.action !== 'PATCH_FILE' ||
+      deriveMutationProviderDecisionFingerprint(evidence) !== evidence.fingerprint ||
+      evidence.requestedCapability !== 'COMPARE_AND_REPLACE' ||
+      !['QUALIFIED', 'UNQUALIFIED', 'UNSUPPORTED', 'FAILED'].includes(
+        evidence.qualificationState) ||
+      (evidence.decision === 'DENIED' && evidence.zeroDispatch !== true)) {
+    throw new Error('Mutation provider evidence is malformed.');
+  }
+  const replay = current.mutationProviderEvidence.find(
+    (entry) => entry.fingerprint === evidence.fingerprint
+  );
+  if (replay) return current;
+  if (current.finalization !== null) {
+    throw new Error('Mutation provider evidence cannot be appended after finalization.');
+  }
+  return deepFreeze({ ...current, version: current.version + 1,
+    mutationProviderEvidence: [...current.mutationProviderEvidence, evidence] });
 }
 
 function appendMutationRecoveryEvidence(record, evidence) {
@@ -606,6 +642,7 @@ function finalizeOperationRecord(record, finalState) {
 module.exports = {
   createOperationRecord,
   appendAdapterEvidence,
+  appendMutationProviderEvidence,
   appendMutationRecoveryEvidence,
   finalizeOperationRecord
 };

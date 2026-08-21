@@ -8,6 +8,7 @@ const path = require('path');
 const {
   createOperationRecord: createOperationRecordCore,
   appendAdapterEvidence,
+  appendMutationProviderEvidence,
   appendMutationRecoveryEvidence,
   finalizeOperationRecord
 } = require('../../accelerator/core/operation-record');
@@ -20,6 +21,8 @@ const { deriveCommitAuthorityEvidenceFingerprint } =
   require('../../accelerator/core/mutation-transaction');
 const { deriveMutationRecoveryFingerprint } =
   require('../../accelerator/core/mutation-recovery');
+const { defaultMutationProviderBoundary, evaluateMutationProvider } =
+  require('../../accelerator/core/mutation-provider');
 
 const TIME = '2026-08-20T12:00:00.000Z';
 const WORKSPACE = fs.realpathSync(os.tmpdir());
@@ -611,4 +614,19 @@ test('operation record preserves immutable transaction-correlated recovery evide
   assert.equal(next.mutationRecoveryEvidence[0].transactionId, patch.transactionId);
   assert.ok(Object.isFrozen(next.mutationRecoveryEvidence[0]));
   assert.equal(appendMutationRecoveryEvidence(next, recovery), next);
+});
+
+test('operation record preserves immutable bound provider denial without physical evidence', () => {
+  const current = r3PatchRecord();
+  const denial = evaluateMutationProvider(defaultMutationProviderBoundary, {
+    operationId: current.operationId, workspace: current.workspace, action: 'PATCH_FILE'
+  });
+  const next = appendMutationProviderEvidence(current, denial);
+  assert.equal(next.mutationProviderEvidence.length, 1);
+  assert.equal(next.mutationProviderEvidence[0].zeroDispatch, true);
+  assert.equal(next.adapterEvidence.length, 0);
+  assert.ok(Object.isFrozen(next.mutationProviderEvidence[0]));
+  assert.equal(appendMutationProviderEvidence(next, denial), next);
+  assert.throws(() => appendMutationProviderEvidence(current, frozen({ ...denial,
+    operationId: 'substituted' })), /malformed/);
 });
