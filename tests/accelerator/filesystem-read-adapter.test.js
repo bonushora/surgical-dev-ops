@@ -57,7 +57,7 @@ function frozenEvaluation(grant) {
 test('valid bounded file read returns bound evidence', () => {
   const result = read();
   assert.equal(result.operationId, 'op-1');
-  assert.equal(result.workspace, workspace);
+  assert.equal(result.workspace, fs.realpathSync(workspace));
   assert.equal(result.evidence.content, 'authorized\n');
 });
 

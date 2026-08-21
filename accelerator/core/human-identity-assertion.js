@@ -124,8 +124,15 @@ function evaluateVerifiedHumanIdentityAssertion(candidate, expected = {}, tempor
     subjectId: fields.subject.id, issuer: fields.issuer, operationId: fields.operationId,
     workspace: fields.workspace, tenantId: fields.tenantId, projectId: fields.projectId
   };
+  const expectedExact = { ...expected };
+  if (Object.prototype.hasOwnProperty.call(expectedExact, 'workspace')) {
+    expectedExact.workspace = canonicalWorkspace(expectedExact.workspace);
+    if (!expectedExact.workspace) {
+      return denied('Verified human identity assertion workspace mismatch.');
+    }
+  }
   for (const key of ['subjectId', 'issuer', 'operationId', 'workspace', 'tenantId', 'projectId']) {
-    if (Object.prototype.hasOwnProperty.call(expected, key) && expected[key] !== exact[key]) {
+    if (Object.prototype.hasOwnProperty.call(expectedExact, key) && expectedExact[key] !== exact[key]) {
       return denied(`Verified human identity assertion ${key} mismatch.`);
     }
   }

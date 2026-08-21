@@ -3,7 +3,11 @@
 const childProcess = require('child_process');
 const fs = require('fs');
 const path = require('path');
-const { canonicalizeAuthorizedRoot, resolveInspectedFile } = require('../core/workspace-boundary');
+const {
+  createPathIdentityAuthority,
+  canonicalizeAuthorizedRoot,
+  resolveInspectedFile
+} = require('../core/workspace-boundary');
 
 const TIMEOUT_MS = 2000;
 const MAX_OUTPUT_BYTES = 32 * 1024;
@@ -106,8 +110,12 @@ function validateJavaScriptWithGrant(request) {
   const operationId = requireText(request.operationId, 'operationId');
   if (operationId !== grant.operationId) throw new Error('Validation operationId mismatch.');
 
+  const pathIdentity = createPathIdentityAuthority(process.platform);
+  if (!pathIdentity.isCanonicalAbsoluteIdentity(request.workspace)) {
+    throw new Error('Validation workspace mismatch.');
+  }
   const workspace = canonicalizeAuthorizedRoot(request.workspace);
-  if (workspace !== request.workspace || workspace !== grant.workspace) {
+  if (workspace !== grant.workspace) {
     throw new Error('Validation workspace mismatch.');
   }
   if (grant.lifecycleState !== 'PENDING' || grant.policyDecision !== 'ALLOWED' ||

@@ -91,8 +91,6 @@ test('inspection rejects sibling-prefix path confusion', () => {
     const siblingPath = path.join(fixtureRoot, 'repo-secret');
     const siblingLink = path.join(repositoryPath, 'sibling-prefix-link.txt');
 
-    assert.equal(fs.realpathSync(repositoryPath), repositoryPath);
-    assert.equal(fs.realpathSync(siblingPath), siblingPath);
     fs.symlinkSync(
       path.join(siblingPath, 'secret.txt'),
       siblingLink

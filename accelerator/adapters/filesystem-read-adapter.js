@@ -3,6 +3,7 @@
 const crypto = require('crypto');
 const fs = require('fs');
 const {
+  createPathIdentityAuthority,
   canonicalizeAuthorizedRoot,
   resolveInspectedFile
 } = require('../core/workspace-boundary');
@@ -71,8 +72,12 @@ function readFileWithGrant({
     throw new Error('Capability operationId mismatch.');
   }
 
+  const pathIdentity = createPathIdentityAuthority(process.platform);
+  if (!pathIdentity.isCanonicalAbsoluteIdentity(workspace)) {
+    throw new Error('Capability workspace mismatch.');
+  }
   const canonicalWorkspace = canonicalizeAuthorizedRoot(workspace);
-  if (canonicalWorkspace !== workspace || canonicalWorkspace !== grant.workspace) {
+  if (canonicalWorkspace !== grant.workspace) {
     throw new Error('Capability workspace mismatch.');
   }
 

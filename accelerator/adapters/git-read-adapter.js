@@ -231,8 +231,12 @@ function readGitWithGrant(request) {
   const operationId = requireText(request.operationId, 'operationId');
   if (operationId !== grant.operationId) throw new Error('Git capability operationId mismatch.');
 
+  const pathIdentity = createPathIdentityAuthority(process.platform);
+  if (!pathIdentity.isCanonicalAbsoluteIdentity(request.workspace)) {
+    throw new Error('Git capability workspace mismatch.');
+  }
   const workspace = canonicalizeAuthorizedRoot(request.workspace);
-  if (workspace !== request.workspace || workspace !== grant.workspace) {
+  if (workspace !== grant.workspace) {
     throw new Error('Git capability workspace mismatch.');
   }
   safeWorkspace(workspace);

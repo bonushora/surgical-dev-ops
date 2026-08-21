@@ -123,7 +123,7 @@ function patch(overrides = {}) {
   let mutationTransaction = null;
   if (grant) {
     let transaction = createMutationTransaction({ operationId: patchRequest.operationId,
-      workspace, target: grant.scope.target.canonicalPath,
+      workspace: grant.workspace, target: grant.scope.target.canonicalPath,
       beforeSha256: grant.scope.target.beforeSha256,
       replacementSha256: grant.scope.target.replacementSha256,
       grantFingerprint: grant.fingerprint,
@@ -132,9 +132,9 @@ function patch(overrides = {}) {
       idempotencyKey: 'adapter-test' });
     const lock = Object.freeze({ schema: 'sdo.mutation_lock.v1',
       adapter: 'FILESYSTEM_EXCLUSIVE_CREATE', version: 1,
-      lockId: deriveMutationLockId(workspace, grant.scope.target.canonicalPath),
+      lockId: deriveMutationLockId(grant.workspace, grant.scope.target.canonicalPath),
       transactionId: transaction.transactionId, operationId: transaction.operationId,
-      workspace, target: grant.scope.target.canonicalPath,
+      workspace: grant.workspace, target: grant.scope.target.canonicalPath,
       ownerToken: 'a'.repeat(64), ownerProcess: 'test:adapter', acquiredAt: NOW });
     transaction = bindMutationLock(transaction, lock);
     let journal = frozen({ journalId: 'b'.repeat(64),
@@ -204,7 +204,7 @@ test('malformed qualified provider response causes zero physical mutation', () =
 
 test('physical replacement requires durable commit-authority journal acceptance', () => {
   const grant = issue().grant;
-  let transaction = createMutationTransaction({ operationId: 'op-patch', workspace,
+  let transaction = createMutationTransaction({ operationId: 'op-patch', workspace: grant.workspace,
     target: grant.scope.target.canonicalPath, beforeSha256: grant.scope.target.beforeSha256,
     replacementSha256: grant.scope.target.replacementSha256,
     grantFingerprint: grant.fingerprint,
@@ -213,9 +213,9 @@ test('physical replacement requires durable commit-authority journal acceptance'
     idempotencyKey: 'adapter-test' });
   transaction = bindMutationLock(transaction, frozen({ schema: 'sdo.mutation_lock.v1',
     adapter: 'FILESYSTEM_EXCLUSIVE_CREATE', version: 1,
-    lockId: deriveMutationLockId(workspace, grant.scope.target.canonicalPath),
+    lockId: deriveMutationLockId(grant.workspace, grant.scope.target.canonicalPath),
     transactionId: transaction.transactionId, operationId: transaction.operationId,
-    workspace, target: grant.scope.target.canonicalPath, ownerToken: 'a'.repeat(64),
+    workspace: grant.workspace, target: grant.scope.target.canonicalPath, ownerToken: 'a'.repeat(64),
     ownerProcess: 'test:adapter', acquiredAt: NOW }));
   let journal = frozen({ journalId: 'b'.repeat(64),
     identity: { transactionId: transaction.transactionId }, transaction });
@@ -443,8 +443,8 @@ test('ancestor directory replacement immediately before publish fails closed wit
 test('AFTER hash and bound evidence are valid', () => {
   const result = patch();
   assert.equal(result.operationId, 'op-patch');
-  assert.equal(result.workspace, workspace);
-  assert.equal(result.target.canonical, targetPath);
+  assert.equal(result.workspace, fs.realpathSync(workspace));
+  assert.equal(result.target.canonical, fs.realpathSync(targetPath));
   assert.equal(result.beforeSha256, digest('before\n'));
   assert.equal(result.afterSha256, digest('after\n'));
 });

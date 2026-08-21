@@ -53,7 +53,7 @@ function read(selector, overrides = {}) {
 }
 
 test('valid repository-root read', () => {
-  assert.equal(read('REPOSITORY_ROOT').result, workspace);
+  assert.equal(read('REPOSITORY_ROOT').result, fs.realpathSync(workspace));
 });
 
 test('valid current-branch read', () => {

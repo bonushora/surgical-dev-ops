@@ -102,7 +102,23 @@ function evaluateR3ApprovalAuthority(candidate, expected = {}, temporalAuthority
         reason: 'Caller-supplied current time cannot authorize R3 approval.', authority: null });
     }
   }
-  for (const [key, value] of Object.entries(expected)) {
+  const expectedFields = { ...expected };
+  if (Object.prototype.hasOwnProperty.call(expectedFields, 'workspace')) {
+    const expectedWorkspaceInput = typeof expectedFields.workspace === 'string'
+      ? expectedFields.workspace.trim() : '';
+    try {
+      expectedFields.workspace = path.isAbsolute(expectedWorkspaceInput) &&
+        path.normalize(expectedWorkspaceInput) === expectedWorkspaceInput
+        ? canonicalizeAuthorizedRoot(expectedWorkspaceInput)
+        : null;
+    } catch {
+      expectedFields.workspace = null;
+    }
+    if (!expectedFields.workspace) {
+      return deepFreeze({ decision: 'DENIED', reason: 'R3 approval authority workspace mismatch.', authority: null });
+    }
+  }
+  for (const [key, value] of Object.entries(expectedFields)) {
     if (value !== undefined && JSON.stringify(canonicalize(fields[key])) !==
         JSON.stringify(canonicalize(value))) {
       return deepFreeze({ decision: 'DENIED', reason: `R3 approval authority ${key} mismatch.`, authority: null });
