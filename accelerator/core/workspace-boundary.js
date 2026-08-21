@@ -3,6 +3,76 @@
 const fs = require('fs');
 const path = require('path');
 
+function createPathIdentityAuthority(platform = process.platform) {
+  let pathPort;
+
+  if (platform === 'linux' || platform === 'darwin') {
+    pathPort = path.posix;
+  } else if (platform === 'win32') {
+    pathPort = path.win32;
+  } else {
+    throw new Error(`Unsupported path identity platform: ${platform}`);
+  }
+
+  function normalizeAbsoluteIdentity(value) {
+    if (typeof value !== 'string' || !value.trim()) {
+      throw new Error('Path identity must be a non-empty string.');
+    }
+
+    if (!pathPort.isAbsolute(value)) {
+      throw new Error(`Path identity must be absolute: ${value}`);
+    }
+
+    const normalized = pathPort.normalize(value);
+    const root = pathPort.parse(normalized).root;
+
+    if (
+      normalized !== root &&
+      normalized.endsWith(pathPort.sep)
+    ) {
+      return normalized.slice(0, -pathPort.sep.length);
+    }
+
+    return normalized;
+  }
+
+  function sameIdentity(left, right) {
+    const normalizedLeft = normalizeAbsoluteIdentity(left);
+    const normalizedRight = normalizeAbsoluteIdentity(right);
+
+    if (platform === 'win32') {
+      return normalizedLeft.toLowerCase() === normalizedRight.toLowerCase();
+    }
+
+    return normalizedLeft === normalizedRight;
+  }
+
+  function isCanonicalAbsoluteIdentity(value) {
+    if (
+      typeof value !== 'string' ||
+      !value.trim() ||
+      !pathPort.isAbsolute(value)
+    ) {
+      return false;
+    }
+
+    try {
+      return value === normalizeAbsoluteIdentity(value);
+    } catch {
+      return false;
+    }
+  }
+
+  return Object.freeze({
+    platform,
+    separator: pathPort.sep,
+    delimiter: pathPort.delimiter,
+    normalizeAbsoluteIdentity,
+    sameIdentity,
+    isCanonicalAbsoluteIdentity
+  });
+}
+
 function canonicalizeAuthorizedRoot(rootPath) {
   if (typeof rootPath !== 'string' || !rootPath.trim()) {
     throw new Error('Authorized workspace root must be a non-empty string.');
@@ -74,6 +144,7 @@ function resolveInspectedFile(authorizedRoot, targetPath) {
 }
 
 module.exports = {
+  createPathIdentityAuthority,
   canonicalizeAuthorizedRoot,
   resolveInspectedFile
 };
