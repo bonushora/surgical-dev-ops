@@ -17,16 +17,38 @@ const SELECTORS = Object.freeze({
   WORKTREE_STATUS: Object.freeze({ operation: 'status', args: ['status', '--porcelain=v1', '-z', '--untracked-files=all'] }),
   TRACKED_FILES: Object.freeze({ operation: 'ls-files', args: ['ls-files', '-z'] })
 });
-const FIXED_CONFIG = Object.freeze([
-  '-c', 'credential.helper=',
-  '-c', 'core.fsmonitor=false',
-  '-c', 'core.hooksPath=/dev/null',
-  '-c', 'diff.external=',
-  '-c', 'diff.trustExitCode=false',
-  '-c', 'pager.status=false',
-  '-c', 'pager.diff=false',
-  '-c', 'pager.show=false'
-]);
+function createGitPlatformIsolation(platform = process.platform) {
+  if (!['linux', 'darwin', 'win32'].includes(platform)) {
+    throw new Error(`Git platform is unsupported: ${platform}`);
+  }
+
+  const nullDevice = platform === 'win32'
+    ? 'NUL'
+    : '/dev/null';
+
+  const fixedConfig = Object.freeze([
+    '-c', 'credential.helper=',
+    '-c', 'core.fsmonitor=false',
+    '-c', `core.hooksPath=${nullDevice}`,
+    '-c', 'diff.external=',
+    '-c', 'diff.trustExitCode=false',
+    '-c', 'pager.status=false',
+    '-c', 'pager.diff=false',
+    '-c', 'pager.show=false'
+  ]);
+
+  const environment = Object.freeze({
+    GIT_CONFIG_GLOBAL: nullDevice,
+    GIT_CONFIG_SYSTEM: nullDevice
+  });
+
+  return deepFreeze({
+    platform,
+    nullDevice,
+    fixedConfig,
+    environment
+  });
+}
 const PREflightSelectors = Object.freeze(new Set(Object.keys(SELECTORS)));
 
 function deepFreeze(value) {
@@ -85,9 +107,11 @@ function validateGrant(evaluation) {
   return grant;
 }
 
-function sanitizedEnvironment() {
+function sanitizedEnvironment(platform = process.platform) {
+  const isolation = createGitPlatformIsolation(platform);
+
   return {
-    PATH: process.platform === 'win32'
+    PATH: platform === 'win32'
       ? 'C:\\Windows\\System32;C:\\Program Files\\Git\\cmd'
       : '/usr/local/bin:/usr/bin:/bin',
     LANG: 'C',
@@ -95,7 +119,7 @@ function sanitizedEnvironment() {
     GIT_TERMINAL_PROMPT: '0',
     GIT_OPTIONAL_LOCKS: '0',
     GIT_CONFIG_NOSYSTEM: '1',
-    GIT_CONFIG_GLOBAL: '/dev/null',
+    GIT_CONFIG_GLOBAL: isolation.environment.GIT_CONFIG_GLOBAL,
     GIT_PAGER: 'cat',
     PAGER: 'cat',
     NO_PROXY: '*',
@@ -106,9 +130,7 @@ function sanitizedEnvironment() {
     GIT_SSH: undefined,
     GIT_SSH_COMMAND: undefined,
     GIT_PROXY_COMMAND: undefined,
-    GIT_CONFIG_SYSTEM: '/dev/null',
-    GIT_CONFIG_NOSYSTEM: '1',
-    GIT_CONFIG_GLOBAL: '/dev/null'
+    GIT_CONFIG_SYSTEM: isolation.environment.GIT_CONFIG_SYSTEM
   };
 }
 
@@ -162,7 +184,8 @@ function runTrustedGitRead(workspaceInput, selectorInput) {
   if (!template || !PREflightSelectors.has(selector)) {
     throw new Error('Git preflight command is unapproved.');
   }
-  const args = [...FIXED_CONFIG, ...template.args];
+  const isolation = createGitPlatformIsolation();
+  const args = [...isolation.fixedConfig, ...template.args];
   const result = childProcess.spawnSync('git', args, {
     cwd: workspace, shell: false, input: Buffer.alloc(0), encoding: 'utf8',
     timeout: TIMEOUT_MS, maxBuffer: MAX_OUTPUT_BYTES, windowsHide: true,
@@ -208,7 +231,8 @@ function readGitWithGrant(request) {
   }
 
   const trustedResult = runTrustedGitRead(workspace, selector);
-  const args = [...FIXED_CONFIG, ...template.args];
+  const isolation = createGitPlatformIsolation();
+  const args = [...isolation.fixedConfig, ...template.args];
 
   return deepFreeze({
     schema: 'sdo.git_read_result.v1',
@@ -230,4 +254,8 @@ function readGitWithGrant(request) {
   });
 }
 
-module.exports = { readGitWithGrant, runTrustedGitRead };
+module.exports = {
+  createGitPlatformIsolation,
+  readGitWithGrant,
+  runTrustedGitRead
+};
