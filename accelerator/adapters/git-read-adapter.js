@@ -183,7 +183,22 @@ function normalizeOutput(selector, stdout, workspace) {
     const pathIdentity =
       createPathIdentityAuthority(process.platform);
 
-    if (!pathIdentity.sameIdentity(repositoryRoot, workspace)) {
+    let samePhysicalRoot = false;
+
+    try {
+      const repositoryStat = fs.statSync(repositoryRoot, { bigint: true });
+      const workspaceStat = fs.statSync(workspace, { bigint: true });
+
+      samePhysicalRoot =
+        repositoryStat.isDirectory() &&
+        workspaceStat.isDirectory() &&
+        repositoryStat.dev === workspaceStat.dev &&
+        repositoryStat.ino === workspaceStat.ino;
+    } catch {
+      samePhysicalRoot = false;
+    }
+
+    if (!samePhysicalRoot && !pathIdentity.sameIdentity(repositoryRoot, workspace)) {
       throw new Error('Git repository root does not match the authorized workspace.');
     }
 
