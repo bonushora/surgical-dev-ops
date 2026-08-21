@@ -39,7 +39,8 @@ jobs:
         run: npm ci
 
       - name: Show native execution identity
-        run: node -e "console.log(JSON.stringify({ platform: process.platform, arch: process.arch, node: process.version }))"
+        run: |
+          node -e "console.log(JSON.stringify({ platform: process.platform, arch: process.arch, node: process.version }))"
 
       - name: Run canonical conformance suite
         run: npm test
