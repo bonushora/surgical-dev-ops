@@ -70,3 +70,11 @@ test('missing and non-repository paths fail closed', (t) => {
   assert.throws(() => discover(path.join(root, 'missing')), /does not exist/);
   assert.throws(() => discover(plain), /Not a Git repository/);
 });
+
+test('remote credentials and malicious remote metadata are never persisted', (t) => {
+  const { workspace } = fixture(t);
+  git(workspace, ['remote', 'add', 'origin', 'https://user:token@host/repo.git']);
+  const result = discover(workspace);
+  assert.equal(Object.prototype.hasOwnProperty.call(result.repository, 'remote'), false);
+  assert.doesNotMatch(JSON.stringify(result), /user|token|host|repo\.git/);
+});

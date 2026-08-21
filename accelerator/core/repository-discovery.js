@@ -4,18 +4,7 @@
 
 const fs = require('fs');
 const path = require('path');
-const { execFileSync } = require('child_process');
-
-function runGit(repositoryPath, args) {
-  return execFileSync(
-    'git',
-    ['-C', repositoryPath, ...args],
-    {
-      encoding: 'utf8',
-      stdio: ['ignore', 'pipe', 'pipe']
-    }
-  ).trim();
-}
+const { runTrustedGitRead } = require('../adapters/git-read-adapter');
 
 function detectPackageManager(repositoryPath) {
   const files = fs.readdirSync(repositoryPath);
@@ -123,49 +112,17 @@ function discover(repositoryPath) {
     throw new Error(`Not a Git repository: ${absolutePath}`);
   }
 
-  const status = runGit(absolutePath, ['status', '--porcelain=v1']);
-
-  const branches = runGit(
-    absolutePath,
-    ['branch', '--show-current']
-  );
-
-  const commit = runGit(
-    absolutePath,
-    ['rev-parse', 'HEAD']
-  );
-
-  const shortCommit = runGit(
-    absolutePath,
-    ['rev-parse', '--short', 'HEAD']
-  );
-
-  const remote = (() => {
-    try {
-      return runGit(
-        absolutePath,
-        ['remote', 'get-url', 'origin']
-      );
-    } catch {
-      return null;
-    }
-  })();
-
-  const root = runGit(
-    absolutePath,
-    ['rev-parse', '--show-toplevel']
-  );
+  const status = runTrustedGitRead(absolutePath, 'WORKTREE_STATUS').result;
+  const branches = runTrustedGitRead(absolutePath, 'CURRENT_BRANCH').result;
+  const commit = runTrustedGitRead(absolutePath, 'HEAD_COMMIT').result;
+  const shortCommit = commit.slice(0, 7);
+  const root = runTrustedGitRead(absolutePath, 'REPOSITORY_ROOT').result;
 
   const trackedFiles = Number(
-    runGit(absolutePath, ['ls-files', '-z'])
-      .split('\0')
-      .filter(Boolean)
-      .length
+    runTrustedGitRead(absolutePath, 'TRACKED_FILES').result.count
   );
 
-  const dirtyFiles = status
-    ? status.split('\n').filter(Boolean)
-    : [];
+  const dirtyFiles = status;
 
   return {
     schema: 'sdo.repository_discovery.v1',
@@ -175,7 +132,6 @@ function discover(repositoryPath) {
       branch: branches || null,
       commit,
       shortCommit,
-      remote
     },
     worktree: {
       clean: dirtyFiles.length === 0,

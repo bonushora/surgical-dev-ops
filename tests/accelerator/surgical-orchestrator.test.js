@@ -328,8 +328,12 @@ test('governed filesystem read succeeds with bound evidence', () => withFixture(
 
 test('governed Git read succeeds', (context) => withFixture((repo) => {
   const head = runGit(repo, ['rev-parse', 'HEAD']);
-  context.mock.method(childProcess, 'spawnSync', () => ({
-    status: 0, signal: null, stdout: `${head}\n`, stderr: ''
+  context.mock.method(childProcess, 'spawnSync', (executable, args) => ({
+    status: 0, signal: null, stderr: '', stdout: args.includes('--verify') ? `${head}\n`
+      : args.includes('--show-toplevel') ? `${repo}\n`
+        : args.includes('--abbrev-ref') ? 'master\n'
+          : args.includes('HEAD') ? `${head}\n`
+            : args.includes('ls-files') ? 'target.js\0invalid.js\0' : ''
   }));
   const result = orchestrate(input(repo, execution(repo, 'GIT_READ')));
   assert.equal(result.orchestration.status, 'COMPLETED', JSON.stringify(result.execution));
@@ -337,8 +341,12 @@ test('governed Git read succeeds', (context) => withFixture((repo) => {
 }));
 
 test('governed process validation PASSED completes', (context) => withFixture((repo) => {
-  context.mock.method(childProcess, 'spawnSync', () => ({
-    status: 0, signal: null, stdout: '', stderr: ''
+  const head = runGit(repo, ['rev-parse', 'HEAD']);
+  context.mock.method(childProcess, 'spawnSync', (executable, args) => ({
+    status: 0, signal: null, stderr: '', stdout: args.includes('--show-toplevel') ? `${repo}\n`
+      : args.includes('--abbrev-ref') ? 'master\n'
+        : args.includes('HEAD') ? `${head}\n`
+          : args.includes('ls-files') ? 'target.js\0invalid.js\0' : ''
   }));
   const result = orchestrate(input(repo, execution(repo, 'PROCESS_VALIDATION')));
   assert.equal(result.execution.validation && result.execution.validation.status, 'PASSED',
@@ -347,8 +355,14 @@ test('governed process validation PASSED completes', (context) => withFixture((r
 }));
 
 test('governed process validation FAILED cannot complete successfully', (context) => withFixture((repo) => {
-  context.mock.method(childProcess, 'spawnSync', () => ({
-    status: 1, signal: null, stdout: '', stderr: 'syntax error'
+  const head = runGit(repo, ['rev-parse', 'HEAD']);
+  context.mock.method(childProcess, 'spawnSync', (executable, args) => ({
+    status: executable !== 'git' ? 1 : 0, signal: null,
+    stdout: args.includes('--show-toplevel') ? `${repo}\n`
+      : args.includes('--abbrev-ref') ? 'master\n'
+        : args.includes('HEAD') ? `${head}\n`
+          : args.includes('ls-files') ? 'target.js\0invalid.js\0' : '',
+    stderr: executable !== 'git' ? 'syntax error' : ''
   }));
   const request = execution(repo, 'PROCESS_VALIDATION', {
     target: 'invalid.js', grantEvaluation: issue(repo, 'PROCESS_VALIDATION', 'invalid.js')

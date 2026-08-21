@@ -157,3 +157,38 @@ test('Git is invoked directly without a shell', (context) => {
   assert.equal(invocation.options.shell, false);
   assert.ok(invocation.args.includes('credential.helper='));
 });
+
+test('credential-bearing, token, SSH, ANSI and multiline Git output never escapes', (context) => {
+  for (const secret of [
+    'https://user:password@host/repo.git',
+    'https://token@host/repo.git',
+    'ssh://user@host/repo.git',
+    '\u001b[31mSECRET\u001b[0m',
+    'safe\nINJECTED'
+  ]) {
+    context.mock.method(childProcess, 'spawnSync', () => ({
+      status: 0, signal: null, stdout: `${secret}\n`, stderr: ''
+    }));
+    assert.throws(() => read('HEAD_COMMIT'), (error) =>
+      /malformed/.test(error.message) && !error.message.includes(secret));
+    context.mock.restoreAll();
+  }
+});
+
+test('stderr secrets, unavailable Git and forged execution inputs fail closed without disclosure', (context) => {
+  context.mock.method(childProcess, 'spawnSync', () => ({
+    status: 1, signal: null, stdout: '', stderr: 'TOKEN=super-secret'
+  }));
+  assert.throws(() => read('HEAD_COMMIT'), (error) =>
+    /nonzero|stderr/.test(error.message) && !error.message.includes('super-secret'));
+  context.mock.restoreAll();
+  context.mock.method(childProcess, 'spawnSync', () => ({
+    error: Object.assign(new Error('TOKEN=super-secret'), { code: 'ENOENT' })
+  }));
+  assert.throws(() => read('HEAD_COMMIT'), (error) =>
+    /process failed closed/.test(error.message) && !error.message.includes('super-secret'));
+  context.mock.restoreAll();
+  assert.throws(() => readGitWithGrant({ operationId: 'op-1', workspace, selector: 'HEAD_COMMIT',
+    grantEvaluation: issue(), observedAt: NOW, executable: 'sh', argv: ['push'],
+    env: { GIT_DIR: '/escape' } }), /arguments, options or environment/);
+});

@@ -4,22 +4,11 @@
 
 const fs = require('fs');
 const path = require('path');
-const { execFileSync } = require('child_process');
+const { runTrustedGitRead } = require('../adapters/git-read-adapter');
 const {
   canonicalizeAuthorizedRoot,
   resolveInspectedFile
 } = require('./workspace-boundary');
-
-function runGit(repositoryPath, args) {
-  return execFileSync(
-    'git',
-    ['-C', repositoryPath, ...args],
-    {
-      encoding: 'utf8',
-      stdio: ['ignore', 'pipe', 'pipe']
-    }
-  ).trim();
-}
 
 function inspectFile(repositoryPath, relativePath) {
   const { canonicalTarget } = resolveInspectedFile(
@@ -59,20 +48,9 @@ function inspect(repositoryPath, input) {
     throw new Error('Inspection objective is required.');
   }
 
-  const branch = runGit(
-    absolutePath,
-    ['branch', '--show-current']
-  );
-
-  const commit = runGit(
-    absolutePath,
-    ['rev-parse', 'HEAD']
-  );
-
-  const status = runGit(
-    absolutePath,
-    ['status', '--porcelain=v1']
-  );
+  const branch = runTrustedGitRead(absolutePath, 'CURRENT_BRANCH').result;
+  const commit = runTrustedGitRead(absolutePath, 'HEAD_COMMIT').result;
+  const status = runTrustedGitRead(absolutePath, 'WORKTREE_STATUS').result;
 
   const inspectedFiles = input.files.map((file) =>
     inspectFile(absolutePath, file)
@@ -84,7 +62,7 @@ function inspect(repositoryPath, input) {
       repository: absolutePath,
       branch: branch || null,
       commit,
-      worktreeClean: status === ''
+      worktreeClean: status.length === 0
     },
     inspection: {
       files: inspectedFiles,

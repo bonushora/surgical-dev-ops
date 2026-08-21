@@ -27,6 +27,7 @@ const FIXED_CONFIG = Object.freeze([
   '-c', 'pager.diff=false',
   '-c', 'pager.show=false'
 ]);
+const PREflightSelectors = Object.freeze(new Set(Object.keys(SELECTORS)));
 
 function deepFreeze(value) {
   if (!value || typeof value !== 'object' || Object.isFrozen(value)) return value;
@@ -86,7 +87,9 @@ function validateGrant(evaluation) {
 
 function sanitizedEnvironment() {
   return {
-    PATH: process.env.PATH || '',
+    PATH: process.platform === 'win32'
+      ? 'C:\\Windows\\System32;C:\\Program Files\\Git\\cmd'
+      : '/usr/local/bin:/usr/bin:/bin',
     LANG: 'C',
     LC_ALL: 'C',
     GIT_TERMINAL_PROMPT: '0',
@@ -96,20 +99,51 @@ function sanitizedEnvironment() {
     GIT_PAGER: 'cat',
     PAGER: 'cat',
     NO_PROXY: '*',
-    no_proxy: '*'
+    no_proxy: '*',
+    GIT_DIR: undefined,
+    GIT_WORK_TREE: undefined,
+    GIT_INDEX_FILE: undefined,
+    GIT_SSH: undefined,
+    GIT_SSH_COMMAND: undefined,
+    GIT_PROXY_COMMAND: undefined,
+    GIT_CONFIG_SYSTEM: '/dev/null',
+    GIT_CONFIG_NOSYSTEM: '1',
+    GIT_CONFIG_GLOBAL: '/dev/null'
   };
+}
+
+function safeWorkspace(value) {
+  const workspace = canonicalizeAuthorizedRoot(value);
+  if (!fs.existsSync(path.join(workspace, '.git')) ||
+      !fs.statSync(path.join(workspace, '.git')).isDirectory()) {
+    throw new Error('Authorized workspace is not a supported local Git repository.');
+  }
+  return workspace;
+}
+
+function rejectUnsafeText(value, label) {
+  if (typeof value !== 'string' || /[\u0000-\u0008\u000b\u000c\u000e-\u001f\u007f\u001b]/u.test(value) ||
+      value.includes('\r') || value.includes('\n')) {
+    throw new Error(`Git preflight ${label} is malformed.`);
+  }
+  return value;
 }
 
 function normalizeOutput(selector, stdout, workspace) {
   if (selector === 'WORKTREE_STATUS' || selector === 'TRACKED_FILES') {
-    const entries = stdout.split('\0').filter(Boolean);
-    if (entries.some((entry) => entry.includes('\0'))) {
+    const entries = stdout.split('\0').filter(Boolean).map((entry) => rejectUnsafeText(entry, 'path output'));
+    if (entries.some((entry) => {
+      const filename = selector === 'WORKTREE_STATUS' && entry.length >= 3
+        ? entry.slice(3) : entry;
+      return entry.includes('\0') || path.isAbsolute(filename) || filename === '..' ||
+        filename.startsWith(`..${path.sep}`) || filename.startsWith('../');
+    })) {
       throw new Error('Git produced malformed NUL-delimited output.');
     }
-    return entries;
+    return selector === 'TRACKED_FILES' ? Object.freeze({ count: entries.length }) : entries;
   }
   const value = stdout.trim();
-  if (!value || value.includes('\0') || value.includes('\n')) {
+  if (!value || value.includes('\0') || /[\r\n\u0000-\u0008\u000b\u000c\u000e-\u001f\u007f\u001b]/u.test(value)) {
     throw new Error('Git produced malformed scalar output.');
   }
   if (selector === 'REPOSITORY_ROOT' && value !== workspace) {
@@ -119,6 +153,35 @@ function normalizeOutput(selector, stdout, workspace) {
     throw new Error('Git produced a malformed HEAD object ID.');
   }
   return value;
+}
+
+function runTrustedGitRead(workspaceInput, selectorInput) {
+  const workspace = safeWorkspace(workspaceInput);
+  const selector = requireText(selectorInput, 'selector').toUpperCase();
+  const template = SELECTORS[selector];
+  if (!template || !PREflightSelectors.has(selector)) {
+    throw new Error('Git preflight command is unapproved.');
+  }
+  const args = [...FIXED_CONFIG, ...template.args];
+  const result = childProcess.spawnSync('git', args, {
+    cwd: workspace, shell: false, input: Buffer.alloc(0), encoding: 'utf8',
+    timeout: TIMEOUT_MS, maxBuffer: MAX_OUTPUT_BYTES, windowsHide: true,
+    env: Object.fromEntries(Object.entries(sanitizedEnvironment()).filter(([, value]) => value !== undefined))
+  });
+  if (result.error) {
+    if (result.error.code === 'ETIMEDOUT') throw new Error('Git preflight timed out.');
+    if (result.error.code === 'ENOBUFS') throw new Error('Git read exceeded output limit.');
+    throw new Error('Git read process failed closed.');
+  }
+  if (result.signal) throw new Error(`Git read terminated by signal: ${result.signal}`);
+  if (result.status !== 0) throw new Error('Git read returned a nonzero exit status.');
+  const stdout = typeof result.stdout === 'string' ? result.stdout : '';
+  const stderr = typeof result.stderr === 'string' ? result.stderr : '';
+  if (Buffer.byteLength(stdout) > MAX_OUTPUT_BYTES || Buffer.byteLength(stderr) > MAX_OUTPUT_BYTES) {
+    throw new Error('Git preflight output exceeded limit.');
+  }
+  if (stderr.trim()) throw new Error('Git read produced unexpected stderr output.');
+  return deepFreeze({ workspace, selector, result: normalizeOutput(selector, stdout, workspace) });
 }
 
 function readGitWithGrant(request) {
@@ -131,10 +194,7 @@ function readGitWithGrant(request) {
   if (workspace !== request.workspace || workspace !== grant.workspace) {
     throw new Error('Git capability workspace mismatch.');
   }
-  if (!fs.existsSync(path.join(workspace, '.git')) ||
-      !fs.statSync(path.join(workspace, '.git')).isDirectory()) {
-    throw new Error('Authorized workspace is not a supported local Git repository.');
-  }
+  safeWorkspace(workspace);
 
   const observedAt = requireTimestamp(request.observedAt, 'observedAt');
   const expiresAt = requireTimestamp(grant.expiresAt, 'grant.expiresAt');
@@ -147,31 +207,8 @@ function readGitWithGrant(request) {
     throw new Error('Git selector is outside the authorized capability scope.');
   }
 
+  const trustedResult = runTrustedGitRead(workspace, selector);
   const args = [...FIXED_CONFIG, ...template.args];
-  const result = childProcess.spawnSync('git', args, {
-    cwd: workspace,
-    shell: false,
-    input: Buffer.alloc(0),
-    encoding: 'utf8',
-    timeout: TIMEOUT_MS,
-    maxBuffer: MAX_OUTPUT_BYTES,
-    windowsHide: true,
-    env: sanitizedEnvironment()
-  });
-
-  if (result.error) {
-    if (result.error.code === 'ETIMEDOUT') throw new Error('Git read timed out.');
-    if (result.error.code === 'ENOBUFS') throw new Error('Git read exceeded output limit.');
-    throw new Error('Git read process failed closed.');
-  }
-  if (result.signal) throw new Error(`Git read terminated by signal: ${result.signal}`);
-  if (result.status !== 0) throw new Error('Git read returned a nonzero exit status.');
-  const stdout = typeof result.stdout === 'string' ? result.stdout : '';
-  const stderr = typeof result.stderr === 'string' ? result.stderr : '';
-  if (Buffer.byteLength(stdout) > MAX_OUTPUT_BYTES || Buffer.byteLength(stderr) > MAX_OUTPUT_BYTES) {
-    throw new Error('Git read exceeded output limit.');
-  }
-  if (stderr.trim()) throw new Error('Git read produced unexpected stderr output.');
 
   return deepFreeze({
     schema: 'sdo.git_read_result.v1',
@@ -179,12 +216,12 @@ function readGitWithGrant(request) {
     workspace,
     selector,
     observedAt,
-    result: normalizeOutput(selector, stdout, workspace),
+    result: trustedResult.result,
     execution: {
       executable: 'git',
       arguments: [...args],
       shell: false,
-      exitCode: result.status,
+      exitCode: 0,
       signal: null,
       timeoutMs: TIMEOUT_MS,
       maxOutputBytes: MAX_OUTPUT_BYTES,
@@ -193,4 +230,4 @@ function readGitWithGrant(request) {
   });
 }
 
-module.exports = { readGitWithGrant };
+module.exports = { readGitWithGrant, runTrustedGitRead };
