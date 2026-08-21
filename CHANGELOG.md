@@ -10,6 +10,51 @@ https://semver.org/
 
 ---
 
+## [2.3.0] - 2026-08-21
+
+### Added
+
+- Development Orchestration Layer
+- Surgical DevOps Accelerator / Orchestrator
+- Authenticated human authority boundary for critical R3 execution
+- Exact-scope capability grants
+- Governed FILESYSTEM_PATCH transaction model
+- Exact-target mutation lock
+- Durable mutation journal
+- Persisted commit-authority evidence
+- Deterministic process-crash / process-restart recovery
+- Filesystem durability primitive enforcement
+- Qualified mutation-provider boundary
+- Canonical Accelerator conformance command
+- GitHub Actions canonical conformance workflow
+
+### Security
+
+- Fail-closed provider qualification
+- Commit-boundary authority expiry enforcement
+- Protected Git preflight with minimized/redacted evidence
+- Conflicting replay rejection
+- Zero duplicate physical mutation after proven recovery
+- Ancestor replacement detection before physical publish
+- Orphan-lock recovery only with trusted owner-termination proof
+
+### Validation
+
+- ADR-007 acceptance criteria: 18/18 PASS
+- Canonical Accelerator suite: 427/427 PASS
+- Clean archive conformance: PASS
+
+### Limitations
+
+- BH-SEP v2.2 and BH-SDP v2.2 remain the normative protocol core
+- Cross-platform architecture is defined, but full Linux / Windows / macOS
+  conformance requires direct per-platform validation
+- POWER_LOSS_VALIDATED remains false pending platform/filesystem qualification
+- Production physical mutation remains fail-closed without a qualified
+  compare-and-replace provider
+
+---
+
 ## [1.0.0] - 2026-07-21
 
 ### Added

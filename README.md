@@ -321,6 +321,36 @@ surgical-dev-ops/
 └── LICENSE
 Status
 
-🚀 Surgical DevOps v2.2
+🚀 Surgical DevOps v2.3
 
-Baseline inicial congelada para publicação.
+A versão v2.3 introduz a Development Orchestration Layer do Surgical DevOps,
+mantendo BH-SEP v2.2 e BH-SDP v2.2 como núcleo normativo independente.
+
+Principais capacidades implementadas nesta versão:
+
+- Surgical DevOps Accelerator / Orchestrator;
+- inspeção declarativa e preparação determinística de tarefas;
+- autoridade humana autenticada para operações críticas R3;
+- grants de capacidade com escopo exato e fail-closed;
+- FILESYSTEM_PATCH governado por transação;
+- locking determinístico de alvo exato;
+- journal durável e autoridade de commit persistida;
+- recovery determinístico após process crash/restart;
+- proteção contra replay conflitante e remutação duplicada;
+- enforcement de primitivas de durabilidade de filesystem;
+- boundary de mutation provider qualificado;
+- hardening do Git preflight;
+- suíte canônica de conformidade com 427 testes;
+- GitHub Actions executando a suíte canônica em push e pull request.
+
+Limites explícitos da v2.3:
+
+- BH-SEP e BH-SDP permanecem na versão normativa v2.2;
+- conformidade multiplataforma completa requer validação direta em Linux,
+  Windows e macOS;
+- POWER_LOSS_VALIDATED permanece falso até qualificação específica por
+  plataforma/filesystem;
+- mutação física de produção permanece fail-closed na ausência de provider
+  qualificado.
+
+Baseline técnica da v2.3: Development Orchestration Layer.

@@ -76,3 +76,38 @@ Surgical DevOps was born within the BônusHora ecosystem, but its principles are
 
 💡 Vision
 Surgical DevOps does not replace engineering judgment. It establishes a disciplined model where human decisions remain sovereign and AI-assisted execution remains aligned, traceable, and secure.
+
+---
+
+## Surgical DevOps v2.3 — Development Orchestration Layer
+
+Surgical DevOps v2.3 evolves the project from a protocol-only operational
+baseline into a governed Development Orchestration Layer while preserving
+BH-SEP v2.2 and BH-SDP v2.2 as the independent normative core.
+
+Implemented capabilities include:
+
+- Surgical DevOps Accelerator / Orchestrator;
+- deterministic declarative inspection and task preparation;
+- authenticated human authority for critical R3 operations;
+- exact-scope capability grants with fail-closed enforcement;
+- governed FILESYSTEM_PATCH transactions;
+- deterministic exact-target locking;
+- durable mutation journal and persisted commit authority;
+- deterministic process-crash / process-restart recovery;
+- conflicting-replay rejection and zero duplicate remutation;
+- filesystem durability primitive enforcement;
+- qualified mutation-provider boundary;
+- hardened read-only Git preflight;
+- canonical conformance suite with 427 tests;
+- GitHub Actions conformance on pushes and pull requests.
+
+Explicit v2.3 limitations:
+
+- BH-SEP and BH-SDP remain normatively versioned at v2.2;
+- complete cross-platform conformance still requires direct validation on
+  Linux, Windows and macOS;
+- POWER_LOSS_VALIDATED remains false until platform/filesystem-specific
+  qualification is completed;
+- production physical mutation remains fail-closed when no qualified provider
+  is available.
