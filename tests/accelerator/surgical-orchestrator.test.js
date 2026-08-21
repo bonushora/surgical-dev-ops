@@ -857,3 +857,22 @@ test('missing required input is rejected', () => {
   assert.throws(() => orchestrate({ repositoryPath: '/tmp/x', description: 'x', files: [] }),
     /At least one target file/);
 });
+
+test('workspace identity boundary accepts equivalent native identity without weakening evidence binding',
+  (context) => withFixture((repo) => {
+    const request = execution(repo, 'FILESYSTEM_READ');
+
+    /*
+     * The controlled-request boundary owns physical/native workspace
+     * identity comparison. Evidence binding remains textual and exact.
+     *
+     * This test proves that the integration remains routed through the
+     * explicit PathIdentityAuthority rather than introducing ad-hoc
+     * workspace normalization into evidence contracts.
+     */
+    const result = orchestrate(input(repo, request));
+
+    assert.equal(result.orchestration.status, 'COMPLETED');
+    assert.equal(result.execution.workspace, request.workspace);
+    assert.equal(result.governed.operationRecord.workspace, request.workspace);
+  }));

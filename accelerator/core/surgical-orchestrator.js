@@ -2,6 +2,8 @@
 
 'use strict';
 
+const { createPathIdentityAuthority } = require('./workspace-boundary');
+
 const crypto = require('crypto');
 const path = require('path');
 
@@ -175,7 +177,21 @@ function validateControlledRequest(request, repositoryPath, expectedRisk, runtim
   if (request.operationId !== grant.operationId) {
     return executionDenial('Capability operationId mismatch.');
   }
-  if (request.workspace !== repositoryPath || grant.workspace !== repositoryPath) {
+  const pathIdentityAuthority = createPathIdentityAuthority();
+
+  let requestWorkspaceMatches;
+  let grantWorkspaceMatches;
+
+  try {
+    requestWorkspaceMatches =
+      pathIdentityAuthority.sameIdentity(request.workspace, repositoryPath);
+    grantWorkspaceMatches =
+      pathIdentityAuthority.sameIdentity(grant.workspace, repositoryPath);
+  } catch {
+    return executionDenial('Capability workspace mismatch.');
+  }
+
+  if (!requestWorkspaceMatches || !grantWorkspaceMatches) {
     return executionDenial('Capability workspace mismatch.');
   }
   const observed = Date.parse(request.observedAt);
@@ -230,9 +246,19 @@ function validateControlledRequest(request, repositoryPath, expectedRisk, runtim
   const recordPolicyMatches = r3Patch
     ? operationRecord && operationRecord.policyDecision === 'APPROVAL_REQUIRED'
     : operationRecord && operationRecord.policyDecision === grant.policyDecision;
+  let operationRecordWorkspaceMatches = false;
+
+  try {
+    operationRecordWorkspaceMatches =
+      Boolean(operationRecord) &&
+      pathIdentityAuthority.sameIdentity(operationRecord.workspace, repositoryPath);
+  } catch {
+    operationRecordWorkspaceMatches = false;
+  }
+
   if (!operationRecord || operationRecord.schema !== 'sdo.operation_record.v1' ||
       !isDeepFrozen(operationRecord) || operationRecord.operationId !== request.operationId ||
-      operationRecord.workspace !== repositoryPath ||
+      !operationRecordWorkspaceMatches ||
       !recordPolicyMatches ||
       operationRecord.riskLevel !== grant.riskLevel) {
     return executionDenial('Operation record binding is missing or mismatched.');
