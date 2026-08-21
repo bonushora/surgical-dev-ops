@@ -2,6 +2,8 @@
 
 const crypto = require('node:crypto');
 const fs = require('node:fs');
+const { openVerifiedRegularRead } =
+  require('./filesystem-safe-read-adapter');
 const path = require('node:path');
 const { defaultFilesystemDurabilityAdapter } =
   require('./filesystem-durability-adapter');
@@ -198,10 +200,10 @@ function recordFor(transaction, identity, previousRecordHash) {
 function readRecord(file) {
   let descriptor;
   try {
-    const noFollow = typeof fs.constants.O_NOFOLLOW === 'number' ? fs.constants.O_NOFOLLOW : 0;
-    descriptor = fs.openSync(file, fs.constants.O_RDONLY | noFollow);
-    const stat = fs.fstatSync(descriptor);
-    if (!stat.isFile() || stat.size < 3 || stat.size > 65536) {
+    const opened = openVerifiedRegularRead(file, { maxBytes: 65536 });
+    descriptor = opened.descriptor;
+    const stat = opened.stat;
+    if (stat.size < 3n) {
       throw new Error('Mutation journal record is malformed or truncated.');
     }
     const raw = fs.readFileSync(descriptor, 'utf8');

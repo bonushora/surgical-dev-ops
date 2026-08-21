@@ -2,6 +2,8 @@
 
 const crypto = require('node:crypto');
 const fs = require('node:fs');
+const { openVerifiedRegularRead } =
+  require('./filesystem-safe-read-adapter');
 const os = require('node:os');
 const path = require('node:path');
 const { defaultFilesystemDurabilityAdapter } = require('./filesystem-durability-adapter');
@@ -116,10 +118,10 @@ function validateMetadata(metadata, expected = null) {
 function readLockFile(file) {
   let descriptor;
   try {
-    const noFollow = typeof fs.constants.O_NOFOLLOW === 'number' ? fs.constants.O_NOFOLLOW : 0;
-    descriptor = fs.openSync(file, fs.constants.O_RDONLY | noFollow);
-    const stat = fs.fstatSync(descriptor);
-    if (!stat.isFile() || stat.size < 2 || stat.size > 8192) {
+    const opened = openVerifiedRegularRead(file, { maxBytes: 8192 });
+    descriptor = opened.descriptor;
+    const stat = opened.stat;
+    if (stat.size < 2n) {
       throw new Error('Mutation lock record is malformed or corrupt.');
     }
     const raw = fs.readFileSync(descriptor, 'utf8');
