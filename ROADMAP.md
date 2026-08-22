@@ -98,15 +98,21 @@ Completed
 - Filesystem durability primitive enforcement
 - Qualified mutation-provider boundary
 - Hardened Git preflight
-- Canonical 503-test conformance suite
+- Canonical 508-test conformance suite
 - GitHub Actions conformance workflow
 - Direct Linux / Windows / macOS canonical conformance matrix validated on
-  GitHub Actions run 32539804002 at commit ff6d6e069558f9fddda3ca4cf3823bb1e89f801a
+  GitHub Actions run 32545548306 at commit 0586fa4113de00c075113f12fd98059f44feba8f
+- Safe Exclusive Write primitive qualified on Linux / Windows / macOS
 
-Qualification still pending:
+Explicit qualification boundaries retained at v2.3 closure:
 
-- platform/filesystem-specific power-loss validation
-- production qualification of physical compare-and-replace providers
+- POWER_LOSS_VALIDATED remains false pending platform/filesystem-specific
+  qualification
+- Strict Physical Identity-Conditional CAS remains UNQUALIFIED
+- production physical mutation dependent on strict physical CAS remains
+  fail-closed
+- strict physical CAS qualification continues only as a separate specialized
+  qualification line and is not a prerequisite for v2.3 closure
 
 ---
 
