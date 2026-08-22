@@ -374,3 +374,26 @@ Invariantes e limites preservados:
   durabilidade universal contra perda física de energia.
 
 Baseline operacional da v2.4.0: Governed Content-Addressed Mutation Authority.
+
+---
+
+## Instalação da CLI v2.4.1
+
+Comando principal para engenheiros: surgical-devops
+
+Runtime atualmente qualificado: Node.js >= 24.18.0
+
+Instalação: npm install -g surgical-dev-ops
+
+Verificação: surgical-devops --version
+Verificação adicional: surgical-devops --help
+
+Para iniciar a sessão humana governada: surgical-devops
+
+O pacote também fornece o executável de compatibilidade surgical.
+Se esse nome já for usado por outro launcher ou função de shell,
+utilize surgical-devops.
+
+A v2.4.1 altera distribuição, metadados, versionamento e documentação.
+Orchestrator, Manifest CAS, journal, adapters, autoridade de mutação e
+runtime de produção permanecem semanticamente inalterados.

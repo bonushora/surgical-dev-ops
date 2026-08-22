@@ -20,6 +20,16 @@ test('package exposes the canonical surgical executable', () => {
     packageJson.bin.surgical,
     'accelerator/cli/surgical.js'
   );
+  assert.equal(
+    packageJson.bin['surgical-devops'],
+    'accelerator/cli/surgical.js'
+  );
+  assert.equal(packageJson.name, 'surgical-dev-ops');
+  assert.equal(packageJson.version, '2.4.1');
+  assert.equal(packageJson.license, 'MIT');
+  assert.deepEqual(packageJson.engines, {
+    node: '>=24.18.0'
+  });
 });
 
 test('canonical surgical CLI exists', () => {
@@ -36,7 +46,7 @@ test('surgical --version exposes the Surgical DevOps version', () => {
     }
   ).trim();
 
-  assert.equal(output, 'Surgical DevOps v2.4.0');
+  assert.equal(output, 'Surgical DevOps v2.4.1');
 });
 
 test('surgical --help exposes the stable human entrypoint', () => {
@@ -49,7 +59,7 @@ test('surgical --help exposes the stable human entrypoint', () => {
     }
   );
 
-  assert.match(output, /Surgical DevOps v2\.4\.0/);
+  assert.match(output, /Surgical DevOps v2\.4\.1/);
   assert.match(output, /Usage:/);
   assert.match(output, /\bsurgical\b/);
   assert.match(output, /--help/);

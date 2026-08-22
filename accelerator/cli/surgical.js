@@ -21,7 +21,7 @@ const {
   formatGovernedPatchResult
 } = require('./governed-patch-dispatch');
 
-const VERSION = '2.4.0';
+const VERSION = '2.4.1';
 
 function printVersion() {
   process.stdout.write(`Surgical DevOps v${VERSION}\n`);

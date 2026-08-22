@@ -6,6 +6,26 @@
     "test": "node --test tests/accelerator/*.test.js"
   },
   "bin": {
-    "surgical": "accelerator/cli/surgical.js"
+    "surgical": "accelerator/cli/surgical.js",
+    "surgical-devops": "accelerator/cli/surgical.js"
+  },
+  "name": "surgical-dev-ops",
+  "version": "2.4.1",
+  "description": "Governed deterministic development orchestration runtime.",
+  "license": "MIT",
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/bonushora/surgical-dev-ops.git"
+  },
+  "files": [
+    "accelerator/",
+    "protocols/",
+    "README.md",
+    "README_EN.md",
+    "CHANGELOG.md",
+    "LICENSE"
+  ],
+  "engines": {
+    "node": ">=24.18.0"
   }
 }

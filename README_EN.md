@@ -119,3 +119,26 @@ Explicit v2.3 limitations:
   independent from v2.3 closure;
 - POWER_LOSS_VALIDATED remains false until platform/filesystem-specific
   qualification is completed.
+
+---
+
+## CLI v2.4.1 Installation
+
+Primary engineer command: surgical-devops
+
+Currently qualified runtime: Node.js >= 24.18.0
+
+Installation: npm install -g surgical-dev-ops
+
+Verification: surgical-devops --version
+Additional verification: surgical-devops --help
+
+Start the governed human session with: surgical-devops
+
+The package also provides the compatibility executable surgical.
+If that name is already used by another launcher or shell function,
+use surgical-devops.
+
+Version 2.4.1 changes distribution, metadata, versioning and documentation.
+Orchestrator, Manifest CAS, journal, adapters, mutation authority and
+production runtime remain semantically unchanged.

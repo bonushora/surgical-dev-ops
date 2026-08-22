@@ -14,6 +14,20 @@ https://semver.org/
 
 ---
 
+## [2.4.1] - 2026-08-22
+
+### CLI Distribution
+
+- Added canonical npm package name and version metadata.
+- Added MIT license and repository package metadata.
+- Added the non-colliding `surgical-devops` executable.
+- Declared the currently qualified runtime requirement: Node.js >= 24.18.0.
+- Added explicit npm package-content allowlisting.
+- Qualified installation from the packed `.tgz` artifact and isolated engineer environment.
+- Preserved the existing `surgical` executable mapping.
+- No Orchestrator, mutation authority, CAS, journal, filesystem,
+  identity, provider, or production runtime semantics changed.
+
 ## [2.4.0] - 2026-08-22
 
 ### Added
