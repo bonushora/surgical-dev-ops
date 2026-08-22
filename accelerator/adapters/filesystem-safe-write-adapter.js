@@ -5,6 +5,9 @@ const path = require('node:path');
 const {
   sameFileIdentity
 } = require('./filesystem-safe-read-adapter');
+const {
+  createPathIdentityAuthority
+} = require('../core/workspace-boundary');
 
 function requireSafeParent(target, fsPort) {
   if (typeof target !== 'string' || !target || !path.isAbsolute(target)) {
@@ -37,7 +40,9 @@ function requireSafeParent(target, fsPort) {
     );
   }
 
-  if (path.normalize(physicalParent) !== parent) {
+  const pathIdentity = createPathIdentityAuthority(process.platform);
+
+  if (!pathIdentity.sameIdentity(physicalParent, parent)) {
     throw new Error(
       'Exclusive write parent must already be a physical canonical directory.'
     );
