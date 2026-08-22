@@ -31,9 +31,7 @@ function requireSafeParent(target, fsPort) {
       throw new Error('unsafe parent');
     }
 
-    physicalParent = fsPort.realpathSync.native
-      ? fsPort.realpathSync.native(parent)
-      : fsPort.realpathSync(parent);
+    physicalParent = fsPort.realpathSync(parent);
   } catch {
     throw new Error(
       'Exclusive write parent cannot be physically resolved safely.'
