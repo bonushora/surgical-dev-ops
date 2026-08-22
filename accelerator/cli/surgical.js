@@ -16,6 +16,11 @@ const {
   formatGovernedReadOnlyResult
 } = require('./governed-readonly-dispatch');
 
+const {
+  dispatchGovernedPatch,
+  formatGovernedPatchResult
+} = require('./governed-patch-dispatch');
+
 const VERSION = '2.4.0';
 
 function printVersion() {
@@ -98,6 +103,8 @@ function formatSessionHelp() {
   git head               Governed HEAD commit read
   git status             Governed worktree-status read
   git tracked            Governed tracked-files read
+  patch <file> --content-base64 <data>
+                         Governed R3 single-file patch
   exit                   Close the Surgical session
   quit                   Close the Surgical session
 `
@@ -225,6 +232,63 @@ function handleInteractiveCommand(input, activation) {
     };
   }
 
+  if (command === 'patch') {
+    const option =
+      ' --content-base64 ';
+
+    const optionIndex =
+      argument.indexOf(option);
+
+    if (
+      optionIndex <= 0 ||
+      argument.indexOf(
+        option,
+        optionIndex + option.length
+      ) !== -1
+    ) {
+      return {
+        action: 'CONTINUE',
+        output:
+          'Usage: patch <file> --content-base64 <data>\n'
+      };
+    }
+
+    const target =
+      argument
+        .slice(0, optionIndex)
+        .trim();
+
+    const replacementBase64 =
+      argument
+        .slice(
+          optionIndex + option.length
+        )
+        .trim();
+
+    if (
+      !target ||
+      !replacementBase64 ||
+      /\s/.test(replacementBase64)
+    ) {
+      return {
+        action: 'CONTINUE',
+        output:
+          'Usage: patch <file> --content-base64 <data>\n'
+      };
+    }
+
+    return {
+      action: 'DISPATCH',
+      output: '',
+      intent: Object.freeze({
+        capabilityType:
+          'FILESYSTEM_PATCH',
+        target,
+        replacementBase64
+      })
+    };
+  }
+
   if (command === 'exit' || command === 'quit') {
     return {
       action: 'EXIT',
@@ -236,6 +300,111 @@ function handleInteractiveCommand(input, activation) {
     action: 'CONTINUE',
     output: `Unknown command: ${raw}\n`
   };
+}
+
+function decodeCanonicalBase64(value) {
+  if (
+    typeof value !== 'string' ||
+    !value ||
+    !/^(?:[A-Za-z0-9+/]{4})*(?:[A-Za-z0-9+/]{2}==|[A-Za-z0-9+/]{3}=)?$/.test(
+      value
+    )
+  ) {
+    throw new Error(
+      'Patch replacement Base64 is malformed.'
+    );
+  }
+
+  const bytes =
+    Buffer.from(
+      value,
+      'base64'
+    );
+
+  if (
+    bytes.toString('base64') !== value
+  ) {
+    throw new Error(
+      'Patch replacement Base64 is non-canonical.'
+    );
+  }
+
+  return bytes.toString('utf8');
+}
+
+function patchOptionsFromEnvironment(
+  environment = process.env
+) {
+  return Object.freeze({
+    authorityRoot:
+      environment
+        .SDO_HUMAN_AUTHORITY_ROOT,
+
+    journalStorageRoot:
+      environment
+        .SDO_MUTATION_JOURNAL_ROOT,
+
+    tenantId:
+      environment.SDO_TENANT_ID ||
+      null,
+
+    projectId:
+      environment.SDO_PROJECT_ID ||
+      null
+  });
+}
+
+function dispatchInteractiveIntent(
+  intent,
+  activation,
+  options = {}
+) {
+  if (
+    !intent ||
+    typeof intent !== 'object' ||
+    !activation ||
+    typeof activation !== 'object'
+  ) {
+    throw new Error(
+      'Explicit interactive dispatch context is required.'
+    );
+  }
+
+  if (
+    intent.capabilityType ===
+      'FILESYSTEM_PATCH'
+  ) {
+    const governed =
+      dispatchGovernedPatch(
+        {
+          target:
+            intent.target,
+
+          replacement:
+            decodeCanonicalBase64(
+              intent.replacementBase64
+            )
+        },
+
+        activation.repositoryPath,
+
+        options.patchOptions || {}
+      );
+
+    return formatGovernedPatchResult(
+      governed
+    );
+  }
+
+  const governed =
+    dispatchGovernedReadOnly(
+      intent,
+      activation.repositoryPath
+    );
+
+  return formatGovernedReadOnlyResult(
+    governed
+  );
 }
 
 function createInteractiveSession(
@@ -274,15 +443,11 @@ function createInteractiveSession(
 
     if (result.action === 'DISPATCH') {
       try {
-        const governed =
-          dispatchGovernedReadOnly(
-            result.intent,
-            activation.repositoryPath
-          );
-
         output.write(
-          formatGovernedReadOnlyResult(
-            governed
+          dispatchInteractiveIntent(
+            result.intent,
+            activation,
+            options
           )
         );
       } catch {
@@ -339,7 +504,13 @@ function main(argv = process.argv.slice(2)) {
     formatInteractiveActivation(activation)
   );
 
-  createInteractiveSession(activation);
+  createInteractiveSession(
+    activation,
+    {
+      patchOptions:
+        patchOptionsFromEnvironment()
+    }
+  );
 }
 
 if (require.main === module) {
@@ -353,5 +524,7 @@ module.exports = {
   formatInteractiveActivation,
   activateInteractive,
   handleInteractiveCommand,
-  createInteractiveSession
+  createInteractiveSession,
+  dispatchInteractiveIntent,
+  patchOptionsFromEnvironment
 };

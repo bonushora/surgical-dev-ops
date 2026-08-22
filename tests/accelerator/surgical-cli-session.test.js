@@ -267,3 +267,104 @@ test('persistent session contract does not mutate activation state', () => {
 
   assert.deepEqual(state, activation());
 });
+
+test('bounded patch command produces structured R3 dispatch intent only', () => {
+  const replacement =
+    Buffer.from(
+      'const value = 2;\n',
+      'utf8'
+    ).toString('base64');
+
+  const result =
+    cli.handleInteractiveCommand(
+      `patch target.js --content-base64 ${replacement}`,
+      activation()
+    );
+
+  assert.equal(
+    result.action,
+    'DISPATCH'
+  );
+
+  assert.deepEqual(
+    result.intent,
+    {
+      capabilityType:
+        'FILESYSTEM_PATCH',
+      target:
+        'target.js',
+      replacementBase64:
+        replacement
+    }
+  );
+
+  assert.ok(
+    Object.isFrozen(
+      result.intent
+    )
+  );
+
+  for (const forbidden of [
+    'provider',
+    'providerId',
+    'mutationProvider',
+    'privateKey',
+    'command',
+    'args',
+    'executable'
+  ]) {
+    assert.equal(
+      forbidden in result.intent,
+      false
+    );
+  }
+});
+
+test('patch command rejects incomplete or ambiguous syntax without dispatch authority', () => {
+  for (const command of [
+    'patch',
+    'patch target.js',
+    'patch target.js --content-base64',
+    'patch --content-base64 YQ==',
+    'patch target.js --content-base64 YQ== --content-base64 Yg=='
+  ]) {
+    const result =
+      cli.handleInteractiveCommand(
+        command,
+        activation()
+      );
+
+    assert.equal(
+      result.action,
+      'CONTINUE'
+    );
+
+    assert.match(
+      result.output,
+      /Usage: patch/
+    );
+
+    assert.equal(
+      'intent' in result,
+      false
+    );
+  }
+});
+
+test('session help exposes governed patch without exposing generic execution', () => {
+  const result =
+    cli.handleInteractiveCommand(
+      'help',
+      activation()
+    );
+
+  assert.match(
+    result.output,
+    /patch <file> --content-base64/
+  );
+
+  assert.doesNotMatch(
+    result.output,
+    /\bshell\b|\bbash\b|\bexec\b/i
+  );
+});
