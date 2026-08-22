@@ -321,43 +321,56 @@ surgical-dev-ops/
 └── LICENSE
 Status
 
-🚀 Surgical DevOps v2.3
+🚀 Surgical DevOps v2.4.0
 
-A versão v2.3 introduz a Development Orchestration Layer do Surgical DevOps,
-mantendo BH-SEP v2.2 e BH-SDP v2.2 como núcleo normativo independente.
+A versão v2.4.0 fecha a fronteira operacional de mutação governada do
+Surgical DevOps, preservando BH-SEP v2.2 e BH-SDP v2.2 como núcleo normativo
+independente.
 
-Principais capacidades implementadas nesta versão:
+Principais capacidades qualificadas no baseline atual:
 
 - Surgical DevOps Accelerator / Orchestrator;
 - inspeção declarativa e preparação determinística de tarefas;
 - autoridade humana autenticada para operações críticas R3;
-- grants de capacidade com escopo exato e fail-closed;
+- grants de capacidade com escopo exato e comportamento fail-closed;
 - FILESYSTEM_PATCH governado por transação;
 - locking determinístico de alvo exato;
 - journal durável e autoridade de commit persistida;
 - recovery determinístico após process crash/restart;
 - proteção contra replay conflitante e remutação duplicada;
 - enforcement de primitivas de durabilidade de filesystem;
-- boundary de mutation provider qualificado;
+- Governed Content-Addressed Workspace como autoridade de mutação;
+- conteúdo imutável e manifests content-addressed;
+- Manifest CAS com transição condicional genuína da autoridade interna;
+- worktree comum explicitamente não autoritativa;
+- managed materialization separada da transição de autoridade;
+- materialização e recovery idempotentes;
+- detecção fail-closed de projeção gerenciada corrompida;
+- Production Mutation Provider qualificado e bounded;
+- Local Offline Human Authority com assinatura Ed25519;
+- runtime de produção sem autoridade privada de assinatura;
+- integração R3 governada através de `surgical> patch`;
+- continuidade operacional através de process restart;
+- testes end-to-end usando processos reais da CLI;
 - hardening do Git preflight;
-- suíte canônica de conformidade com 508 testes;
-- GitHub Actions executando a suíte canônica em push e pull request;
-- matriz nativa de conformidade validada no mesmo baseline em Linux,
-  Windows e macOS.
+- suíte canônica com 595 testes: 591 PASS, 0 FAIL e 4 platform-specific SKIP;
+- GitHub Actions mantendo a matriz canônica Linux / Windows / macOS.
 
-Limites explícitos da v2.3:
+Invariantes e limites preservados:
 
 - BH-SEP e BH-SDP permanecem na versão normativa v2.2;
-- a suíte canônica foi validada diretamente em Linux, Windows e macOS no
-  mesmo baseline técnico (GitHub Actions run 32545548306, commit 0586fa4113de00c075113f12fd98059f44feba8f);
-- a primitive Safe Exclusive Write está qualificada diretamente em Linux,
-  Windows e macOS nesse baseline;
-- Strict Physical Identity-Conditional CAS permanece UNQUALIFIED;
-- mutação física de produção dependente desse CAS permanece fail-closed;
-- essa fronteira não reduz o threat model nem enfraquece os invariantes
-  normativos e sua qualificação futura é uma linha especializada independente
-  do fechamento da v2.3;
-- POWER_LOSS_VALIDATED permanece falso até qualificação específica por
-  plataforma/filesystem.
+- a worktree física comum não redefine a autoridade content-addressed;
+- callers não podem selecionar ou autoqualificar o Production Mutation Provider;
+- autenticação isoladamente não autoriza mutação R3;
+- private signing authority não é exposta ao runtime de produção;
+- generic shell/process authority não é exposta pela fronteira de mutação;
+- Strict Physical Identity-Conditional CAS de pathname permanece UNQUALIFIED
+  conforme ADR-009;
+- essa limitação não redefine a autoridade content-addressed adotada pela
+  ADR-010;
+- POWER_LOSS_VALIDATED permanece falso até qualificação física específica por
+  plataforma/filesystem;
+- nenhuma suíte de process crash/restart deve ser representada como prova de
+  durabilidade universal contra perda física de energia.
 
-Baseline técnica da v2.3: Development Orchestration Layer.
+Baseline operacional da v2.4.0: Governed Content-Addressed Mutation Authority.

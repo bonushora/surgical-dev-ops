@@ -116,6 +116,41 @@ Explicit qualification boundaries retained at v2.3 closure:
 
 ---
 
+# Version 2.4 — Governed Content-Addressed Mutation Authority ✅
+
+Completed
+
+- Governed Content-Addressed Workspace adopted as mutation authority
+- Immutable content-addressed objects and authoritative manifests
+- Genuine conditional Manifest CAS authority transition
+- Ordinary worktree explicitly retained as a non-authoritative projection
+- Managed materialization separated from authoritative CAS
+- Idempotent restart recovery from immutable authoritative evidence
+- Stale writer rejection and conflicting successor prevention
+- Corrupt managed projection detection with fail-closed recovery
+- Qualified bounded Production Mutation Provider
+- Local Offline Human Authority with Ed25519 signing
+- Production runtime composition without private signing authority
+- Governed R3 `surgical> patch` production boundary
+- Real-process CLI end-to-end operational qualification
+- Cross-process restart and persistent-authority qualification
+- Canonical suite: 595 tests, 591 PASS, 0 FAIL, 4 platform-specific SKIP
+
+Explicit qualification boundaries retained at v2.4 operational closure:
+
+- BH-SEP v2.2 and BH-SDP v2.2 remain the normative protocol core
+- Strict Physical Identity-Conditional CAS for ordinary pathname mutation
+  remains UNQUALIFIED under ADR-009
+- ordinary worktree state cannot independently establish mutation authority
+- POWER_LOSS_VALIDATED remains false pending separate
+  platform/filesystem-specific physical qualification
+- process-crash / process-restart qualification does not constitute universal
+  physical power-loss qualification
+- generic shell/process authority and caller-selected production mutation
+  providers remain outside the production mutation boundary
+
+---
+
 # Guiding Principle
 
 The objective of Surgical DevOps is not merely to improve prompts.

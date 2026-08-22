@@ -12,27 +12,66 @@ https://semver.org/
 
 ## [Unreleased]
 
+---
+
+## [2.4.0] - 2026-08-22
+
+### Added
+
+- Governed Content-Addressed Workspace mutation authority
+- Immutable content-addressed object and manifest authority
+- Genuine conditional Manifest CAS transition
+- Managed materialization of authoritative generations
+- Restart recovery derived from immutable authoritative evidence
+- Qualified bounded Production Mutation Provider
+- Local Offline Human Authority and Ed25519 signing boundary
+- Production mutation runtime composition
+- Governed R3 `surgical> patch` execution path
+- Real-process production CLI end-to-end qualification
+- Cross-process restart and persistent-authority qualification
+
+### Changed
+
+- Ordinary worktree state is explicitly non-authoritative for governed mutation
+- Production R3 mutation advances content-addressed authority before verified
+  managed materialization
+- Recovery uses authoritative immutable evidence rather than ordinary worktree
+  state
+- Surgical CLI version advanced to v2.4.0
+
+### Security
+
+- Stale writers cannot redefine current Manifest CAS authority
+- Conflicting writers starting from the same authority cannot both commit
+  conflicting successors
+- Corrupt managed projections fail closed
+- Caller-selected production mutation providers remain rejected
+- Production runtime exposes no private signing authority
+- Generic shell/process authority remains outside the governed mutation
+  boundary
+- Authentication alone does not authorize R3 mutation
+- Existing exact-scope capability, approval, lifecycle, journal and recovery
+  invariants remain enforced
+
 ### Validation
 
-- Canonical Accelerator suite expanded to 503 tests
-- Direct Linux / Windows / macOS conformance matrix: PASS
-- GitHub Actions qualification run: 32539804002
-- Qualified technical baseline: `ff6d6e069558f9fddda3ca4cf3823bb1e89f801a`
-
-### Platform
-
-- Windows native filesystem durability helper qualified in canonical CI
-- Git repository-root authority preserves the already authorized physical
-  workspace representation after physical identity verification
-- Git preflight remains bounded and fail-closed with a 5000 ms execution limit
+- Canonical suite: 595 tests
+- PASS: 591
+- FAIL: 0
+- Platform-specific SKIP: 4
+- Real `surgical` process qualified through governed production R3 mutation
+- Process-restart continuity and conflicting second-process mutation behavior
+  qualified end-to-end
 
 ### Limitations
 
-- POWER_LOSS_VALIDATED remains false pending platform/filesystem-specific
-  physical qualification
-- Production physical mutation remains fail-closed without a qualified
-  compare-and-replace provider
-
+- BH-SEP v2.2 and BH-SDP v2.2 remain the normative protocol core
+- Strict Physical Identity-Conditional CAS for ordinary pathname mutation
+  remains UNQUALIFIED under ADR-009
+- POWER_LOSS_VALIDATED remains false pending separate
+  platform/filesystem-specific physical qualification
+- Process-crash / process-restart qualification is not physical power-loss
+  qualification
 ---
 
 ## [2.3.0] - 2026-08-21
