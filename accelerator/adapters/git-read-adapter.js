@@ -202,7 +202,7 @@ function normalizeOutput(selector, stdout, workspace) {
       throw new Error('Git repository root does not match the authorized workspace.');
     }
 
-    return repositoryRoot;
+    return workspace;
   }
   if (selector === 'HEAD_COMMIT' && !/^(?:[0-9a-f]{40}|[0-9a-f]{64})$/.test(value)) {
     throw new Error('Git produced a malformed HEAD object ID.');
