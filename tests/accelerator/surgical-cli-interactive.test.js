@@ -71,6 +71,81 @@ test('interactive activation preserves deterministic governance defaults', () =>
   );
 });
 
+test('interactive activation defaults interaction mode to EXPERT without changing deterministic governance', () => {
+  const activation =
+    cli.createInteractiveActivation(ROOT);
+
+  assert.equal(
+    activation.mode,
+    'DETERMINISTIC'
+  );
+
+  assert.equal(
+    activation.interactionMode.mode,
+    'EXPERT'
+  );
+
+  assert.equal(
+    activation.interactionMode.governance.authorityProfile,
+    'CANONICAL'
+  );
+
+  assert.equal(
+    activation.interactionMode.governance.securityInvariantsReduced,
+    false
+  );
+
+  assert.ok(
+    Object.isFrozen(
+      activation.interactionMode
+    )
+  );
+});
+
+test('interactive activation accepts bounded NATURAL and ENGINEER selection', () => {
+  for (const mode of [
+    'NATURAL',
+    'ENGINEER'
+  ]) {
+    const activation =
+      cli.createInteractiveActivation(
+        ROOT,
+        mode
+      );
+
+    assert.equal(
+      activation.mode,
+      'DETERMINISTIC'
+    );
+
+    assert.equal(
+      activation.interactionMode.mode,
+      mode
+    );
+
+    assert.equal(
+      activation.interactionMode.governance.authorityProfile,
+      'CANONICAL'
+    );
+
+    assert.equal(
+      activation.interactionMode.governance.securityInvariantsReduced,
+      false
+    );
+  }
+});
+
+test('interactive activation rejects unknown interaction modes fail closed', () => {
+  assert.throws(
+    () =>
+      cli.createInteractiveActivation(
+        ROOT,
+        'UNRESTRICTED'
+      ),
+    /interaction mode/i
+  );
+});
+
 test('interactive activation identifies the canonical protocols', () => {
   assert.equal(
     typeof cli.createInteractiveActivation,

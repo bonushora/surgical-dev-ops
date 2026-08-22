@@ -12,6 +12,10 @@ const {
 } = require('../core/repository-discovery');
 
 const {
+  createInteractionMode
+} = require('../core/interaction-mode');
+
+const {
   dispatchGovernedReadOnly,
   formatGovernedReadOnlyResult
 } = require('./governed-readonly-dispatch');
@@ -35,14 +39,21 @@ Usage:
   surgical [options]
 
 Options:
-  --help       Show this help
-  --version    Show the Surgical DevOps version
+  --help                 Show this help
+  --version              Show the Surgical DevOps version
+  --interaction <mode>   Select NATURAL, ENGINEER or EXPERT
 `
   );
 }
 
-function createInteractiveActivation(repositoryPath = process.cwd()) {
+function createInteractiveActivation(
+  repositoryPath = process.cwd(),
+  interactionMode = 'EXPERT'
+) {
   const discovery = discover(repositoryPath);
+
+  const interaction =
+    createInteractionMode(interactionMode);
 
   return {
     repositoryPath: discovery.repository.path,
@@ -52,6 +63,7 @@ function createInteractiveActivation(repositoryPath = process.cwd()) {
     worktreeClean: discovery.worktree.clean,
     packageManager: discovery.project.packageManager,
     mode: 'DETERMINISTIC',
+    interactionMode: interaction,
     strategy: 'PATCH',
     orchestrator: 'ACTIVE',
     providers: 'none',
@@ -70,6 +82,11 @@ BH-SEP v${activation.protocols.bhSep} E BH-SDP v${activation.protocols.bhSdp} AT
 Workspace: ${activation.workspace}
 Branch: ${activation.branch || 'detached'}
 Mode: ${activation.mode}
+Interaction: ${
+  activation.interactionMode
+    ? activation.interactionMode.mode
+    : 'EXPERT'
+}
 Strategy: ${activation.strategy}
 Orchestrator: ${activation.orchestrator}
 Providers: ${activation.providers}
@@ -83,6 +100,11 @@ function formatInteractiveStatus(activation) {
 `Workspace: ${activation.workspace}
 Branch: ${activation.branch || 'detached'}
 Mode: ${activation.mode}
+Interaction: ${
+  activation.interactionMode
+    ? activation.interactionMode.mode
+    : 'EXPERT'
+}
 Strategy: ${activation.strategy}
 Orchestrator: ${activation.orchestrator}
 Providers: ${activation.providers}
@@ -497,8 +519,49 @@ function main(argv = process.argv.slice(2)) {
     return;
   }
 
+  const interactionIndexes =
+    argv.reduce(
+      (indexes, argument, index) => {
+        if (argument === '--interaction') {
+          indexes.push(index);
+        }
+
+        return indexes;
+      },
+      []
+    );
+
+  if (interactionIndexes.length > 1) {
+    throw new Error(
+      'Interaction mode selector cannot be repeated.'
+    );
+  }
+
+  let interactionMode =
+    'EXPERT';
+
+  if (interactionIndexes.length === 1) {
+    const interactionIndex =
+      interactionIndexes[0];
+
+    if (
+      interactionIndex + 1 >= argv.length ||
+      argv[interactionIndex + 1].startsWith('--')
+    ) {
+      throw new Error(
+        'Explicit interaction mode is required.'
+      );
+    }
+
+    interactionMode =
+      argv[interactionIndex + 1];
+  }
+
   const activation =
-    createInteractiveActivation(process.cwd());
+    createInteractiveActivation(
+      process.cwd(),
+      interactionMode
+    );
 
   process.stdout.write(
     formatInteractiveActivation(activation)
