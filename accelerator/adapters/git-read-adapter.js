@@ -8,7 +8,7 @@ const {
   canonicalizeAuthorizedRoot
 } = require('../core/workspace-boundary');
 
-const TIMEOUT_MS = 2000;
+const TIMEOUT_MS = 5000;
 const MAX_OUTPUT_BYTES = 64 * 1024;
 const REQUEST_KEYS = new Set([
   'operationId', 'workspace', 'selector', 'grantEvaluation', 'observedAt'
