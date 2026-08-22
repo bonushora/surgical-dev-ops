@@ -98,12 +98,13 @@ Completed
 - Filesystem durability primitive enforcement
 - Qualified mutation-provider boundary
 - Hardened Git preflight
-- Canonical 427-test conformance suite
+- Canonical 503-test conformance suite
 - GitHub Actions conformance workflow
+- Direct Linux / Windows / macOS canonical conformance matrix validated on
+  GitHub Actions run 32539804002 at commit ff6d6e069558f9fddda3ca4cf3823bb1e89f801a
 
 Qualification still pending:
 
-- direct Linux / Windows / macOS conformance matrix
 - platform/filesystem-specific power-loss validation
 - production qualification of physical compare-and-replace providers
 

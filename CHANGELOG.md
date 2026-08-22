@@ -10,6 +10,31 @@ https://semver.org/
 
 ---
 
+## [Unreleased]
+
+### Validation
+
+- Canonical Accelerator suite expanded to 503 tests
+- Direct Linux / Windows / macOS conformance matrix: PASS
+- GitHub Actions qualification run: 32539804002
+- Qualified technical baseline: `ff6d6e069558f9fddda3ca4cf3823bb1e89f801a`
+
+### Platform
+
+- Windows native filesystem durability helper qualified in canonical CI
+- Git repository-root authority preserves the already authorized physical
+  workspace representation after physical identity verification
+- Git preflight remains bounded and fail-closed with a 5000 ms execution limit
+
+### Limitations
+
+- POWER_LOSS_VALIDATED remains false pending platform/filesystem-specific
+  physical qualification
+- Production physical mutation remains fail-closed without a qualified
+  compare-and-replace provider
+
+---
+
 ## [2.3.0] - 2026-08-21
 
 ### Added

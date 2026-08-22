@@ -99,14 +99,17 @@ Implemented capabilities include:
 - filesystem durability primitive enforcement;
 - qualified mutation-provider boundary;
 - hardened read-only Git preflight;
-- canonical conformance suite with 427 tests;
-- GitHub Actions conformance on pushes and pull requests.
+- canonical conformance suite with 503 tests;
+- GitHub Actions conformance on pushes and pull requests;
+- native conformance matrix validated on the same baseline across Linux,
+  Windows and macOS.
 
 Explicit v2.3 limitations:
 
 - BH-SEP and BH-SDP remain normatively versioned at v2.2;
-- complete cross-platform conformance still requires direct validation on
-  Linux, Windows and macOS;
+- the canonical suite has been directly validated on Linux, Windows and
+  macOS on the same technical baseline (GitHub Actions run 32539804002,
+  commit ff6d6e069558f9fddda3ca4cf3823bb1e89f801a);
 - POWER_LOSS_VALIDATED remains false until platform/filesystem-specific
   qualification is completed;
 - production physical mutation remains fail-closed when no qualified provider

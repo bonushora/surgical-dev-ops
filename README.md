@@ -340,14 +340,16 @@ Principais capacidades implementadas nesta versão:
 - enforcement de primitivas de durabilidade de filesystem;
 - boundary de mutation provider qualificado;
 - hardening do Git preflight;
-- suíte canônica de conformidade com 427 testes;
-- GitHub Actions executando a suíte canônica em push e pull request.
+- suíte canônica de conformidade com 503 testes;
+- GitHub Actions executando a suíte canônica em push e pull request;
+- matriz nativa de conformidade validada no mesmo baseline em Linux,
+  Windows e macOS.
 
 Limites explícitos da v2.3:
 
 - BH-SEP e BH-SDP permanecem na versão normativa v2.2;
-- conformidade multiplataforma completa requer validação direta em Linux,
-  Windows e macOS;
+- a suíte canônica foi validada diretamente em Linux, Windows e macOS no
+  mesmo baseline técnico (GitHub Actions run 32539804002, commit ff6d6e069558f9fddda3ca4cf3823bb1e89f801a);
 - POWER_LOSS_VALIDATED permanece falso até qualificação específica por
   plataforma/filesystem;
 - mutação física de produção permanece fail-closed na ausência de provider
