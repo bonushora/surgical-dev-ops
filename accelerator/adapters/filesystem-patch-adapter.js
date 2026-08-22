@@ -208,6 +208,84 @@ function denyBeforeCommit(context, temporalAuthority, reason, transactionContext
   throw error;
 }
 
+
+function contentAddressedDurability(providerEvidence) {
+  const durability = providerEvidence && providerEvidence.durability;
+  return durability &&
+    durability.schema === 'sdo.content_addressed_provider_evidence.v1'
+    ? durability
+    : null;
+}
+
+function verifyContentAddressedProjection(providerEvidence, expectedSha256) {
+  if (!/^[a-f0-9]{64}$/.test(expectedSha256 || '')) {
+    throw new Error('Content-addressed expected SHA-256 is malformed.');
+  }
+
+  const durability = contentAddressedDurability(providerEvidence);
+  if (!durability ||
+      durability.ordinaryWorktreeAuthoritative !== false ||
+      !durability.authority ||
+      !durability.materialization) {
+    throw new Error('Content-addressed provider evidence is incomplete.');
+  }
+
+  const authority = durability.authority;
+  const materialization = durability.materialization;
+
+  const manifestOid =
+    authority.afterManifestOid ||
+    authority.manifestOid ||
+    authority.currentManifestOid;
+
+  if (authority.decision !== 'APPLIED' ||
+      authority.replacementSha256 !== expectedSha256 ||
+      !/^[a-f0-9]{40,64}$/.test(manifestOid || '')) {
+    throw new Error('Content-addressed authority evidence is not bound to AFTER.');
+  }
+
+  if (!['MATERIALIZED', 'ALREADY_MATERIALIZED'].includes(
+        materialization.decision
+      ) ||
+      materialization.contentSha256 !== expectedSha256 ||
+      materialization.expectedManifestOid !== manifestOid ||
+      materialization.observedManifestOid !== manifestOid ||
+      typeof materialization.projection !== 'string' ||
+      !path.isAbsolute(materialization.projection)) {
+    throw new Error('Managed materialization evidence is not bound to authority.');
+  }
+
+  const projection = path.normalize(materialization.projection);
+
+  let lexical;
+  try {
+    lexical = fs.lstatSync(projection);
+  } catch {
+    throw new Error('Managed authoritative projection is unavailable.');
+  }
+
+  if (lexical.isSymbolicLink() || !lexical.isFile()) {
+    throw new Error('Managed authoritative projection is unsafe.');
+  }
+
+  const opened = readRegularNoFollow(projection);
+  const observedSha256 = hash(opened.content);
+
+  if (observedSha256 !== expectedSha256) {
+    throw new Error('Managed authoritative projection hash mismatch.');
+  }
+
+  return deepFreeze({
+    schema: 'sdo.content_addressed_after_verification.v1',
+    decision: 'PROVEN_APPLIED',
+    manifestOid,
+    projection,
+    expectedSha256,
+    observedSha256,
+    ordinaryWorktreeAuthoritative: false
+  });
+}
+
 function patchFileWithGrant({
   operationId, workspace, target, replacement, grantEvaluation
 }, temporalRuntime = {}) {
@@ -380,17 +458,46 @@ function patchFileWithGrant({
       transaction: transactionEvidence(transactionContext), durability: physicalDurability });
     throw error;
   }
+  const contentAddressed = contentAddressedDurability(providerEvidence);
   let afterResolved;
   let after;
   try {
-    afterResolved = resolveInspectedFile(canonicalWorkspace, requested);
-    after = readRegularNoFollow(afterResolved.canonicalTarget);
-    if (afterResolved.canonicalTarget !== resolved.canonicalTarget ||
-        hash(after.content) !== afterHash || !after.content.equals(replacementBytes)) {
-      throw new Error('AFTER verification failed.');
+    if (contentAddressed) {
+      verifyContentAddressedProjection(providerEvidence, afterHash);
+    } else {
+      afterResolved = resolveInspectedFile(canonicalWorkspace, requested);
+      after = readRegularNoFollow(afterResolved.canonicalTarget);
+      if (afterResolved.canonicalTarget !== resolved.canonicalTarget ||
+          hash(after.content) !== afterHash || !after.content.equals(replacementBytes)) {
+        throw new Error('AFTER verification failed.');
+      }
     }
   } catch (verificationError) {
     try { transactionContext.requireRecovery(); } catch {}
+
+    if (contentAddressed) {
+      const error = new Error(
+        `Content-addressed AFTER verification failed: ${verificationError.message}`
+      );
+      error.evidence = evidence({
+        operationId: normalizedOperationId,
+        workspace: canonicalWorkspace,
+        requested,
+        canonical: resolved.canonicalTarget,
+        beforeHash,
+        afterHash,
+        outcome: 'FAILED',
+        recovery: 'RECOVERY_REQUIRED_AUTHORITATIVE_PROJECTION',
+        observedAt: commitAuthority.reading.wallTime,
+        temporalAuthority: commitEvidence,
+        commitAuthority: durableCommitAuthority,
+        transaction: transactionEvidence(transactionContext),
+        durability: physicalDurability,
+        mutationProvider: providerEvidence
+      });
+      throw error;
+    }
+
     let owned = false;
     try {
       const current = readRegularNoFollow(resolved.canonicalTarget);
@@ -482,6 +589,44 @@ function verifyAppliedFile({ workspace, target, expectedSha256 }) {
   });
 }
 
+
+function verifyAppliedMutation({
+  workspace,
+  target,
+  expectedSha256,
+  evidence: priorEvidence = null
+}) {
+  const providerEvidence =
+    priorEvidence &&
+    priorEvidence.mutationProvider
+      ? priorEvidence.mutationProvider
+      : null;
+
+  if (contentAddressedDurability(providerEvidence)) {
+    const verification =
+      verifyContentAddressedProjection(providerEvidence, expectedSha256);
+
+    return deepFreeze({
+      schema: 'sdo.filesystem_patch_replay_verification.v1',
+      workspace: canonicalizeAuthorizedRoot(workspace),
+      target: requireText(target, 'target'),
+      expectedSha256,
+      currentSha256: verification.observedSha256,
+      authority: 'CONTENT_ADDRESSED_MANIFEST',
+      manifestOid: verification.manifestOid,
+      projection: verification.projection,
+      ordinaryWorktreeAuthoritative: false,
+      decision: 'PROVEN_APPLIED'
+    });
+  }
+
+  return verifyAppliedFile({
+    workspace,
+    target,
+    expectedSha256
+  });
+}
+
 function inspectMutationTarget({ transaction }) {
   if (!transaction || !Object.isFrozen(transaction) ||
       !/^[a-f0-9]{64}$/.test(transaction.transactionId || '')) {
@@ -505,4 +650,9 @@ function inspectMutationTarget({ transaction }) {
   }
 }
 
-module.exports = { patchFileWithGrant, verifyAppliedFile, inspectMutationTarget };
+module.exports = {
+  patchFileWithGrant,
+  verifyAppliedFile,
+  verifyAppliedMutation,
+  inspectMutationTarget
+};

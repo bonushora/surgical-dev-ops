@@ -165,6 +165,52 @@ test('bounded read and validate commands produce structured dispatch intent only
   assert.ok(Object.isFrozen(validate.intent));
 });
 
+
+test('bounded Git commands produce repository-scoped governed intents', () => {
+  const expected = {
+    root: 'root',
+    branch: 'branch',
+    head: 'head',
+    status: 'status',
+    tracked: 'tracked'
+  };
+
+  for (const [command, target] of Object.entries(expected)) {
+    const result =
+      cli.handleInteractiveCommand(
+        `git ${command}`,
+        activation()
+      );
+
+    assert.equal(result.action, 'DISPATCH');
+    assert.deepEqual(result.intent, {
+      capabilityType: 'GIT_READ',
+      target
+    });
+    assert.ok(Object.isFrozen(result.intent));
+  }
+});
+
+test('arbitrary Git commands remain outside Level 1 authority', () => {
+  for (const command of [
+    'git push',
+    'git commit',
+    'git remote',
+    'git reset',
+    'git checkout'
+  ]) {
+    const result =
+      cli.handleInteractiveCommand(
+        command,
+        activation()
+      );
+
+    assert.equal(result.action, 'CONTINUE');
+    assert.match(result.output, /Usage: git/);
+    assert.equal('intent' in result, false);
+  }
+});
+
 test('read and validate require one explicit target', () => {
   assert.deepEqual(
     cli.handleInteractiveCommand(

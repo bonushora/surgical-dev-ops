@@ -46,6 +46,37 @@ const CONTRACTS = Object.freeze({
         paths: [target]
       };
     }
+  }),
+
+  GIT_READ: Object.freeze({
+    adapter: 'GIT_READ',
+    actions: Object.freeze({
+      root: 'REPOSITORY_ROOT',
+      branch: 'CURRENT_BRANCH',
+      head: 'HEAD_COMMIT',
+      status: 'WORKTREE_STATUS',
+      tracked: 'TRACKED_FILES'
+    }),
+    objective(selector) {
+      return `Governed Git repository read: ${selector}`;
+    },
+    scope(selector) {
+      const operation = {
+        REPOSITORY_ROOT: 'rev-parse',
+        CURRENT_BRANCH: 'rev-parse',
+        HEAD_COMMIT: 'rev-parse',
+        WORKTREE_STATUS: 'status',
+        TRACKED_FILES: 'ls-files'
+      }[selector];
+
+      if (!operation) {
+        throw new Error('Unknown governed Git selector.');
+      }
+
+      return {
+        operations: [operation]
+      };
+    }
   })
 });
 
@@ -130,6 +161,20 @@ function createGovernedReadOnlyRequest(
   const requestedTarget =
     requireText(target, 'Target');
 
+  const requestedAction =
+    capabilityType === 'GIT_READ'
+      ? (
+          contract.actions &&
+          contract.actions[requestedTarget.toLowerCase()]
+        )
+      : contract.action;
+
+  if (!requestedAction) {
+    throw new Error(
+      'Unknown governed read-only action.'
+    );
+  }
+
   const repository =
     discover(
       requireText(
@@ -162,13 +207,22 @@ function createGovernedReadOnlyRequest(
     });
 
   const scope =
-    contract.scope(requestedTarget);
+    contract.scope(
+      capabilityType === 'GIT_READ'
+        ? requestedAction
+        : requestedTarget
+    );
+
+  const authorityRiskLevel =
+    capabilityType === 'GIT_READ'
+      ? 'R0'
+      : 'R1';
 
   const common = {
     operationId,
     workspace,
     policyDecision: 'ALLOWED',
-    riskLevel: 'R1',
+    riskLevel: authorityRiskLevel,
     lifecycleState: 'PENDING',
     capabilityType,
     scope,
@@ -198,7 +252,11 @@ function createGovernedReadOnlyRequest(
   }
 
   const objective =
-    contract.objective(requestedTarget);
+    contract.objective(
+      capabilityType === 'GIT_READ'
+        ? requestedAction
+        : requestedTarget
+    );
 
   const operationRecordEvaluation =
     createOperationRecord({
@@ -212,7 +270,7 @@ function createGovernedReadOnlyRequest(
       workspace,
       objective,
       policyDecision: 'ALLOWED',
-      riskLevel: 'R1',
+      riskLevel: authorityRiskLevel,
       idempotency: 'IDEMPOTENT',
 
       events: [
@@ -227,7 +285,7 @@ function createGovernedReadOnlyRequest(
           operationId,
           timestamp: observedAt,
           policyDecision: 'ALLOWED',
-          riskLevel: 'R1'
+          riskLevel: authorityRiskLevel
         },
         {
           type: 'state',
@@ -258,10 +316,12 @@ function createGovernedReadOnlyRequest(
 
   const execution = Object.freeze({
     adapter: contract.adapter,
-    action: contract.action,
+    action: requestedAction,
     operationId,
     workspace,
-    target: requestedTarget,
+    ...(capabilityType === 'GIT_READ'
+      ? {}
+      : { target: requestedTarget }),
     observedAt,
     grantEvaluation,
     operationRecord:
@@ -272,10 +332,15 @@ function createGovernedReadOnlyRequest(
   return Object.freeze({
     repositoryPath: workspace,
     description: objective,
-    files: Object.freeze([
-      requestedTarget
-    ]),
-    mode: 'PATCH',
+    files: Object.freeze(
+      capabilityType === 'GIT_READ'
+        ? []
+        : [requestedTarget]
+    ),
+    mode:
+      capabilityType === 'GIT_READ'
+        ? 'OBSERVE'
+        : 'PATCH',
     risk: 'BAIXO',
     authorizeExecution: true,
     estimatedDiffLines: 0,
@@ -368,6 +433,27 @@ function formatGovernedReadOnlyResult(result) {
           : '\n'
       ) +
       '----- END CONTENT -----\n'
+    );
+  }
+
+  if (
+    result.execution &&
+    result.execution.schema ===
+      'sdo.git_read_result.v1'
+  ) {
+    const value =
+      typeof result.execution.result === 'string'
+        ? result.execution.result
+        : JSON.stringify(
+            result.execution.result,
+            null,
+            2
+          );
+
+    return (
+      'Governed Git read: COMPLETED\n' +
+      `Selector: ${result.execution.selector}\n` +
+      `${value}\n`
     );
   }
 

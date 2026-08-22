@@ -377,3 +377,104 @@ test(
     }
   }
 );
+
+test(
+  'governed CLI Git repository reads complete through canonical orchestrator',
+  () => {
+    const state = fixture();
+
+    try {
+      for (
+        const target of [
+          'root',
+          'branch',
+          'head',
+          'status',
+          'tracked'
+        ]
+      ) {
+        const result =
+          dispatchGovernedReadOnly(
+            {
+              capabilityType: 'GIT_READ',
+              target
+            },
+            state.repo,
+            {
+              now: () => NOW
+            }
+          );
+
+        assert.equal(
+          result.orchestration.status,
+          'COMPLETED'
+        );
+
+        assert.equal(
+          result.execution.schema,
+          'sdo.git_read_result.v1'
+        );
+
+        assert.equal(
+          result.pipeline.inspection.inspection.scope,
+          'REPOSITORY'
+        );
+
+        assert.deepEqual(
+          result.pipeline.inspection.inspection.files,
+          []
+        );
+
+        assert.equal(
+          result.pipeline.classification.classification.level,
+          'R0'
+        );
+      }
+    } finally {
+      cleanup(state);
+    }
+  }
+);
+
+test(
+  'governed CLI Git status is permitted on a dirty workspace because it is R0 read-only',
+  () => {
+    const state = fixture();
+
+    try {
+      fs.writeFileSync(
+        path.join(state.repo, 'dirty.txt'),
+        'dirty\n'
+      );
+
+      const result =
+        dispatchGovernedReadOnly(
+          {
+            capabilityType: 'GIT_READ',
+            target: 'status'
+          },
+          state.repo,
+          {
+            now: () => NOW
+          }
+        );
+
+      assert.equal(
+        result.orchestration.status,
+        'COMPLETED'
+      );
+
+      assert.equal(
+        result.pipeline.classification.classification.level,
+        'R0'
+      );
+
+      assert.equal(
+        result.pipeline.classification.governance.worktreeCleanRequired,
+        false
+      );
+    } finally {
+      cleanup(state);
+    }
+  }
+);

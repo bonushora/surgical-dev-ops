@@ -36,8 +36,26 @@ function inspect(repositoryPath, input) {
     throw new Error('Inspection input must be an object.');
   }
 
-  if (!Array.isArray(input.files) || input.files.length === 0) {
+  const inspectionScope =
+    input.scope === 'REPOSITORY'
+      ? 'REPOSITORY'
+      : 'FILES';
+
+  if (
+    inspectionScope === 'FILES' &&
+    (!Array.isArray(input.files) || input.files.length === 0)
+  ) {
     throw new Error('At least one file must be inspected.');
+  }
+
+  if (
+    inspectionScope === 'REPOSITORY' &&
+    Array.isArray(input.files) &&
+    input.files.length !== 0
+  ) {
+    throw new Error(
+      'Repository-scoped inspection cannot declare target files.'
+    );
   }
 
   if (!input.hypothesis || !String(input.hypothesis).trim()) {
@@ -52,9 +70,12 @@ function inspect(repositoryPath, input) {
   const commit = runTrustedGitRead(absolutePath, 'HEAD_COMMIT').result;
   const status = runTrustedGitRead(absolutePath, 'WORKTREE_STATUS').result;
 
-  const inspectedFiles = input.files.map((file) =>
-    inspectFile(absolutePath, file)
-  );
+  const inspectedFiles =
+    inspectionScope === 'FILES'
+      ? input.files.map((file) =>
+          inspectFile(absolutePath, file)
+        )
+      : [];
 
   return {
     schema: 'sdo.declarative_inspection.v1',
@@ -65,6 +86,7 @@ function inspect(repositoryPath, input) {
       worktreeClean: status.length === 0
     },
     inspection: {
+      scope: inspectionScope,
       files: inspectedFiles,
       hypothesis: String(input.hypothesis).trim(),
       objective: String(input.objective).trim(),

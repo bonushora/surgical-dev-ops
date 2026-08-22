@@ -9,6 +9,7 @@ const RISK_LEVELS = new Set([
 ]);
 
 const MODES = new Set([
+  'OBSERVE',
   'PATCH',
   'REFRACTOR'
 ]);
@@ -32,7 +33,7 @@ function normalizeMode(mode) {
 
   if (!MODES.has(normalized)) {
     throw new Error(
-      `Invalid execution mode: ${normalized}. Expected PATCH or REFRACTOR.`
+      `Invalid execution mode: ${normalized}. Expected OBSERVE, PATCH or REFRACTOR.`
     );
   }
 

@@ -93,6 +93,11 @@ function formatSessionHelp() {
   providers              Show provider state
   read <file>            Governed bounded filesystem read
   validate <file.js>     Governed Node.js syntax validation
+  git root               Governed repository-root read
+  git branch             Governed current-branch read
+  git head               Governed HEAD commit read
+  git status             Governed worktree-status read
+  git tracked            Governed tracked-files read
   exit                   Close the Surgical session
   quit                   Close the Surgical session
 `
@@ -186,6 +191,36 @@ function handleInteractiveCommand(input, activation) {
       intent: Object.freeze({
         capabilityType: 'PROCESS_VALIDATION',
         target: argument
+      })
+    };
+  }
+
+  if (command === 'git') {
+    const selector =
+      argument.toLowerCase();
+
+    if (
+      ![
+        'root',
+        'branch',
+        'head',
+        'status',
+        'tracked'
+      ].includes(selector)
+    ) {
+      return {
+        action: 'CONTINUE',
+        output:
+          'Usage: git <root|branch|head|status|tracked>\n'
+      };
+    }
+
+    return {
+      action: 'DISPATCH',
+      output: '',
+      intent: Object.freeze({
+        capabilityType: 'GIT_READ',
+        target: selector
       })
     };
   }

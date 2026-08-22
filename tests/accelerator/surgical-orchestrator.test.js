@@ -32,6 +32,9 @@ const {
   preserveControlledErrorEvidence
 } = require('../../accelerator/core/surgical-orchestrator');
 const { execute } = require('../../accelerator/core/surgical-execution');
+const {
+  providerBoundary: contentAddressedProviderBoundary
+} = require('../../accelerator/core/content-addressed-mutation-provider');
 
 const CREATED = '2026-08-20T11:59:00.000Z';
 const NOW = '2026-08-20T12:00:00.000Z';
@@ -85,16 +88,21 @@ function frozen(value) {
   return Object.freeze(value);
 }
 
-function operationRecord(repo) {
+function operationRecord(repo, adapter = 'FILESYSTEM_READ') {
+  const riskLevel =
+    adapter === 'GIT_READ'
+      ? 'R0'
+      : 'R1';
+
   return createOperationRecord({
     operationId: 'op-1', requester: { id: 'requester-1', type: 'HUMAN' },
     workspace: repo, objective: 'Govern one bounded adapter action.',
-    policyDecision: 'ALLOWED', riskLevel: 'R1', idempotency: 'IDEMPOTENT',
+    policyDecision: 'ALLOWED', riskLevel, idempotency: 'IDEMPOTENT',
     events: [
       { type: 'intent', operationId: 'op-1', timestamp: CREATED,
         objective: 'Govern one bounded adapter action.' },
       { type: 'policy', operationId: 'op-1', timestamp: CREATED,
-        policyDecision: 'ALLOWED', riskLevel: 'R1' },
+        policyDecision: 'ALLOWED', riskLevel },
       { type: 'state', operationId: 'op-1', timestamp: CREATED, status: 'PENDING' }
     ]
   }).record;
@@ -215,8 +223,12 @@ function issue(repo, adapter, target = 'target.js', overrides = {}) {
   const scope = adapter === 'FILESYSTEM_READ' ? { paths: [target] }
     : adapter === 'GIT_READ' ? { operations: ['rev-parse'] }
       : { selectors: ['NODE_SYNTAX_CHECK'], paths: [target] };
+  const riskLevel =
+    adapter === 'GIT_READ'
+      ? 'R0'
+      : 'R1';
   const common = {
-    operationId: 'op-1', workspace: repo, policyDecision: 'ALLOWED', riskLevel: 'R1',
+    operationId: 'op-1', workspace: repo, policyDecision: 'ALLOWED', riskLevel,
     lifecycleState: 'PENDING', capabilityType, scope, idempotency: 'IDEMPOTENT'
   };
   return evaluateCapabilityGrant(
@@ -232,15 +244,26 @@ function execution(repo, adapter, overrides = {}) {
   return {
     adapter, action, operationId: 'op-1', workspace: repo, target,
     observedAt: NOW, grantEvaluation: issue(repo, adapter, target),
-    operationRecord: operationRecord(repo), lifecycle: lifecycle(repo), ...overrides
+    operationRecord: operationRecord(repo, adapter), lifecycle: lifecycle(repo), ...overrides
   };
 }
 
 function input(repo, executionRequest, overrides = {}) {
+  const gitRead =
+    executionRequest &&
+    executionRequest.adapter === 'GIT_READ';
+
   return {
-    repositoryPath: repo, description: 'Govern adapter dispatch', files: ['target.js'],
-    mode: 'PATCH', risk: 'BAIXO', authorizeExecution: true, estimatedDiffLines: 1,
-    architecturalChange: false, execution: executionRequest, ...overrides
+    repositoryPath: repo,
+    description: 'Govern adapter dispatch',
+    files: gitRead ? [] : ['target.js'],
+    mode: gitRead ? 'OBSERVE' : 'PATCH',
+    risk: 'BAIXO',
+    authorizeExecution: true,
+    estimatedDiffLines: gitRead ? 0 : 1,
+    architecturalChange: false,
+    execution: executionRequest,
+    ...overrides
   };
 }
 
@@ -395,7 +418,10 @@ test('workspace mismatch prevents dispatch', (context) => withFixture((repo) => 
 
 test('capability and action mismatch prevents dispatch', (context) => withFixture((repo) => {
   const request = execution(repo, 'FILESYSTEM_READ', {
-    grantEvaluation: issue(repo, 'GIT_READ')
+    grantEvaluation: issue(repo, 'GIT_READ', 'target.js', {
+      request: { riskLevel: 'R1' },
+      authority: { riskLevel: 'R1' }
+    })
   });
   assertNoDispatch(context, repo, request, /type mismatch/);
 }));
@@ -902,4 +928,238 @@ test('orchestrator accepts a lexical workspace alias only when it resolves to th
     assert.equal(result.orchestration.status, 'COMPLETED');
     assert.equal(fs.realpathSync(request.workspace), repo);
     assert.equal(result.governed.operationRecord.workspace, repo);
+  }));
+
+test('GIT_READ accepts explicit repository scope without a fictitious target file',
+  () => withFixture((repo) => {
+    const request = execution(repo, 'GIT_READ');
+
+    const result = orchestrate(
+      input(repo, request)
+    );
+
+    assert.equal(
+      result.pipeline.inspection.inspection.scope,
+      'REPOSITORY'
+    );
+
+    assert.deepEqual(
+      result.pipeline.inspection.inspection.files,
+      []
+    );
+
+    assert.equal(
+      result.orchestration.status,
+      'COMPLETED'
+    );
+  }));
+
+test('GIT_READ repository scope rejects simultaneous target files',
+  () => withFixture((repo) => {
+    const request = execution(repo, 'GIT_READ');
+
+    assert.throws(
+      () => orchestrate(
+        input(repo, request, {
+          files: ['target.js']
+        })
+      ),
+      /Repository-scoped GIT_READ cannot declare target files/
+    );
+  }));
+
+test('FILESYSTEM_READ still requires an explicit target file',
+  () => withFixture((repo) => {
+    const request = execution(repo, 'FILESYSTEM_READ');
+
+    assert.throws(
+      () => orchestrate(
+        input(repo, request, { files: [] })
+      ),
+      /At least one target file/
+    );
+  }));
+
+test('PROCESS_VALIDATION still requires an explicit target file',
+  () => withFixture((repo) => {
+    const request = execution(repo, 'PROCESS_VALIDATION');
+
+    assert.throws(
+      () => orchestrate(
+        input(repo, request, { files: [] })
+      ),
+      /At least one target file/
+    );
+  }));
+
+
+test('H: R3 orchestrator commits content-addressed authority while ordinary worktree stays non-authoritative',
+  () => withFixture((repo) => {
+    const request = r3Execution(repo);
+    const runtime = r3Runtime(request, {
+      mutationProvider: contentAddressedProviderBoundary
+    });
+
+    const result = orchestrate(
+      input(repo, request, {
+        risk: 'ALTO',
+        policy: {
+          decision: 'APPROVAL_REQUIRED',
+          approvalAuthority: request.operationRecord.approvalAuthority
+        }
+      }),
+      runtime
+    );
+
+    assert.equal(
+      result.orchestration.status,
+      'COMPLETED',
+      JSON.stringify(result.execution)
+    );
+    assert.equal(result.execution.outcome, 'APPLIED');
+    assert.equal(result.governed.lifecycle.status, 'COMPLETED');
+    assert.equal(result.governed.operationRecord.finalization.outcome, 'SUCCESS');
+
+    assert.equal(
+      result.governed.operationRecord.finalization.mutationTransaction.stage,
+      'FINALIZED_SUCCESS'
+    );
+    assert.equal(
+      result.governed.operationRecord.finalization.mutationTransaction.lockDisposition,
+      'RELEASED'
+    );
+
+    assert.equal(
+      fs.readFileSync(path.join(repo, 'target.js'), 'utf8'),
+      'const value = 1;\n',
+      'ordinary worktree must remain non-authoritative'
+    );
+
+    const provider = result.execution.mutationProvider;
+    assert.ok(provider);
+    assert.equal(provider.providerId, 'sdo:git-manifest-cas-v1');
+
+    const authority = provider.durability;
+    assert.equal(authority.schema, 'sdo.content_addressed_provider_evidence.v1');
+    assert.equal(authority.ordinaryWorktreeAuthoritative, false);
+    assert.equal(authority.authority.decision, 'APPLIED');
+
+    assert.ok(
+      ['MATERIALIZED', 'ALREADY_MATERIALIZED']
+        .includes(authority.materialization.decision)
+    );
+
+    assert.equal(
+      fs.readFileSync(authority.materialization.projection, 'utf8'),
+      'const value = 2;\n'
+    );
+
+    assert.equal(
+      authority.materialization.contentSha256,
+      request.grantEvaluation.grant.scope.target.replacementSha256
+    );
+
+    assert.equal(
+      authority.materialization.expectedManifestOid,
+      authority.authority.afterManifestOid
+    );
+
+    assert.equal(
+      authority.materialization.observedManifestOid,
+      authority.authority.afterManifestOid
+    );
+  }));
+
+test('H: finalized R3 replay proves manifest authority instead of ordinary pathname',
+  () => withFixture((repo) => {
+    const request = r3Execution(repo);
+    const runtime = r3Runtime(request, {
+      mutationProvider: contentAddressedProviderBoundary
+    });
+
+    const policy = {
+      decision: 'APPROVAL_REQUIRED',
+      approvalAuthority: request.operationRecord.approvalAuthority
+    };
+
+    const first = orchestrate(
+      input(repo, request, { risk: 'ALTO', policy }),
+      runtime
+    );
+
+    assert.equal(first.orchestration.status, 'COMPLETED');
+    assert.equal(
+      fs.readFileSync(path.join(repo, 'target.js'), 'utf8'),
+      'const value = 1;\n'
+    );
+
+    const replayRequest = {
+      ...request,
+      operationRecord: first.governed.operationRecord,
+      lifecycle: first.governed.lifecycle
+    };
+
+    const replay = orchestrate(
+      input(repo, replayRequest, { risk: 'ALTO', policy }),
+      runtime
+    );
+
+    assert.equal(replay.orchestration.status, 'COMPLETED');
+    assert.equal(replay.orchestration.executionAttempted, false);
+    assert.equal(replay.governed.replay, true);
+
+    assert.equal(
+      replay.execution.mutationProvider.durability
+        .ordinaryWorktreeAuthoritative,
+      false
+    );
+
+    assert.equal(
+      fs.readFileSync(path.join(repo, 'target.js'), 'utf8'),
+      'const value = 1;\n'
+    );
+  }));
+
+test('H: corrupt managed projection cannot replay a finalized R3 mutation as success',
+  () => withFixture((repo) => {
+    const request = r3Execution(repo);
+    const runtime = r3Runtime(request, {
+      mutationProvider: contentAddressedProviderBoundary
+    });
+
+    const policy = {
+      decision: 'APPROVAL_REQUIRED',
+      approvalAuthority: request.operationRecord.approvalAuthority
+    };
+
+    const first = orchestrate(
+      input(repo, request, { risk: 'ALTO', policy }),
+      runtime
+    );
+
+    assert.equal(first.orchestration.status, 'COMPLETED');
+
+    const projection =
+      first.execution.mutationProvider.durability.materialization.projection;
+
+    fs.writeFileSync(projection, 'tampered projection\n');
+
+    const replayRequest = {
+      ...request,
+      operationRecord: first.governed.operationRecord,
+      lifecycle: first.governed.lifecycle
+    };
+
+    const replay = orchestrate(
+      input(repo, replayRequest, { risk: 'ALTO', policy }),
+      runtime
+    );
+
+    assert.notEqual(replay.orchestration.status, 'COMPLETED');
+    assert.equal(replay.orchestration.executionAttempted, false);
+
+    assert.equal(
+      fs.readFileSync(path.join(repo, 'target.js'), 'utf8'),
+      'const value = 1;\n'
+    );
   }));

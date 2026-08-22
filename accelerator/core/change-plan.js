@@ -5,6 +5,7 @@
 const crypto = require('crypto');
 
 const MODES = new Set([
+  'OBSERVE',
   'PATCH',
   'REFRACTOR'
 ]);
@@ -119,13 +120,23 @@ function buildChangePlan({
     /^[a-f0-9]{64}$/.test(grant.verifiedIdentityAssertionFingerprint || '') &&
     /^[a-f0-9]{64}$/.test(grant.identityVerificationEvidenceFingerprint || '');
 
-  if (!worktreeClean) {
+  const worktreeCleanRequired =
+    !(
+      classification.governance &&
+      classification.governance.worktreeCleanRequired === false
+    );
+
+  if (worktreeCleanRequired && !worktreeClean) {
     blockers.push(
       'Target repository worktree is not clean.'
     );
-  } else {
+  } else if (worktreeCleanRequired) {
     reasons.push(
       'Target repository worktree is clean.'
+    );
+  } else {
+    reasons.push(
+      'Read-only classification does not require a clean worktree.'
     );
   }
 

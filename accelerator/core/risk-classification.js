@@ -219,14 +219,30 @@ function validateNumericFacts(input) {
   if (!Number.isFinite(input.estimatedDiffLines) || input.estimatedDiffLines < 0) {
     return 'estimatedDiffLines must be a finite non-negative number.';
   }
-  if (!Array.isArray(input.files) || input.files.length === 0) {
+
+  const scopeKind =
+    input.scopeKind === 'REPOSITORY'
+      ? 'REPOSITORY'
+      : 'FILES';
+
+  if (!Array.isArray(input.files)) {
+    return 'File scope must be represented as an array.';
+  }
+
+  if (scopeKind === 'FILES' && input.files.length === 0) {
     return 'A non-empty file scope is required.';
   }
+
+  if (scopeKind === 'REPOSITORY' && input.files.length !== 0) {
+    return 'Repository scope cannot contain file inspection entries.';
+  }
+
   for (const file of input.files) {
     if (!file || !Number.isFinite(file.lines) || file.lines < 0) {
       return 'Every file line count must be a finite non-negative number.';
     }
   }
+
   return null;
 }
 

@@ -629,8 +629,25 @@ function validateInput(input) {
     throw new Error('Task description is required.');
   }
 
-  if (!Array.isArray(input.files) || input.files.length === 0) {
+  const repositoryScopedGitRead =
+    input.execution &&
+    input.execution.adapter === 'GIT_READ';
+
+  if (
+    !repositoryScopedGitRead &&
+    (!Array.isArray(input.files) || input.files.length === 0)
+  ) {
     throw new Error('At least one target file is required.');
+  }
+
+  if (
+    repositoryScopedGitRead &&
+    Array.isArray(input.files) &&
+    input.files.length !== 0
+  ) {
+    throw new Error(
+      'Repository-scoped GIT_READ cannot declare target files.'
+    );
   }
 }
 
@@ -656,10 +673,17 @@ function orchestrate(input, runtime = {}) {
    * PHASE 2
    * Deterministic task preparation.
    */
+  const repositoryScopedGitRead =
+    input.execution &&
+    input.execution.adapter === 'GIT_READ';
+
   const task = prepareTask(
     input.description,
     {
-      mode: input.mode || 'PATCH',
+      mode:
+        repositoryScopedGitRead
+          ? 'OBSERVE'
+          : (input.mode || 'PATCH'),
       risk: input.risk || 'BAIXO',
       authorizeExecution:
         input.authorizeExecution === true
@@ -673,7 +697,16 @@ function orchestrate(input, runtime = {}) {
   const inspection = declarativeInspection.inspect(
     repositoryPath,
     {
-      files: input.files,
+      scope:
+        input.execution &&
+        input.execution.adapter === 'GIT_READ'
+          ? 'REPOSITORY'
+          : 'FILES',
+      files:
+        input.execution &&
+        input.execution.adapter === 'GIT_READ'
+          ? []
+          : input.files,
       hypothesis:
         input.hypothesis ||
         'Inspecionar fisicamente o escopo antes de qualquer alteração.',
@@ -740,9 +773,11 @@ function orchestrate(input, runtime = {}) {
           idempotencyKey: replayId
         });
         const journal = runtime.mutationJournalAdapter.reopen(transaction);
-        const physical = filesystemPatchAdapter.verifyAppliedFile({
-          workspace: replayRequest.workspace, target: replayRequest.target,
-          expectedSha256: grant.scope.target.replacementSha256
+        const physical = filesystemPatchAdapter.verifyAppliedMutation({
+          workspace: replayRequest.workspace,
+          target: replayRequest.target,
+          expectedSha256: grant.scope.target.replacementSha256,
+          evidence: prior.payload
         });
         journalProven = journal.transaction.stage === 'FINALIZED_SUCCESS' &&
           prior.transactionId === journal.transaction.transactionId &&
@@ -782,23 +817,37 @@ function orchestrate(input, runtime = {}) {
     try { authorityObservation = runtime.authoritativeClock.observe(); } catch {}
   }
   const classification = classifyScope({
+    scopeKind: inspection.inspection.scope,
     files: inspection.inspection.files,
     mode: task.task.mode,
-    risk: task.task.risk,
+    risk:
+      repositoryScopedGitRead
+        ? null
+        : task.task.risk,
     estimatedDiffLines:
       Number(input.estimatedDiffLines || 0),
     architecturalChange:
       input.architecturalChange === true,
     worktreeClean:
       discovery.worktree.clean,
-    facts: input.facts || {
-      readOnly: false,
-      externalEffect: false,
-      reversible: true,
-      sensitive: false,
-      critical: false,
-      irreversible: false
-    },
+    facts:
+      repositoryScopedGitRead
+        ? {
+            readOnly: true,
+            externalEffect: false,
+            reversible: false,
+            sensitive: false,
+            critical: false,
+            irreversible: false
+          }
+        : input.facts || {
+            readOnly: false,
+            externalEffect: false,
+            reversible: true,
+            sensitive: false,
+            critical: false,
+            irreversible: false
+          },
     policy: input.policy || {
       decision: input.authorizeExecution === true ? 'ALLOW' : 'DENY'
     },

@@ -129,3 +129,45 @@ test('inspection fails closed when the target is not a file', () => {
     );
   });
 });
+
+test('repository-scoped inspection anchors the repository without requiring a target file', () => {
+  withFixture(({ repositoryPath }) => {
+    const result = inspect(repositoryPath, {
+      scope: 'REPOSITORY',
+      files: [],
+      hypothesis: 'Inspect repository state.',
+      objective: 'Anchor repository-scoped read-only evidence.',
+      diffEstimate: '0 lines',
+      risk: 'BAIXO',
+      mode: 'OBSERVE'
+    });
+
+    assert.equal(result.inspection.scope, 'REPOSITORY');
+    assert.deepEqual(result.inspection.files, []);
+    assert.equal(
+      result.physicalAnchor.repository,
+      fs.realpathSync(repositoryPath)
+    );
+    assert.equal(
+      result.governance.declarativeInspectionCompleted,
+      true
+    );
+  });
+});
+
+test('repository-scoped inspection rejects mixed repository and file scope', () => {
+  withFixture(({ repositoryPath }) => {
+    assert.throws(
+      () => inspect(repositoryPath, {
+        scope: 'REPOSITORY',
+        files: ['inside.txt'],
+        hypothesis: 'Inspect repository state.',
+        objective: 'Reject ambiguous inspection scope.',
+        diffEstimate: '0 lines',
+        risk: 'BAIXO',
+        mode: 'OBSERVE'
+      }),
+      /Repository-scoped inspection cannot declare target files/
+    );
+  });
+});

@@ -19,6 +19,7 @@ const fingerprint = (value) => require('crypto').createHash('sha256')
 function createInternalMutationProviderBoundary(input) {
   const caller = (new Error().stack || '').replace(/\\/g, '/');
   if (!caller.includes('accelerator/core/mutation-provider.js') &&
+      !caller.includes('accelerator/core/content-addressed-mutation-provider.js') &&
       !caller.includes('tests/accelerator/helpers/qualified-mutation-provider.js')) {
     throw new Error('Mutation provider authority is restricted to internal composition.');
   }
