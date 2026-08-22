@@ -11,7 +11,12 @@ const {
   discover
 } = require('../core/repository-discovery');
 
-const VERSION = '2.3.0';
+const {
+  dispatchGovernedReadOnly,
+  formatGovernedReadOnlyResult
+} = require('./governed-readonly-dispatch');
+
+const VERSION = '2.4.0';
 
 function printVersion() {
   process.stdout.write(`Surgical DevOps v${VERSION}\n`);
@@ -35,6 +40,7 @@ function createInteractiveActivation(repositoryPath = process.cwd()) {
   const discovery = discover(repositoryPath);
 
   return {
+    repositoryPath: discovery.repository.path,
     workspace: discovery.repository.name,
     branch: discovery.repository.branch,
     commit: discovery.repository.shortCommit,
@@ -82,11 +88,13 @@ Providers: ${activation.providers}
 function formatSessionHelp() {
   return (
 `Available commands:
-  help        Show bounded Level 1 commands
-  status      Show deterministic session status
-  providers   Show provider state
-  exit        Close the Surgical session
-  quit        Close the Surgical session
+  help                   Show bounded Level 1 commands
+  status                 Show deterministic session status
+  providers              Show provider state
+  read <file>            Governed bounded filesystem read
+  validate <file.js>     Governed Node.js syntax validation
+  exit                   Close the Surgical session
+  quit                   Close the Surgical session
 `
   );
 }
@@ -96,10 +104,25 @@ function handleInteractiveCommand(input, activation) {
     throw new Error('Explicit activation state is required.');
   }
 
-  const command =
+  const raw =
     typeof input === 'string'
-      ? input.trim().toLowerCase()
+      ? input.trim()
       : '';
+
+  const separator =
+    raw.search(/\s/);
+
+  const command =
+    (
+      separator === -1
+        ? raw
+        : raw.slice(0, separator)
+    ).toLowerCase();
+
+  const argument =
+    separator === -1
+      ? ''
+      : raw.slice(separator).trim();
 
   if (command === '') {
     return {
@@ -131,6 +154,42 @@ function handleInteractiveCommand(input, activation) {
     };
   }
 
+  if (command === 'read') {
+    if (!argument) {
+      return {
+        action: 'CONTINUE',
+        output: 'Usage: read <file>\n'
+      };
+    }
+
+    return {
+      action: 'DISPATCH',
+      output: '',
+      intent: Object.freeze({
+        capabilityType: 'FILESYSTEM_READ',
+        target: argument
+      })
+    };
+  }
+
+  if (command === 'validate') {
+    if (!argument) {
+      return {
+        action: 'CONTINUE',
+        output: 'Usage: validate <file.js>\n'
+      };
+    }
+
+    return {
+      action: 'DISPATCH',
+      output: '',
+      intent: Object.freeze({
+        capabilityType: 'PROCESS_VALIDATION',
+        target: argument
+      })
+    };
+  }
+
   if (command === 'exit' || command === 'quit') {
     return {
       action: 'EXIT',
@@ -140,7 +199,7 @@ function handleInteractiveCommand(input, activation) {
 
   return {
     action: 'CONTINUE',
-    output: `Unknown command: ${input.trim()}\n`
+    output: `Unknown command: ${raw}\n`
   };
 }
 
@@ -176,6 +235,26 @@ function createInteractiveSession(
 
     if (result.output) {
       output.write(result.output);
+    }
+
+    if (result.action === 'DISPATCH') {
+      try {
+        const governed =
+          dispatchGovernedReadOnly(
+            result.intent,
+            activation.repositoryPath
+          );
+
+        output.write(
+          formatGovernedReadOnlyResult(
+            governed
+          )
+        );
+      } catch {
+        output.write(
+          'Governed request denied: operation failed closed.\n'
+        );
+      }
     }
 
     if (result.action === 'EXIT') {

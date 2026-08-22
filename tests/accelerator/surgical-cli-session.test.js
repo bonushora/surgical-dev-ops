@@ -7,6 +7,7 @@ const cli = require('../../accelerator/cli/surgical');
 
 function activation() {
   return Object.freeze({
+    repositoryPath: '/tmp/surgical-dev-ops',
     workspace: 'surgical-dev-ops',
     branch: 'main',
     commit: 'f8e319a',
@@ -48,6 +49,8 @@ test('help command exposes bounded Level 1 session commands', () => {
   assert.match(result.output, /help/);
   assert.match(result.output, /status/);
   assert.match(result.output, /providers/);
+  assert.match(result.output, /read/);
+  assert.match(result.output, /validate/);
   assert.match(result.output, /exit/);
   assert.match(result.output, /quit/);
 
@@ -131,6 +134,59 @@ test('unknown command fails closed without orchestration authority', () => {
 
   assert.doesNotMatch(result.output, /executed/i);
   assert.doesNotMatch(result.output, /authorized/i);
+});
+
+test('bounded read and validate commands produce structured dispatch intent only', () => {
+  const read =
+    cli.handleInteractiveCommand(
+      'read README.md',
+      activation()
+    );
+
+  assert.equal(read.action, 'DISPATCH');
+  assert.deepEqual(read.intent, {
+    capabilityType: 'FILESYSTEM_READ',
+    target: 'README.md'
+  });
+
+  const validate =
+    cli.handleInteractiveCommand(
+      'validate accelerator/cli/surgical.js',
+      activation()
+    );
+
+  assert.equal(validate.action, 'DISPATCH');
+  assert.deepEqual(validate.intent, {
+    capabilityType: 'PROCESS_VALIDATION',
+    target: 'accelerator/cli/surgical.js'
+  });
+
+  assert.ok(Object.isFrozen(read.intent));
+  assert.ok(Object.isFrozen(validate.intent));
+});
+
+test('read and validate require one explicit target', () => {
+  assert.deepEqual(
+    cli.handleInteractiveCommand(
+      'read',
+      activation()
+    ),
+    {
+      action: 'CONTINUE',
+      output: 'Usage: read <file>\n'
+    }
+  );
+
+  assert.deepEqual(
+    cli.handleInteractiveCommand(
+      'validate',
+      activation()
+    ),
+    {
+      action: 'CONTINUE',
+      output: 'Usage: validate <file.js>\n'
+    }
+  );
 });
 
 test('session constructor requires explicit activation state', () => {
