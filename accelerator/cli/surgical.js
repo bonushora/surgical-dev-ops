@@ -51,6 +51,12 @@ const {
   formatProviderStatus
 } = require('./natural-session-control');
 
+const {
+  formatWorkspaceFiles,
+  extractFilesystemEvidence,
+  formatFileReadEvidence
+} = require('./natural-governed-task');
+
 const VERSION = '2.5.0';
 
 function printVersion() {
@@ -580,7 +586,10 @@ function createInteractiveSession(
     naturalMode
       ? (
           options.sessionControl ||
-          createNaturalSessionControl()
+          createNaturalSessionControl({
+            workspace:
+              activation.workspace
+          })
         )
       : null;
 
@@ -618,6 +627,86 @@ function createInteractiveSession(
 
             if (controlled.matched) {
               if (
+                controlled.action ===
+                  'AUTHORIZED_GOVERNED_TASK'
+              ) {
+                try {
+                  const task =
+                    controlled.task;
+
+                  if (
+                    !task ||
+                    !Array.isArray(
+                      task.operations
+                    ) ||
+                    task.operations.length !== 1
+                  ) {
+                    throw new Error(
+                      'Authorized NATURAL task is malformed.'
+                    );
+                  }
+
+                  const governed =
+                    dispatchGovernedReadOnly(
+                      task.operations[0],
+                      activation.repositoryPath
+                    );
+
+                  if (
+                    task.kind ===
+                      'WORKSPACE_LIST'
+                  ) {
+                    output.write(
+                      formatWorkspaceFiles(
+                        governed
+                      )
+                    );
+                  } else {
+                    const evidence =
+                      extractFilesystemEvidence(
+                        governed
+                      );
+
+                    if (
+                      task.kind ===
+                        'READ_AND_EXPLAIN_FILE'
+                    ) {
+                      if (!cognitiveSession) {
+                        output.write(
+                          formatFileReadEvidence(
+                            evidence
+                          )
+                        );
+                      } else {
+                        const cognitiveOutput =
+                          await cognitiveSession.ask(
+                            task.objective,
+                            activation,
+                            (
+                              `Arquivo: ${evidence.target}\n` +
+                              `SHA256: ${evidence.sha256}\n` +
+                              `Conteúdo:\n${evidence.content}`
+                            )
+                          );
+
+                        output.write(
+                          cognitiveOutput
+                        );
+                      }
+                    } else {
+                      output.write(
+                        formatFileReadEvidence(
+                          evidence
+                        )
+                      );
+                    }
+                  }
+                } catch {
+                  output.write(
+                    'A operação autorizada foi negada pelo Surgical DevOps e falhou de forma segura.\n'
+                  );
+                }
+              } else if (
                 controlled.action ===
                   'TECHNICAL_STATUS'
               ) {

@@ -55,7 +55,8 @@ const CONTRACTS = Object.freeze({
       branch: 'CURRENT_BRANCH',
       head: 'HEAD_COMMIT',
       status: 'WORKTREE_STATUS',
-      tracked: 'TRACKED_FILES'
+      tracked: 'TRACKED_FILES',
+      'workspace-files': 'WORKSPACE_FILES'
     }),
     objective(selector) {
       return `Governed Git repository read: ${selector}`;
@@ -66,7 +67,8 @@ const CONTRACTS = Object.freeze({
         CURRENT_BRANCH: 'rev-parse',
         HEAD_COMMIT: 'rev-parse',
         WORKTREE_STATUS: 'status',
-        TRACKED_FILES: 'ls-files'
+        TRACKED_FILES: 'ls-files',
+        WORKSPACE_FILES: 'ls-files'
       }[selector];
 
       if (!operation) {

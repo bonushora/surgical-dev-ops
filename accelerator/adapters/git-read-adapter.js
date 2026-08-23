@@ -18,7 +18,11 @@ const SELECTORS = Object.freeze({
   CURRENT_BRANCH: Object.freeze({ operation: 'rev-parse', args: ['rev-parse', '--abbrev-ref', 'HEAD'] }),
   HEAD_COMMIT: Object.freeze({ operation: 'rev-parse', args: ['rev-parse', '--verify', 'HEAD'] }),
   WORKTREE_STATUS: Object.freeze({ operation: 'status', args: ['status', '--porcelain=v1', '-z', '--untracked-files=all'] }),
-  TRACKED_FILES: Object.freeze({ operation: 'ls-files', args: ['ls-files', '-z'] })
+  TRACKED_FILES: Object.freeze({ operation: 'ls-files', args: ['ls-files', '-z'] }),
+  WORKSPACE_FILES: Object.freeze({
+    operation: 'ls-files',
+    args: ['ls-files', '-co', '--exclude-standard', '-z']
+  })
 });
 function createGitPlatformIsolation(platform = process.platform) {
   if (!['linux', 'darwin', 'win32'].includes(platform)) {
@@ -155,7 +159,11 @@ function rejectUnsafeText(value, label) {
 }
 
 function normalizeOutput(selector, stdout, workspace) {
-  if (selector === 'WORKTREE_STATUS' || selector === 'TRACKED_FILES') {
+  if (
+    selector === 'WORKTREE_STATUS' ||
+    selector === 'TRACKED_FILES' ||
+    selector === 'WORKSPACE_FILES'
+  ) {
     const entries = stdout.split('\0').filter(Boolean).map((entry) => rejectUnsafeText(entry, 'path output'));
     if (entries.some((entry) => {
       const filename = selector === 'WORKTREE_STATUS' && entry.length >= 3
@@ -165,7 +173,20 @@ function normalizeOutput(selector, stdout, workspace) {
     })) {
       throw new Error('Git produced malformed NUL-delimited output.');
     }
-    return selector === 'TRACKED_FILES' ? Object.freeze({ count: entries.length }) : entries;
+    if (selector === 'TRACKED_FILES') {
+      return Object.freeze({
+        count: entries.length
+      });
+    }
+
+    if (selector === 'WORKSPACE_FILES') {
+      return Object.freeze({
+        count: entries.length,
+        files: Object.freeze([...entries].sort())
+      });
+    }
+
+    return entries;
   }
   const value = stdout.trim();
   if (!value || value.includes('\0') || /[\r\n\u0000-\u0008\u000b\u000c\u000e-\u001f\u007f\u001b]/u.test(value)) {

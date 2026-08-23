@@ -64,7 +64,7 @@ const CONTROLLED_ACTIONS = Object.freeze({
   GIT_READ: Object.freeze({
     actions: new Set([
       'REPOSITORY_ROOT', 'CURRENT_BRANCH', 'HEAD_COMMIT',
-      'WORKTREE_STATUS', 'TRACKED_FILES'
+      'WORKTREE_STATUS', 'TRACKED_FILES', 'WORKSPACE_FILES'
     ]),
     capabilityType: 'GIT_READ'
   }),
@@ -213,7 +213,10 @@ function validateControlledRequest(request, repositoryPath, expectedRisk, runtim
     const operations = grant.scope && grant.scope.operations;
     const operation = {
       REPOSITORY_ROOT: 'rev-parse', CURRENT_BRANCH: 'rev-parse',
-      HEAD_COMMIT: 'rev-parse', WORKTREE_STATUS: 'status', TRACKED_FILES: 'ls-files'
+      HEAD_COMMIT: 'rev-parse',
+      WORKTREE_STATUS: 'status',
+      TRACKED_FILES: 'ls-files',
+      WORKSPACE_FILES: 'ls-files'
     }[request.action];
     if (!Array.isArray(operations) || !operations.includes(operation)) {
       return executionDenial('Capability scope mismatch.');

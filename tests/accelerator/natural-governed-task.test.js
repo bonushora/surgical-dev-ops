@@ -1,0 +1,136 @@
+'use strict';
+
+const test =
+  require('node:test');
+
+const assert =
+  require('node:assert/strict');
+
+const {
+  detectNaturalGovernedTask,
+  formatTaskProposal,
+  isAffirmative,
+  isNegative
+} = require(
+  '../../accelerator/cli/natural-governed-task'
+);
+
+test(
+  'natural workspace listing becomes a bounded governed task rather than cognitive guess',
+  () => {
+    const task =
+      detectNaturalGovernedTask(
+        'liste os arquivos deste diretório'
+      );
+
+    assert.ok(task);
+
+    assert.equal(
+      task.kind,
+      'WORKSPACE_LIST'
+    );
+
+    assert.deepEqual(
+      task.operations,
+      [
+        {
+          capabilityType:
+            'GIT_READ',
+
+          target:
+            'workspace-files'
+        }
+      ]
+    );
+
+    assert.equal(
+      task.mutating,
+      false
+    );
+  }
+);
+
+test(
+  'explicit file analysis requests one bounded filesystem read',
+  () => {
+    const task =
+      detectNaturalGovernedTask(
+        'analise o arquivo package.json'
+      );
+
+    assert.ok(task);
+
+    assert.equal(
+      task.kind,
+      'READ_AND_EXPLAIN_FILE'
+    );
+
+    assert.equal(
+      task.target,
+      'package.json'
+    );
+
+    assert.equal(
+      task.operations[0]
+        .capabilityType,
+      'FILESYSTEM_READ'
+    );
+  }
+);
+
+test(
+  'proposal explains operation before authority',
+  () => {
+    const task =
+      detectNaturalGovernedTask(
+        'liste os arquivos deste diretorio'
+      );
+
+    const output =
+      formatTaskProposal(
+        task,
+        'example-project'
+      );
+
+    assert.match(
+      output,
+      /preciso consultar/i
+    );
+
+    assert.match(
+      output,
+      /nenhum arquivo será alterado/i
+    );
+
+    assert.match(
+      output,
+      /posso prosseguir/i
+    );
+  }
+);
+
+test(
+  'authorization language is interpreted only by bounded task state',
+  () => {
+    assert.equal(
+      isAffirmative(
+        'eu autorizo'
+      ),
+      true
+    );
+
+    assert.equal(
+      isAffirmative(
+        'sim'
+      ),
+      true
+    );
+
+    assert.equal(
+      isNegative(
+        'não'
+      ),
+      true
+    );
+  }
+);

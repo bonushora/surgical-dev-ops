@@ -278,3 +278,135 @@ test(
     );
   }
 );
+
+test(
+  'workspace request creates pending authorization and affirmative response authorizes exact task',
+  () => {
+    const control =
+      createNaturalSessionControl({
+        workspace:
+          'example-project'
+      });
+
+    const proposal =
+      control.handle(
+        'liste os arquivos deste diretório'
+      );
+
+    assert.equal(
+      proposal.matched,
+      true
+    );
+
+    assert.match(
+      proposal.output,
+      /Posso prosseguir/i
+    );
+
+    assert.equal(
+      control.hasPendingAuthorization(),
+      true
+    );
+
+    const approval =
+      control.handle(
+        'eu autorizo'
+      );
+
+    assert.equal(
+      approval.action,
+      'AUTHORIZED_GOVERNED_TASK'
+    );
+
+    assert.equal(
+      approval.task.kind,
+      'WORKSPACE_LIST'
+    );
+
+    assert.equal(
+      control.hasPendingAuthorization(),
+      false
+    );
+  }
+);
+
+test(
+  'authorization without pending governed task does not grant authority',
+  () => {
+    const control =
+      createNaturalSessionControl({
+        workspace:
+          'example-project'
+      });
+
+    const result =
+      control.handle(
+        'eu autorizo'
+      );
+
+    assert.equal(
+      result.matched,
+      false
+    );
+  }
+);
+
+test(
+  'pending task captures unrelated input instead of leaking ambiguous authorization to cognitive provider',
+  () => {
+    const control =
+      createNaturalSessionControl({
+        workspace:
+          'example-project'
+      });
+
+    control.handle(
+      'leia o arquivo package.json'
+    );
+
+    const result =
+      control.handle(
+        'talvez'
+      );
+
+    assert.equal(
+      result.matched,
+      true
+    );
+
+    assert.match(
+      result.output,
+      /aguardando sua decisão/i
+    );
+  }
+);
+
+test(
+  'negative response cancels pending task without authority',
+  () => {
+    const control =
+      createNaturalSessionControl({
+        workspace:
+          'example-project'
+      });
+
+    control.handle(
+      'liste os arquivos deste diretório'
+    );
+
+    const result =
+      control.handle(
+        'não'
+      );
+
+    assert.match(
+      result.output,
+      /cancelada/i
+    );
+
+    assert.equal(
+      control.hasPendingAuthorization(),
+      false
+    );
+  }
+);

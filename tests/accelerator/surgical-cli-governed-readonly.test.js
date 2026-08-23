@@ -478,3 +478,69 @@ test(
     }
   }
 );
+
+test(
+  'governed workspace-files enumerates tracked and untracked project files through fixed Git read',
+  () => {
+    const state =
+      fixture();
+
+    try {
+      fs.writeFileSync(
+        path.join(
+          state.repo,
+          'untracked.txt'
+        ),
+        'untracked\n'
+      );
+
+      const result =
+        dispatchGovernedReadOnly(
+          {
+            capabilityType:
+              'GIT_READ',
+
+            target:
+              'workspace-files'
+          },
+
+          state.repo,
+
+          {
+            now:
+              () => NOW
+          }
+        );
+
+      assert.equal(
+        result.orchestration.status,
+        'COMPLETED'
+      );
+
+      assert.equal(
+        result.execution.selector,
+        'WORKSPACE_FILES'
+      );
+
+      assert.ok(
+        Array.isArray(
+          result.execution.result.files
+        )
+      );
+
+      assert.ok(
+        result.execution.result.files.includes(
+          'target.js'
+        )
+      );
+
+      assert.ok(
+        result.execution.result.files.includes(
+          'untracked.txt'
+        )
+      );
+    } finally {
+      cleanup(state);
+    }
+  }
+);

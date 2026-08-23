@@ -6,6 +6,15 @@ const {
   './natural-assistance-context'
 );
 
+const {
+  detectNaturalGovernedTask,
+  formatTaskProposal,
+  isAffirmative,
+  isNegative
+} = require(
+  './natural-governed-task'
+);
+
 function normalize(value) {
   return String(value || '')
     .normalize('NFD')
@@ -119,9 +128,20 @@ function formatProviderStatus(
   );
 }
 
-function createNaturalSessionControl() {
+function createNaturalSessionControl(
+  options = {}
+) {
   let workMode =
     WORK_MODES.SUPERVISED;
+
+  const workspace =
+    typeof options.workspace === 'string' &&
+    options.workspace.trim()
+      ? options.workspace.trim()
+      : 'current-project';
+
+  let pendingTask =
+    null;
 
   function currentWorkMode() {
     return workMode;
@@ -134,6 +154,74 @@ function createNaturalSessionControl() {
     if (!text) {
       return Object.freeze({
         matched: false
+      });
+    }
+
+    if (pendingTask) {
+      if (isAffirmative(input)) {
+        const authorizedTask =
+          pendingTask;
+
+        pendingTask =
+          null;
+
+        return Object.freeze({
+          matched: true,
+
+          action:
+            'AUTHORIZED_GOVERNED_TASK',
+
+          task:
+            authorizedTask
+        });
+      }
+
+      if (isNegative(input)) {
+        pendingTask =
+          null;
+
+        return Object.freeze({
+          matched: true,
+
+          action:
+            'CONTINUE',
+
+          output:
+            'Tudo bem. A operação foi cancelada e nenhuma autoridade nova foi materializada.\n'
+        });
+      }
+
+      return Object.freeze({
+        matched: true,
+
+        action:
+          'CONTINUE',
+
+        output:
+          'Há uma operação aguardando sua decisão. Responda "sim" para autorizar ou "não" para cancelar.\n'
+      });
+    }
+
+    const governedTask =
+      detectNaturalGovernedTask(
+        input
+      );
+
+    if (governedTask) {
+      pendingTask =
+        governedTask;
+
+      return Object.freeze({
+        matched: true,
+
+        action:
+          'CONTINUE',
+
+        output:
+          formatTaskProposal(
+            governedTask,
+            workspace
+          )
       });
     }
 
@@ -324,7 +412,11 @@ function createNaturalSessionControl() {
       'sdo.natural_session_control.v1',
 
     handle,
-    currentWorkMode
+    currentWorkMode,
+
+    hasPendingAuthorization() {
+      return pendingTask !== null;
+    }
   });
 }
 
