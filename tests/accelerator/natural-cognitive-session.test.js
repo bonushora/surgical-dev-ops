@@ -250,3 +250,208 @@ test(
     }
   }
 );
+
+test(
+  'NATURAL retries at most once after failed cognitive evidence and performs no operational action',
+  async () => {
+    let chatCalls =
+      0;
+
+    const session =
+      createNaturalCognitiveSession({
+        fetchImplementation:
+          async (
+            url,
+            options
+          ) => {
+            if (
+              url.endsWith(
+                '/api/tags'
+              )
+            ) {
+              return response({
+                models: [
+                  {
+                    name:
+                      'llama3:latest',
+
+                    model:
+                      'llama3:latest'
+                  }
+                ]
+              });
+            }
+
+            chatCalls += 1;
+
+            if (chatCalls === 1) {
+              throw new Error(
+                'transient cognitive transport failure'
+              );
+            }
+
+            const body =
+              JSON.parse(
+                options.body
+              );
+
+            assert.ok(
+              Array.isArray(
+                body.messages
+              )
+            );
+
+            const userMessage =
+              body.messages.find(
+                (message) =>
+                  message &&
+                  typeof message === 'object' &&
+                  message.role === 'user' &&
+                  typeof message.content === 'string'
+              );
+
+            assert.ok(
+              userMessage,
+              'canonical Ollama user message is required'
+            );
+
+            const cognitiveEnvelope =
+              JSON.parse(
+                userMessage.content
+              );
+
+            assert.equal(
+              cognitiveEnvelope.capability,
+              'EXPLAIN'
+            );
+
+            assert.match(
+              cognitiveEnvelope.objective,
+              /uma única chave/i
+            );
+
+            assert.match(
+              cognitiveEnvelope.objective,
+              /"response"/
+            );
+
+            return response({
+              message: {
+                role:
+                  'assistant',
+
+                content:
+                  JSON.stringify({
+                    response:
+                      'Resposta cognitiva recuperada com segurança.'
+                  })
+              }
+            });
+          }
+      });
+
+    const output =
+      await session.ask(
+        'Explique sua função.',
+        activation()
+      );
+
+    assert.equal(
+      chatCalls,
+      2
+    );
+
+    assert.match(
+      output,
+      /Resposta cognitiva recuperada com segurança/
+    );
+
+    assert.match(
+      output,
+      /Nenhuma alteração foi realizada/
+    );
+  }
+);
+
+test(
+  'NATURAL canonical cognitive request explicitly asks for response-only JSON',
+  async () => {
+    let observedChat =
+      null;
+
+    const session =
+      createNaturalCognitiveSession({
+        fetchImplementation:
+          async (
+            url,
+            options
+          ) => {
+            if (
+              url.endsWith(
+                '/api/tags'
+              )
+            ) {
+              return response({
+                models: [
+                  {
+                    name:
+                      'llama3:latest',
+
+                    model:
+                      'llama3:latest'
+                  }
+                ]
+              });
+            }
+
+            observedChat =
+              JSON.parse(
+                options.body
+              );
+
+            return response({
+              message: {
+                role:
+                  'assistant',
+
+                content:
+                  JSON.stringify({
+                    response:
+                      'Contrato canônico respeitado.'
+                  })
+              }
+            });
+          }
+      });
+
+    const output =
+      await session.ask(
+        'Explique este projeto.',
+        activation()
+      );
+
+    assert.ok(
+      observedChat
+    );
+
+    const userEnvelope =
+      JSON.parse(
+        observedChat.messages[1].content
+      );
+
+    assert.match(
+      userEnvelope.objective,
+      /uma única chave/i
+    );
+
+    assert.match(
+      userEnvelope.objective,
+      /"response"/
+    );
+
+    assert.match(
+      output,
+      /Contrato canônico respeitado/
+    );
+  }
+);

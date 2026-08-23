@@ -263,8 +263,8 @@ function createNaturalCognitiveSession(
     }
 
     try {
-      const result =
-        await invokeNaturalCognitive(
+      async function invokeOnce() {
+        return invokeNaturalCognitive(
           current.composition,
           {
             requestId:
@@ -290,6 +290,10 @@ function createNaturalCognitiveSession(
                 'Responda em português claro para um usuário leigo. ' +
                 'A resposta é somente cognitiva: não afirme que executou, ' +
                 'alterou arquivos, aprovou operações ou ganhou autoridade. ' +
+                'Retorne exclusivamente um objeto JSON com uma única chave ' +
+                '"response", cujo valor seja a resposta textual ao usuário. ' +
+                'Não repita o envelope da requisição, capability, objective ' +
+                'ou context na resposta. ' +
                 'Pedido do usuário: ' +
                 userInput.trim()
               ),
@@ -303,6 +307,28 @@ function createNaturalCognitiveSession(
             }
           }
         );
+      }
+
+      let result =
+        await invokeOnce();
+
+      /*
+       * Cognitive retry is bounded to exactly one additional
+       * attempt and carries zero operational authority.
+       *
+       * This does not retry an operation, patch, command,
+       * approval or filesystem action.
+       */
+      if (
+        result &&
+        result.schema ===
+          'sdo.ai_cognitive_result.v1' &&
+        result.status ===
+          'FAILED'
+      ) {
+        result =
+          await invokeOnce();
+      }
 
       return formatCognitiveResult(
         result
