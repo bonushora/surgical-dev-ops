@@ -10,6 +10,44 @@ https://semver.org/
 
 ---
 
+## [2.5.0] - 2026-08-23
+
+### Added
+
+- Governed interaction modes: Natural, Engineer and Expert.
+- Provider-neutral governed AI provider port and invocation boundary.
+- Governed AI provider execution and provider selection.
+- Ollama reference provider adapter and bounded local transport.
+- Governed cognitive proposal boundary.
+- Deterministic read-only intent materialization.
+- Governed candidate admission boundary.
+- Cognitive R0 authority composition and canonical orchestrator dispatch.
+- Governed R0 Git metadata observations for worktree status, HEAD commit and current branch.
+- End-to-end governed AI R0 qualification.
+
+### Governance and compatibility
+
+- Preserves the qualified Surgical DevOps v2.4.1 deterministic baseline.
+- Preserves human authority, risk classification and capability grants.
+- Preserves governed reads and governed mutation boundaries.
+- Preserves Manifest CAS, mutation journal, durability and recovery invariants.
+- Preserves fail-closed behavior.
+- Preserves Expert / Deterministic compatibility.
+- AI cognitive output acquires no independent operational authority.
+- Bounded cognitive R0 execution crosses only the canonical orchestrator authority boundary.
+
+### Qualification
+
+- ADR-013 implementation sequence v2.5-A through v2.5-J completed.
+- Governed AI end-to-end R0 qualification: PASS.
+- Canonical implementation predecessor: `23bdd6881928f6e9ff33f122804ab6880106cba6`.
+
+### Deferred
+
+- Strict Physical Identity-Conditional CAS remains explicitly unqualified at its documented boundary.
+- Physical power-loss qualification is not claimed.
+- Adoption telemetry, public metrics, commercial activation and multijurisdiction payment implementation remain post-v2.5 scope.
+
 ## [Unreleased]
 
 ---

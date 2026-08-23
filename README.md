@@ -377,7 +377,7 @@ Baseline operacional da v2.4.0: Governed Content-Addressed Mutation Authority.
 
 ---
 
-## Instalação da CLI v2.4.1
+## Instalação da CLI v2.5.0
 
 Comando principal para engenheiros: surgical-devops
 
@@ -394,6 +394,6 @@ O pacote também fornece o executável de compatibilidade surgical.
 Se esse nome já for usado por outro launcher ou função de shell,
 utilize surgical-devops.
 
-A v2.4.1 altera distribuição, metadados, versionamento e documentação.
+A v2.5.0 adiciona integração de IA governada, modos de interação, provider port, adapter local Ollama, interpretação determinística de intenção, planejamento governado e execução cognitiva R0 end-to-end, preservando a autoridade e os invariantes qualificados da v2.4.1.
 Orchestrator, Manifest CAS, journal, adapters, autoridade de mutação e
 runtime de produção permanecem semanticamente inalterados.
