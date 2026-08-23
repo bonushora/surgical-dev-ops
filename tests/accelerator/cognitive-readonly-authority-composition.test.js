@@ -877,3 +877,26 @@ test(
     );
   }
 );
+
+test(
+  'composition vocabulary recognizes CURRENT_BRANCH only as bounded GIT_READ rev-parse metadata',
+  () => {
+    const source =
+      fs.readFileSync(
+        require.resolve(
+          '../../accelerator/core/cognitive-readonly-authority-composition'
+        ),
+        'utf8'
+      );
+
+    assert.match(
+      source,
+      /CURRENT_BRANCH/
+    );
+
+    assert.doesNotMatch(
+      source,
+      /FILESYSTEM_PATCH|PATCH_FILE|child_process|execFile|spawn\(|fetch\(/
+    );
+  }
+);

@@ -309,7 +309,8 @@ function extractBoundedIntent(
       'GIT_READ' ||
     ![
       'WORKTREE_STATUS',
-      'HEAD_COMMIT'
+      'HEAD_COMMIT',
+      'CURRENT_BRANCH'
     ].includes(action)
   ) {
     throw new Error(

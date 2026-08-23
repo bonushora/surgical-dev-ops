@@ -297,7 +297,8 @@ function admitGovernedCandidate(
       'GIT_READ' ||
     ![
       'WORKTREE_STATUS',
-      'HEAD_COMMIT'
+      'HEAD_COMMIT',
+      'CURRENT_BRANCH'
     ].includes(
       validated.intent.action
     )

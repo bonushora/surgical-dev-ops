@@ -207,6 +207,9 @@ function normalizeOutput(selector, stdout, workspace) {
   if (selector === 'HEAD_COMMIT' && !/^(?:[0-9a-f]{40}|[0-9a-f]{64})$/.test(value)) {
     throw new Error('Git produced a malformed HEAD object ID.');
   }
+  if (selector === 'CURRENT_BRANCH' && value === 'HEAD') {
+    throw new Error('Git repository is in detached HEAD state.');
+  }
   return value;
 }
 

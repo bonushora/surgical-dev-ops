@@ -478,3 +478,37 @@ test(
     }
   }
 );
+
+test(
+  'materializes GIT_READ CURRENT_BRANCH as immutable bounded candidate intent',
+  () => {
+    const result =
+      materializeCandidateIntent(
+        proposal({
+          capabilityType:
+            'GIT_READ',
+
+          action:
+            'CURRENT_BRANCH'
+        })
+      );
+
+    assert.equal(
+      result.intent.capabilityType,
+      'GIT_READ'
+    );
+
+    assert.equal(
+      result.intent.action,
+      'CURRENT_BRANCH'
+    );
+
+    assert.ok(
+      Object.isFrozen(result)
+    );
+
+    assert.ok(
+      Object.isFrozen(result.intent)
+    );
+  }
+);

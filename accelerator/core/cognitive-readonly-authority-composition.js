@@ -353,8 +353,12 @@ function validateAdmission(
       (
         admittedIntent.target ===
           'rev-parse' &&
-        admittedIntent.canonicalAction ===
-          'HEAD_COMMIT'
+        (
+          admittedIntent.canonicalAction ===
+            'HEAD_COMMIT' ||
+          admittedIntent.canonicalAction ===
+            'CURRENT_BRANCH'
+        )
       )
     )
   ) {

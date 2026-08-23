@@ -192,3 +192,21 @@ test('stderr secrets, unavailable Git and forged execution inputs fail closed wi
     grantEvaluation: issue(), observedAt: NOW, executable: 'sh', argv: ['push'],
     env: { GIT_DIR: '/escape' } }), /arguments, options or environment/);
 });
+
+test('CURRENT_BRANCH fails closed for detached HEAD', (context) => {
+  context.mock.method(
+    childProcess,
+    'spawnSync',
+    () => ({
+      status: 0,
+      signal: null,
+      stdout: 'HEAD\n',
+      stderr: ''
+    })
+  );
+
+  assert.throws(
+    () => read('CURRENT_BRANCH'),
+    /detached HEAD state/
+  );
+});

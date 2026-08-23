@@ -491,3 +491,71 @@ test(
     );
   }
 );
+
+test(
+  'admits canonical GIT_READ CURRENT_BRANCH candidate without new authority',
+  () => {
+    const proposal =
+      createGovernedCognitiveProposal({
+        humanIntent:
+          'Identify the current repository branch.',
+
+        cognitiveResult:
+          deepFreeze({
+            ...cognitiveResult(),
+
+            output: {
+              intent: {
+                capabilityType:
+                  'GIT_READ',
+
+                action:
+                  'CURRENT_BRANCH'
+              },
+
+              rationale:
+                'Identify the current symbolic repository branch.'
+            }
+          })
+      });
+
+    const source =
+      materializeCandidateIntent(
+        proposal
+      );
+
+    const admission =
+      admitGovernedCandidate(
+        source
+      );
+
+    assert.deepEqual(
+      admission.admittedIntent,
+      {
+        capabilityType:
+          'GIT_READ',
+
+        target:
+          'rev-parse',
+
+        canonicalAction:
+          'CURRENT_BRANCH'
+      }
+    );
+
+    assert.equal(
+      admission.authority.executable,
+      false
+    );
+
+    assert.equal(
+      admission.authority.dispatchAllowed,
+      false
+    );
+
+    assert.equal(
+      admission.authority.humanAuthority,
+      false
+    );
+  }
+);
