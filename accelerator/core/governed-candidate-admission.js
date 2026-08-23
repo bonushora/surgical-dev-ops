@@ -295,11 +295,15 @@ function admitGovernedCandidate(
   if (
     validated.intent.capabilityType !==
       'GIT_READ' ||
-    validated.intent.action !==
-      'WORKTREE_STATUS'
+    ![
+      'WORKTREE_STATUS',
+      'HEAD_COMMIT'
+    ].includes(
+      validated.intent.action
+    )
   ) {
     throw new Error(
-      'Only GIT_READ / WORKTREE_STATUS can be admitted at this frontier.'
+      'Only governed GIT_READ metadata actions can be admitted at this frontier.'
     );
   }
 
@@ -333,10 +337,13 @@ function admitGovernedCandidate(
           'GIT_READ',
 
         target:
-          'status',
+          validated.intent.action ===
+            'WORKTREE_STATUS'
+            ? 'status'
+            : 'rev-parse',
 
         canonicalAction:
-          'WORKTREE_STATUS'
+          validated.intent.action
       },
 
       provenance: {

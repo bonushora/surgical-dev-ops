@@ -343,13 +343,23 @@ function validateAdmission(
     ) ||
     admittedIntent.capabilityType !==
       'GIT_READ' ||
-    admittedIntent.target !==
-      'status' ||
-    admittedIntent.canonicalAction !==
-      'WORKTREE_STATUS'
+    !(
+      (
+        admittedIntent.target ===
+          'status' &&
+        admittedIntent.canonicalAction ===
+          'WORKTREE_STATUS'
+      ) ||
+      (
+        admittedIntent.target ===
+          'rev-parse' &&
+        admittedIntent.canonicalAction ===
+          'HEAD_COMMIT'
+      )
+    )
   ) {
     throw new Error(
-      'Only GIT_READ / WORKTREE_STATUS admission can cross the R0 composition boundary.'
+      'Only governed cognitive GIT_READ metadata admission can cross the R0 composition boundary.'
     );
   }
 
@@ -420,6 +430,7 @@ function physicalEvidence(
 function operationIdFor({
   admissionFingerprint,
   workspace,
+  action,
   observedAt
 }) {
   return (
@@ -430,7 +441,7 @@ function operationIdFor({
         admissionFingerprint,
         workspace,
         'GIT_READ',
-        'WORKTREE_STATUS',
+        action,
         observedAt
       ].join('\0')
     )
@@ -486,6 +497,16 @@ function createCognitiveReadOnlyAuthorityRequest(
       60_000
     ).toISOString();
 
+  const action =
+    validatedAdmission
+      .admittedIntent
+      .canonicalAction;
+
+  const operation =
+    validatedAdmission
+      .admittedIntent
+      .target;
+
   const operationId =
     operationIdFor({
       admissionFingerprint:
@@ -493,20 +514,19 @@ function createCognitiveReadOnlyAuthorityRequest(
 
       workspace,
 
+      action,
+
       observedAt
     });
 
   const capabilityType =
     'GIT_READ';
 
-  const action =
-    'WORKTREE_STATUS';
-
   const scope =
     Object.freeze({
       operations:
         Object.freeze([
-          'status'
+          operation
         ])
     });
 
@@ -550,7 +570,7 @@ function createCognitiveReadOnlyAuthorityRequest(
   }
 
   const objective =
-    'Governed cognitive Git repository read: WORKTREE_STATUS';
+    `Governed cognitive Git repository read: ${action}`;
 
   const requester =
     cognitiveRequesterFor(

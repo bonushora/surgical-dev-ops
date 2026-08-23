@@ -149,6 +149,69 @@ test(
 );
 
 test(
+  'admits canonical GIT_READ HEAD_COMMIT candidate without new authority',
+  () => {
+    const proposal =
+      createGovernedCognitiveProposal({
+        humanIntent:
+          'Identify the repository HEAD commit.',
+
+        cognitiveResult:
+          deepFreeze({
+            ...cognitiveResult(),
+
+            output: {
+              intent: {
+                capabilityType:
+                  'GIT_READ',
+
+                action:
+                  'HEAD_COMMIT'
+              },
+
+              rationale:
+                'Identify the exact repository revision.'
+            }
+          })
+      });
+
+    const source =
+      materializeCandidateIntent(
+        proposal
+      );
+
+    const admission =
+      admitGovernedCandidate(
+        source
+      );
+
+    assert.deepEqual(
+      admission.admittedIntent,
+      {
+        capabilityType:
+          'GIT_READ',
+
+        target:
+          'rev-parse',
+
+        canonicalAction:
+          'HEAD_COMMIT'
+      }
+    );
+
+    assert.equal(
+      admission.authority.executable,
+      false
+    );
+
+    assert.equal(
+      admission.authority.dispatchAllowed,
+      false
+    );
+  }
+);
+
+test(
   'admission preserves candidate proposal and human-intent provenance',
   () => {
     const source =

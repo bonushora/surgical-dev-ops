@@ -199,6 +199,40 @@ test(
 );
 
 test(
+  'materializes GIT_READ HEAD_COMMIT as immutable bounded candidate intent',
+  () => {
+    const result =
+      materializeCandidateIntent(
+        proposal({
+          capabilityType:
+            'GIT_READ',
+
+          action:
+            'HEAD_COMMIT'
+        })
+      );
+
+    assert.equal(
+      result.intent.capabilityType,
+      'GIT_READ'
+    );
+
+    assert.equal(
+      result.intent.action,
+      'HEAD_COMMIT'
+    );
+
+    assert.ok(
+      Object.isFrozen(result)
+    );
+
+    assert.ok(
+      Object.isFrozen(result.intent)
+    );
+  }
+);
+
+test(
   'all other capabilities and actions fail closed',
   () => {
     for (
@@ -223,13 +257,6 @@ test(
             'GIT_READ',
 
           action:
-            'HEAD_COMMIT'
-        },
-        {
-          capabilityType:
-            'GIT_READ',
-
-          action:
             'TRACKED_FILES'
         },
         {
@@ -246,7 +273,7 @@ test(
           materializeCandidateIntent(
             proposal(intent)
           ),
-        /only git_read \/ worktree_status/i
+        /governed git_read metadata actions/i
       );
     }
   }

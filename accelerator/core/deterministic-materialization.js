@@ -307,11 +307,13 @@ function extractBoundedIntent(
   if (
     capabilityType !==
       'GIT_READ' ||
-    action !==
-      'WORKTREE_STATUS'
+    ![
+      'WORKTREE_STATUS',
+      'HEAD_COMMIT'
+    ].includes(action)
   ) {
     throw new Error(
-      'Only GIT_READ / WORKTREE_STATUS is materializable at this frontier.'
+      'Only governed GIT_READ metadata actions are materializable at this frontier.'
     );
   }
 

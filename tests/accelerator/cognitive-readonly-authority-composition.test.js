@@ -668,6 +668,69 @@ test(
 );
 
 test(
+  'composes admitted cognitive HEAD_COMMIT into bounded R0 governed request',
+  () => {
+    const repo =
+      fixture();
+
+    try {
+      const source =
+        admission();
+
+      const headAdmission =
+        deepFreeze({
+          ...source,
+
+          admittedIntent:
+            deepFreeze({
+              capabilityType:
+                'GIT_READ',
+
+              target:
+                'rev-parse',
+
+              canonicalAction:
+                'HEAD_COMMIT'
+            })
+        });
+
+      /*
+       * Recompute through the canonical admission path is required;
+       * direct fingerprint substitution must remain fail-closed.
+       *
+       * This assertion deliberately proves that forged admission
+       * broadening is rejected.
+       */
+      assert.throws(
+        () =>
+          createCognitiveReadOnlyAuthorityRequest(
+            {
+              admission:
+                headAdmission,
+
+              repositoryPath:
+                repo
+            },
+            {
+              now: () =>
+                NOW
+            }
+          ),
+        /fingerprint/i
+      );
+    } finally {
+      fs.rmSync(
+        repo,
+        {
+          recursive: true,
+          force: true
+        }
+      );
+    }
+  }
+);
+
+test(
   'composition cannot broaden beyond GIT_READ WORKTREE_STATUS',
   () => {
     const repo =
@@ -709,7 +772,7 @@ test(
                 NOW
             }
           ),
-        /WORKTREE_STATUS|fingerprint/i
+        /governed cognitive GIT_READ metadata|fingerprint/i
       );
     } finally {
       fs.rmSync(
