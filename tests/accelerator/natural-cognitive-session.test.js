@@ -455,3 +455,218 @@ test(
     );
   }
 );
+
+test(
+  'NATURAL cognitive planner may request bounded evidence but cannot execute it',
+  async () => {
+    let observedRequest =
+      null;
+
+    function httpJsonResponse(
+      payload
+    ) {
+      const bytes =
+        new TextEncoder().encode(
+          JSON.stringify(payload)
+        );
+
+      let delivered =
+        false;
+
+      return {
+        status:
+          200,
+
+        body: {
+          getReader() {
+            return {
+              async read() {
+                if (delivered) {
+                  return {
+                    done:
+                      true,
+
+                    value:
+                      undefined
+                  };
+                }
+
+                delivered =
+                  true;
+
+                return {
+                  done:
+                    false,
+
+                  value:
+                    bytes
+                };
+              },
+
+              releaseLock() {}
+            };
+          }
+        }
+      };
+    }
+
+    const session =
+      createNaturalCognitiveSession({
+        assistanceContext:
+          null,
+
+        getWorkMode:
+          () =>
+            'SUPERVISED_MICROTASKS',
+
+        fetchImplementation:
+          async (
+            _url,
+            options = {}
+          ) => {
+            /*
+             * Discovery uses GET and consumes a bounded byte stream.
+             */
+            if (
+              options.method ===
+                'GET'
+            ) {
+              return httpJsonResponse({
+                models: [
+                  {
+                    name:
+                      'llama3:latest'
+                  }
+                ]
+              });
+            }
+
+            /*
+             * Cognitive invocation uses POST and the same bounded
+             * byte-stream HTTP response contract.
+             */
+            if (
+              options.method !==
+                'POST' ||
+              typeof options.body !==
+                'string'
+            ) {
+              throw new Error(
+                'Unexpected NATURAL cognitive test transport.'
+              );
+            }
+
+            const body =
+              JSON.parse(
+                options.body
+              );
+
+            if (
+              !body ||
+              body.model !==
+                'llama3:latest' ||
+              !Array.isArray(
+                body.messages
+              ) ||
+              body.messages.length !==
+                2
+            ) {
+              throw new Error(
+                'Unexpected Ollama cognitive request.'
+              );
+            }
+
+            observedRequest =
+              JSON.parse(
+                body.messages[1].content
+              );
+
+            return httpJsonResponse({
+              message: {
+                role:
+                  'assistant',
+
+                content:
+                  JSON.stringify({
+                    decision:
+                      'REQUEST_EVIDENCE',
+
+                    response:
+                      null,
+
+                    evidenceRequest: {
+                      kind:
+                        'READ_FILE',
+
+                      target:
+                        'package.json',
+
+                      reason:
+                        'Preciso conhecer os scripts.'
+                    }
+                  })
+              }
+            });
+          }
+      });
+
+    const result =
+      await session.decideEvidence(
+        'Analise este projeto.',
+        {
+          workspace:
+            'example-project',
+
+          interactionMode: {
+            mode:
+              'NATURAL'
+          }
+        },
+        []
+      );
+
+    assert.equal(
+      result.decision,
+      'REQUEST_EVIDENCE'
+    );
+
+    assert.equal(
+      result.evidenceRequest.kind,
+      'READ_FILE'
+    );
+
+    assert.equal(
+      result.evidenceRequest.target,
+      'package.json'
+    );
+
+    assert.ok(
+      observedRequest
+    );
+
+    assert.equal(
+      observedRequest.capability,
+      'PLAN'
+    );
+
+    assert.match(
+      observedRequest.objective,
+      /NÃO executa operações/i
+    );
+
+    assert.match(
+      observedRequest.objective,
+      /WORKSPACE_FILES/i
+    );
+
+    assert.match(
+      observedRequest.objective,
+      /READ_FILE/i
+    );
+
+    assert.match(
+      observedRequest.objective,
+      /VALIDATE_JS/i
+    );
+  }
+);
