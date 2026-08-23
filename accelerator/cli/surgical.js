@@ -42,6 +42,15 @@ const {
   createNaturalCognitiveSession
 } = require('./natural-cognitive-session');
 
+const {
+  createNaturalAssistanceContext
+} = require('./natural-assistance-context');
+
+const {
+  createNaturalSessionControl,
+  formatProviderStatus
+} = require('./natural-session-control');
+
 const VERSION = '2.5.0';
 
 function printVersion() {
@@ -83,7 +92,10 @@ function createInteractiveActivation(
     interactionMode: interaction,
     strategy: 'PATCH',
     orchestrator: 'ACTIVE',
-    providers: 'none',
+    providers:
+      interaction.mode === 'NATURAL'
+        ? 'auto-discovery'
+        : 'none',
     protocols: {
       bhSep: '2.2',
       bhSdp: '2.2'
@@ -92,8 +104,21 @@ function createInteractiveActivation(
 }
 
 function formatInteractiveActivation(activation) {
+  const naturalProviderInfo =
+    (
+      activation.interactionMode &&
+      activation.interactionMode.mode === 'NATURAL'
+    )
+      ? (
+          'Assistente cognitivo padrão: Llama 3 via Ollama, quando localmente verificado.\n' +
+          'Execução local: sem cobrança por chamada de API do Ollama; recursos locais e licenças aplicáveis permanecem do usuário.\n' +
+          'Providers externos são substituíveis e podem cobrar diretamente segundo seus próprios termos.\n' +
+          'O Surgical DevOps não recebe, intermedeia ou retém taxas ou comissões desses providers.\n'
+        )
+      : '';
+
   return (
-`Surgical DevOps v${VERSION}
+    `Surgical DevOps v${VERSION}
 BH-SEP v${activation.protocols.bhSep} E BH-SDP v${activation.protocols.bhSdp} ATIVADOS 🚀
 
 Workspace: ${activation.workspace}
@@ -107,7 +132,7 @@ Interaction: ${
 Strategy: ${activation.strategy}
 Orchestrator: ${activation.orchestrator}
 Providers: ${activation.providers}
-
+${naturalProviderInfo}
 surgical> `
   );
 }
@@ -518,14 +543,43 @@ function createInteractiveSession(
     }
   }
 
+  const naturalMode =
+    Boolean(
+      activation.interactionMode &&
+      activation.interactionMode.mode === 'NATURAL'
+    );
+
+  const assistanceContext =
+    naturalMode
+      ? (
+          options.assistanceContext ||
+          createNaturalAssistanceContext(
+            activation
+          )
+        )
+      : null;
+
+  const sessionControl =
+    naturalMode
+      ? (
+          options.sessionControl ||
+          createNaturalSessionControl()
+        )
+      : null;
+
   const cognitiveSession =
     options.cognitiveSession ||
     (
-      activation.interactionMode &&
-      activation.interactionMode.mode === 'NATURAL'
+      naturalMode
         ? createNaturalCognitiveSession({
             fetchImplementation:
-              options.fetchImplementation
+              options.fetchImplementation,
+
+            assistanceContext,
+
+            getWorkMode:
+              () =>
+                sessionControl.currentWorkMode()
           })
         : null
     );
@@ -539,6 +593,44 @@ function createInteractiveSession(
     processing =
       processing
         .then(async () => {
+          if (sessionControl) {
+            const controlled =
+              sessionControl.handle(
+                line
+              );
+
+            if (controlled.matched) {
+              if (
+                controlled.action ===
+                  'PROVIDER_STATUS'
+              ) {
+                if (!cognitiveSession) {
+                  output.write(
+                    'Assistente cognitivo: indisponível.\n'
+                  );
+                } else {
+                  const discovery =
+                    await cognitiveSession.describe();
+
+                  output.write(
+                    formatProviderStatus(
+                      discovery
+                    )
+                  );
+                }
+              } else if (
+                controlled.output
+              ) {
+                output.write(
+                  controlled.output
+                );
+              }
+
+              resumeAndPrompt();
+              return;
+            }
+          }
+
           const result =
             handleInteractiveCommand(
               line,

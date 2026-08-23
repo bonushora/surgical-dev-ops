@@ -16,6 +16,13 @@ const {
   './natural-ai-runtime'
 );
 
+const {
+  WORK_MODES,
+  formatNaturalProviderInstruction
+} = require(
+  './natural-assistance-context'
+);
+
 const MAX_PRESENTED_TEXT =
   6000;
 
@@ -174,6 +181,16 @@ function createNaturalCognitiveSession(
     input.fetchImplementation ||
     globalThis.fetch;
 
+  const assistanceContext =
+    input.assistanceContext ||
+    null;
+
+  const getWorkMode =
+    typeof input.getWorkMode === 'function'
+      ? input.getWorkMode
+      : () =>
+          WORK_MODES.SUPERVISED;
+
   let statePromise = null;
 
   async function initialize() {
@@ -259,6 +276,17 @@ function createNaturalCognitiveSession(
 
             objective:
               (
+                (
+                  assistanceContext
+                    ? (
+                        formatNaturalProviderInstruction(
+                          assistanceContext,
+                          getWorkMode()
+                        ) +
+                        '\n\n'
+                      )
+                    : ''
+                ) +
                 'Responda em português claro para um usuário leigo. ' +
                 'A resposta é somente cognitiva: não afirme que executou, ' +
                 'alterou arquivos, aprovou operações ou ganhou autoridade. ' +

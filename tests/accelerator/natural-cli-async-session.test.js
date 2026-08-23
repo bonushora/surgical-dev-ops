@@ -10,6 +10,9 @@ const {
   PassThrough
 } = require('node:stream');
 
+const path =
+  require('node:path');
+
 const cli =
   require(
     '../../accelerator/cli/surgical'
@@ -17,8 +20,23 @@ const cli =
 
 function naturalActivation() {
   return Object.freeze({
+    repositoryPath:
+      path.resolve(
+        __dirname,
+        '../..'
+      ),
+
     workspace:
       'surgical-dev-ops',
+
+    protocols:
+      Object.freeze({
+        bhSep:
+          '2.2',
+
+        bhSdp:
+          '2.2'
+      }),
 
     interactionMode:
       Object.freeze({
