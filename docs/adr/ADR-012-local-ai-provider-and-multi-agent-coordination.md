@@ -507,6 +507,151 @@ Responsibility for selecting, contracting with and paying an external AI
 provider remains with the user or organization using that provider, subject
 to the provider's own terms.
 
+### Guided Provider Setup for NATURAL
+
+The NATURAL interaction profile SHALL provide a guided provider setup
+experience intended to allow a non-technical user to select, understand,
+configure, verify and replace a compatible AI provider without requiring
+prior knowledge of provider-specific developer terminology.
+
+The guided experience SHALL be invocable through natural-language requests
+conceptually equivalent to:
+
+- "I want to change AI";
+- "I want to use Codex";
+- "I want to connect another AI";
+- "help me choose an AI provider"; and
+- equivalent supported natural-language expressions.
+
+The exact natural-language vocabulary is an implementation concern and SHALL
+NOT expand provider or operational authority.
+
+### Guided setup stages
+
+For a supported provider, the guided setup SHOULD lead the user through the
+applicable stages in comprehensible language:
+
+1. identify the provider and, when relevant, the model or product;
+2. explain whether execution is local, remote or hybrid;
+3. explain the authentication mechanism and required credentials;
+4. explain relevant privacy and data-transmission implications;
+5. present currently available plan, limit and cost information when it can
+   be obtained from an authoritative provider source;
+6. distinguish subscription access, API access, credits and usage-based
+   charging when those concepts differ for the selected provider;
+7. obtain any required explicit user choice or authorization;
+8. configure only the bounded provider integration;
+9. test provider connectivity and compatibility;
+10. declare the provider operational only after the applicable verification
+    succeeds; and
+11. identify the active provider/model to the user when materially useful.
+
+Codex / OpenAI MAY be offered through this guided provider setup when a
+compatible Surgical DevOps provider integration exists. Such availability
+does not give Codex, OpenAI or any other provider privileged authority.
+
+### Provider choice and informed consent
+
+Surgical DevOps SHALL NOT silently select, contract, purchase, subscribe to
+or activate a paid third-party AI service on behalf of the user.
+
+When a choice may result in third-party charges, the NATURAL experience SHALL
+make that possibility clear before the provider is treated as the user's
+selected paid service.
+
+The user MAY request assistance comparing supported providers. Such
+comparison MAY consider factors including:
+
+- local versus remote execution;
+- provider availability;
+- model capability;
+- privacy characteristics;
+- plan or usage limits;
+- subscription requirements;
+- usage-based charging; and
+- other materially relevant provider characteristics.
+
+A recommendation SHALL NOT bypass explicit user choice where third-party
+commercial terms or credentials are required.
+
+### Dynamic commercial information
+
+Provider plans, prices, quotas, credits, limits and commercial conditions are
+external and mutable information.
+
+Surgical DevOps SHALL NOT hardcode provider pricing as a permanent normative
+truth.
+
+When provider pricing, plans, limits or similar commercial information is
+shown to the user, the implementation SHOULD obtain it from an authoritative
+provider-controlled source or other explicitly qualified current metadata
+whenever such retrieval is available.
+
+The user-facing experience SHOULD identify the source and retrieval or
+effective date of commercial information when available.
+
+If current commercial information cannot be reliably confirmed, Surgical
+DevOps SHALL say that it could not confirm the current value or condition
+rather than presenting stale, inferred or invented pricing as current fact.
+
+Commercial information presented by Surgical DevOps is informational and
+does not replace the provider's own contractual terms.
+
+### Credential boundary
+
+Provider credentials, API keys, access tokens, account sessions or equivalent
+authentication material SHALL be confined to the minimum provider integration
+boundary required for their intended use.
+
+Possession or configuration of provider credentials SHALL NOT grant:
+
+- shell authority;
+- generic process execution authority;
+- filesystem authority;
+- repository mutation authority;
+- Orchestrator authority;
+- human approval authority;
+- risk reclassification authority; or
+- authority to bypass BH-SEP, BH-SDP, capability controls or fail-closed
+  behavior.
+
+A provider credential authenticates access to the bounded provider service;
+it does not authenticate operational authority over Surgical DevOps.
+
+Secrets SHALL NOT be unnecessarily exposed in user-visible output, logs,
+telemetry, prompts or provider-independent state.
+
+### Provider verification and safe failure
+
+A configured provider SHALL NOT be represented as operational merely because
+configuration data or credentials were supplied.
+
+The applicable provider boundary SHOULD verify connectivity and compatibility
+before reporting successful activation.
+
+Authentication failure, unavailable service, unsupported model, invalid
+configuration, incompatible provider behavior or inability to verify the
+provider SHALL fail safely.
+
+Such failure SHALL NOT disable deterministic Surgical DevOps capabilities
+that do not require cognitive inference and SHALL NOT authorize fallback to
+weaker governance.
+
+### Commercial neutrality of guided setup
+
+Guided setup is a provider-configuration and user-education capability. It
+does not create a payment-intermediation relationship.
+
+Third-party provider charges remain governed by the provider's own commercial
+terms and remain the responsibility of the user or organization using that
+provider.
+
+Unless a future explicit commercial decision establishes a separate managed
+AI offering, Surgical DevOps SHALL NOT receive, act as an intermediary for,
+or retain third-party provider payments, usage charges, referral fees or
+commissions merely because the provider was discovered, compared, recommended
+or configured through Guided Provider Setup.
+
 ### Preserved invariants
 
 This amendment does not alter the previously frozen requirements that:
