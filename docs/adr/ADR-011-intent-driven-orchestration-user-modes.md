@@ -173,6 +173,54 @@ The interface SHOULD expose:
 Low-level Git, CAS, journal, hashes and internal orchestration mechanics SHOULD
 remain available for audit but SHALL NOT be required for ordinary interaction.
 
+#### 5.1.1 Natural Mode Experience Contract
+
+Natural Mode SHALL provide a product experience suitable for a person who is
+not required to understand software engineering mechanics in order to pursue a
+permitted objective.
+
+The default Natural Mode presentation SHALL:
+
+- use ordinary natural language;
+- describe outcomes rather than internal commands;
+- hide low-level Git, shell, CAS, journal, fingerprint, capability and adapter
+  terminology unless disclosure is requested or materially necessary;
+- translate technical failures into understandable explanations without
+  suppressing the underlying evidence;
+- explain material consequences before requesting human authorization;
+- present required human choices in clear decision-oriented language;
+- expose progress in terms of objective, current activity, result and blockers;
+- provide progressive disclosure through actions such as "show details",
+  "show technical evidence" or equivalent interfaces;
+- preserve access to canonical evidence for audit even when that evidence is
+  not displayed by default.
+
+A Natural Mode authorization request SHOULD prefer a form conceptually
+equivalent to:
+
+"The system proposes to create or modify these artifacts, will validate the
+result, and requires your authorization before proceeding."
+
+The user SHALL NOT be required to understand Git, repositories, diffs,
+capability grants, journal state, CAS or internal orchestration terminology in
+order to make an ordinary Natural Mode decision.
+
+Natural Mode SHALL simplify representation only.
+
+Natural Mode SHALL NOT:
+
+- reduce validation;
+- reduce evidence generation;
+- bypass policy;
+- bypass capability enforcement;
+- weaken workspace boundaries;
+- suppress required human approval;
+- create broader authority than the same operation would receive in another
+  mode;
+- convert ambiguity into implicit authority;
+- hide a materially significant risk that would affect a reasonable human
+  decision.
+
 ---
 
 ### 5.2 Engineer Mode
@@ -217,6 +265,36 @@ Engineer Mode SHOULD expose:
 The engineer SHALL retain the ability to inspect the exact operations selected
 by the AI.
 
+#### 5.2.1 Engineer Mode Experience Contract
+
+Engineer Mode SHALL provide a development-oriented technical experience while
+preserving intent-driven orchestration.
+
+The default Engineer Mode presentation SHOULD expose:
+
+- interpreted objective and constraints;
+- provider and reasoning context when materially relevant;
+- inspected files and repository state;
+- implementation plan;
+- files proposed for creation, modification or deletion;
+- diff or equivalent change evidence;
+- tests selected and their results;
+- validation evidence;
+- risk classification;
+- capability and authority boundary summaries;
+- blockers and fail-closed reasons;
+- reasons for escalation to human authority.
+
+Engineer Mode MAY abstract low-level internal implementation details that are
+not useful to the engineering decision, but the engineer SHALL be able to
+request the corresponding canonical evidence.
+
+Engineer Mode SHOULD optimize for engineering productivity, reproducibility and
+technical review rather than maximum abstraction or maximum protocol exposure.
+
+Engineer Mode SHALL NOT grant additional authority merely because the operator
+has a technical profile.
+
 ---
 
 ### 5.3 Expert / Deterministic Mode
@@ -253,6 +331,39 @@ The existing `surgical>` CLI model SHALL be preserved as an Expert /
 Deterministic interaction surface.
 
 The introduction of higher-level AI interfaces SHALL NOT remove this mode.
+
+#### 5.3.1 Expert / Deterministic Mode Experience Contract
+
+Expert / Deterministic Mode SHALL provide the highest practical visibility into
+the deterministic governance and authority state of Surgical DevOps.
+
+The default Expert / Deterministic presentation MAY expose, where applicable:
+
+- exact operation identifiers;
+- canonical workspace identity;
+- fingerprints and hashes;
+- capability type and scope;
+- capability-grant evaluation;
+- policy decision;
+- risk classification;
+- requester and approval provenance;
+- lifecycle state;
+- journal state;
+- CAS and manifest authority;
+- recovery evidence;
+- adapter selection;
+- exact validation operations;
+- exact deterministic blockers;
+- canonical before/after evidence.
+
+The operator SHALL be able to work directly with explicit governed commands
+where such commands are part of the qualified interface.
+
+Expert / Deterministic Mode SHOULD minimize representational abstraction when
+that abstraction would obscure authority, provenance, evidence or deterministic
+state.
+
+Maximum visibility SHALL NOT imply broader authority.
 
 ---
 
@@ -442,6 +553,50 @@ All modes SHALL converge on the same normative governance core.
 
 This prevents the creation of a less secure "easy mode".
 
+### 12.1 Normative Experience Separation
+
+The modes SHALL differ in presentation, terminology, interaction abstraction
+and evidence disclosure.
+
+They SHALL NOT differ in the normative security or authority guarantees applied
+to an equivalent operation.
+
+Conceptually:
+
+Natural
+    → outcome-oriented language
+    → minimal technical exposure by default
+    → progressive disclosure on demand
+
+Engineer
+    → engineering-oriented language
+    → implementation, diff, tests and risk evidence
+    → technical inspection on demand
+
+Expert / Deterministic
+    → protocol- and authority-oriented language
+    → maximum deterministic visibility
+    → canonical evidence by default where appropriate
+
+Changing mode SHALL NOT modify:
+
+- workspace authority;
+- risk classification rules;
+- policy semantics;
+- capability-grant semantics;
+- approval requirements;
+- human authority;
+- mutation authority;
+- CAS guarantees;
+- journal guarantees;
+- durability guarantees;
+- recovery semantics;
+- validation requirements;
+- fail-closed behavior.
+
+The same underlying operation SHALL remain subject to the same normative
+governance regardless of interaction mode.
+
 ---
 
 ## 13. Preservation of Qualified Core
@@ -619,6 +774,15 @@ The following decisions are APPROVED and FROZEN:
 18. Any future proposal granting unrestricted execution authority to an AI,
     eliminating meaningful human authority, or weakening the common governance
     core requires a new ADR explicitly superseding this decision.
+19. Natural Mode SHALL use outcome-oriented natural language and progressive
+    disclosure suitable for non-technical users.
+20. Engineer Mode SHALL expose implementation, diff, test, validation, risk and
+    technical evidence appropriate to professional engineering work.
+21. Expert / Deterministic Mode SHALL preserve maximum deterministic visibility
+    into canonical authority, provenance, protocol state and evidence.
+22. Interaction mode changes SHALL affect presentation and disclosure only and
+    SHALL NOT alter the normative authority, security, validation, recovery or
+    fail-closed guarantees applied to an equivalent operation.
 
 ---
 
