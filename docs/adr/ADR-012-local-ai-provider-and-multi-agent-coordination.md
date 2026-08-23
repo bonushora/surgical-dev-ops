@@ -1110,6 +1110,186 @@ truth.
 A prior snapshot SHALL NOT override changed physical repository state,
 authority expiry, changed policy or a newer architectural decision.
 
+### Governance Without Friction
+
+Surgical DevOps SHALL preserve rigorous deterministic governance internally
+without transferring unnecessary governance ceremony to the user.
+
+The existence of internal controls including risk classification, capability
+grants, fingerprints, lifecycle state, policy decisions, evidence binding,
+fail-closed semantics or provider qualification SHALL NOT by itself require
+that those implementation details dominate the normal user experience.
+
+The user-facing level of governance detail SHOULD be proportional to:
+
+- operational risk;
+- authority expansion;
+- scope expansion;
+- mutation impact;
+- ambiguity;
+- provider or execution qualification state; and
+- the selected interaction profile.
+
+Low-risk or already-authorized mechanical operations SHOULD remain
+conversationally lightweight when the existing authority contract permits
+them.
+
+Higher-risk operations, new authority, scope expansion, mutation, unresolved
+ambiguity or architectural boundaries SHALL receive correspondingly greater
+explanation and explicit human involvement.
+
+Reducing user-facing friction SHALL NOT reduce, bypass or weaken:
+
+- BH-SEP;
+- BH-SDP;
+- risk classification;
+- capability enforcement;
+- human authority;
+- workspace confinement;
+- mutation boundaries;
+- provider qualification;
+- evidence binding;
+- fail-closed behavior; or
+- any frozen architectural invariant.
+
+User-experience simplification is therefore presentation and interaction
+simplification, not governance simplification.
+
+#### Interaction-profile progressive disclosure
+
+The interaction profiles SHALL expose governance according to their intended
+user experience while preserving the same underlying authority model.
+
+For NATURAL:
+
+- language SHOULD be understandable to a non-technical user;
+- internal capability and risk terminology SHOULD remain hidden unless
+  materially useful or explicitly requested;
+- the system SHOULD explain intended outcomes, relevant boundaries and
+  required human decisions;
+- technical details SHOULD be progressively disclosed rather than presented
+  as mandatory ceremony; and
+- the user SHOULD be able to work primarily through ordinary natural language.
+
+For ENGINEER:
+
+- relevant technical evidence SHOULD be available without requiring full
+  internal protocol verbosity;
+- scope, operation type, mutation status and material authority boundaries MAY
+  be presented directly; and
+- the engineer SHOULD be able to understand what will happen and what will not
+  happen before consequential execution.
+
+For EXPERT / DETERMINISTIC:
+
+- detailed governance evidence MAY be exposed;
+- risk classification, grants, fingerprints, lifecycle, policy decisions,
+  adapter evidence and related deterministic state MAY be inspected where
+  supported; and
+- increased observability SHALL NOT change the underlying authority available
+  to the session.
+
+Changing the interaction profile SHALL NOT create an easier security path.
+
+### Automation Restriction, Not Human Restriction
+
+The Surgical DevOps Orchestrator SHALL be designed and communicated primarily
+as a mechanism for constraining and verifying authority delegated to
+automation.
+
+Its purpose is NOT to represent the legitimate user as an adversary to their
+own authorized project.
+
+The human remains sovereign over legitimate project decisions subject to the
+explicit governance model, applicable organizational policy and previously
+accepted architectural invariants.
+
+The Orchestrator SHALL mediate what an AI model, agent, provider, automated
+workflow or execution mechanism may do on behalf of that human.
+
+The fundamental distinction is:
+
+> Human intent does not automatically become automation authority.
+
+Likewise:
+
+> Restricting delegated automation authority does not imply reducing the
+> legitimate authority of the human principal.
+
+A cognitive provider MAY understand, propose, recommend and request governed
+operations.
+
+It SHALL NOT acquire unrestricted authority merely because the human owns or
+controls the project.
+
+The system SHOULD make this distinction understandable to users and engineers
+when explaining its security model.
+
+A user-facing explanation MAY communicate the principle in terms equivalent
+to:
+
+> The AI can work for you without receiving unrestricted control over your
+> computer or project.
+
+For engineering audiences, the same principle MAY be expressed as:
+
+> AI proposes. Policy determines what is permissible. The Orchestrator
+> enforces. Humans retain authority.
+
+These explanatory formulations do not replace the normative authority model.
+
+#### Trust through inspectability
+
+Surgical DevOps SHOULD enable qualified users and engineers to inspect
+governance evidence when they choose to do so.
+
+Where supported, the system MAY expose evidence including:
+
+- active workspace scope;
+- operation type;
+- operational effect classification;
+- required capability authority;
+- mutation status;
+- provider operational authority;
+- policy decision;
+- approval requirement; and
+- resulting governed evidence.
+
+This inspectability SHOULD reduce the need to trust an AI provider's own claim
+that it behaved safely.
+
+The security proposition is therefore not:
+
+> trust the AI to always make the correct decision.
+
+It is:
+
+> limit, verify and evidence the authority through which automation can act.
+
+#### No approval fatigue
+
+Governance Without Friction reinforces the existing rule that operations
+already unambiguously covered by valid authority SHOULD NOT require repetitive
+human confirmations solely for ceremony.
+
+This principle SHALL NOT be interpreted as permission to batch unrelated
+authority, infer authorization, broaden scope or silently convert observation
+authority into mutation authority.
+
+The system MAY reduce repetitive interaction only when the relevant operation
+remains inside the already valid:
+
+- objective;
+- workspace;
+- capability;
+- risk and policy conditions;
+- architectural decisions;
+- provider qualification; and
+- human authority.
+
+When any of those boundaries changes materially, control SHALL return to the
+human according to the applicable governance rules.
+
 ### Provider Behavioral Equivalence
 
 Replacing an AI provider SHALL NOT replace, weaken or redefine the Surgical
