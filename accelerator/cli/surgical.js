@@ -38,6 +38,10 @@ const {
   formatNaturalPresentation
 } = require('./natural-presentation');
 
+const {
+  createNaturalCognitiveSession
+} = require('./natural-cognitive-session');
+
 const VERSION = '2.5.0';
 
 function printVersion() {
@@ -349,8 +353,9 @@ function handleInteractiveCommand(input, activation) {
     }
 
     return {
-      action: 'CONTINUE',
-      output: naturalUnknownMessage()
+      action: 'COGNITIVE',
+      output: '',
+      cognitiveInput: raw
     };
   }
 
@@ -491,47 +496,124 @@ function createInteractiveSession(
     prompt: 'surgical> '
   });
 
-  rl.on('line', (line) => {
-    const result =
-      handleInteractiveCommand(line, activation);
+  /*
+   * readline may close because of explicit EXIT or because a
+   * non-interactive input reaches EOF while an asynchronous
+   * cognitive request is still pending.
+   *
+   * Once closed, the session must never attempt resume/prompt.
+   */
+  let interfaceClosed =
+    false;
 
-    if (result.output) {
-      output.write(result.output);
-    }
-
-    if (result.action === 'DISPATCH') {
-      try {
-        const governedOutput =
-          dispatchInteractiveIntent(
-            result.intent,
-            activation,
-            options
-          );
-
-        output.write(
-          result.presentation
-            ? formatNaturalPresentation(
-                result.presentation,
-                governedOutput
-              )
-            : governedOutput
-        );
-      } catch {
-        output.write(
-          'Governed request denied: operation failed closed.\n'
-        );
-      }
-    }
-
-    if (result.action === 'EXIT') {
-      rl.close();
+  function resumeAndPrompt() {
+    if (interfaceClosed) {
       return;
     }
 
-    rl.prompt();
+    rl.resume();
+
+    if (!interfaceClosed) {
+      rl.prompt();
+    }
+  }
+
+  const cognitiveSession =
+    options.cognitiveSession ||
+    (
+      activation.interactionMode &&
+      activation.interactionMode.mode === 'NATURAL'
+        ? createNaturalCognitiveSession({
+            fetchImplementation:
+              options.fetchImplementation
+          })
+        : null
+    );
+
+  let processing =
+    Promise.resolve();
+
+  rl.on('line', (line) => {
+    rl.pause();
+
+    processing =
+      processing
+        .then(async () => {
+          const result =
+            handleInteractiveCommand(
+              line,
+              activation
+            );
+
+          if (result.output) {
+            output.write(result.output);
+          }
+
+          if (result.action === 'DISPATCH') {
+            try {
+              const governedOutput =
+                dispatchInteractiveIntent(
+                  result.intent,
+                  activation,
+                  options
+                );
+
+              output.write(
+                result.presentation
+                  ? formatNaturalPresentation(
+                      result.presentation,
+                      governedOutput
+                    )
+                  : governedOutput
+              );
+            } catch {
+              output.write(
+                'Governed request denied: operation failed closed.\n'
+              );
+            }
+          }
+
+          if (result.action === 'COGNITIVE') {
+            if (!cognitiveSession) {
+              output.write(
+                naturalUnknownMessage()
+              );
+            } else {
+              const cognitiveOutput =
+                await cognitiveSession.ask(
+                  result.cognitiveInput,
+                  activation
+                );
+
+              output.write(
+                cognitiveOutput
+              );
+            }
+          }
+
+          if (result.action === 'EXIT') {
+            if (!interfaceClosed) {
+              rl.close();
+            }
+
+            return;
+          }
+
+          resumeAndPrompt();
+        })
+        .catch(() => {
+          output.write(
+            'Surgical session failed closed while processing the request.\n'
+          );
+
+          resumeAndPrompt();
+        });
   });
 
   rl.on('close', () => {
+    interfaceClosed =
+      true;
+
     if (terminal) {
       output.write('\n');
     }

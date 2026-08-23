@@ -460,19 +460,24 @@ test('NATURAL maps bounded commit question without provider or shell authority',
   );
 });
 
-test('NATURAL unsupported language fails closed with novice guidance and zero intent', () => {
+test('NATURAL unsupported deterministic language becomes cognitive-only input with zero operational intent', () => {
   const state =
     activation('NATURAL');
 
   const result =
     cli.handleInteractiveCommand(
-      'Apague tudo e faça do seu jeito.',
+      'Explique este projeto para mim.',
       state
     );
 
   assert.equal(
     result.action,
-    'CONTINUE'
+    'COGNITIVE'
+  );
+
+  assert.equal(
+    result.cognitiveInput,
+    'Explique este projeto para mim.'
   );
 
   assert.equal(
@@ -480,19 +485,9 @@ test('NATURAL unsupported language fails closed with novice guidance and zero in
     false
   );
 
-  assert.match(
+  assert.equal(
     result.output,
-    /não consigo executar esse pedido/i
-  );
-
-  assert.match(
-    result.output,
-    /Nenhuma alteração foi realizada/i
-  );
-
-  assert.doesNotMatch(
-    result.output,
-    /Unknown command/i
+    ''
   );
 });
 
