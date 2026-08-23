@@ -45,6 +45,51 @@ function ensureNoExistingAuthority(root) {
   }
 }
 
+function requirePhysicalAuthorityRoot(
+  authorityRoot
+) {
+  const requested =
+    requireAbsolute(
+      authorityRoot,
+      'authorityRoot'
+    );
+
+  const requestedStat =
+    fs.lstatSync(requested);
+
+  /*
+   * Reject authority when the final component itself is a
+   * symlink. An ancestor lexical alias is different: it may
+   * legitimately materialize to the same physical directory
+   * on platforms such as macOS (/var -> /private/var).
+   */
+  if (
+    !requestedStat.isDirectory() ||
+    requestedStat.isSymbolicLink()
+  ) {
+    throw new Error(
+      'Authority root must be a physical canonical directory.'
+    );
+  }
+
+  const physical =
+    fs.realpathSync(requested);
+
+  const physicalStat =
+    fs.lstatSync(physical);
+
+  if (
+    !physicalStat.isDirectory() ||
+    physicalStat.isSymbolicLink()
+  ) {
+    throw new Error(
+      'Authority root must be a physical canonical directory.'
+    );
+  }
+
+  return physical;
+}
+
 function writeExclusive(
   target,
   content,
@@ -224,23 +269,9 @@ function loadLocalOfflineHumanSigner({
   authorityRoot
 } = {}) {
   const root =
-    requireAbsolute(
-      authorityRoot,
-      'authorityRoot'
+    requirePhysicalAuthorityRoot(
+      authorityRoot
     );
-
-  const stat =
-    fs.lstatSync(root);
-
-  if (
-    !stat.isDirectory() ||
-    stat.isSymbolicLink() ||
-    fs.realpathSync(root) !== root
-  ) {
-    throw new Error(
-      'Authority root must be a physical canonical directory.'
-    );
-  }
 
   const privateKeyPath =
     path.join(
@@ -316,9 +347,8 @@ function readLocalOfflineHumanPublicAuthority({
   authorityRoot
 } = {}) {
   const root =
-    requireAbsolute(
-      authorityRoot,
-      'authorityRoot'
+    requirePhysicalAuthorityRoot(
+      authorityRoot
     );
 
   const publicKeyPath =

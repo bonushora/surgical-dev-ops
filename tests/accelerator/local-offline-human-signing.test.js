@@ -424,3 +424,165 @@ test(
     }
   }
 );
+
+test(
+  'authority loader accepts a physical authority reached through a lexical ancestor alias',
+  (t) => {
+    /*
+     * Provisioning itself continues to require a physical
+     * parent directory. We first create the authority through
+     * that physical path and only then expose the same
+     * authority through an ancestor lexical alias.
+     *
+     * This models macOS /var -> /private/var semantics without
+     * weakening the provisioning boundary.
+     */
+
+    const physicalParent =
+      fs.mkdtempSync(
+        path.join(
+          fs.realpathSync(os.tmpdir()),
+          'sdo-authority-physical-'
+        )
+      );
+
+    const physicalAuthorityRoot =
+      path.join(
+        physicalParent,
+        'authority'
+      );
+
+    const aliasParent =
+      path.join(
+        fs.realpathSync(os.tmpdir()),
+        `sdo-authority-alias-${process.pid}-${Date.now()}`
+      );
+
+    t.after(() => {
+      try {
+        fs.rmSync(
+          aliasParent,
+          {
+            recursive: true,
+            force: true
+          }
+        );
+      } catch {}
+
+      fs.rmSync(
+        physicalParent,
+        {
+          recursive: true,
+          force: true
+        }
+      );
+    });
+
+    const provisioned =
+      provisionLocalOfflineHumanAuthority({
+        authorityRoot:
+          physicalAuthorityRoot,
+
+        issuer:
+          'local:human-alias',
+
+        subjectId:
+          'human-alias'
+      });
+
+    assert.equal(
+      provisioned.authorityRoot,
+      fs.realpathSync(
+        physicalAuthorityRoot
+      )
+    );
+
+    try {
+      fs.symlinkSync(
+        physicalParent,
+        aliasParent,
+        'dir'
+      );
+    } catch (error) {
+      if (
+        [
+          'EPERM',
+          'EACCES',
+          'ENOTSUP'
+        ].includes(error.code)
+      ) {
+        return t.skip(
+          'Directory symlink creation is unavailable on this platform.'
+        );
+      }
+
+      throw error;
+    }
+
+    const lexicalAuthorityRoot =
+      path.join(
+        aliasParent,
+        'authority'
+      );
+
+    /*
+     * The authority directory itself is NOT a symlink.
+     * Only an ancestor component is lexically aliased.
+     */
+    const lexicalStat =
+      fs.lstatSync(
+        lexicalAuthorityRoot
+      );
+
+    assert.equal(
+      lexicalStat.isDirectory(),
+      true
+    );
+
+    assert.equal(
+      lexicalStat.isSymbolicLink(),
+      false
+    );
+
+    assert.notEqual(
+      lexicalAuthorityRoot,
+      fs.realpathSync(
+        lexicalAuthorityRoot
+      )
+    );
+
+    assert.equal(
+      fs.realpathSync(
+        lexicalAuthorityRoot
+      ),
+      provisioned.authorityRoot
+    );
+
+    const signer =
+      loadLocalOfflineHumanSigner({
+        authorityRoot:
+          lexicalAuthorityRoot
+      });
+
+    const publicAuthority =
+      readLocalOfflineHumanPublicAuthority({
+        authorityRoot:
+          lexicalAuthorityRoot
+      });
+
+    assert.equal(
+      typeof signer.signChallenge,
+      'function'
+    );
+
+    assert.equal(
+      publicAuthority.issuer,
+      'local:human-alias'
+    );
+
+    assert.equal(
+      publicAuthority.subjectId,
+      'human-alias'
+    );
+  }
+);
