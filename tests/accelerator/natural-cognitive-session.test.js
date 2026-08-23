@@ -82,12 +82,12 @@ test(
 
     assert.match(
       output,
-      /Resposta cognitiva do Llama 3 via Ollama/
+      /Esta é apenas uma explicação/
     );
 
-    assert.match(
+    assert.doesNotMatch(
       output,
-      /Nenhuma alteração foi realizada/
+      /Resposta cognitiva do Llama 3 via Ollama/
     );
   }
 );
@@ -212,9 +212,9 @@ test(
       /Posso explicar o projeto/
     );
 
-    assert.match(
+    assert.doesNotMatch(
       output,
-      /Nenhuma alteração foi realizada/
+      /Resposta cognitiva do Llama 3 via Ollama/
     );
   }
 );
@@ -366,9 +366,9 @@ test(
       /Resposta cognitiva recuperada com segurança/
     );
 
-    assert.match(
+    assert.doesNotMatch(
       output,
-      /Nenhuma alteração foi realizada/
+      /Resposta cognitiva do Llama 3 via Ollama/
     );
   }
 );

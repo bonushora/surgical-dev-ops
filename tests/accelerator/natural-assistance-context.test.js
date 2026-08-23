@@ -195,3 +195,77 @@ test(
     );
   }
 );
+
+test(
+  'NATURAL context carries qualified Surgical DevOps identity without changing authority',
+  () => {
+    const context =
+      createNaturalAssistanceContext(
+        activation()
+      );
+
+    assert.equal(
+      context.product.name,
+      'Surgical DevOps'
+    );
+
+    assert.equal(
+      context.product
+        .conversationalExperience,
+      true
+    );
+
+    assert.equal(
+      context.product
+        .userMustKnowInternalCommands,
+      false
+    );
+
+    assert.equal(
+      context.governance.ai,
+      'DELEGATED_COGNITIVE_ONLY'
+    );
+
+    assert.equal(
+      context.governance
+        .orchestrator,
+      'SOVEREIGN_OPERATIONAL_AUTHORITY'
+    );
+  }
+);
+
+test(
+  'provider instruction explains governed evidence access instead of absolute file blindness',
+  () => {
+    const context =
+      createNaturalAssistanceContext(
+        activation()
+      );
+
+    const instruction =
+      formatNaturalProviderInstruction(
+        context,
+        WORK_MODES.SUPERVISED
+      );
+
+    assert.match(
+      instruction,
+      /não acessa o filesystem diretamente/i
+    );
+
+    assert.match(
+      instruction,
+      /evidências obtidas por operações governadas/i
+    );
+
+    assert.match(
+      instruction,
+      /não responda com uma definição genérica de DevOps/i
+    );
+
+    assert.match(
+      instruction,
+      /conversar normalmente/i
+    );
+  }
+);

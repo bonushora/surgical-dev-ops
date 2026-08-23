@@ -28,6 +28,24 @@ function includesAny(
   );
 }
 
+function naturalHelpMessage() {
+  return (
+    'Você pode conversar comigo normalmente sobre este projeto.\n\n' +
+    'Por exemplo, pode dizer:\n' +
+    '  "Em que ponto estamos?"\n' +
+    '  "Explique este projeto para mim."\n' +
+    '  "Veja se há alguma alteração pendente."\n' +
+    '  "Qual é a branch atual?"\n' +
+    '  "Explique este arquivo."\n' +
+    '  "O que você sugere fazer agora?"\n' +
+    '  "Trabalhe passo a passo."\n' +
+    '  "Trabalhe sozinha até a próxima fronteira arquitetural."\n' +
+    '  "Quero trocar de IA."\n\n' +
+    'Quando uma ação exigir nova autorização, mudança de escopo ou uma decisão sua, eu paro e explico antes de prosseguir.\n' +
+    'Se quiser ver informações internas do modo atual, diga "detalhes técnicos".\n'
+  );
+}
+
 function providerSetupOverview() {
   return (
     'Posso ajudá-lo a trocar ou configurar a IA passo a passo.\n\n' +
@@ -116,6 +134,40 @@ function createNaturalSessionControl() {
     if (!text) {
       return Object.freeze({
         matched: false
+      });
+    }
+
+    if (
+      text === 'ajuda' ||
+      text === 'help' ||
+      includesAny(
+        text,
+        [
+          'o que voce pode fazer',
+          'como voce pode me ajudar',
+          'como posso usar voce',
+          'como posso usar o surgical devops'
+        ]
+      )
+    ) {
+      return Object.freeze({
+        matched: true,
+        action:
+          'CONTINUE',
+        output:
+          naturalHelpMessage()
+      });
+    }
+
+    if (
+      text === 'detalhes tecnicos' ||
+      text === 'mostrar detalhes tecnicos' ||
+      text === 'ver detalhes tecnicos'
+    ) {
+      return Object.freeze({
+        matched: true,
+        action:
+          'TECHNICAL_STATUS'
       });
     }
 
@@ -279,6 +331,7 @@ function createNaturalSessionControl() {
 module.exports =
   Object.freeze({
     normalize,
+    naturalHelpMessage,
     providerSetupOverview,
     codexSetupGuide,
     formatProviderStatus,

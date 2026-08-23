@@ -104,18 +104,35 @@ function createInteractiveActivation(
 }
 
 function formatInteractiveActivation(activation) {
-  const naturalProviderInfo =
-    (
+  const naturalMode =
+    Boolean(
       activation.interactionMode &&
       activation.interactionMode.mode === 'NATURAL'
-    )
-      ? (
-          'Assistente cognitivo padrão: Llama 3 via Ollama, quando localmente verificado.\n' +
-          'Execução local: sem cobrança por chamada de API do Ollama; recursos locais e licenças aplicáveis permanecem do usuário.\n' +
-          'Providers externos são substituíveis e podem cobrar diretamente segundo seus próprios termos.\n' +
-          'O Surgical DevOps não recebe, intermedeia ou retém taxas ou comissões desses providers.\n'
-        )
-      : '';
+    );
+
+  if (naturalMode) {
+    return (
+      `Surgical DevOps v${VERSION}
+
+Olá. Estou conectado ao projeto "${activation.workspace}".
+
+Você pode conversar comigo normalmente sobre este projeto.
+Posso ajudá-lo a compreender o código, analisar evidências do projeto,
+explicar problemas, planejar alterações e conduzir o desenvolvimento
+dentro das permissões governadas pelo Surgical DevOps.
+
+O assistente cognitivo padrão é o Llama 3 via Ollama quando disponível localmente.
+A proteção determinística do projeto está ativa.
+O modo inicial de trabalho é microtarefas supervisionadas.
+
+Quando uma ação exigir sua autorização, ampliar o escopo do projeto
+ou envolver uma nova decisão arquitetural, eu paro e explico antes de prosseguir.
+
+Digite "ajuda" para ver exemplos ou simplesmente diga o que você quer fazer.
+
+surgical> `
+    );
+  }
 
   return (
     `Surgical DevOps v${VERSION}
@@ -132,7 +149,7 @@ Interaction: ${
 Strategy: ${activation.strategy}
 Orchestrator: ${activation.orchestrator}
 Providers: ${activation.providers}
-${naturalProviderInfo}
+
 surgical> `
   );
 }
@@ -601,6 +618,15 @@ function createInteractiveSession(
 
             if (controlled.matched) {
               if (
+                controlled.action ===
+                  'TECHNICAL_STATUS'
+              ) {
+                output.write(
+                  formatInteractiveStatus(
+                    activation
+                  )
+                );
+              } else if (
                 controlled.action ===
                   'PROVIDER_STATUS'
               ) {

@@ -153,9 +153,7 @@ function formatCognitiveResult(result) {
       : extracted;
 
   return (
-    `${bounded}\n\n` +
-    'Resposta cognitiva do Llama 3 via Ollama. ' +
-    'Nenhuma alteração foi realizada.\n'
+    `${bounded}\n`
   );
 }
 

@@ -44,14 +44,29 @@ test(
       /Llama 3 via Ollama/
     );
 
-    assert.match(
+    /*
+     * Commercial/provider details remain available through the
+     * explicit provider UX. They are intentionally not part of
+     * the default NATURAL conversational startup.
+     */
+    assert.doesNotMatch(
       output,
-      /sem cobrança por chamada de API do Ollama/i
+      /sem cobrança por chamada de API/i
+    );
+
+    assert.doesNotMatch(
+      output,
+      /taxas ou comissões/i
     );
 
     assert.match(
       output,
-      /não recebe, intermedeia ou retém taxas ou comissões/i
+      /conversar comigo normalmente/i
+    );
+
+    assert.match(
+      output,
+      /proteção determinística do projeto está ativa/i
     );
 
     assert.equal(
@@ -77,6 +92,98 @@ test(
     assert.equal(
       activation.providers,
       'none'
+    );
+  }
+);
+
+test(
+  'NATURAL activation is conversational and hides implementation terminology by default',
+  () => {
+    const activation =
+      cli.createInteractiveActivation(
+        ROOT,
+        'NATURAL'
+      );
+
+    const output =
+      cli.formatInteractiveActivation(
+        activation
+      );
+
+    assert.match(
+      output,
+      /Olá\. Estou conectado ao projeto "surgical-dev-ops"/
+    );
+
+    assert.match(
+      output,
+      /conversar comigo normalmente/i
+    );
+
+    assert.match(
+      output,
+      /proteção determinística do projeto está ativa/i
+    );
+
+    assert.match(
+      output,
+      /microtarefas supervisionadas/i
+    );
+
+    assert.doesNotMatch(
+      output,
+      /^Mode:/m
+    );
+
+    assert.doesNotMatch(
+      output,
+      /^Strategy:/m
+    );
+
+    assert.doesNotMatch(
+      output,
+      /^Orchestrator:/m
+    );
+
+    assert.doesNotMatch(
+      output,
+      /^Providers:/m
+    );
+  }
+);
+
+test(
+  'EXPERT keeps the exact technical activation surface',
+  () => {
+    const activation =
+      cli.createInteractiveActivation(
+        ROOT,
+        'EXPERT'
+      );
+
+    const output =
+      cli.formatInteractiveActivation(
+        activation
+      );
+
+    assert.match(
+      output,
+      /Mode: DETERMINISTIC/
+    );
+
+    assert.match(
+      output,
+      /Strategy: PATCH/
+    );
+
+    assert.match(
+      output,
+      /Orchestrator: ACTIVE/
+    );
+
+    assert.match(
+      output,
+      /Providers: none/
     );
   }
 );

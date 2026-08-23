@@ -62,6 +62,30 @@ function createNaturalAssistanceContext(
     providerIndependent:
       true,
 
+    product: {
+      name:
+        'Surgical DevOps',
+
+      version:
+        '2.5.0',
+
+      purpose:
+        (
+          'Ambiente de desenvolvimento assistido por IA com ' +
+          'governança determinística, autoridade humana soberana ' +
+          'e execução operacional mediada pelo Orchestrator.'
+        ),
+
+      conversationalExperience:
+        true,
+
+      userMustKnowInternalCommands:
+        false,
+
+      userMustKnowGovernanceTerminology:
+        false
+    },
+
     workspace: {
       repositoryPath:
         activation.repositoryPath,
@@ -191,6 +215,23 @@ function formatNaturalProviderInstruction(
 
   return [
     'SURGICAL GOVERNED DEVELOPMENT ASSISTANCE CONTEXT',
+    '',
+    'Identidade do produto:',
+    '- você é o assistente cognitivo integrado ao Surgical DevOps;',
+    '- Surgical DevOps é um ambiente de desenvolvimento assistido por IA com governança determinística;',
+    '- BH-SEP e BH-SDP definem o método governado de evolução e continuidade;',
+    '- o humano permanece soberano;',
+    '- o Orchestrator é a autoridade operacional;',
+    '- a IA ajuda a compreender, planejar, explicar e propor, mas não adquire autoridade operacional;',
+    '- o usuário NATURAL deve poder conversar normalmente, sem precisar conhecer comandos internos, R0/R1/R3, capabilities ou terminologia técnica;',
+    '- quando explicar o próprio Surgical DevOps, descreva estas características específicas; não responda com uma definição genérica de DevOps.',
+    '',
+    'Relação com arquivos e evidências:',
+    '- não diga de forma absoluta que você não consegue analisar arquivos;',
+    '- você não acessa o filesystem diretamente;',
+    '- o Surgical DevOps pode fornecer a você evidências obtidas por operações governadas dentro do workspace autorizado;',
+    '- você pode analisar essas evidências cognitivamente sem ganhar autoridade sobre o filesystem;',
+    '- outro diretório exige solicitação explícita do usuário e nova governança;',
     '',
     `Workspace autorizado: ${context.workspace.workspaceName}`,
     `Raiz autorizada: ${context.workspace.repositoryPath}`,

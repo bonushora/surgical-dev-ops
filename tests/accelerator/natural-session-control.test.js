@@ -217,3 +217,64 @@ test(
     }
   }
 );
+
+test(
+  'NATURAL help is conversational rather than command-list primary',
+  () => {
+    const control =
+      createNaturalSessionControl();
+
+    const result =
+      control.handle(
+        'ajuda'
+      );
+
+    assert.equal(
+      result.matched,
+      true
+    );
+
+    assert.match(
+      result.output,
+      /conversar comigo normalmente/i
+    );
+
+    assert.match(
+      result.output,
+      /Em que ponto estamos/i
+    );
+
+    assert.match(
+      result.output,
+      /Trabalhe sozinha até a próxima fronteira/i
+    );
+
+    assert.match(
+      result.output,
+      /detalhes técnicos/i
+    );
+  }
+);
+
+test(
+  'NATURAL progressive disclosure exposes technical status only on explicit request',
+  () => {
+    const control =
+      createNaturalSessionControl();
+
+    const result =
+      control.handle(
+        'detalhes técnicos'
+      );
+
+    assert.equal(
+      result.matched,
+      true
+    );
+
+    assert.equal(
+      result.action,
+      'TECHNICAL_STATUS'
+    );
+  }
+);
