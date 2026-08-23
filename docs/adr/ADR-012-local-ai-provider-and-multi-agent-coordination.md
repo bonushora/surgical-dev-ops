@@ -432,6 +432,96 @@ Rejected because cognitive delegation SHALL NOT create operational authority.
 
 ---
 
+## Amendment 2026-08-23 — NATURAL Default Local AI and Provider Cost Neutrality
+
+**Status:** APPROVED / FROZEN
+
+### NATURAL default local AI experience
+
+For the NATURAL interaction profile, Surgical DevOps SHALL prefer Llama 3
+through the approved Ollama local AI provider boundary as the default
+cognitive user experience when that provider and model are locally available
+and qualified for the requested cognitive function.
+
+This is a product-experience default only.
+
+Llama 3 SHALL NOT become mandatory, normative, architecturally privileged or
+an operational authority boundary. Ollama SHALL NOT become mandatory.
+
+The provider-independent architecture established by this ADR remains
+unchanged. A user or organization MAY replace the default model or provider
+with another supported local or remote AI provider without redefining the
+Surgical DevOps Orchestrator, BH-SEP, BH-SDP, human authority, risk
+classification, capability boundaries or fail-closed semantics.
+
+No AI provider or model receives direct operational authority merely because
+it is selected as the NATURAL cognitive provider.
+
+### Deterministic fallback
+
+If the default local AI provider or model is absent, unavailable, incompatible
+or not qualified for the requested cognitive function, Surgical DevOps SHALL
+preserve safe startup and all deterministic capabilities that do not require
+that AI provider.
+
+Provider unavailability SHALL NOT authorize governance bypass.
+
+The NATURAL experience SHOULD clearly distinguish between:
+
+- cognitive AI availability; and
+- deterministic Surgical DevOps availability.
+
+### User-facing provider transparency
+
+The NATURAL experience SHOULD identify the active cognitive provider/model
+when materially useful and SHALL make clear that compatible AI providers may
+be substituted.
+
+The product SHALL NOT imply that a specific AI vendor is required in order to
+preserve Surgical DevOps governance.
+
+For the approved local default, user-facing language MAY explain that local
+execution can operate without per-call API charges, while remaining subject
+to the applicable model/runtime licenses, local computing resources and other
+costs borne by the user.
+
+The product SHALL NOT describe this property in a manner that implies absence
+of all possible cost, licensing condition or infrastructure requirement.
+
+### External AI provider costs
+
+A supported external or commercial AI provider MAY charge the user or
+organization directly according to that provider's own pricing, plans, usage
+rules, licenses and contractual terms.
+
+Unless a future explicit commercial decision establishes a separate managed
+AI offering, Surgical DevOps SHALL NOT receive, act as an intermediary for, or retain
+payments, usage charges, provider fees or commissions arising from the
+customer's consumption of third-party AI providers.
+
+Selection of an external AI provider therefore SHALL NOT, by itself, create a
+commission or revenue-share relationship between Surgical DevOps and that AI
+provider.
+
+Responsibility for selecting, contracting with and paying an external AI
+provider remains with the user or organization using that provider, subject
+to the provider's own terms.
+
+### Preserved invariants
+
+This amendment does not alter the previously frozen requirements that:
+
+1. Ollama is a replaceable AI runtime/provider boundary.
+2. Llama 3 is a replaceable model.
+3. no paid AI provider is mandatory;
+4. provider replacement does not redefine Orchestrator authority;
+5. cognitive delegation does not create operational authority;
+6. local and remote providers remain subject to the same governance
+   principles;
+7. provider failure fails safely; and
+8. the deterministic core remains usable without an AI provider for
+   capabilities that do not require cognitive inference.
+
 ## 20. Frozen Decision
 
 The following decisions are APPROVED and FROZEN:
