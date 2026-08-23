@@ -7,7 +7,9 @@
   },
   "bin": {
     "surgical": "accelerator/cli/surgical.js",
-    "surgical-devops": "accelerator/cli/surgical.js"
+    "surgical-devops": "accelerator/cli/surgical.js",
+    "surgical-metrics": "accelerator/cli/surgical-metrics.js",
+    "surgical-telemetry-server": "accelerator/cli/surgical-telemetry-server.js"
   },
   "name": "surgical-dev-ops",
   "version": "2.5.0",

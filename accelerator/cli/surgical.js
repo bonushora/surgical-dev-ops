@@ -25,6 +25,10 @@ const {
   formatGovernedPatchResult
 } = require('./governed-patch-dispatch');
 
+const {
+  recordSessionStarted
+} = require('../telemetry/session-telemetry');
+
 const VERSION = '2.5.0';
 
 function printVersion() {
@@ -562,6 +566,16 @@ function main(argv = process.argv.slice(2)) {
       process.cwd(),
       interactionMode
     );
+
+  /*
+   * Best-effort privacy-preserving telemetry.
+   * Delivery outcome never participates in
+   * Surgical operational authority.
+   */
+  recordSessionStarted({
+    activation,
+    version: VERSION
+  }).catch(() => {});
 
   process.stdout.write(
     formatInteractiveActivation(activation)
