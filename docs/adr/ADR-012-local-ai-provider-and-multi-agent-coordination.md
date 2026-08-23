@@ -696,6 +696,225 @@ R3 operation, the target cycle is:
 6. AI explains the evidence without acquiring the authority used to produce
    it.
 
+### NATURAL Governed Task Authorization & Workspace Evidence Loop
+
+The NATURAL interaction profile SHALL support a governed task authorization
+and workspace evidence loop allowing a qualified cognitive provider to obtain
+the evidence necessary to assist with real development work without receiving
+direct operational authority.
+
+This loop refines the Continuous Governed Development Assistance cycle.
+
+#### Plan before new authority
+
+Before a task requires operational authority not already validly materialized,
+the cognitive layer SHALL explain to the human, in comprehensible language,
+what it proposes to inspect, read, validate, execute or modify and why those
+operations are relevant to the requested objective.
+
+The explanation SHOULD identify the applicable workspace and the material
+classes of operation being requested without requiring a non-technical user
+to understand internal capability names.
+
+The cognitive provider MAY propose the plan.
+
+It SHALL NOT approve its own plan or materialize the authority required to
+perform it.
+
+#### Human authorization binding
+
+Where new human authorization is required, Surgical DevOps SHALL interpret the
+human response in the context of the pending governed plan.
+
+Responses conceptually equivalent to:
+
+- "yes";
+- "proceed";
+- "I authorize";
+- "continue"; or
+- another supported affirmative expression
+
+MAY satisfy the conversational expression of authorization only when Surgical
+DevOps can deterministically bind that response to the specific pending plan,
+scope and authority request.
+
+The authorization SHALL NOT be treated merely as unconstrained cognitive text
+sent to the selected AI provider.
+
+The provider SHALL NOT manufacture, infer, extend or self-approve human
+authority.
+
+Before operational authority becomes effective, the applicable Surgical
+DevOps authority mechanisms SHALL verify and materialize the authorized scope,
+capabilities, risk conditions and other required controls.
+
+Ambiguous, stale, conflicting or unbound authorization SHALL fail closed.
+
+#### Workspace-confined evidence acquisition
+
+After the applicable authority has been validly materialized, the cognitive
+provider MAY iteratively request the evidence reasonably necessary to pursue
+the authorized objective.
+
+Such requests MAY include qualified operations such as:
+
+- listing the authorized workspace or its permitted descendants;
+- locating files or project artifacts;
+- reading permitted files;
+- inspecting repository state;
+- obtaining governed Git evidence;
+- requesting bounded validation or test evidence; and
+- requesting other qualified evidence operations covered by the active
+  capabilities.
+
+The cognitive provider SHALL NOT perform those filesystem, repository,
+process or validation operations directly merely because it requested them.
+
+Surgical DevOps and its Orchestrator SHALL remain responsible for validating
+and performing the applicable governed operation and for returning bounded
+evidence to the cognitive layer.
+
+The resulting evidence MAY be incorporated into the cognitive context required
+to continue assisting the user.
+
+#### Recursive evidence loop
+
+A single authorized task MAY require more than one evidence acquisition step.
+
+The qualified assistance loop MAY therefore proceed iteratively:
+
+1. cognitive layer identifies required evidence;
+2. Surgical DevOps validates the requested evidence operation;
+3. the Orchestrator performs only an authorized bounded operation;
+4. governed evidence is returned;
+5. the cognitive layer evaluates the evidence;
+6. the cognitive layer MAY request additional evidence still covered by the
+   same valid task authority; and
+7. the loop continues until the objective is resolved or an authority boundary
+   is reached.
+
+This recursive evidence loop SHALL NOT itself broaden authority.
+
+Discovery that another file, command, directory, capability or operation would
+be useful does not mean that the discovered item is authorized.
+
+#### No approval fatigue inside valid authority
+
+Surgical DevOps SHOULD avoid requiring a new human confirmation for every
+mechanical evidence operation when that operation is already unambiguously
+covered by valid task authority.
+
+For example, an authorized project-analysis task MAY permit multiple bounded
+file reads necessary to understand the project without asking the human to
+approve each individual read.
+
+This continuity is valid only while each operation remains within the
+authorized:
+
+- objective;
+- physical workspace scope;
+- capabilities;
+- risk class;
+- policy;
+- architectural decisions;
+- provider qualification; and
+- applicable BH-SEP and BH-SDP controls.
+
+Avoiding repetitive approval SHALL NOT be implemented by granting generic
+filesystem, shell or process authority.
+
+#### Analysis authority does not imply mutation authority
+
+Authorization to inspect, understand, analyze, search, validate or test a
+project SHALL NOT implicitly authorize mutation.
+
+A task authorized only for read or validation capabilities SHALL remain
+non-mutating even if the cognitive provider concludes that a modification
+would solve the identified problem.
+
+If a required modification is not already covered by valid authority, the
+system SHALL present the proposed modification and obtain the applicable
+additional authority before mutation.
+
+Likewise, authorization for one bounded mutation SHALL NOT imply unrestricted
+repository mutation authority.
+
+#### Execution remains capability bounded
+
+Where the user authorizes execution necessary for the task, such execution
+SHALL occur only through qualified Surgical DevOps execution boundaries and
+only for the capabilities actually granted.
+
+Task authorization SHALL NOT create generic shell authority or generic process
+authority.
+
+The cognitive provider MAY request an authorized validation, test, build or
+other qualified operation.
+
+The Orchestrator remains the component responsible for determining whether the
+requested operation is representable, permitted and executable under current
+authority.
+
+#### Mandatory reauthorization boundary
+
+The governed task loop SHALL stop and return control to the human when
+continuation requires authority not already validly materialized.
+
+This includes, without limitation:
+
+- access to another project or directory;
+- access outside the authorized physical workspace;
+- a new capability;
+- a higher or materially different risk class;
+- mutation not covered by existing authority;
+- an operation requiring explicit human approval;
+- generic shell or process authority;
+- a new architectural decision;
+- an unresolved ambiguity affecting scope or authority;
+- an unqualified provider or execution path; or
+- any operation that cannot be proven to remain inside the current governed
+  task authority.
+
+The system SHALL explain the new requirement before requesting additional
+authorization.
+
+#### Physical workspace restriction
+
+Authorization for a project SHALL be enforced against the canonical physical
+workspace boundary, not merely against a textual path included in the
+cognitive prompt.
+
+A provider SHALL NOT receive authority over parent directories, sibling
+directories, the user's home directory or another project merely because such
+locations are reachable from, related to or useful for the authorized project.
+
+Access to an additional directory requires the explicit scope-expansion
+process defined by this ADR.
+
+#### Provider-independent enforcement
+
+This task authorization and evidence loop belongs to Surgical DevOps and SHALL
+remain provider-independent.
+
+Llama 3, Codex / OpenAI or any other qualified replacement provider MAY
+participate in the cognitive portions of the loop.
+
+Changing the cognitive provider SHALL NOT change:
+
+- the human authorization requirement;
+- workspace confinement;
+- capability enforcement;
+- risk classification;
+- Orchestrator authority;
+- mutation boundaries;
+- scope-expansion rules;
+- BH-SEP or BH-SDP enforcement; or
+- fail-closed behavior.
+
+A provider with native filesystem, shell, coding-agent or process capabilities
+SHALL NOT bypass the Surgical DevOps governed boundaries merely because those
+native capabilities exist.
+
 ### Strict workspace confinement
 
 Continuous assistance SHALL be strictly confined to the project workspace or
