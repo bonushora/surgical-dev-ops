@@ -652,6 +652,326 @@ or retain third-party provider payments, usage charges, referral fees or
 commissions merely because the provider was discovered, compared, recommended
 or configured through Guided Provider Setup.
 
+### Continuous Governed Development Assistance
+
+The NATURAL interaction profile SHALL support continuous governed development
+assistance intended to provide a non-technical or technical user with a
+conversational development experience while preserving Surgical DevOps
+authority boundaries.
+
+The AI cognitive layer MAY:
+
+- understand and clarify user objectives;
+- explain repository and project state from authorized evidence;
+- help decompose work into smaller tasks;
+- plan and suggest next steps;
+- explain tests, failures and governed evidence;
+- prepare non-executable cognitive proposals;
+- assist the user in understanding architectural alternatives;
+- maintain qualified conversational continuity; and
+- explain the result of operations performed through the Surgical DevOps
+  authority boundary.
+
+These cognitive capabilities SHALL NOT themselves create operational
+authority.
+
+The target assistance cycle is:
+
+1. the human expresses an objective;
+2. the cognitive provider interprets, explains or proposes;
+3. Surgical DevOps materializes only supported governed intent;
+4. the Orchestrator applies the applicable BH-SEP and BH-SDP controls;
+5. bounded governed operations produce evidence;
+6. the cognitive layer MAY explain that evidence; and
+7. the human remains sovereign over decisions requiring human authority.
+
+For an operation requiring explicit human authority, including an applicable
+R3 operation, the target cycle is:
+
+1. AI proposes;
+2. Orchestrator classifies and verifies the operation;
+3. human authority is obtained and verified when required;
+4. Orchestrator performs only the authorized operation;
+5. governed evidence is produced; and
+6. AI explains the evidence without acquiring the authority used to produce
+   it.
+
+### Strict workspace confinement
+
+Continuous assistance SHALL be strictly confined to the project workspace or
+workspaces explicitly authorized by the user and materialized through the
+Surgical DevOps workspace authority boundary.
+
+The cognitive provider SHALL NOT gain implicit authority to inspect:
+
+- parent directories;
+- sibling directories;
+- the user's home directory;
+- unrelated repositories;
+- credential stores;
+- arbitrary filesystem locations; or
+- any path outside the explicitly authorized workspace scope.
+
+The AI SHALL NOT broaden its own filesystem knowledge merely because an
+external path may appear useful to the task.
+
+Where filesystem evidence is required, the preferred authority model is that
+the cognitive provider requests knowledge and Surgical DevOps materializes
+only evidence permitted by the applicable governed read boundary.
+
+Prompt instructions such as "remain inside this directory" SHALL NOT be
+treated as the sole enforcement mechanism for workspace confinement.
+
+### Explicit scope expansion
+
+Access to another directory or project requires an explicit user request for
+that additional scope.
+
+A requested scope expansion SHALL NOT become effective solely because the AI
+suggested, inferred or discovered the path.
+
+Before a new path is admitted, Surgical DevOps SHALL apply the applicable
+canonicalization, physical identity, workspace, scope, policy and authority
+checks.
+
+Authorization of multiple independent paths SHALL remain the union of those
+explicit paths.
+
+Authorization of:
+
+- workspace A; and
+- workspace B
+
+SHALL NOT implicitly authorize their common parent, ancestor, sibling set or a
+wildcard filesystem region.
+
+No common-ancestor authority expansion is permitted.
+
+Traversal, lexical aliases, symlink escapes, sibling-prefix confusion or other
+path representations SHALL NOT broaden authorized scope.
+
+### Supervised microtask mode
+
+NATURAL SHALL support a supervised microtask working mode.
+
+In this mode the assistance cycle proceeds in small, reviewable units.
+
+After an applicable microtask or bounded group of microtasks, the system
+SHOULD present the relevant outcome and evidence and return control to the
+human before proceeding beyond the currently supervised step.
+
+This mode is intended for users who want close conversational supervision of
+development progress.
+
+Supervision changes interaction cadence, not the underlying governance or
+authority model.
+
+### Bounded autonomy-to-boundary mode
+
+NATURAL SHALL also support an explicitly requested bounded autonomy mode
+conceptually equivalent to:
+
+"work independently until the next architectural boundary"
+
+and other supported natural-language expressions with the same meaning.
+
+In this mode, the AI MAY continue decomposing work, requesting authorized
+inspection, evaluating governed evidence, running already-authorized bounded
+workflows and advancing through qualified microtasks without requiring a new
+conversational confirmation after every mechanical step.
+
+This continuity is permitted only while every step remains inside:
+
+- the currently authorized workspace scope;
+- the currently valid capabilities;
+- the applicable risk and policy boundaries;
+- the current architectural decisions;
+- the current human authority;
+- the current provider qualification;
+- the applicable BH-SEP and BH-SDP contracts; and
+- the current fail-closed conditions.
+
+Autonomy is continuity within authority.
+
+Autonomy is NOT:
+
+- filesystem scope expansion;
+- a new capability grant;
+- risk downgrade;
+- generic shell authority;
+- generic process authority;
+- implicit R3 approval;
+- architectural decision authority;
+- provider self-qualification; or
+- permission to weaken an invariant.
+
+### Mandatory autonomy boundaries
+
+Bounded autonomy SHALL stop and return control to the human when the next
+step requires or encounters a material boundary including, but not limited
+to:
+
+- a new architectural decision;
+- explicit expansion to another project or directory;
+- a new capability or authority;
+- an operation requiring human approval not already validly materialized;
+- a materially ambiguous user objective;
+- an unresolved invariant;
+- evidence inconsistent with the planned operation;
+- a failed qualification gate that cannot be resolved inside existing
+  authority;
+- a provider or platform state that is not qualified for the requested
+  function;
+- an unsafe or ambiguous recovery state;
+- a change that would redefine the frozen governance model; or
+- any condition for which existing authority is insufficient.
+
+The AI SHALL NOT reinterpret reaching a boundary as permission to broaden its
+own authority.
+
+### Surgical Governed Development Assistance Context
+
+Surgical DevOps SHALL maintain a provider-independent governed assistance
+context defining how qualified cognitive providers participate in development
+assistance.
+
+This context belongs to Surgical DevOps.
+
+It does not belong to Llama 3, Ollama, Codex, OpenAI or any other AI model,
+runtime, vendor or provider.
+
+The context MAY include distinct classes such as:
+
+1. normative protocol and architectural rules;
+2. governed and qualified operational playbooks;
+3. qualified development experience and reusable working patterns; and
+4. current session or BH-SDP continuation context.
+
+Normative protocol and architectural rules include applicable BH-SEP,
+BH-SDP, ADRs, authority boundaries and frozen invariants.
+
+Governed playbooks MAY encode qualified procedures such as declarative
+inspection, exact-scope patching, precondition gates, syntax validation,
+targeted tests, regression gates, canonical suite validation, diff integrity,
+checkpointing and publication.
+
+Current session context MAY identify the current objective, workspace,
+qualified evidence, completed steps, pending work and the boundary at which
+work stopped.
+
+### Qualified operational knowledge
+
+Historical commands, successful terminal sequences and prior conversational
+sessions MAY inform qualified operational knowledge.
+
+Raw historical behavior SHALL NOT automatically become a normative rule.
+
+A command or procedure used successfully in one session does not acquire
+authority or permanent normative status merely because it previously worked.
+
+Reusable experience SHOULD be promoted into a governed playbook only through
+an explicit qualification process appropriate to its risk and scope.
+
+Where practical, recurring command sequences SHOULD be represented as bounded,
+parameterized and testable playbooks rather than repeatedly generated as
+unconstrained shell text.
+
+Knowledge of a command does not grant authority to execute that command.
+
+### Experience continuity
+
+BH-SDP-compatible continuation state SHOULD allow a later NATURAL session to
+recover enough qualified context to explain where governed work stopped and
+what boundary or next qualified step remains.
+
+Recovered conversational context SHALL be reconciled against current
+repository and authority evidence before being treated as current operational
+truth.
+
+A prior snapshot SHALL NOT override changed physical repository state,
+authority expiry, changed policy or a newer architectural decision.
+
+### Provider Behavioral Equivalence
+
+Replacing an AI provider SHALL NOT replace, weaken or redefine the Surgical
+DevOps operational method.
+
+Every provider participating in NATURAL continuous governed assistance SHALL
+be subject to the same applicable:
+
+- BH-SEP and BH-SDP rules;
+- architectural decisions;
+- authority boundaries;
+- risk classification;
+- workspace confinement;
+- explicit scope expansion rules;
+- governed playbooks;
+- session-context rules;
+- supervised microtask semantics;
+- bounded autonomy-to-boundary semantics;
+- human sovereignty; and
+- fail-closed behavior.
+
+The provider adapter MAY translate the Surgical Governed Development
+Assistance Context into provider-specific instruction, context or agent
+mechanisms where technically supported.
+
+Such translation SHALL NOT grant the provider broader authority than the
+canonical Surgical DevOps contract.
+
+### Codex and external agent applicability
+
+Codex / OpenAI and other external development agents MAY participate in the
+same governed assistance experience when a compatible integration is
+technically available and qualified.
+
+Where the provider supports project instructions, agent context, developer
+instructions or equivalent mechanisms, Surgical DevOps MAY materialize the
+applicable provider-independent assistance context through those mechanisms.
+
+Provider-native instructions are a cognitive alignment mechanism and SHALL
+NOT replace mechanical Surgical DevOps enforcement of workspace, capability,
+risk, authority or execution boundaries.
+
+Codex or any other provider SHALL NOT receive privileged authority merely
+because the provider has native coding-agent functionality.
+
+### Provider qualification levels
+
+A provider capable of satisfying the complete applicable governed assistance
+contract MAY be qualified for the corresponding continuous assistance
+capabilities.
+
+A provider that can safely satisfy only a subset MAY be limited to the
+qualified cognitive subset.
+
+A provider that cannot satisfy an indispensable contract SHALL remain
+unqualified for that capability.
+
+Surgical DevOps SHALL NOT weaken its governance, workspace confinement,
+authority model or fail-closed semantics merely to claim compatibility with
+an additional AI provider.
+
+### Provider-independent success principle
+
+The successful working method accumulated through qualified Surgical DevOps
+experience SHALL be preserved independently of the currently selected model.
+
+Changing:
+
+- Llama 3 to another local model;
+- Ollama to another compatible runtime;
+- a local model to a remote provider;
+- or one qualified development agent to another
+
+SHALL NOT, by itself, change the user's Surgical DevOps governance experience.
+
+The model may change.
+
+The provider may change.
+
+The Surgical DevOps governed development method remains authoritative.
+
 ### Preserved invariants
 
 This amendment does not alter the previously frozen requirements that:
