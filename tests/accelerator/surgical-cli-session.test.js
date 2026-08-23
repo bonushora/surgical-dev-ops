@@ -5,7 +5,7 @@ const assert = require('node:assert/strict');
 
 const cli = require('../../accelerator/cli/surgical');
 
-function activation() {
+function activation(interactionMode = 'EXPERT') {
   return Object.freeze({
     repositoryPath: '/tmp/surgical-dev-ops',
     workspace: 'surgical-dev-ops',
@@ -14,6 +14,10 @@ function activation() {
     worktreeClean: false,
     packageManager: 'npm',
     mode: 'DETERMINISTIC',
+    interactionMode:
+      Object.freeze({
+        mode: interactionMode
+      }),
     strategy: 'PATCH',
     orchestrator: 'ACTIVE',
     providers: 'none',
@@ -366,5 +370,154 @@ test('session help exposes governed patch without exposing generic execution', (
   assert.doesNotMatch(
     result.output,
     /\bshell\b|\bbash\b|\bexec\b/i
+  );
+});
+
+test('NATURAL maps bounded repository-state question to governed Git status intent', () => {
+  const state =
+    activation('NATURAL');
+
+  const result =
+    cli.handleInteractiveCommand(
+      'Qual é o estado atual deste repositório?',
+      state
+    );
+
+  assert.equal(
+    result.action,
+    'DISPATCH'
+  );
+
+  assert.deepEqual(
+    result.intent,
+    {
+      capabilityType: 'GIT_READ',
+      target: 'status'
+    }
+  );
+
+  assert.equal(
+    result.presentation,
+    'REPOSITORY_STATUS'
+  );
+});
+
+test('NATURAL maps bounded branch question without changing governance authority', () => {
+  const state =
+    activation('NATURAL');
+
+  const result =
+    cli.handleInteractiveCommand(
+      'Qual é a branch atual?',
+      state
+    );
+
+  assert.equal(
+    result.action,
+    'DISPATCH'
+  );
+
+  assert.deepEqual(
+    result.intent,
+    {
+      capabilityType: 'GIT_READ',
+      target: 'branch'
+    }
+  );
+});
+
+test('NATURAL maps bounded commit question without provider or shell authority', () => {
+  const state =
+    activation('NATURAL');
+
+  const result =
+    cli.handleInteractiveCommand(
+      'Qual é o commit atual?',
+      state
+    );
+
+  assert.equal(
+    result.action,
+    'DISPATCH'
+  );
+
+  assert.deepEqual(
+    result.intent,
+    {
+      capabilityType: 'GIT_READ',
+      target: 'head'
+    }
+  );
+
+  assert.equal(
+    'command' in result.intent,
+    false
+  );
+
+  assert.equal(
+    'shell' in result.intent,
+    false
+  );
+});
+
+test('NATURAL unsupported language fails closed with novice guidance and zero intent', () => {
+  const state =
+    activation('NATURAL');
+
+  const result =
+    cli.handleInteractiveCommand(
+      'Apague tudo e faça do seu jeito.',
+      state
+    );
+
+  assert.equal(
+    result.action,
+    'CONTINUE'
+  );
+
+  assert.equal(
+    'intent' in result,
+    false
+  );
+
+  assert.match(
+    result.output,
+    /não consigo executar esse pedido/i
+  );
+
+  assert.match(
+    result.output,
+    /Nenhuma alteração foi realizada/i
+  );
+
+  assert.doesNotMatch(
+    result.output,
+    /Unknown command/i
+  );
+});
+
+test('EXPERT preserves deterministic unknown-command behavior', () => {
+  const state =
+    activation('EXPERT');
+
+  const result =
+    cli.handleInteractiveCommand(
+      'Qual é o estado atual deste repositório?',
+      state
+    );
+
+  assert.equal(
+    result.action,
+    'CONTINUE'
+  );
+
+  assert.match(
+    result.output,
+    /Unknown command/i
+  );
+
+  assert.equal(
+    'intent' in result,
+    false
   );
 });

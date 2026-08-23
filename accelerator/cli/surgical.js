@@ -29,6 +29,15 @@ const {
   recordSessionStarted
 } = require('../telemetry/session-telemetry');
 
+const {
+  interpretNaturalIntent,
+  naturalUnknownMessage
+} = require('./natural-intent');
+
+const {
+  formatNaturalPresentation
+} = require('./natural-presentation');
+
 const VERSION = '2.5.0';
 
 function printVersion() {
@@ -322,6 +331,29 @@ function handleInteractiveCommand(input, activation) {
     };
   }
 
+  if (
+    activation.interactionMode &&
+    activation.interactionMode.mode === 'NATURAL'
+  ) {
+    const natural =
+      interpretNaturalIntent(raw);
+
+    if (natural.matched) {
+      return {
+        action: 'DISPATCH',
+        output: '',
+        intent: natural.intent,
+        presentation:
+          natural.presentation
+      };
+    }
+
+    return {
+      action: 'CONTINUE',
+      output: naturalUnknownMessage()
+    };
+  }
+
   return {
     action: 'CONTINUE',
     output: `Unknown command: ${raw}\n`
@@ -469,12 +501,20 @@ function createInteractiveSession(
 
     if (result.action === 'DISPATCH') {
       try {
-        output.write(
+        const governedOutput =
           dispatchInteractiveIntent(
             result.intent,
             activation,
             options
-          )
+          );
+
+        output.write(
+          result.presentation
+            ? formatNaturalPresentation(
+                result.presentation,
+                governedOutput
+              )
+            : governedOutput
         );
       } catch {
         output.write(
