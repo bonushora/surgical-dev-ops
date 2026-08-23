@@ -819,12 +819,21 @@ function orchestrate(input, runtime = {}) {
       typeof runtime.authoritativeClock.observe === 'function') {
     try { authorityObservation = runtime.authoritativeClock.observe(); } catch {}
   }
+  const governedReadOnlyExecution =
+    repositoryScopedGitRead ||
+    (
+      input.execution &&
+      input.execution.adapter === 'FILESYSTEM_READ' &&
+      input.execution.action === 'READ_FILE' &&
+      task.task.mode === 'OBSERVE'
+    );
+
   const classification = classifyScope({
     scopeKind: inspection.inspection.scope,
     files: inspection.inspection.files,
     mode: task.task.mode,
     risk:
-      repositoryScopedGitRead
+      governedReadOnlyExecution
         ? null
         : task.task.risk,
     estimatedDiffLines:
@@ -834,7 +843,7 @@ function orchestrate(input, runtime = {}) {
     worktreeClean:
       discovery.worktree.clean,
     facts:
-      repositoryScopedGitRead
+      governedReadOnlyExecution
         ? {
             readOnly: true,
             externalEffect: false,
@@ -987,9 +996,41 @@ function orchestrate(input, runtime = {}) {
   }
 
   let request = input.execution;
+
+  /*
+   * Operational-effect risk and capability-authority risk
+   * are intentionally separate dimensions.
+   *
+   * A bounded FILESYSTEM_READ is observational (R0 effect),
+   * while exercising that capability still requires the
+   * previously qualified R1 authority envelope.
+   *
+   * Do not weaken validateControlledRequest() to accept
+   * arbitrary risk mismatches. The expected authority level
+   * remains exact for each controlled capability.
+   */
+  const controlledAuthorityRisk =
+    request.adapter === 'GIT_READ'
+      ? 'R0'
+      : (
+          request.adapter === 'FILESYSTEM_READ' ||
+          request.adapter === 'PROCESS_VALIDATION'
+        )
+        ? 'R1'
+        : request.adapter === 'FILESYSTEM_PATCH'
+          ? 'R3'
+          : classification.classification.level;
+
   const validation = validateControlledRequest(
-    request, discovery.repository.path, classification.classification.level, runtime,
-    { previousReading: authorityObservation && authorityObservation.reading }
+    request,
+    discovery.repository.path,
+    controlledAuthorityRisk,
+    runtime,
+    {
+      previousReading:
+        authorityObservation &&
+        authorityObservation.reading
+    }
   );
 
   if (validation.decision === 'DENIED') {

@@ -340,7 +340,10 @@ function createGovernedReadOnlyRequest(
         : [requestedTarget]
     ),
     mode:
-      capabilityType === 'GIT_READ'
+      (
+        capabilityType === 'GIT_READ' ||
+        capabilityType === 'FILESYSTEM_READ'
+      )
         ? 'OBSERVE'
         : 'PATCH',
     risk: 'BAIXO',

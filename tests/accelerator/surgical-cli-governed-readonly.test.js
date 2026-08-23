@@ -544,3 +544,180 @@ test(
     }
   }
 );
+
+test(
+  'governed filesystem read remains observable on dirty worktree without mutation authority',
+  () => {
+    const state = fixture();
+
+    try {
+      fs.writeFileSync(
+        path.join(
+          state.repo,
+          'untracked-residue.txt'
+        ),
+        'residue\n'
+      );
+
+      const result =
+        dispatchGovernedReadOnly(
+          {
+            capabilityType:
+              'FILESYSTEM_READ',
+            target:
+              'target.js'
+          },
+          state.repo,
+          {
+            now: () => NOW
+          }
+        );
+
+      assert.equal(
+        result.worktree.clean,
+        false
+      );
+
+      assert.equal(
+        result.orchestration.status,
+        'COMPLETED'
+      );
+
+      assert.equal(
+        result.execution.schema,
+        'sdo.filesystem_read_result.v1'
+      );
+
+      assert.equal(
+        result.execution.evidence.content,
+        'const value = 1;\n'
+      );
+
+      assert.equal(
+        result.governed.lifecycle.status,
+        'COMPLETED'
+      );
+    } finally {
+      cleanup(state);
+    }
+  }
+);
+
+test(
+  'governed filesystem read traversal remains fail-closed on dirty worktree',
+  () => {
+    const state = fixture();
+
+    try {
+      fs.writeFileSync(
+        path.join(
+          state.repo,
+          'untracked-residue.txt'
+        ),
+        'residue\n'
+      );
+
+      assert.throws(
+        () =>
+          dispatchGovernedReadOnly(
+            {
+              capabilityType:
+                'FILESYSTEM_READ',
+              target:
+                '../outside.txt'
+            },
+            state.repo,
+            {
+              now: () => NOW
+            }
+          )
+      );
+    } finally {
+      cleanup(state);
+    }
+  }
+);
+
+test(
+  'filesystem read preserves R1 capability authority while operational effect remains R0',
+  () => {
+    const state =
+      fixture();
+
+    try {
+      fs.writeFileSync(
+        path.join(
+          state.repo,
+          'untracked-authority-proof.txt'
+        ),
+        'dirty\n'
+      );
+
+      const result =
+        dispatchGovernedReadOnly(
+          {
+            capabilityType:
+              'FILESYSTEM_READ',
+
+            target:
+              'target.js'
+          },
+
+          state.repo,
+
+          {
+            now:
+              () => NOW
+          }
+        );
+
+      assert.equal(
+        result.worktree.clean,
+        false
+      );
+
+      assert.equal(
+        result.pipeline
+          .classification
+          .classification
+          .level,
+        'R0'
+      );
+
+      assert.equal(
+        result.pipeline
+          .classification
+          .governance
+          .worktreeCleanRequired,
+        false
+      );
+
+      assert.equal(
+        result.orchestration.status,
+        'COMPLETED'
+      );
+
+      assert.equal(
+        result.execution.schema,
+        'sdo.filesystem_read_result.v1'
+      );
+
+      assert.equal(
+        result.governed
+          .operationRecord
+          .riskLevel,
+        'R1'
+      );
+
+      assert.equal(
+        result.governed
+          .operationRecord
+          .adapterEvidence[0]
+          .riskLevel,
+        'R1'
+      );
+    } finally {
+      cleanup(state);
+    }
+  }
+);
