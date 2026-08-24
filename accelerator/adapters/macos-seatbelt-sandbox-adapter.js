@@ -43,6 +43,12 @@ function createProfile(workspace, node) {
   const rules = readable.map((entry) =>
     `(allow file-read* (subpath "${seatbeltLiteral(entry)}"))`
   );
+  const executableMappings = [
+    `(allow file-map-executable (literal "${seatbeltLiteral(node)}"))`,
+    '(allow file-map-executable (subpath "/System"))',
+    '(allow file-map-executable (subpath "/usr/lib"))',
+    '(allow file-map-executable (subpath "/private/var/db/dyld"))'
+  ];
   return [
     '(version 1)',
     '(deny default)',
@@ -58,6 +64,7 @@ function createProfile(workspace, node) {
     '(allow ipc-posix-shm-read*)',
     '(allow file-ioctl)',
     '(allow file-read-metadata)',
+    ...executableMappings,
     ...rules
   ].join('\n');
 }

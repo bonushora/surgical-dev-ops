@@ -84,6 +84,8 @@ test('Seatbelt profile is deny-default operation-bound and network-silent', () =
   const profile = createProfile('/qualified/workspace', '/qualified/node');
   assert.match(profile, /\(deny default\)/);
   assert.match(profile, /allow process-exec/);
+  assert.match(profile, /allow file-map-executable/);
+  assert.match(profile, /literal "\/qualified\/node"/);
   assert.match(profile, /qualified\/workspace/);
   assert.doesNotMatch(profile, /allow network|file-write|\/Users/);
   const source = fs.readFileSync(
