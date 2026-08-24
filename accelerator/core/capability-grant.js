@@ -225,6 +225,14 @@ function evaluateCapabilityGrant(request, authority, authoritativeClock = null) 
     return denied('A filesystem patch requires R3 authenticated human authority.');
   }
 
+  const requestedAction = request.action === undefined ? null : text(request.action);
+  const authoritativeAction = authority.action === undefined ? null : text(authority.action);
+  if (requestedAction !== authoritativeAction ||
+      (request.action !== undefined && !requestedAction) ||
+      (authority.action !== undefined && !authoritativeAction)) {
+    return denied('Capability action is missing or mismatched.');
+  }
+
   const r3Patch = capabilityType === 'FILESYSTEM_PATCH' && request.riskLevel === 'R3';
   let approvalAuthority = null;
   let authoritativeReading = null;
@@ -341,6 +349,7 @@ function evaluateCapabilityGrant(request, authority, authoritativeClock = null) 
       riskLevel: request.riskLevel,
       lifecycleState: request.lifecycleState,
       capabilityType,
+      ...(requestedAction ? { action: requestedAction } : {}),
       scope: scopeResult.scope,
       issuedAt: r3Patch ? authoritativeReading.wallTime : evaluatedAt,
       expiresAt,

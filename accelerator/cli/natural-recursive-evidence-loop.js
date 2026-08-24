@@ -28,9 +28,15 @@ const crypto =
   require('node:crypto');
 
 const {
-  dispatchGovernedReadOnly
+  createGovernedReadOnlyRequest
 } = require(
   './governed-readonly-dispatch'
+);
+
+const {
+  executeGovernedMachineAccess
+} = require(
+  '../core/machine-access-governed-composition'
 );
 
 const {
@@ -358,13 +364,31 @@ function finalResult(
   });
 }
 
+function dispatchGovernedMachineEvidence(
+  intent,
+  repositoryPath
+) {
+  const governedRequest =
+    createGovernedReadOnlyRequest({
+      repositoryPath,
+      capabilityType:
+        intent.capabilityType,
+      target:
+        intent.target
+    });
+
+  return executeGovernedMachineAccess(
+    governedRequest
+  );
+}
+
 async function runNaturalRecursiveEvidenceLoop(
   {
     task,
     activation,
     cognitiveSession,
     dispatchEvidence =
-      dispatchGovernedReadOnly
+      dispatchGovernedMachineEvidence
   } = {}
 ) {
   if (

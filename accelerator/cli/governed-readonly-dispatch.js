@@ -227,6 +227,7 @@ function createGovernedReadOnlyRequest(
     riskLevel: authorityRiskLevel,
     lifecycleState: 'PENDING',
     capabilityType,
+    action: requestedAction,
     scope,
     idempotency: 'IDEMPOTENT'
   };
