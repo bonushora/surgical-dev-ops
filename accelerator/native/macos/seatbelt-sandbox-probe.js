@@ -46,30 +46,25 @@ async function main() {
   });
   const networkOutcome = await networkProbe();
   const environmentKeys = Object.keys(process.env).sort();
-  const result = {
-    schema: 'sdo.macos_seatbelt_probe_result.v1',
-    operationId: input.operationId,
-    requirementFingerprint: input.requirementFingerprint,
-    platform: process.platform,
-    cwd: process.cwd(),
-    workspaceReadOnly: ['EACCES', 'EPERM', 'EROFS'].includes(writeOutcome),
-    workspaceBound: deniedRead('/etc/passwd'),
-    networkDenied: networkOutcome !== 'CONNECTED',
-    genericProcessDenied: Boolean(shell.error) || shell.status !== 0,
-    secretAccessDenied: deniedRead(input.hostEscapeProbe),
-    environmentMinimal: environmentKeys.every((key) => ['HOME', 'PATH', 'PWD'].includes(key)),
-    writeOutcome,
-    networkOutcome,
-    processOutcome: shell.error ? shell.error.code : shell.status
-  };
-  process.stdout.write(`${JSON.stringify(result)}\n`);
-  if (!result.workspaceReadOnly || !result.workspaceBound || !result.networkDenied ||
-      !result.genericProcessDenied || !result.secretAccessDenied || !result.environmentMinimal ||
-      result.platform !== 'darwin' || result.cwd !== input.workspace) process.exitCode = 1;
+  const qualified =
+    typeof input.operationId === 'string' && input.operationId.length > 0 &&
+    typeof input.requirementFingerprint === 'string' &&
+    input.requirementFingerprint.length === 64 &&
+    ['EACCES', 'EPERM', 'EROFS'].includes(writeOutcome) &&
+    deniedRead('/etc/passwd') &&
+    networkOutcome !== 'CONNECTED' &&
+    (Boolean(shell.error) || shell.status !== 0) &&
+    deniedRead(input.hostEscapeProbe) &&
+    environmentKeys.every((key) => ['HOME', 'PATH', 'PWD'].includes(key)) &&
+    process.platform === 'darwin' &&
+    process.cwd() === input.workspace;
+
+  /*
+   * The deny-default profile grants no output write channel. A zero exit
+   * status is the complete fixed-probe attestation; every failed predicate
+   * remains a nonzero fail-closed result.
+   */
+  process.exitCode = qualified ? 0 : 1;
 }
 
-main().catch((error) => {
-  process.stderr.write(`${JSON.stringify({ schema: 'sdo.macos_seatbelt_probe_error.v1',
-    reason: error.message })}\n`);
-  process.exitCode = 1;
-});
+main().catch(() => { process.exitCode = 1; });

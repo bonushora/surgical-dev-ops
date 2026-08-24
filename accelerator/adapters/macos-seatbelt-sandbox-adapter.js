@@ -133,23 +133,11 @@ function attestMacosSeatbeltSandbox({ requirement, observedAt, expiresAt }) {
     windowsHide: true,
     env: { PATH: '/usr/bin:/bin', HOME: '/nonexistent' }
   });
-  if (result.error || result.signal || result.status !== 0 || result.stderr.trim()) {
+  if (result.error || result.signal || result.status !== 0 ||
+      result.stdout.trim() || result.stderr.trim()) {
     throw new Error(`macOS Seatbelt sandbox attestation failed closed: ${
       boundedFailure(result, { workspace, node })
     }`);
-  }
-  let probe;
-  try { probe = JSON.parse(result.stdout); } catch {
-    throw new Error('macOS Seatbelt sandbox evidence is malformed.');
-  }
-  if (probe.schema !== 'sdo.macos_seatbelt_probe_result.v1' ||
-      probe.operationId !== requirement.operationId ||
-      probe.requirementFingerprint !== requirement.fingerprint ||
-      probe.platform !== 'darwin' || probe.cwd !== workspace ||
-      !probe.workspaceReadOnly || !probe.workspaceBound || !probe.networkDenied ||
-      !probe.genericProcessDenied || !probe.secretAccessDenied ||
-      !probe.environmentMinimal) {
-    throw new Error('macOS Seatbelt sandbox controls are not qualified.');
   }
   return deepFreeze({
     schema: 'sdo.sandbox_adapter_evidence.v1',
