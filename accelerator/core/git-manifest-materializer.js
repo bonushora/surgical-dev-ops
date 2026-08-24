@@ -12,6 +12,12 @@ const path =
 const childProcess =
   require('node:child_process');
 
+const {
+  samePhysicalWorkspaceIdentity
+} = require(
+  './workspace-boundary'
+);
+
 const MANIFEST_SCHEMA =
   'sdo.content_addressed_manifest.v1';
 
@@ -181,9 +187,16 @@ function canonicalWorkspace(
       ]
     ).stdout.trim();
 
+  const physicalRoot =
+    fs.realpathSync(
+      root
+    );
+
   if (
-    fs.realpathSync(root) !==
+    !samePhysicalWorkspaceIdentity(
+      physicalRoot,
       physical
+    )
   ) {
     throw new Error(
       'Workspace must be the physical Git repository root.'

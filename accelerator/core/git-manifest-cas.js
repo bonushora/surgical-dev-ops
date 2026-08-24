@@ -5,6 +5,10 @@ const fs = require('node:fs');
 const path = require('node:path');
 const childProcess = require('node:child_process');
 
+const {
+  samePhysicalWorkspaceIdentity
+} = require('./workspace-boundary');
+
 const MANIFEST_SCHEMA = 'sdo.content_addressed_manifest.v1';
 const RESULT_SCHEMA = 'sdo.manifest_cas_result.v1';
 const REF_PREFIX = 'refs/surgical-devops/workspace/';
@@ -123,7 +127,12 @@ function canonicalWorkspace(workspace) {
   const physicalRoot =
     fs.realpathSync(root);
 
-  if (physicalRoot !== physical) {
+  if (
+    !samePhysicalWorkspaceIdentity(
+      physicalRoot,
+      physical
+    )
+  ) {
     throw new Error(
       'Workspace must be the physical Git repository root.'
     );
