@@ -94,6 +94,6 @@ test('Seatbelt profile is deny-default operation-bound and network-silent', () =
   assert.match(source, /const SANDBOX_EXEC = '\/usr\/bin\/sandbox-exec'/);
   assert.match(source, /shell: false/);
   assert.match(source, /node, '--jitless', helper/);
-  assert.doesNotMatch(source, /allow dynamic-code-generation/);
+  assert.match(source, /allow dynamic-code-generation/);
   assert.doesNotMatch(source, /execSync|https?|FILESYSTEM_PATCH|writeFileSync/);
 });

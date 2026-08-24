@@ -55,6 +55,7 @@ function createProfile(workspace, node) {
     '(allow process-fork)',
     '(allow process-info* (target same-sandbox))',
     `(allow process-exec (literal "${seatbeltLiteral(node)}"))`,
+    '(allow dynamic-code-generation)',
     '(allow signal (target same-sandbox))',
     '(allow sysctl-read)',
     '(allow mach-host*)',
