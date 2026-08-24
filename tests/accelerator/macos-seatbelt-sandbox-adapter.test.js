@@ -81,17 +81,14 @@ test('macOS adapter rejects malformed requirement and invalid evidence lifetime'
 });
 
 test('Seatbelt profile is deny-default operation-bound and network-silent', () => {
-  const profile = createProfile('/qualified/workspace', '/qualified/native-helper');
+  const profile = createProfile('/qualified/workspace');
   assert.match(profile, /\(deny default\)/);
-  assert.match(profile, /allow process-exec/);
   assert.match(profile, /allow file-map-executable/);
-  assert.match(profile, /literal "\/qualified\/native-helper"/);
   assert.match(profile, /qualified\/workspace/);
-  assert.doesNotMatch(profile, /allow network|file-write|\/Users/);
+  assert.doesNotMatch(profile, /allow network|file-write|process-exec|\/Users/);
   const source = fs.readFileSync(
     require.resolve('../../accelerator/adapters/macos-seatbelt-sandbox-adapter'), 'utf8'
   );
-  assert.match(source, /const SANDBOX_EXEC = '\/usr\/bin\/sandbox-exec'/);
   assert.match(source, /shell: false/);
   assert.match(source, /sdo-seatbelt-probe/);
   assert.match(source, /probe: 'bootstrap'/);
@@ -102,6 +99,7 @@ test('Seatbelt profile is deny-default operation-bound and network-silent', () =
   assert.match(source, /'generic-process'/);
   assert.match(source, /\['SIGABRT', 'SIGKILL', 'SIGSYS'\]/);
   assert.doesNotMatch(source, /process\.execPath|--jitless|dynamic-code-generation/);
+  assert.doesNotMatch(source, /sandbox-exec/);
   assert.doesNotMatch(source, /execSync|https?|FILESYSTEM_PATCH|writeFileSync/);
 
   const probeSource = fs.readFileSync(
@@ -112,6 +110,7 @@ test('Seatbelt profile is deny-default operation-bound and network-silent', () =
   assert.match(probeSource, /generic_process_is_denied/);
   assert.match(probeSource, /read_is_denied\("\/etc\/passwd", false\)/);
   assert.match(probeSource, /strcmp\(argv\[5\], "bootstrap"\)/);
+  assert.match(probeSource, /sandbox_init\(profile, 0, &error\)/);
   assert.doesNotMatch(probeSource, /system\(|popen\(|posix_spawn/);
 
   const buildSource = fs.readFileSync(
@@ -121,6 +120,7 @@ test('Seatbelt profile is deny-default operation-bound and network-silent', () =
   assert.match(buildSource, /-Wall/);
   assert.match(buildSource, /-Wextra/);
   assert.match(buildSource, /-Werror/);
+  assert.match(buildSource, /-lsandbox/);
   assert.doesNotMatch(buildSource, /curl|wget|https?:|eval/);
 
   const workflow = fs.readFileSync(

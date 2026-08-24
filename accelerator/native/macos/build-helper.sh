@@ -9,5 +9,7 @@ SCRIPT_DIRECTORY=$(CDPATH= cd -- "$(dirname -- "$0")" && pwd)
   -Wall \
   -Wextra \
   -Werror \
+  -Wno-deprecated-declarations \
   "$SCRIPT_DIRECTORY/sdo-seatbelt-probe.c" \
+  -lsandbox \
   -o "$SCRIPT_DIRECTORY/sdo-seatbelt-probe"

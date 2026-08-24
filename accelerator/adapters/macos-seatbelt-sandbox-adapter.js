@@ -6,7 +6,6 @@ const path = require('node:path');
 const childProcess = require('node:child_process');
 const { canonicalizeAuthorizedRoot } = require('../core/workspace-boundary');
 
-const SANDBOX_EXEC = '/usr/bin/sandbox-exec';
 const TIMEOUT_MS = 5000;
 const MAX_OUTPUT_BYTES = 32 * 1024;
 
@@ -29,7 +28,7 @@ function seatbeltLiteral(value) {
   return value.replace(/\\/g, '\\\\').replace(/"/g, '\\"');
 }
 
-function createProfile(workspace, helper) {
+function createProfile(workspace) {
   const readable = [
     workspace,
     '/System',
@@ -42,7 +41,6 @@ function createProfile(workspace, helper) {
     `(allow file-read* (subpath "${seatbeltLiteral(entry)}"))`
   );
   const executableMappings = [
-    `(allow file-map-executable (literal "${seatbeltLiteral(helper)}"))`,
     '(allow file-map-executable (subpath "/System"))',
     '(allow file-map-executable (subpath "/usr/lib"))',
     '(allow file-map-executable (subpath "/private/var/db/dyld"))'
@@ -50,9 +48,7 @@ function createProfile(workspace, helper) {
   return [
     '(version 1)',
     '(deny default)',
-    '(allow process-fork)',
     '(allow process-info* (target same-sandbox))',
-    `(allow process-exec (literal "${seatbeltLiteral(helper)}"))`,
     '(allow signal (target same-sandbox))',
     '(allow sysctl-read)',
     '(allow mach-host*)',
@@ -87,13 +83,13 @@ function boundedFailure(result, { workspace, helper, probe }) {
 }
 
 function runNativeProbe({ profile, helper, requirement, workspace, hostEscapeProbe, probe }) {
-  return childProcess.spawnSync(SANDBOX_EXEC, [
-    '-p', profile, helper,
+  return childProcess.spawnSync(helper, [
     requirement.operationId,
     requirement.fingerprint,
     workspace,
     hostEscapeProbe,
-    probe
+    probe,
+    profile
   ], {
     cwd: workspace,
     shell: false,
@@ -118,9 +114,6 @@ function attestMacosSeatbeltSandbox({ requirement, observedAt, expiresAt }) {
       requirement.schema !== 'sdo.sandbox_requirement.v1' || requirement.platform !== 'darwin') {
     throw new Error('Immutable macOS sandbox requirement is required.');
   }
-  if (!fs.existsSync(SANDBOX_EXEC) || !fs.statSync(SANDBOX_EXEC).isFile()) {
-    throw new Error('Qualified macOS Seatbelt executable is unavailable.');
-  }
   const workspace = canonicalizeAuthorizedRoot(requirement.workspace);
   const helper = path.join(workspace, 'accelerator/native/macos/sdo-seatbelt-probe');
   if (!fs.existsSync(helper) || !fs.statSync(helper).isFile()) {
@@ -131,7 +124,7 @@ function attestMacosSeatbeltSandbox({ requirement, observedAt, expiresAt }) {
   if (Date.parse(expiry) <= Date.parse(observation)) {
     throw new Error('Sandbox evidence expiry is invalid.');
   }
-  const profile = createProfile(workspace, helper);
+  const profile = createProfile(workspace);
   const hostEscapeProbe = path.join(os.homedir(), '.ssh', 'id_rsa');
   const bootstrap = runNativeProbe({
     profile, helper, requirement, workspace, hostEscapeProbe, probe: 'bootstrap'

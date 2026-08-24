@@ -10,6 +10,20 @@
 #include <sys/time.h>
 #include <unistd.h>
 
+#ifdef __APPLE__
+#include <sandbox.h>
+#else
+static int sandbox_init(const char *profile, unsigned long long flags, char **error) {
+  (void) profile;
+  (void) flags;
+  (void) error;
+  return -1;
+}
+static void sandbox_free_error(char *error) {
+  (void) error;
+}
+#endif
+
 extern char **environ;
 
 #ifndef PATH_MAX
@@ -37,6 +51,13 @@ static bool minimal_environment(void) {
         strncmp(*entry, "PWD=", 4) != 0) return false;
   }
   return true;
+}
+
+static bool apply_seatbelt(const char *profile) {
+  char *error = NULL;
+  const int status = sandbox_init(profile, 0, &error);
+  if (error != NULL) sandbox_free_error(error);
+  return status == 0;
 }
 
 static bool read_is_denied(const char *target, bool missing_is_denied) {
@@ -86,11 +107,12 @@ static bool generic_process_is_denied(void) {
 }
 
 int main(int argc, char **argv) {
-  if (argc != 6 || argv[1][0] == '\0' || !valid_fingerprint(argv[2]) ||
+  if (argc != 7 || argv[1][0] == '\0' || !valid_fingerprint(argv[2]) ||
       argv[3][0] == '\0' || argv[4][0] == '\0' || argv[5][0] == '\0' ||
-      !minimal_environment()) return 1;
+      argv[6][0] == '\0' || !minimal_environment()) return 1;
   char current[PATH_MAX];
-  if (getcwd(current, sizeof(current)) == NULL || strcmp(current, argv[3]) != 0) return 1;
+  if (getcwd(current, sizeof(current)) == NULL || strcmp(current, argv[3]) != 0 ||
+      !apply_seatbelt(argv[6])) return 1;
   if (strcmp(argv[5], "bootstrap") == 0) return 0;
   if (strcmp(argv[5], "workspace-write") == 0)
     return workspace_write_is_denied(argv[3]) ? 0 : 1;
