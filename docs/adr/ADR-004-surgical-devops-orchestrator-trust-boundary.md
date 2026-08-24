@@ -644,3 +644,262 @@ The governing objective is:
 > Improve the human experience over time while preserving the complete deterministic capability and trust model of the Surgical DevOps Orchestrator.
 
 **Decision: APPROVED AND FROZEN.**
+
+---
+
+## Amendment 2026-08-24 — Deterministic Governed Machine Access Adoption Path
+
+**Status: APPROVED / FROZEN**
+
+This amendment freezes the most viable implementation path for governed access
+to a user's machine.
+
+It extends the mandatory Orchestrator trust boundary without weakening any
+existing invariant and without representing planned capabilities as already
+implemented or qualified.
+
+### Deterministic authority instead of ambient machine access
+
+Surgical DevOps SHALL NOT model machine access as ambient, generic or
+provider-owned authority.
+
+The normative model SHALL authorize bounded state transitions rather than grant
+an AI provider unrestricted access to a terminal, filesystem, process surface,
+network or user environment.
+
+An AI agent, model, coordinator or provider MAY propose an operation.
+
+Only the Surgical DevOps Orchestrator MAY admit that proposal as a governed
+machine operation, after validating the applicable human authority, purpose,
+workspace, target, capability, risk, lifecycle and evidence requirements.
+
+### Mandatory double containment
+
+Governed machine access SHALL use two independent and complementary boundaries:
+
+1. an operating-system-enforced or equivalently isolated sandbox that constrains
+   what the executing process can technically reach; and
+2. the Surgical DevOps Orchestrator, which constrains what operation may be
+   admitted, for what purpose, under which authority and with which evidence.
+
+Surgical DevOps SHALL use qualified platform-native or provider-supplied
+sandboxing where available rather than unnecessarily replacing mature
+operating-system isolation.
+
+A provider sandbox SHALL NOT replace Surgical DevOps governance.
+
+Surgical DevOps governance SHALL NOT be treated as a substitute for
+operating-system containment when executing untrusted or agent-directed code.
+
+Where the governed machine-access mode requires sandbox evidence, absence,
+unavailability or insufficient qualification of that sandbox SHALL fail closed.
+
+### Provider and platform independence
+
+The deterministic machine-access contract SHALL remain independent of Codex,
+Ollama, any other AI provider and any single sandbox implementation.
+
+Platform-specific enforcement SHALL remain isolated behind qualified adapters
+for Linux, macOS and Windows.
+
+A provider MAY change without redefining the authority contract.
+
+A sandbox implementation MAY change without transferring policy, human
+approval, mutation, journal, CAS or recovery authority away from the Surgical
+DevOps Orchestrator.
+
+### Machine Access Contract
+
+Surgical DevOps SHALL introduce an operating-system-agnostic contract with
+conceptual responsibilities equivalent to:
+
+- `MachineAccessRequest`;
+- `MachineAccessAuthority`;
+- `MachineAccessOperation`;
+- `MachineAccessEvidence`; and
+- `MachineAccessResult`.
+
+Names and internal representation MAY evolve, but the separation between
+request, authority, operation, evidence and result is normative.
+
+The contract SHALL be:
+
+- schema-bound;
+- deny-by-default;
+- purpose-bound;
+- workspace-bound;
+- target-bound;
+- capability-bound;
+- risk-bound;
+- time-bounded where applicable;
+- auditable;
+- provider-independent; and
+- incapable of creating authority from natural-language output alone.
+
+### Typed operations before generic execution
+
+Initial machine access SHALL use a closed, typed and reviewable operation
+vocabulary.
+
+The first qualified read-only slice SHOULD be limited to operations
+conceptually equivalent to:
+
+- `LIST_DIRECTORY`;
+- `READ_FILE`;
+- `GIT_STATUS`;
+- `GIT_DIFF`; and
+- `RUN_FIXED_VALIDATION`.
+
+These names are conceptual and MAY be refined by implementation contracts.
+
+The initial slice SHALL NOT introduce:
+
+- arbitrary shell execution;
+- arbitrary process execution;
+- filesystem mutation;
+- Git mutation;
+- unrestricted network access;
+- credential exposure;
+- secret retrieval by the model;
+- provider-defined operational authority; or
+- access outside the authorized physical workspace.
+
+Unknown, malformed, broadened or out-of-envelope operations SHALL fail closed.
+
+### Read-first governed adoption
+
+The first implementation frontier SHALL connect the existing NATURAL Governed
+Task Authorization and Recursive Governed Evidence Loop to a qualified
+read-only machine-access broker.
+
+The intended flow is:
+
+Human intent
+→ governed task envelope
+→ cognitive evidence request
+→ deterministic policy and authority evaluation
+→ sandboxed typed read operation
+→ normalized governed evidence
+→ cognitive continuation or return to human.
+
+Evidence returned to cognition SHALL remain data only.
+
+Evidence SHALL NOT carry, mint, delegate or imply operational authority.
+
+A read authorization SHALL NOT become mutation, process, network, credential or
+Git-write authority.
+
+### Minimal operational broker
+
+Physical interaction with the machine SHALL pass through a minimal operational
+broker or equivalent adapter boundary.
+
+That boundary SHALL:
+
+- accept only typed operations;
+- reject unconstrained natural-language commands;
+- validate the exact capability and target binding;
+- use explicit working-directory and platform semantics;
+- enforce bounded input, output, duration and resource use;
+- return normalized evidence;
+- expose no generic shell;
+- expose no generic process authority;
+- prevent providers from calling physical adapters directly; and
+- remain smaller and less authoritative than the Orchestrator.
+
+The broker SHALL NOT interpret intent, approve risk, mint human authority,
+change policy or decide architectural questions.
+
+### Isolated projection before canonical mutation
+
+Agent-directed work SHOULD occur first in a sandboxed snapshot, temporary
+worktree or governed content-addressed projection rather than directly against
+the canonical workspace.
+
+The canonical workspace SHALL remain authoritative.
+
+Promotion into the canonical workspace SHALL require the independently
+qualified mutation, journal, recovery and CAS boundaries defined by the
+applicable ADRs.
+
+### Mutation remains deferred and fail-closed
+
+The read-only machine-access slice SHALL be qualified before opening a new
+agent-directed mutation surface.
+
+Agent-directed physical mutation SHALL remain fail-closed until, at minimum:
+
+- the applicable multiplatform conformance baseline is green;
+- Strict Physical Identity-Conditional CAS is qualified for the operation;
+- Governed Content-Addressed Workspace authority is available where required;
+- transaction journal and recovery semantics are preserved;
+- the operating-system sandbox and broker boundary are qualified;
+- exact-target human authority is satisfied; and
+- adversarial tests cover scope escape and authority broadening.
+
+The first future mutation type SHOULD be an exact, bounded patch against an
+existing authorized file.
+
+This amendment does not approve arbitrary shell, broad file creation,
+unrestricted process execution or unrestricted machine access.
+
+### Practical implementation sequence
+
+The approved implementation order is:
+
+1. restore and preserve the current Linux, macOS and Windows conformance
+   baseline;
+2. freeze and publish the applicable architectural contracts;
+3. introduce the provider-independent Machine Access Contract;
+4. qualify a minimal read-only broker;
+5. connect the broker to the Recursive Governed Evidence Loop;
+6. qualify the read-only boundary on Linux;
+7. qualify equivalent behavior on macOS and Windows;
+8. conduct a controlled pilot;
+9. open the first governed mutation type only after its independent safety
+   prerequisites are satisfied.
+
+A red platform gate SHALL NOT be reclassified as green merely to advance this
+sequence.
+
+### Product and security position
+
+Surgical DevOps SHALL NOT claim that its sandbox is categorically safer than
+Codex or another provider solely from architectural intent.
+
+The defensible target is the composition of:
+
+- mature operating-system or provider sandbox containment; and
+- deterministic Surgical DevOps authority, evidence, transaction and recovery
+  governance.
+
+Comparative security claims SHALL require implemented controls, multiplatform
+qualification, adversarial evidence and independent external review.
+
+### Relationship to existing ADRs
+
+This amendment:
+
+- extends the trust boundary established by this ADR;
+- preserves authenticated human authority under ADR-006;
+- preserves Windows native safety and durability under ADR-008;
+- preserves Strict Physical Identity-Conditional CAS under ADR-009;
+- preserves Governed Content-Addressed Workspace authority under ADR-010;
+- composes with the local AI and Recursive Governed Evidence Loop decisions
+  under ADR-012;
+- preserves the governed AI engineering-agent boundary under ADR-013; and
+- preserves the Governed AI Behavior Contract under ADR-014.
+
+No referenced ADR is weakened or superseded.
+
+### Frozen decision
+
+The adopted path is therefore:
+
+> Reuse qualified native sandbox containment, add a provider-independent
+> deterministic machine-access contract, qualify read-only evidence collection
+> first, and defer canonical mutation until the existing CAS, content-addressed
+> workspace, journal, recovery and human-authority boundaries are independently
+> satisfied.
+
+**Decision: APPROVED AND FROZEN.**
