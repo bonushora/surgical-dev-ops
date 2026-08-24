@@ -18,6 +18,10 @@ const SELECTORS = Object.freeze({
   CURRENT_BRANCH: Object.freeze({ operation: 'rev-parse', args: ['rev-parse', '--abbrev-ref', 'HEAD'] }),
   HEAD_COMMIT: Object.freeze({ operation: 'rev-parse', args: ['rev-parse', '--verify', 'HEAD'] }),
   WORKTREE_STATUS: Object.freeze({ operation: 'status', args: ['status', '--porcelain=v1', '-z', '--untracked-files=all'] }),
+  WORKTREE_DIFF: Object.freeze({
+    operation: 'diff',
+    args: ['diff', '--no-ext-diff', '--no-textconv', '--no-color', '--unified=0', '--', '.']
+  }),
   TRACKED_FILES: Object.freeze({ operation: 'ls-files', args: ['ls-files', '-z'] }),
   WORKSPACE_FILES: Object.freeze({
     operation: 'ls-files',
@@ -159,6 +163,17 @@ function rejectUnsafeText(value, label) {
 }
 
 function normalizeOutput(selector, stdout, workspace) {
+  if (selector === 'WORKTREE_DIFF') {
+    if (stdout.includes('\0') || stdout.includes('\u001b')) {
+      throw new Error('Git produced malformed diff output.');
+    }
+
+    return Object.freeze({
+      bytes: Buffer.byteLength(stdout),
+      patch: stdout
+    });
+  }
+
   if (
     selector === 'WORKTREE_STATUS' ||
     selector === 'TRACKED_FILES' ||
