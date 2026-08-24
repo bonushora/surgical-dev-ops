@@ -101,5 +101,6 @@ test('Seatbelt profile is deny-default operation-bound and network-silent', () =
     require.resolve('../../accelerator/native/macos/seatbelt-sandbox-probe'), 'utf8'
   );
   assert.match(probeSource, /process\.exitCode = qualified \? 0 : 1/);
+  assert.match(probeSource, /--seatbelt-bootstrap-only/);
   assert.doesNotMatch(probeSource, /process\.(?:stdout|stderr)\.write/);
 });

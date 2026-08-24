@@ -70,7 +70,7 @@ function createProfile(workspace, node) {
   ].join('\n');
 }
 
-function boundedFailure(result, { workspace, node }) {
+function boundedFailure(result, { workspace, node, bootstrap = null }) {
   const redact = (value) => String(value || '')
     .replaceAll(workspace, '<WORKSPACE>')
     .replaceAll(path.dirname(workspace), '<WORKSPACE_PARENT>')
@@ -78,13 +78,23 @@ function boundedFailure(result, { workspace, node }) {
     .replaceAll(node, '<NODE>')
     .replace(/[\r\n]+/g, ' ')
     .slice(0, 2048);
-  return JSON.stringify({
+  const failure = {
     errorCode: result.error && result.error.code || null,
     signal: result.signal || null,
     status: Number.isInteger(result.status) ? result.status : null,
     stdout: redact(result.stdout),
     stderr: redact(result.stderr)
-  });
+  };
+  if (bootstrap) {
+    failure.bootstrap = {
+      errorCode: bootstrap.error && bootstrap.error.code || null,
+      signal: bootstrap.signal || null,
+      status: Number.isInteger(bootstrap.status) ? bootstrap.status : null,
+      stdout: redact(bootstrap.stdout),
+      stderr: redact(bootstrap.stderr)
+    };
+  }
+  return JSON.stringify(failure);
 }
 
 function attestMacosSeatbeltSandbox({ requirement, observedAt, expiresAt }) {
@@ -135,8 +145,19 @@ function attestMacosSeatbeltSandbox({ requirement, observedAt, expiresAt }) {
   });
   if (result.error || result.signal || result.status !== 0 ||
       result.stdout.trim() || result.stderr.trim()) {
+    const bootstrap = childProcess.spawnSync(SANDBOX_EXEC, [
+      '-p', profile, node, '--jitless', helper, '--seatbelt-bootstrap-only'
+    ], {
+      cwd: workspace,
+      shell: false,
+      encoding: 'utf8',
+      timeout: TIMEOUT_MS,
+      maxBuffer: MAX_OUTPUT_BYTES,
+      windowsHide: true,
+      env: { PATH: '/usr/bin:/bin', HOME: '/nonexistent' }
+    });
     throw new Error(`macOS Seatbelt sandbox attestation failed closed: ${
-      boundedFailure(result, { workspace, node })
+      boundedFailure(result, { workspace, node, bootstrap })
     }`);
   }
   return deepFreeze({

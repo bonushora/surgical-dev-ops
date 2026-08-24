@@ -30,6 +30,11 @@ function deniedRead(target) {
 }
 
 async function main() {
+  if (process.argv[2] === '--seatbelt-bootstrap-only') {
+    process.exitCode = 0;
+    return;
+  }
+
   const input = JSON.parse(fs.readFileSync(0, 'utf8'));
   let writeOutcome = null;
   try {
