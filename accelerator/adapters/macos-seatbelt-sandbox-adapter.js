@@ -108,7 +108,13 @@ function attestMacosSeatbeltSandbox({ requirement, observedAt, expiresAt }) {
     hostEscapeProbe
   });
   const result = childProcess.spawnSync(SANDBOX_EXEC, [
-    '-p', profile, node, helper
+    /*
+     * Seatbelt deny-default intentionally does not grant dynamic code
+     * generation. Run this fixed JavaScript probe without the V8 JIT so
+     * the runtime does not abort before it can emit qualified evidence.
+     * This changes only the probe runtime and grants no new sandbox rule.
+     */
+    '-p', profile, node, '--jitless', helper
   ], {
     cwd: workspace,
     shell: false,
