@@ -178,10 +178,50 @@ function detectExplicitFileTask(text) {
   return null;
 }
 
+function detectProjectAnalysis(text) {
+  const normalized =
+    normalizeNaturalText(text);
+
+  const analysis =
+    [
+      'explique este projeto',
+      'analise este projeto',
+      'examine este projeto',
+      'em que ponto estamos',
+      'o que voce sugere fazer agora',
+      'avalie este projeto'
+    ].some(
+      (pattern) =>
+        normalized.includes(pattern)
+    );
+
+  if (!analysis) {
+    return null;
+  }
+
+  return deepFreeze({
+    schema:
+      'sdo.natural_governed_task.v1',
+
+    kind:
+      'PROJECT_ANALYSIS',
+
+    objective:
+      String(text || '').trim(),
+
+    mutating:
+      false,
+
+    operations:
+      []
+  });
+}
+
 function detectNaturalGovernedTask(input) {
   return (
     detectWorkspaceList(input) ||
-    detectExplicitFileTask(input)
+    detectExplicitFileTask(input) ||
+    detectProjectAnalysis(input)
   );
 }
 
@@ -196,6 +236,17 @@ function formatTaskProposal(
   ) {
     throw new Error(
       'Canonical NATURAL governed task is required.'
+    );
+  }
+
+  if (task.kind === 'PROJECT_ANALYSIS') {
+    return (
+      'Para responder com base no projeto real, preciso consultar evidências do workspace.\n\n' +
+      `Projeto autorizado: ${workspace}\n` +
+      'O Orchestrator poderá listar arquivos, ler somente arquivos descendentes necessários e validar arquivos JavaScript específicos.\n' +
+      'A consulta ficará restrita a este projeto, terá no máximo 8 etapas e não permitirá escrita, shell genérico ou ampliação de autoridade.\n' +
+      'Nenhum arquivo será alterado.\n\n' +
+      'Posso prosseguir?\n'
     );
   }
 

@@ -331,6 +331,50 @@ test(
 );
 
 test(
+  'broad project analysis requires explicit human authorization',
+  () => {
+    const control =
+      createNaturalSessionControl({
+        workspace:
+          'example-project'
+      });
+
+    const proposal =
+      control.handle(
+        'Explique este projeto para mim.'
+      );
+
+    assert.equal(
+      proposal.matched,
+      true
+    );
+
+    assert.match(
+      proposal.output,
+      /evidências do workspace/i
+    );
+
+    assert.equal(
+      control.hasPendingAuthorization(),
+      true
+    );
+
+    const approval =
+      control.handle('sim');
+
+    assert.equal(
+      approval.action,
+      'AUTHORIZED_GOVERNED_TASK'
+    );
+
+    assert.equal(
+      approval.task.kind,
+      'PROJECT_ANALYSIS'
+    );
+  }
+);
+
+test(
   'authorization without pending governed task does not grant authority',
   () => {
     const control =

@@ -79,6 +79,46 @@ test(
 );
 
 test(
+  'broad project analysis becomes an immutable non-mutating governed task',
+  () => {
+    const task =
+      detectNaturalGovernedTask(
+        'Explique este projeto para mim.'
+      );
+
+    assert.ok(task);
+
+    assert.equal(
+      task.kind,
+      'PROJECT_ANALYSIS'
+    );
+
+    assert.equal(
+      task.mutating,
+      false
+    );
+
+    assert.deepEqual(
+      task.operations,
+      []
+    );
+
+    assert.equal(
+      Object.isFrozen(task),
+      true
+    );
+
+    assert.match(
+      formatTaskProposal(
+        task,
+        'example-project'
+      ),
+      /no máximo 8 etapas/i
+    );
+  }
+);
+
+test(
   'proposal explains operation before authority',
   () => {
     const task =

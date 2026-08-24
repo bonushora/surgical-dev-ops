@@ -57,6 +57,12 @@ const {
   formatFileReadEvidence
 } = require('./natural-governed-task');
 
+const {
+  runNaturalRecursiveEvidenceLoop
+} = require(
+  './natural-recursive-evidence-loop'
+);
+
 const VERSION = '2.5.0';
 
 function printVersion() {
@@ -633,6 +639,51 @@ function createInteractiveSession(
                 try {
                   const task =
                     controlled.task;
+
+                  if (
+                    task &&
+                    task.kind ===
+                      'PROJECT_ANALYSIS'
+                  ) {
+                    if (!cognitiveSession) {
+                      throw new Error(
+                        'NATURAL cognitive evidence planner is unavailable.'
+                      );
+                    }
+
+                    const recursive =
+                      await runNaturalRecursiveEvidenceLoop({
+                        task,
+                        activation,
+                        cognitiveSession,
+                        dispatchEvidence:
+                          options.dispatchEvidence
+                      });
+
+                    if (
+                      recursive.status !==
+                        'COMPLETED' ||
+                      !Array.isArray(
+                        recursive.evidence
+                      ) ||
+                      recursive.evidence.length === 0 ||
+                      typeof recursive.response !==
+                        'string' ||
+                      !recursive.response.trim()
+                    ) {
+                      throw new Error(
+                        'Governed project analysis did not produce grounded evidence.'
+                      );
+                    }
+
+                    output.write(
+                      recursive.response.trim() +
+                      '\n\nA resposta foi fundamentada em evidências governadas do projeto. Nenhum arquivo foi alterado.\n'
+                    );
+
+                    resumeAndPrompt();
+                    return;
+                  }
 
                   if (
                     !task ||
