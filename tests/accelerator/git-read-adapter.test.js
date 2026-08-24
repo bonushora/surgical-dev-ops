@@ -7,7 +7,10 @@ const fs = require('fs');
 const os = require('os');
 const path = require('path');
 const { evaluateCapabilityGrant } = require('../../accelerator/core/capability-grant');
-const { readGitWithGrant } = require('../../accelerator/adapters/git-read-adapter');
+const {
+  createGitPlatformIsolation,
+  readGitWithGrant
+} = require('../../accelerator/adapters/git-read-adapter');
 
 const root = fs.mkdtempSync(path.join(os.tmpdir(), 'sdo-git-adapter-'));
 const workspace = path.join(root, 'repo');
@@ -210,3 +213,24 @@ test('CURRENT_BRANCH fails closed for detached HEAD', (context) => {
     /detached HEAD state/
   );
 });
+
+test(
+  'fsmonitor isolation never names an auxiliary executable',
+  () => {
+    const isolation =
+      createGitPlatformIsolation('linux');
+
+    assert.ok(
+      isolation.fixedConfig.includes(
+        'core.fsmonitor='
+      )
+    );
+
+    assert.equal(
+      isolation.fixedConfig.includes(
+        'core.fsmonitor=false'
+      ),
+      false
+    );
+  }
+);

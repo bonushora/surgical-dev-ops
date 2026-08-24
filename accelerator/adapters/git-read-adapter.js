@@ -39,7 +39,7 @@ function createGitPlatformIsolation(platform = process.platform) {
 
   const fixedConfig = Object.freeze([
     '-c', 'credential.helper=',
-    '-c', 'core.fsmonitor=false',
+    '-c', 'core.fsmonitor=',
     '-c', `core.hooksPath=${nullDevice}`,
     '-c', 'diff.external=',
     '-c', 'diff.trustExitCode=false',
