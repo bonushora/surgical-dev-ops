@@ -56,6 +56,23 @@ function createProfile(workspace, node) {
   ].join('\n');
 }
 
+function boundedFailure(result, { workspace, node }) {
+  const redact = (value) => String(value || '')
+    .replaceAll(workspace, '<WORKSPACE>')
+    .replaceAll(path.dirname(workspace), '<WORKSPACE_PARENT>')
+    .replaceAll(os.homedir(), '<USER_HOME>')
+    .replaceAll(node, '<NODE>')
+    .replace(/[\r\n]+/g, ' ')
+    .slice(0, 2048);
+  return JSON.stringify({
+    errorCode: result.error && result.error.code || null,
+    signal: result.signal || null,
+    status: Number.isInteger(result.status) ? result.status : null,
+    stdout: redact(result.stdout),
+    stderr: redact(result.stderr)
+  });
+}
+
 function attestMacosSeatbeltSandbox({ requirement, observedAt, expiresAt }) {
   if (process.platform !== 'darwin') throw new Error('macOS Seatbelt sandbox is unavailable.');
   if (!requirement || !Object.isFrozen(requirement) ||
@@ -97,7 +114,9 @@ function attestMacosSeatbeltSandbox({ requirement, observedAt, expiresAt }) {
     env: { PATH: '/usr/bin:/bin', HOME: '/nonexistent' }
   });
   if (result.error || result.signal || result.status !== 0 || result.stderr.trim()) {
-    throw new Error('macOS Seatbelt sandbox attestation failed closed.');
+    throw new Error(`macOS Seatbelt sandbox attestation failed closed: ${
+      boundedFailure(result, { workspace, node })
+    }`);
   }
   let probe;
   try { probe = JSON.parse(result.stdout); } catch {
