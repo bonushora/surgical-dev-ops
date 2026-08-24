@@ -47,6 +47,10 @@ jobs:
         shell: cmd
         run: accelerator\native\windows\build-helper.cmd
 
+      - name: Build qualified macOS native Seatbelt helper
+        if: matrix.os == 'macos-latest'
+        run: sh accelerator/native/macos/build-helper.sh
+
       - name: Run canonical conformance suite
         id: conformance
         continue-on-error: true

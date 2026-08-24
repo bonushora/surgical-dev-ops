@@ -29,13 +29,11 @@ function seatbeltLiteral(value) {
   return value.replace(/\\/g, '\\\\').replace(/"/g, '\\"');
 }
 
-function createProfile(workspace, node) {
+function createProfile(workspace, helper) {
   const readable = [
     workspace,
-    node,
     '/System',
     '/usr/lib',
-    '/usr/share',
     '/private/var/db/dyld',
     '/dev/null',
     '/dev/urandom'
@@ -44,7 +42,7 @@ function createProfile(workspace, node) {
     `(allow file-read* (subpath "${seatbeltLiteral(entry)}"))`
   );
   const executableMappings = [
-    `(allow file-map-executable (literal "${seatbeltLiteral(node)}"))`,
+    `(allow file-map-executable (literal "${seatbeltLiteral(helper)}"))`,
     '(allow file-map-executable (subpath "/System"))',
     '(allow file-map-executable (subpath "/usr/lib"))',
     '(allow file-map-executable (subpath "/private/var/db/dyld"))'
@@ -54,8 +52,7 @@ function createProfile(workspace, node) {
     '(deny default)',
     '(allow process-fork)',
     '(allow process-info* (target same-sandbox))',
-    `(allow process-exec (literal "${seatbeltLiteral(node)}"))`,
-    '(allow dynamic-code-generation)',
+    `(allow process-exec (literal "${seatbeltLiteral(helper)}"))`,
     '(allow signal (target same-sandbox))',
     '(allow sysctl-read)',
     '(allow mach-host*)',
@@ -70,12 +67,12 @@ function createProfile(workspace, node) {
   ].join('\n');
 }
 
-function boundedFailure(result, { workspace, node, bootstrap = null }) {
+function boundedFailure(result, { workspace, helper }) {
   const redact = (value) => String(value || '')
     .replaceAll(workspace, '<WORKSPACE>')
     .replaceAll(path.dirname(workspace), '<WORKSPACE_PARENT>')
     .replaceAll(os.homedir(), '<USER_HOME>')
-    .replaceAll(node, '<NODE>')
+    .replaceAll(helper, '<NATIVE_HELPER>')
     .replace(/[\r\n]+/g, ' ')
     .slice(0, 2048);
   const failure = {
@@ -85,15 +82,6 @@ function boundedFailure(result, { workspace, node, bootstrap = null }) {
     stdout: redact(result.stdout),
     stderr: redact(result.stderr)
   };
-  if (bootstrap) {
-    failure.bootstrap = {
-      errorCode: bootstrap.error && bootstrap.error.code || null,
-      signal: bootstrap.signal || null,
-      status: Number.isInteger(bootstrap.status) ? bootstrap.status : null,
-      stdout: redact(bootstrap.stdout),
-      stderr: redact(bootstrap.stderr)
-    };
-  }
   return JSON.stringify(failure);
 }
 
@@ -107,36 +95,26 @@ function attestMacosSeatbeltSandbox({ requirement, observedAt, expiresAt }) {
     throw new Error('Qualified macOS Seatbelt executable is unavailable.');
   }
   const workspace = canonicalizeAuthorizedRoot(requirement.workspace);
-  const node = fs.realpathSync(process.execPath);
-  const helper = path.join(workspace, 'accelerator/native/macos/seatbelt-sandbox-probe.js');
-  if (!fs.statSync(node).isFile() || !fs.statSync(helper).isFile()) {
-    throw new Error('Qualified macOS Seatbelt runtime is unavailable.');
+  const helper = path.join(workspace, 'accelerator/native/macos/sdo-seatbelt-probe');
+  if (!fs.existsSync(helper) || !fs.statSync(helper).isFile()) {
+    throw new Error('Qualified native macOS Seatbelt helper is unavailable.');
   }
   const observation = timestamp(observedAt, 'observedAt');
   const expiry = timestamp(expiresAt, 'expiresAt');
   if (Date.parse(expiry) <= Date.parse(observation)) {
     throw new Error('Sandbox evidence expiry is invalid.');
   }
-  const profile = createProfile(workspace, node);
+  const profile = createProfile(workspace, helper);
   const hostEscapeProbe = path.join(os.homedir(), '.ssh', 'id_rsa');
-  const input = JSON.stringify({
-    operationId: requirement.operationId,
-    requirementFingerprint: requirement.fingerprint,
+  const result = childProcess.spawnSync(SANDBOX_EXEC, [
+    '-p', profile, helper,
+    requirement.operationId,
+    requirement.fingerprint,
     workspace,
     hostEscapeProbe
-  });
-  const result = childProcess.spawnSync(SANDBOX_EXEC, [
-    /*
-     * Seatbelt deny-default intentionally does not grant dynamic code
-     * generation. Run this fixed JavaScript probe without the V8 JIT so
-     * the runtime does not abort before it can emit qualified evidence.
-     * This changes only the probe runtime and grants no new sandbox rule.
-     */
-    '-p', profile, node, '--jitless', helper
   ], {
     cwd: workspace,
     shell: false,
-    input,
     encoding: 'utf8',
     timeout: TIMEOUT_MS,
     maxBuffer: MAX_OUTPUT_BYTES,
@@ -145,19 +123,8 @@ function attestMacosSeatbeltSandbox({ requirement, observedAt, expiresAt }) {
   });
   if (result.error || result.signal || result.status !== 0 ||
       result.stdout.trim() || result.stderr.trim()) {
-    const bootstrap = childProcess.spawnSync(SANDBOX_EXEC, [
-      '-p', profile, node, '--jitless', helper, '--seatbelt-bootstrap-only'
-    ], {
-      cwd: workspace,
-      shell: false,
-      encoding: 'utf8',
-      timeout: TIMEOUT_MS,
-      maxBuffer: MAX_OUTPUT_BYTES,
-      windowsHide: true,
-      env: { PATH: '/usr/bin:/bin', HOME: '/nonexistent' }
-    });
     throw new Error(`macOS Seatbelt sandbox attestation failed closed: ${
-      boundedFailure(result, { workspace, node, bootstrap })
+      boundedFailure(result, { workspace, helper })
     }`);
   }
   return deepFreeze({

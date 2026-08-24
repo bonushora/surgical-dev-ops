@@ -81,11 +81,11 @@ test('macOS adapter rejects malformed requirement and invalid evidence lifetime'
 });
 
 test('Seatbelt profile is deny-default operation-bound and network-silent', () => {
-  const profile = createProfile('/qualified/workspace', '/qualified/node');
+  const profile = createProfile('/qualified/workspace', '/qualified/native-helper');
   assert.match(profile, /\(deny default\)/);
   assert.match(profile, /allow process-exec/);
   assert.match(profile, /allow file-map-executable/);
-  assert.match(profile, /literal "\/qualified\/node"/);
+  assert.match(profile, /literal "\/qualified\/native-helper"/);
   assert.match(profile, /qualified\/workspace/);
   assert.doesNotMatch(profile, /allow network|file-write|\/Users/);
   const source = fs.readFileSync(
@@ -93,14 +93,31 @@ test('Seatbelt profile is deny-default operation-bound and network-silent', () =
   );
   assert.match(source, /const SANDBOX_EXEC = '\/usr\/bin\/sandbox-exec'/);
   assert.match(source, /shell: false/);
-  assert.match(source, /node, '--jitless', helper/);
-  assert.match(source, /allow dynamic-code-generation/);
+  assert.match(source, /sdo-seatbelt-probe/);
+  assert.doesNotMatch(source, /process\.execPath|--jitless|dynamic-code-generation/);
   assert.doesNotMatch(source, /execSync|https?|FILESYSTEM_PATCH|writeFileSync/);
 
   const probeSource = fs.readFileSync(
-    require.resolve('../../accelerator/native/macos/seatbelt-sandbox-probe'), 'utf8'
+    require.resolve('../../accelerator/native/macos/sdo-seatbelt-probe.c'), 'utf8'
   );
-  assert.match(probeSource, /process\.exitCode = qualified \? 0 : 1/);
-  assert.match(probeSource, /--seatbelt-bootstrap-only/);
-  assert.doesNotMatch(probeSource, /process\.(?:stdout|stderr)\.write/);
+  assert.match(probeSource, /workspace_write_is_denied/);
+  assert.match(probeSource, /network_is_denied/);
+  assert.match(probeSource, /generic_process_is_denied/);
+  assert.match(probeSource, /read_is_denied\("\/etc\/passwd", false\)/);
+  assert.doesNotMatch(probeSource, /system\(|popen\(|posix_spawn/);
+
+  const buildSource = fs.readFileSync(
+    require.resolve('../../accelerator/native/macos/build-helper.sh'), 'utf8'
+  );
+  assert.match(buildSource, /^\/usr\/bin\/clang/m);
+  assert.match(buildSource, /-Wall/);
+  assert.match(buildSource, /-Wextra/);
+  assert.match(buildSource, /-Werror/);
+  assert.doesNotMatch(buildSource, /curl|wget|https?:|eval/);
+
+  const workflow = fs.readFileSync(
+    require.resolve('../../.github/workflows/accelerator-conformance.yml'), 'utf8'
+  );
+  assert.match(workflow, /Build qualified macOS native Seatbelt helper/);
+  assert.match(workflow, /sh accelerator\/native\/macos\/build-helper\.sh/);
 });
