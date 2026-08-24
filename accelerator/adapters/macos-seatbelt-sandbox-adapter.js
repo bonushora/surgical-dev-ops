@@ -67,7 +67,7 @@ function createProfile(workspace, helper) {
   ].join('\n');
 }
 
-function boundedFailure(result, { workspace, helper }) {
+function boundedFailure(result, { workspace, helper, probe }) {
   const redact = (value) => String(value || '')
     .replaceAll(workspace, '<WORKSPACE>')
     .replaceAll(path.dirname(workspace), '<WORKSPACE_PARENT>')
@@ -76,6 +76,7 @@ function boundedFailure(result, { workspace, helper }) {
     .replace(/[\r\n]+/g, ' ')
     .slice(0, 2048);
   const failure = {
+    probe,
     errorCode: result.error && result.error.code || null,
     signal: result.signal || null,
     status: Number.isInteger(result.status) ? result.status : null,
@@ -83,6 +84,32 @@ function boundedFailure(result, { workspace, helper }) {
     stderr: redact(result.stderr)
   };
   return JSON.stringify(failure);
+}
+
+function runNativeProbe({ profile, helper, requirement, workspace, hostEscapeProbe, probe }) {
+  return childProcess.spawnSync(SANDBOX_EXEC, [
+    '-p', profile, helper,
+    requirement.operationId,
+    requirement.fingerprint,
+    workspace,
+    hostEscapeProbe,
+    probe
+  ], {
+    cwd: workspace,
+    shell: false,
+    encoding: 'utf8',
+    timeout: TIMEOUT_MS,
+    maxBuffer: MAX_OUTPUT_BYTES,
+    windowsHide: true,
+    env: { PATH: '/usr/bin:/bin', HOME: '/nonexistent' }
+  });
+}
+
+function cleanNativeProbeResult(result, enforcementSignalAllowed) {
+  if (result.error || result.stdout.trim() || result.stderr.trim()) return false;
+  if (!result.signal) return result.status === 0;
+  return enforcementSignalAllowed &&
+    ['SIGABRT', 'SIGKILL', 'SIGSYS'].includes(result.signal);
 }
 
 function attestMacosSeatbeltSandbox({ requirement, observedAt, expiresAt }) {
@@ -106,26 +133,30 @@ function attestMacosSeatbeltSandbox({ requirement, observedAt, expiresAt }) {
   }
   const profile = createProfile(workspace, helper);
   const hostEscapeProbe = path.join(os.homedir(), '.ssh', 'id_rsa');
-  const result = childProcess.spawnSync(SANDBOX_EXEC, [
-    '-p', profile, helper,
-    requirement.operationId,
-    requirement.fingerprint,
-    workspace,
-    hostEscapeProbe
-  ], {
-    cwd: workspace,
-    shell: false,
-    encoding: 'utf8',
-    timeout: TIMEOUT_MS,
-    maxBuffer: MAX_OUTPUT_BYTES,
-    windowsHide: true,
-    env: { PATH: '/usr/bin:/bin', HOME: '/nonexistent' }
+  const bootstrap = runNativeProbe({
+    profile, helper, requirement, workspace, hostEscapeProbe, probe: 'bootstrap'
   });
-  if (result.error || result.signal || result.status !== 0 ||
-      result.stdout.trim() || result.stderr.trim()) {
+  if (!cleanNativeProbeResult(bootstrap, false)) {
     throw new Error(`macOS Seatbelt sandbox attestation failed closed: ${
-      boundedFailure(result, { workspace, helper })
+      boundedFailure(bootstrap, { workspace, helper, probe: 'bootstrap' })
     }`);
+  }
+  const probes = [
+    'workspace-write',
+    'workspace-boundary',
+    'secret-read',
+    'network',
+    'generic-process'
+  ];
+  for (const probe of probes) {
+    const result = runNativeProbe({
+      profile, helper, requirement, workspace, hostEscapeProbe, probe
+    });
+    if (!cleanNativeProbeResult(result, true)) {
+      throw new Error(`macOS Seatbelt sandbox attestation failed closed: ${
+        boundedFailure(result, { workspace, helper, probe })
+      }`);
+    }
   }
   return deepFreeze({
     schema: 'sdo.sandbox_adapter_evidence.v1',

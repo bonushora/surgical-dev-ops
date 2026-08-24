@@ -2,15 +2,12 @@
 #include <errno.h>
 #include <fcntl.h>
 #include <limits.h>
-#include <signal.h>
 #include <stdbool.h>
 #include <stdio.h>
 #include <stdlib.h>
 #include <string.h>
 #include <sys/socket.h>
 #include <sys/time.h>
-#include <sys/types.h>
-#include <sys/wait.h>
 #include <unistd.h>
 
 extern char **environ;
@@ -42,27 +39,13 @@ static bool minimal_environment(void) {
   return true;
 }
 
-static bool enforced_child(pid_t child) {
-  int status = 0;
-  if (child < 0 || waitpid(child, &status, 0) != child) return false;
-  if (WIFEXITED(status)) return WEXITSTATUS(status) == 0;
-  if (!WIFSIGNALED(status)) return false;
-  const int signal_number = WTERMSIG(status);
-  return signal_number == SIGABRT || signal_number == SIGKILL ||
-    signal_number == SIGSYS;
-}
-
 static bool read_is_denied(const char *target, bool missing_is_denied) {
-  const pid_t child = fork();
-  if (child == 0) {
-    const int descriptor = open(target, O_RDONLY);
-    if (descriptor >= 0) {
-      close(descriptor);
-      _exit(1);
-    }
-    _exit(denied(errno) || (missing_is_denied && errno == ENOENT) ? 0 : 1);
+  const int descriptor = open(target, O_RDONLY);
+  if (descriptor >= 0) {
+    close(descriptor);
+    return false;
   }
-  return enforced_child(child);
+  return denied(errno) || (missing_is_denied && errno == ENOENT);
 }
 
 static bool workspace_write_is_denied(const char *workspace) {
@@ -71,60 +54,52 @@ static bool workspace_write_is_denied(const char *workspace) {
     target, sizeof(target), "%s/.sdo-seatbelt-probe", workspace
   );
   if (length < 0 || (size_t) length >= sizeof(target)) return false;
-  const pid_t child = fork();
-  if (child == 0) {
-    const int descriptor = open(target, O_WRONLY | O_CREAT | O_EXCL, 0600);
-    if (descriptor >= 0) {
-      close(descriptor);
-      _exit(1);
-    }
-    _exit(denied(errno) ? 0 : 1);
+  const int descriptor = open(target, O_WRONLY | O_CREAT | O_EXCL, 0600);
+  if (descriptor >= 0) {
+    close(descriptor);
+    return false;
   }
-  return enforced_child(child);
+  return denied(errno);
 }
 
 static bool network_is_denied(void) {
-  const pid_t child = fork();
-  if (child == 0) {
-    const int descriptor = socket(AF_INET, SOCK_STREAM, 0);
-    if (descriptor < 0) _exit(denied(errno) ? 0 : 1);
-    struct timeval timeout = { .tv_sec = 1, .tv_usec = 0 };
-    (void) setsockopt(
-      descriptor, SOL_SOCKET, SO_SNDTIMEO, &timeout, sizeof(timeout)
-    );
-    struct sockaddr_in address;
-    memset(&address, 0, sizeof(address));
-    address.sin_family = AF_INET;
-    address.sin_port = htons(53);
-    if (inet_pton(AF_INET, "1.1.1.1", &address.sin_addr) != 1) _exit(1);
-    const int connected = connect(
-      descriptor, (const struct sockaddr *) &address, sizeof(address)
-    );
-    const int error = errno;
-    close(descriptor);
-    _exit(connected < 0 && denied(error) ? 0 : 1);
-  }
-  return enforced_child(child);
+  const int descriptor = socket(AF_INET, SOCK_STREAM, 0);
+  if (descriptor < 0) return denied(errno);
+  struct timeval timeout = { .tv_sec = 1, .tv_usec = 0 };
+  (void) setsockopt(descriptor, SOL_SOCKET, SO_SNDTIMEO, &timeout, sizeof(timeout));
+  struct sockaddr_in address;
+  memset(&address, 0, sizeof(address));
+  address.sin_family = AF_INET;
+  address.sin_port = htons(53);
+  if (inet_pton(AF_INET, "1.1.1.1", &address.sin_addr) != 1) return false;
+  const int connected = connect(
+    descriptor, (const struct sockaddr *) &address, sizeof(address)
+  );
+  const int error = errno;
+  close(descriptor);
+  return connected < 0 && denied(error);
 }
 
 static bool generic_process_is_denied(void) {
-  const pid_t child = fork();
-  if (child == 0) {
-    execl("/bin/sh", "sh", "-c", "exit 42", (char *) NULL);
-    _exit(denied(errno) ? 0 : 1);
-  }
-  return enforced_child(child);
+  execl("/bin/sh", "sh", "-c", "exit 42", (char *) NULL);
+  return denied(errno);
 }
 
 int main(int argc, char **argv) {
-  if (argc != 5 || argv[1][0] == '\0' || !valid_fingerprint(argv[2]) ||
-      argv[3][0] == '\0' || argv[4][0] == '\0' || !minimal_environment()) return 1;
+  if (argc != 6 || argv[1][0] == '\0' || !valid_fingerprint(argv[2]) ||
+      argv[3][0] == '\0' || argv[4][0] == '\0' || argv[5][0] == '\0' ||
+      !minimal_environment()) return 1;
   char current[PATH_MAX];
   if (getcwd(current, sizeof(current)) == NULL || strcmp(current, argv[3]) != 0) return 1;
-  if (!workspace_write_is_denied(argv[3])) return 1;
-  if (!read_is_denied("/etc/passwd", false)) return 1;
-  if (!read_is_denied(argv[4], true)) return 1;
-  if (!network_is_denied()) return 1;
-  if (!generic_process_is_denied()) return 1;
-  return 0;
+  if (strcmp(argv[5], "bootstrap") == 0) return 0;
+  if (strcmp(argv[5], "workspace-write") == 0)
+    return workspace_write_is_denied(argv[3]) ? 0 : 1;
+  if (strcmp(argv[5], "workspace-boundary") == 0)
+    return read_is_denied("/etc/passwd", false) ? 0 : 1;
+  if (strcmp(argv[5], "secret-read") == 0)
+    return read_is_denied(argv[4], true) ? 0 : 1;
+  if (strcmp(argv[5], "network") == 0) return network_is_denied() ? 0 : 1;
+  if (strcmp(argv[5], "generic-process") == 0)
+    return generic_process_is_denied() ? 0 : 1;
+  return 1;
 }

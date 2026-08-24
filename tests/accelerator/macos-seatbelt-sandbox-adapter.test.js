@@ -94,6 +94,13 @@ test('Seatbelt profile is deny-default operation-bound and network-silent', () =
   assert.match(source, /const SANDBOX_EXEC = '\/usr\/bin\/sandbox-exec'/);
   assert.match(source, /shell: false/);
   assert.match(source, /sdo-seatbelt-probe/);
+  assert.match(source, /probe: 'bootstrap'/);
+  assert.match(source, /'workspace-write'/);
+  assert.match(source, /'workspace-boundary'/);
+  assert.match(source, /'secret-read'/);
+  assert.match(source, /'network'/);
+  assert.match(source, /'generic-process'/);
+  assert.match(source, /\['SIGABRT', 'SIGKILL', 'SIGSYS'\]/);
   assert.doesNotMatch(source, /process\.execPath|--jitless|dynamic-code-generation/);
   assert.doesNotMatch(source, /execSync|https?|FILESYSTEM_PATCH|writeFileSync/);
 
@@ -104,6 +111,7 @@ test('Seatbelt profile is deny-default operation-bound and network-silent', () =
   assert.match(probeSource, /network_is_denied/);
   assert.match(probeSource, /generic_process_is_denied/);
   assert.match(probeSource, /read_is_denied\("\/etc\/passwd", false\)/);
+  assert.match(probeSource, /strcmp\(argv\[5\], "bootstrap"\)/);
   assert.doesNotMatch(probeSource, /system\(|popen\(|posix_spawn/);
 
   const buildSource = fs.readFileSync(
