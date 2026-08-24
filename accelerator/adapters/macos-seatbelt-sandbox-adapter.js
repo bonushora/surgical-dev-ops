@@ -47,10 +47,16 @@ function createProfile(workspace, node) {
     '(version 1)',
     '(deny default)',
     '(allow process-fork)',
+    '(allow process-info* (target same-sandbox))',
     `(allow process-exec (literal "${seatbeltLiteral(node)}"))`,
-    '(allow signal (target self))',
+    '(allow signal (target same-sandbox))',
     '(allow sysctl-read)',
+    '(allow mach-host*)',
     '(allow mach-lookup)',
+    '(allow iokit-open)',
+    '(allow ipc-posix-sem)',
+    '(allow ipc-posix-shm-read*)',
+    '(allow file-ioctl)',
     '(allow file-read-metadata)',
     ...rules
   ].join('\n');
