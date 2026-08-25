@@ -25,6 +25,10 @@ test('original BH-SEP and BH-SDP v2.2 RAW artifacts remain immutable', () => {
     sha256('protocols/BH-SDP.md'),
     '04ea782ada1abf7fb959329054c57f87a0e86fca99a31d2e37751d3bdf7d47bc'
   );
+
+  const attributes = read('.gitattributes');
+  assert.match(attributes, /^protocols\/BH-SEP\.md text eol=lf$/m);
+  assert.match(attributes, /^protocols\/BH-SDP\.md text eol=lf$/m);
 });
 
 test('English and Portuguese entry points expose equivalent qualified baseline facts', () => {
