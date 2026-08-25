@@ -50,7 +50,14 @@ https://semver.org/
 
 ## [Unreleased]
 
-No unreleased changes.
+### CI maintenance
+
+- Migrated the canonical workflow from `actions/checkout@v4` to
+  `actions/checkout@v6`.
+- Migrated from `actions/setup-node@v4` to `actions/setup-node@v6`.
+- Aligned the CI runtime with the declared minimum Node.js version `24.18.0`.
+- Added a workflow-integrity regression contract while preserving the immutable
+  `v2.5.1` release tag.
 
 ## [2.5.1] - 2026-08-25
 
