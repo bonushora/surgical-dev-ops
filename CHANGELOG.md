@@ -19,6 +19,13 @@ https://semver.org/
 - Preserved qualified local models as free, private and offline options while requiring explicit qualification and activation for every external provider.
 - Established measurable latency, bilingual quality, grounding, authority and cross-platform acceptance gates before the experience may be claimed as complete.
 
+### ADR-024-A conversational evaluation harness
+
+- Added immutable canonical Portuguese and English cold/cache project-explanation scenarios.
+- Added deterministic acknowledgement, first-content and completion measurements with explicit qualification targets.
+- Added grounding, language, completeness, required-concept, cache and zero-authority scoring that cannot convert a failed target into success.
+- Added a content-free report contract and executable deterministic contract demonstration; prompts, responses and evidence content are never retained in reports.
+
 ### NATURAL bilingual intent and CPU latency qualification
 
 - Routes equivalent Portuguese and English project-analysis intents through the same human authorization and governed evidence boundary.
