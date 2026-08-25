@@ -35,11 +35,12 @@ function createNaturalAssistanceContext(
     !activation ||
     typeof activation !== 'object' ||
     !activation.interactionMode ||
-    activation.interactionMode.mode !==
-      'NATURAL'
+    !['NATURAL', 'ENGINEER'].includes(
+      activation.interactionMode.mode
+    )
   ) {
     throw new Error(
-      'NATURAL activation is required.'
+      'NATURAL or ENGINEER activation is required.'
     );
   }
 

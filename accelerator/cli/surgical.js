@@ -63,6 +63,12 @@ const {
   './natural-recursive-evidence-loop'
 );
 
+const {
+  runGovernedEngineeringAgentLoop
+} = require(
+  './governed-engineering-agent-loop'
+);
+
 const VERSION = '2.5.0';
 
 function printVersion() {
@@ -105,7 +111,9 @@ function createInteractiveActivation(
     strategy: 'PATCH',
     orchestrator: 'ACTIVE',
     providers:
-      interaction.mode === 'NATURAL'
+      ['NATURAL', 'ENGINEER'].includes(
+        interaction.mode
+      )
         ? 'auto-discovery'
         : 'none',
     protocols: {
@@ -119,7 +127,9 @@ function formatInteractiveActivation(activation) {
   const naturalMode =
     Boolean(
       activation.interactionMode &&
-      activation.interactionMode.mode === 'NATURAL'
+      ['NATURAL', 'ENGINEER'].includes(
+        activation.interactionMode.mode
+      )
     );
 
   if (naturalMode) {
@@ -391,7 +401,9 @@ function handleInteractiveCommand(input, activation) {
 
   if (
     activation.interactionMode &&
-    activation.interactionMode.mode === 'NATURAL'
+    ['NATURAL', 'ENGINEER'].includes(
+      activation.interactionMode.mode
+    )
   ) {
     const natural =
       interpretNaturalIntent(raw);
@@ -572,14 +584,16 @@ function createInteractiveSession(
     }
   }
 
-  const naturalMode =
+  const cognitiveMode =
     Boolean(
       activation.interactionMode &&
-      activation.interactionMode.mode === 'NATURAL'
+      ['NATURAL', 'ENGINEER'].includes(
+        activation.interactionMode.mode
+      )
     );
 
   const assistanceContext =
-    naturalMode
+    cognitiveMode
       ? (
           options.assistanceContext ||
           createNaturalAssistanceContext(
@@ -589,7 +603,7 @@ function createInteractiveSession(
       : null;
 
   const sessionControl =
-    naturalMode
+    cognitiveMode
       ? (
           options.sessionControl ||
           createNaturalSessionControl({
@@ -602,7 +616,7 @@ function createInteractiveSession(
   const cognitiveSession =
     options.cognitiveSession ||
     (
-      naturalMode
+      cognitiveMode
         ? createNaturalCognitiveSession({
             fetchImplementation:
               options.fetchImplementation,
@@ -649,6 +663,47 @@ function createInteractiveSession(
                       throw new Error(
                         'NATURAL cognitive evidence planner is unavailable.'
                       );
+                    }
+
+                    if (
+                      activation.interactionMode.mode ===
+                        'ENGINEER'
+                    ) {
+                      const engineering =
+                        await runGovernedEngineeringAgentLoop({
+                          task,
+                          activation,
+                          cognitiveSession,
+                          dispatchEvidence:
+                            options.dispatchEvidence
+                        });
+
+                      if (
+                        engineering.status !==
+                          'HUMAN_AUTHORITY_REQUIRED' ||
+                        !engineering.proposal
+                      ) {
+                        throw new Error(
+                          'Governed engineering proposal failed safely.'
+                        );
+                      }
+
+                      const proposal =
+                        engineering.proposal;
+
+                      output.write(
+                        'Proposta de engenharia qualificada; nenhuma alteração foi executada.\n\n' +
+                        `Target: ${proposal.target}\n` +
+                        `BEFORE SHA256: ${proposal.beforeSha256}\n` +
+                        `AFTER SHA256: ${proposal.replacementSha256}\n` +
+                        `Validation: ${proposal.validationKind}\n` +
+                        `Reason: ${proposal.reason}\n\n` +
+                        'Para materializar autoridade R3 separadamente, revise o conteúdo e use o comando exato:\n' +
+                        `patch ${proposal.target} --content-base64 ${proposal.replacementBase64}\n`
+                      );
+
+                      resumeAndPrompt();
+                      return;
                     }
 
                     const recursive =

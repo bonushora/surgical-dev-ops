@@ -151,6 +151,38 @@ Explicit qualification boundaries retained at v2.4 operational closure:
 
 ---
 
+# Version 2.5 — Intent-Driven Governed Orchestration ✅
+
+Completed implementation scope
+
+- NATURAL, ENGINEER and EXPERT interaction contracts
+- Provider-neutral cognitive port, selection, invocation and execution seams
+- Ollama as the replaceable local reference provider
+- Governed recursive workspace-evidence acquisition
+- Grounded NATURAL project analysis with zero-evidence rejection
+- Strict immutable engineering patch-proposal contract
+- Single-agent governed engineering loop
+- Exact proposal binding to an observed READ_FILE target and BEFORE SHA-256
+- ENGINEER technical presentation of target, BEFORE/AFTER hashes, validation
+  and the separately authorized R3 command
+- Explicit stop at `HUMAN_AUTHORITY_REQUIRED` before every proposed mutation
+- Existing human identity, risk, capability, Manifest CAS, journal, durability
+  and recovery boundaries preserved for physical R3 execution
+- Expert / Deterministic compatibility preserved
+
+Optional or separately qualified extensions
+
+- Remote commercial AI adapters and credential boundaries
+- Multi-agent cognitive coordination
+- Physical power-loss qualification
+- Strict Physical Identity-Conditional CAS for ordinary pathnames
+- Commercial activation and payment infrastructure
+
+Those extensions do not weaken or silently broaden the completed local
+single-agent Orchestrator boundary.
+
+---
+
 # Guiding Principle
 
 The objective of Surgical DevOps is not merely to improve prompts.

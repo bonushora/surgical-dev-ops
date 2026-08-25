@@ -18,6 +18,12 @@ const cli =
     '../../accelerator/cli/surgical'
   );
 
+const {
+  materializeGovernedEngineeringProposal
+} = require(
+  '../../accelerator/core/governed-engineering-proposal'
+);
+
 function naturalActivation() {
   return Object.freeze({
     repositoryPath:
@@ -42,6 +48,20 @@ function naturalActivation() {
       Object.freeze({
         mode:
           'NATURAL'
+      })
+  });
+}
+
+function engineerActivation() {
+  const current =
+    naturalActivation();
+
+  return Object.freeze({
+    ...current,
+    interactionMode:
+      Object.freeze({
+        mode:
+          'ENGINEER'
       })
   });
 }
@@ -371,6 +391,139 @@ test(
     );
 
     assert.match(
+      observed,
+      /falhou de forma segura/i
+    );
+  }
+);
+
+test(
+  'ENGINEER produces an evidence-bound proposal and stops before R3 mutation',
+  async () => {
+    const input = new PassThrough();
+    const output = new PassThrough();
+    let observed = '';
+    let decision = 0;
+
+    output.on('data', (chunk) => {
+      observed += chunk.toString();
+    });
+
+    const cognitiveSession =
+      Object.freeze({
+        async decideEvidence() {
+          decision += 1;
+
+          if (decision === 1) {
+            return Object.freeze({
+              schema:
+                'sdo.natural_evidence_decision.v1',
+              decision:
+                'REQUEST_EVIDENCE',
+              response:
+                null,
+              evidenceRequest:
+                Object.freeze({
+                  kind: 'READ_FILE',
+                  target: 'accelerator/example.js',
+                  reason: 'Observar BEFORE.'
+                })
+            });
+          }
+
+          return Object.freeze({
+            schema:
+              'sdo.natural_evidence_decision.v1',
+            decision: 'RESPOND',
+            response: 'Evidência suficiente.',
+            evidenceRequest: null
+          });
+        },
+
+        async proposePatch(objective) {
+          return materializeGovernedEngineeringProposal({
+            schema:
+              'sdo.ai_engineering_patch_proposal.v1',
+            objective,
+            target:
+              'accelerator/example.js',
+            beforeSha256:
+              'a'.repeat(64),
+            replacementBase64:
+              Buffer.from(
+                "'use strict';\nmodule.exports = {};\n"
+              ).toString('base64'),
+            reason:
+              'Correção limitada ao arquivo observado.',
+            validationKind:
+              'VALIDATE_JS'
+          });
+        }
+      });
+
+    cli.createInteractiveSession(
+      engineerActivation(),
+      {
+        input,
+        output,
+        terminal: false,
+        cognitiveSession,
+        dispatchEvidence() {
+          return {
+            orchestration: {
+              status: 'COMPLETED'
+            },
+            execution: {
+              schema:
+                'sdo.filesystem_read_result.v1',
+              target: {
+                requested:
+                  'accelerator/example.js'
+              },
+              evidence: {
+                bytes: 14,
+                sha256: 'a'.repeat(64),
+                content: "'use strict';\n"
+              }
+            }
+          };
+        }
+      }
+    );
+
+    input.write(
+      'Analise este projeto e proponha uma correção.\n'
+    );
+
+    await new Promise(
+      (resolve) => setTimeout(resolve, 10)
+    );
+
+    input.write('sim\n');
+
+    await new Promise(
+      (resolve) => setTimeout(resolve, 50)
+    );
+
+    input.end();
+
+    assert.match(
+      observed,
+      /Proposta de engenharia qualificada/
+    );
+    assert.match(
+      observed,
+      /BEFORE SHA256: a{64}/
+    );
+    assert.match(
+      observed,
+      /patch accelerator\/example\.js --content-base64/
+    );
+    assert.match(
+      observed,
+      /nenhuma alteração foi executada/i
+    );
+    assert.doesNotMatch(
       observed,
       /falhou de forma segura/i
     );

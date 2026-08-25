@@ -33,6 +33,7 @@ Start with:
 - [ADR-011 — Interaction Modes](./adr/ADR-011-intent-driven-orchestration-user-modes.md)
 - [ADR-014 — Governed AI Behavior](./adr/ADR-014-governed-ai-behavior-contract.md)
 - [ADR-018 — Immutable Protocol RAW and International Documentation](./adr/ADR-018-immutable-protocol-raw-and-international-documentation.md)
+- [ADR-019 — Single-Agent Governed Engineering Loop](./adr/ADR-019-single-agent-governed-engineering-loop.md)
 
 ## Articles and regression protocol
 

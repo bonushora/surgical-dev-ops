@@ -50,6 +50,18 @@ https://semver.org/
 
 ## [Unreleased]
 
+### Governed engineering loop
+
+- Added a strict immutable cognitive patch-proposal boundary with no
+  operational, approval or mutation authority.
+- Added the single-agent governed engineering loop described by ADR-019.
+- Bound every proposal to an exact governed READ_FILE target and BEFORE hash.
+- Enabled the cognitive provider in ENGINEER mode while preserving the same
+  deterministic authority chain.
+- Added ENGINEER presentation of proposal evidence and a separate exact R3
+  patch command; conversational approval never applies the proposal.
+- Preserved NATURAL grounded explanation and EXPERT deterministic behavior.
+
 ### Documentation
 
 - Made the default repository README English-first for international engineering review.

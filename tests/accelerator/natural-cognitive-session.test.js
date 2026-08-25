@@ -220,6 +220,117 @@ test(
 );
 
 test(
+  'NATURAL materializes a cognitive patch only as a zero-authority governed proposal',
+  async () => {
+    let proposalBody = null;
+
+    const session =
+      createNaturalCognitiveSession({
+        fetchImplementation:
+          async (url, options) => {
+            if (url.endsWith('/api/tags')) {
+              return response({
+                models: [
+                  {
+                    name: 'llama3:latest',
+                    model: 'llama3:latest'
+                  }
+                ]
+              });
+            }
+
+            proposalBody =
+              JSON.parse(options.body);
+
+            return response({
+              message: {
+                role: 'assistant',
+                content: JSON.stringify({
+                  schema:
+                    'sdo.ai_engineering_patch_proposal.v1',
+                  objective:
+                    'Corrigir accelerator/example.js.',
+                  target:
+                    'accelerator/example.js',
+                  beforeSha256:
+                    'a'.repeat(64),
+                  replacementBase64:
+                    Buffer.from(
+                      "'use strict';\n"
+                    ).toString('base64'),
+                  reason:
+                    'Correção limitada ao arquivo observado.',
+                  validationKind:
+                    'VALIDATE_JS'
+                })
+              }
+            });
+          }
+      });
+
+    const proposal =
+      await session.proposePatch(
+        'Corrigir accelerator/example.js.',
+        activation(),
+        'TYPE: READ_FILE\nTARGET: accelerator/example.js\nSHA256: ' +
+          'a'.repeat(64)
+      );
+
+    assert.equal(
+      proposal.schema,
+      'sdo.governed_engineering_proposal.v1'
+    );
+
+    assert.equal(
+      proposal.mutationAuthority,
+      false
+    );
+
+    assert.equal(
+      proposal.approvalAuthority,
+      false
+    );
+
+    assert.equal(
+      proposalBody.format,
+      'json'
+    );
+
+    assert.match(
+      proposalBody.messages
+        .map((message) => message.content)
+        .join('\n'),
+      /não execute nada/i
+    );
+  }
+);
+
+test(
+  'NATURAL refuses engineering proposal without governed evidence',
+  async () => {
+    const session =
+      createNaturalCognitiveSession({
+        fetchImplementation:
+          async () => {
+            throw new Error(
+              'provider must not be reached'
+            );
+          }
+      });
+
+    await assert.rejects(
+      () =>
+        session.proposePatch(
+          'Altere o projeto.',
+          activation(),
+          ''
+        ),
+      /evidence are required/
+    );
+  }
+);
+
+test(
   'NATURAL cognitive session exposes no operational authority',
   () => {
     const boundary =
