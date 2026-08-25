@@ -110,9 +110,9 @@ test(
                 models: [
                   {
                     name:
-                      'llama3:latest',
+                      'qwen3:8b',
                     model:
-                      'llama3:latest'
+                      'qwen3:8b'
                   }
                 ]
               });

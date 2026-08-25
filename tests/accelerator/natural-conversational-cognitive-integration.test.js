@@ -19,7 +19,7 @@ test('identical governed evidence planning is reused without another inference',
   const session = createNaturalCognitiveSession({
     async fetchImplementation(url) {
       if (url.endsWith('/api/tags')) {
-        return new Response(JSON.stringify({ models: [{ name: 'llama3:latest' }] }), {
+        return new Response(JSON.stringify({ models: [{ name: 'qwen3:8b' }] }), {
           status: 200, headers: { 'content-type': 'application/json' }
         });
       }
@@ -42,7 +42,7 @@ test('bounded prior exchange is carried to the next cognitive explanation', asyn
   const session = createNaturalCognitiveSession({
     async fetchImplementation(url, options) {
       if (url.endsWith('/api/tags')) {
-        return new Response(JSON.stringify({ models: [{ name: 'llama3:latest' }] }), {
+        return new Response(JSON.stringify({ models: [{ name: 'qwen3:8b' }] }), {
           status: 200, headers: { 'content-type': 'application/json' }
         });
       }

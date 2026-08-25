@@ -87,7 +87,7 @@ test(
 
     assert.doesNotMatch(
       output,
-      /Resposta cognitiva do Llama 3 via Ollama/
+      /Resposta cognitiva do Qwen 3 8B via Ollama/
     );
   }
 );
@@ -149,9 +149,9 @@ test(
                 models: [
                   {
                     name:
-                      'llama3:latest',
+                      'qwen3:8b',
                     model:
-                      'llama3:latest'
+                      'qwen3:8b'
                   }
                 ]
               });
@@ -194,7 +194,7 @@ test(
 
     assert.equal(
       chatBody.model,
-      'llama3:latest'
+      'qwen3:8b'
     );
 
     assert.equal(
@@ -214,7 +214,7 @@ test(
 
     assert.doesNotMatch(
       output,
-      /Resposta cognitiva do Llama 3 via Ollama/
+      /Resposta cognitiva do Qwen 3 8B via Ollama/
     );
   }
 );
@@ -232,8 +232,8 @@ test(
               return response({
                 models: [
                   {
-                    name: 'llama3:latest',
-                    model: 'llama3:latest'
+                    name: 'qwen3:8b',
+                    model: 'qwen3:8b'
                   }
                 ]
               });
@@ -384,10 +384,10 @@ test(
                 models: [
                   {
                     name:
-                      'llama3:latest',
+                      'qwen3:8b',
 
                     model:
-                      'llama3:latest'
+                      'qwen3:8b'
                   }
                 ]
               });
@@ -479,7 +479,7 @@ test(
 
     assert.doesNotMatch(
       output,
-      /Resposta cognitiva do Llama 3 via Ollama/
+      /Resposta cognitiva do Qwen 3 8B via Ollama/
     );
   }
 );
@@ -506,10 +506,10 @@ test(
                 models: [
                   {
                     name:
-                      'llama3:latest',
+                      'qwen3:8b',
 
                     model:
-                      'llama3:latest'
+                      'qwen3:8b'
                   }
                 ]
               });
@@ -646,7 +646,7 @@ test(
                 models: [
                   {
                     name:
-                      'llama3:latest'
+                      'qwen3:8b'
                   }
                 ]
               });
@@ -675,7 +675,7 @@ test(
             if (
               !body ||
               body.model !==
-                'llama3:latest' ||
+                'qwen3:8b' ||
               !Array.isArray(
                 body.messages
               ) ||
@@ -783,6 +783,75 @@ test(
     assert.match(
       observedRequest.objective,
       /obrigatoriamente escrita em português brasileiro claro/i
+    );
+  }
+);
+
+test(
+  'NATURAL switches between installed qualified local models and resets temporary cognition',
+  async () => {
+    const session =
+      createNaturalCognitiveSession({
+        fetchImplementation:
+          async (url) => {
+            assert.equal(
+              url,
+              'http://127.0.0.1:11434/api/tags'
+            );
+
+            return response({
+              models: [
+                { name: 'qwen3:8b' },
+                { name: 'gemma3:4b' }
+              ]
+            });
+          }
+      });
+
+    const initial =
+      await session.describe();
+
+    assert.equal(
+      initial.model,
+      'qwen3:8b'
+    );
+
+    session.rememberExchange(
+      'pergunta',
+      'resposta'
+    );
+
+    assert.equal(
+      session.conversationState()
+        .turnCount,
+      1
+    );
+
+    const selected =
+      await session.selectLocalModel(
+        'gemma3:4b'
+      );
+
+    assert.equal(
+      selected.available,
+      true
+    );
+    assert.equal(
+      selected.model,
+      'gemma3:4b'
+    );
+    assert.equal(
+      selected.operationalAuthority,
+      false
+    );
+    assert.equal(
+      session.conversationState()
+        .turnCount,
+      0
+    );
+    assert.equal(
+      (await session.describe()).model,
+      'gemma3:4b'
     );
   }
 );

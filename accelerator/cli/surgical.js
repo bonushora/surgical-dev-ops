@@ -143,7 +143,7 @@ Posso ajudá-lo a compreender o código, analisar evidências do projeto,
 explicar problemas, planejar alterações e conduzir o desenvolvimento
 dentro das permissões governadas pelo Surgical DevOps.
 
-O assistente cognitivo padrão é o Llama 3 via Ollama quando disponível localmente.
+O assistente cognitivo padrão é o Qwen 3 8B via Ollama quando disponível localmente.
 A proteção determinística do projeto está ativa.
 O modo inicial de trabalho é microtarefas supervisionadas.
 
@@ -905,6 +905,37 @@ function createInteractiveSession(
                       discovery
                     )
                   );
+                }
+              } else if (
+                controlled.action ===
+                  'LOCAL_MODEL_SELECTION'
+              ) {
+                if (
+                  !cognitiveSession ||
+                  typeof cognitiveSession.selectLocalModel !==
+                    'function'
+                ) {
+                  output.write(
+                    'A seleção de modelo local está indisponível. Nenhuma alteração foi realizada.\n'
+                  );
+                } else {
+                  const selected =
+                    await cognitiveSession.selectLocalModel(
+                      controlled.model
+                    );
+
+                  if (selected.available) {
+                    output.write(
+                      `Modelo local ativado nesta sessão: ${selected.model}.\n` +
+                      'A memória e o cache cognitivo temporários foram reiniciados.\n' +
+                      'A autoridade operacional da IA permanece inexistente.\n'
+                    );
+                  } else {
+                    output.write(
+                      `Não foi possível ativar ${controlled.model}: ${selected.reason}\n` +
+                      'O modelo anterior e a governança foram preservados.\n'
+                    );
+                  }
                 }
               } else if (
                 controlled.action ===

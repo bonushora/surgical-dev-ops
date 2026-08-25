@@ -19,11 +19,19 @@
 const OLLAMA_TAGS_ENDPOINT =
   'http://127.0.0.1:11434/api/tags';
 
+const {
+  QUALIFIED_LOCAL_MODELS,
+  DEFAULT_MODEL_PROFILE,
+  requireQualifiedLocalModel
+} = require(
+  './natural-qualified-model-registry'
+);
+
 const DEFAULT_PROVIDER_ID =
-  'ollama:llama3';
+  DEFAULT_MODEL_PROFILE.providerId;
 
 const DEFAULT_MODEL =
-  'llama3:latest';
+  DEFAULT_MODEL_PROFILE.model;
 
 const {
   NATURAL_LOCAL_INFERENCE_PROFILE
@@ -53,19 +61,25 @@ function deepFreeze(value) {
   return Object.freeze(value);
 }
 
-function unavailable(reason) {
+function unavailable(
+  reason,
+  profile = DEFAULT_MODEL_PROFILE
+) {
   return deepFreeze({
     schema:
       'sdo.natural_provider_discovery.v1',
 
     providerId:
-      DEFAULT_PROVIDER_ID,
+      profile.providerId,
 
     provider:
       'Ollama',
 
     model:
-      DEFAULT_MODEL,
+      profile.model,
+
+    modelProfile:
+      profile.profile,
 
     local:
       true,
@@ -204,6 +218,21 @@ function parseModels(text) {
 async function discoverNaturalDefaultProvider(
   input = {}
 ) {
+  let profile;
+
+  try {
+    profile =
+      requireQualifiedLocalModel(
+        input.model ||
+        DEFAULT_MODEL
+      );
+  } catch {
+    return unavailable(
+      'Requested local model is not qualified for NATURAL.',
+      DEFAULT_MODEL_PROFILE
+    );
+  }
+
   const fetchImplementation =
     input.fetchImplementation ||
     globalThis.fetch;
@@ -213,7 +242,8 @@ async function discoverNaturalDefaultProvider(
     'function'
   ) {
     return unavailable(
-      'Local Ollama discovery is unavailable.'
+      'Local Ollama discovery is unavailable.',
+      profile
     );
   }
 
@@ -239,7 +269,8 @@ async function discoverNaturalDefaultProvider(
       );
   } catch {
     return unavailable(
-      'Local Ollama service is unavailable.'
+      'Local Ollama service is unavailable.',
+      profile
     );
   } finally {
     clearTimeout(timer);
@@ -257,7 +288,8 @@ async function discoverNaturalDefaultProvider(
       parseModels(text);
   } catch {
     return unavailable(
-      'Local Ollama model inventory could not be verified.'
+      'Local Ollama model inventory could not be verified.',
+      profile
     );
   }
 
@@ -267,14 +299,15 @@ async function discoverNaturalDefaultProvider(
         entry &&
         typeof entry === 'object' &&
         (
-          entry.name === DEFAULT_MODEL ||
-          entry.model === DEFAULT_MODEL
+          entry.name === profile.model ||
+          entry.model === profile.model
         )
     );
 
   if (!found) {
     return unavailable(
-      'Llama 3 is not installed in the local Ollama runtime.'
+      `${profile.label} is not installed in the local Ollama runtime.`,
+      profile
     );
   }
 
@@ -283,13 +316,16 @@ async function discoverNaturalDefaultProvider(
       'sdo.natural_provider_discovery.v1',
 
     providerId:
-      DEFAULT_PROVIDER_ID,
+      profile.providerId,
 
     provider:
       'Ollama',
 
     model:
-      DEFAULT_MODEL,
+      profile.model,
+
+    modelProfile:
+      profile.profile,
 
     local:
       true,
@@ -307,7 +343,7 @@ async function discoverNaturalDefaultProvider(
       NATURAL_LOCAL_INFERENCE_PROFILE,
 
     reason:
-      'Local Ollama and Llama 3 were verified.'
+      `Local Ollama and ${profile.label} were verified.`
   });
 }
 
@@ -315,5 +351,6 @@ module.exports = Object.freeze({
   OLLAMA_TAGS_ENDPOINT,
   DEFAULT_PROVIDER_ID,
   DEFAULT_MODEL,
+  QUALIFIED_LOCAL_MODELS,
   discoverNaturalDefaultProvider
 });

@@ -33,9 +33,10 @@ const {
 } = require('../adapters/ollama-local-transport');
 
 const {
-  DEFAULT_PROVIDER_ID,
-  DEFAULT_MODEL
-} = require('./natural-provider-discovery');
+  requireQualifiedLocalModel
+} = require(
+  './natural-qualified-model-registry'
+);
 
 const {
   NATURAL_LOCAL_INFERENCE_PROFILE
@@ -44,15 +45,28 @@ const {
 );
 
 function requireDiscovery(discovery) {
+  let profile = null;
+
+  try {
+    profile =
+      requireQualifiedLocalModel(
+        discovery &&
+        discovery.model
+      );
+  } catch {
+    // The common validation below fails closed.
+  }
+
   if (
     !discovery ||
     typeof discovery !== 'object' ||
     discovery.schema !==
       'sdo.natural_provider_discovery.v1' ||
+    !profile ||
     discovery.providerId !==
-      DEFAULT_PROVIDER_ID ||
-    discovery.model !==
-      DEFAULT_MODEL ||
+      profile.providerId ||
+    discovery.modelProfile !==
+      profile.profile ||
     discovery.available !== true ||
     discovery.local !== true ||
     discovery.operationalAuthority !== false

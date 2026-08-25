@@ -128,6 +128,49 @@ test(
 );
 
 test(
+  'qualified local model commands produce selection data without operational authority',
+  () => {
+    const session =
+      createNaturalSessionControl({
+        workspace: 'example'
+      });
+
+    const qwen =
+      session.handle(
+        'usar qwen3:8b'
+      );
+    const gemma =
+      session.handle(
+        'usar gemma'
+      );
+
+    assert.deepEqual(qwen, {
+      matched: true,
+      action:
+        'LOCAL_MODEL_SELECTION',
+      model:
+        'qwen3:8b'
+    });
+
+    assert.deepEqual(gemma, {
+      matched: true,
+      action:
+        'LOCAL_MODEL_SELECTION',
+      model:
+        'gemma3:4b'
+    });
+
+    assert.equal(
+      Object.prototype.hasOwnProperty.call(
+        qwen,
+        'authority'
+      ),
+      false
+    );
+  }
+);
+
+test(
   'Codex request stops at remote provider qualification boundary',
   () => {
     const control =
@@ -178,13 +221,13 @@ test(
             'Ollama',
 
           model:
-            'llama3:latest'
+            'qwen3:8b'
         })
       );
 
     assert.match(
       output,
-      /llama3/i
+      /qwen3/i
     );
 
     assert.match(

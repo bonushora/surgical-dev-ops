@@ -74,6 +74,61 @@ test(
   }
 );
 
+test(
+  'NATURAL activates a qualified local model through the session boundary',
+  async () => {
+    const input = new PassThrough();
+    const output = new PassThrough();
+    let observed = '';
+    let requested = null;
+
+    output.on('data', (chunk) => {
+      observed += chunk.toString();
+    });
+
+    cli.createInteractiveSession(
+      naturalActivation(),
+      {
+        input,
+        output,
+        terminal: false,
+        cognitiveSession: Object.freeze({
+          async selectLocalModel(model) {
+            requested = model;
+            return Object.freeze({
+              model,
+              available: true,
+              operationalAuthority: false
+            });
+          }
+        })
+      }
+    );
+
+    input.end(
+      'usar gemma3:4b\n' +
+      'exit\n'
+    );
+
+    await new Promise(
+      (resolve) => setTimeout(resolve, 50)
+    );
+
+    assert.equal(
+      requested,
+      'gemma3:4b'
+    );
+    assert.match(
+      observed,
+      /Modelo local ativado nesta sessão: gemma3:4b/
+    );
+    assert.match(
+      observed,
+      /autoridade operacional.*inexistente/i
+    );
+  }
+);
+
 function naturalActivation() {
   return Object.freeze({
     repositoryPath:

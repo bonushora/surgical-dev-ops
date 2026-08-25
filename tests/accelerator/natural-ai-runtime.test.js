@@ -21,13 +21,16 @@ function discovery(
       'sdo.natural_provider_discovery.v1',
 
     providerId:
-      'ollama:llama3',
+      'ollama:qwen3:8b',
 
     provider:
       'Ollama',
 
     model:
-      'llama3:latest',
+      'qwen3:8b',
+
+    modelProfile:
+      'QUALITY_BILINGUAL',
 
     local:
       true,
@@ -71,7 +74,7 @@ function ollamaResponse(output) {
 }
 
 test(
-  'NATURAL composes verified local Llama 3 only through governed AI runtime',
+  'NATURAL composes verified local Qwen 3 8B only through governed AI runtime',
   () => {
     const composition =
       createNaturalLocalAIComposition({
@@ -93,12 +96,12 @@ test(
 
     assert.equal(
       composition.providerId,
-      'ollama:llama3'
+      'ollama:qwen3:8b'
     );
 
     assert.equal(
       composition.model,
-      'llama3:latest'
+      'qwen3:8b'
     );
 
     assert.equal(
@@ -203,7 +206,7 @@ test(
 
     assert.equal(
       result.providerId,
-      'ollama:llama3'
+      'ollama:qwen3:8b'
     );
 
     assert.equal(
@@ -226,7 +229,7 @@ test(
 
     assert.equal(
       observedBody.model,
-      'llama3:latest'
+      'qwen3:8b'
     );
 
     assert.equal(

@@ -10,6 +10,15 @@ https://semver.org/
 
 ---
 
+## Unreleased
+
+### NATURAL qualified model selection
+
+- Froze ADR-022 with Qwen 3 8B as the default bilingual local quality profile and Gemma 3 4B as the local fast profile.
+- Removed Llama 3 from the qualified default, alternative and fallback set while preserving all deterministic defenses learned during its qualification.
+- Added session-scoped fail-closed model selection backed by a closed immutable registry and bounded Ollama inventory verification.
+- Preserved external provider substitution exclusively through separately qualified adapters with no model-created operational authority.
+
 ## [2.5.0] - 2026-08-23
 
 ### Added

@@ -259,12 +259,19 @@ function createNaturalCognitiveSession(
     );
   }
 
+  let selectedModel =
+    typeof input.initialModel === 'string'
+      ? input.initialModel
+      : undefined;
+
   let statePromise = null;
 
   async function initialize() {
     const discovery =
       await discoverNaturalDefaultProvider({
-        fetchImplementation
+        fetchImplementation,
+        model:
+          selectedModel
       });
 
     if (!discovery.available) {
@@ -702,6 +709,37 @@ function createNaturalCognitiveSession(
     return current.discovery;
   }
 
+  async function selectLocalModel(model) {
+    const discovery =
+      await discoverNaturalDefaultProvider({
+        fetchImplementation,
+        model
+      });
+
+    if (!discovery.available) {
+      return discovery;
+    }
+
+    selectedModel =
+      discovery.model;
+
+    statePromise =
+      Promise.resolve(
+        Object.freeze({
+          discovery,
+          composition:
+            createNaturalLocalAIComposition({
+              discovery,
+              fetchImplementation
+            })
+        })
+      );
+
+    conversationalRuntime.reset();
+
+    return discovery;
+  }
+
   function rememberExchange(user, assistant) {
     conversationalRuntime.rememberExchange(
       user,
@@ -725,6 +763,7 @@ function createNaturalCognitiveSession(
     decideEvidence,
     proposePatch,
     describe,
+    selectLocalModel,
     rememberExchange,
     conversationState,
     resetConversation

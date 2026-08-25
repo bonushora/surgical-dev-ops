@@ -41,7 +41,7 @@ test(
 
     assert.match(
       output,
-      /Llama 3 via Ollama/
+      /Qwen 3 8B via Ollama/
     );
 
     /*

@@ -54,7 +54,7 @@ function responseFor(payload) {
 }
 
 test(
-  'NATURAL discovers local Llama 3 through bounded Ollama inventory',
+  'NATURAL discovers local Qwen 3 8B through bounded Ollama inventory',
   async () => {
     let observedUrl = null;
     let observedOptions = null;
@@ -70,9 +70,9 @@ test(
               models: [
                 {
                   name:
-                    'llama3:latest',
+                    'qwen3:8b',
                   model:
-                    'llama3:latest'
+                    'qwen3:8b'
                 }
               ]
             });
@@ -177,7 +177,71 @@ test(
 );
 
 test(
-  'NATURAL does not claim provider availability when Llama 3 is absent',
+  'NATURAL verifies the qualified Gemma fast profile only when explicitly selected',
+  async () => {
+    const result =
+      await discoverNaturalDefaultProvider({
+        model:
+          'gemma3:4b',
+        fetchImplementation:
+          async () =>
+            responseFor({
+              models: [
+                {
+                  name:
+                    'gemma3:4b'
+                }
+              ]
+            })
+      });
+
+    assert.equal(
+      result.available,
+      true
+    );
+    assert.equal(
+      result.providerId,
+      'ollama:gemma3:4b'
+    );
+    assert.equal(
+      result.modelProfile,
+      'FAST_BILINGUAL'
+    );
+    assert.equal(
+      result.operationalAuthority,
+      false
+    );
+  }
+);
+
+test(
+  'NATURAL rejects Llama and arbitrary local model selection before activation',
+  async () => {
+    let dispatches = 0;
+    const result =
+      await discoverNaturalDefaultProvider({
+        model:
+          'llama3:latest',
+        fetchImplementation:
+          async () => {
+            dispatches += 1;
+            return responseFor({
+              models: [
+                { name: 'llama3:latest' }
+              ]
+            });
+          }
+      });
+
+    assert.equal(dispatches, 0);
+    assert.equal(result.available, false);
+    assert.equal(result.operationalAuthority, false);
+    assert.match(result.reason, /not qualified/i);
+  }
+);
+
+test(
+  'NATURAL does not claim provider availability when Qwen 3 8B is absent',
   async () => {
     const result =
       await discoverNaturalDefaultProvider({
@@ -200,7 +264,7 @@ test(
 
     assert.equal(
       result.providerId,
-      'ollama:llama3'
+      'ollama:qwen3:8b'
     );
 
     assert.equal(
@@ -210,7 +274,7 @@ test(
 
     assert.match(
       result.reason,
-      /llama 3|not installed/i
+      /qwen 3 8b|not installed/i
     );
   }
 );

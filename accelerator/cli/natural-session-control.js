@@ -59,8 +59,9 @@ function naturalHelpMessage() {
 function providerSetupOverview() {
   return (
     'Posso ajudá-lo a trocar ou configurar a IA passo a passo.\n\n' +
-    'Provider local padrão:\n' +
-    '  Llama 3 via Ollama, quando disponível e qualificado.\n' +
+    'Modelos locais gratuitos qualificados:\n' +
+    '  qwen3:8b  — padrão bilíngue de qualidade.\n' +
+    '  gemma3:4b — perfil bilíngue rápido.\n' +
     '  Execução local: sem cobrança por chamada de API do Ollama.\n' +
     '  Recursos computacionais locais e licenças aplicáveis continuam sendo responsabilidade do usuário.\n\n' +
     'Outros providers:\n' +
@@ -74,6 +75,8 @@ function providerSetupOverview() {
     '  6. testar conexão e compatibilidade;\n' +
     '  7. ativar somente após verificação.\n\n' +
     'O Surgical DevOps não recebe, intermedeia ou retém taxas ou comissões do consumo desses providers.\n' +
+    'Use "usar qwen3:8b" ou "usar gemma3:4b".\n' +
+    'A seleção vale somente para esta sessão e exige que o modelo já esteja instalado.\n' +
     'Nenhuma alteração foi realizada.\n'
   );
 }
@@ -286,6 +289,20 @@ function createNaturalSessionControl(
     }
 
     if (
+      text === 'listar modelos' ||
+      text === 'modelos' ||
+      text === 'listar ias'
+    ) {
+      return Object.freeze({
+        matched: true,
+        action:
+          'CONTINUE',
+        output:
+          providerSetupOverview()
+      });
+    }
+
+    if (
       text === 'providers' ||
       text === 'provedores' ||
       includesAny(
@@ -303,6 +320,27 @@ function createNaturalSessionControl(
         matched: true,
         action:
           'PROVIDER_STATUS'
+      });
+    }
+
+    const localModelSelection =
+      text.match(
+        /^(?:usar|use|ativar|ative|selecionar|selecione) (qwen3(?::8b)?|qwen|gemma3(?::4b)?|gemma)$/
+      );
+
+    if (localModelSelection) {
+      const requested =
+        localModelSelection[1]
+          .startsWith('qwen')
+          ? 'qwen3:8b'
+          : 'gemma3:4b';
+
+      return Object.freeze({
+        matched: true,
+        action:
+          'LOCAL_MODEL_SELECTION',
+        model:
+          requested
       });
     }
 
