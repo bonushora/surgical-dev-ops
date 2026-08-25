@@ -714,18 +714,49 @@ function createInteractiveSession(
                       'Consultando evidências governadas e processando a resposta local...\n'
                     );
 
+                    const analysisStartedAt =
+                      Date.now();
+
                     const recursive =
                       await runNaturalRecursiveEvidenceLoop({
                         task,
                         activation,
                         cognitiveSession,
                         dispatchEvidence:
-                          options.dispatchEvidence
+                          options.dispatchEvidence,
+                        onProgress(progress) {
+                          if (
+                            progress.stage ===
+                              'EVIDENCE_OBTAINED'
+                          ) {
+                            const evidenceLabel =
+                              progress.detail === 'WORKSPACE_FILES'
+                                ? 'estrutura do projeto obtida'
+                                : progress.detail === 'READ_FILE'
+                                  ? 'conteúdo de arquivo obtido'
+                                  : 'validação obtida';
+
+                            output.write(
+                              `Etapa ${progress.step}: ${evidenceLabel}; continuando...\n`
+                            );
+                          }
+                        }
                       });
 
                     if (
-                      recursive.status !==
-                        'COMPLETED' ||
+                      recursive.status ===
+                        'HUMAN_AUTHORITY_REQUIRED'
+                    ) {
+                      output.write(
+                        'A análise encontrou uma necessidade fora da autorização atual. ' +
+                        'Nenhuma operação adicional foi executada. Reformule o pedido ou autorize um novo escopo explicitamente.\n'
+                      );
+                      resumeAndPrompt();
+                      return;
+                    }
+
+                    if (
+                      recursive.status !== 'COMPLETED' ||
                       !Array.isArray(
                         recursive.evidence
                       ) ||
@@ -734,15 +765,35 @@ function createInteractiveSession(
                         'string' ||
                       !recursive.response.trim()
                     ) {
-                      throw new Error(
-                        'Governed project analysis did not produce grounded evidence.'
+                      output.write(
+                        'Não consegui concluir a análise com as evidências qualificadas disponíveis. ' +
+                        'A governança permanece ativa e nenhum arquivo foi alterado.\n'
                       );
+                      resumeAndPrompt();
+                      return;
                     }
+
+                    const elapsedSeconds =
+                      Math.max(
+                        0.1,
+                        (Date.now() - analysisStartedAt) / 1000
+                      ).toFixed(1);
 
                     output.write(
                       recursive.response.trim() +
-                      '\n\nA resposta foi fundamentada em evidências governadas do projeto. Nenhum arquivo foi alterado.\n'
+                      '\n\nA resposta foi fundamentada em evidências governadas do projeto. ' +
+                      `Concluída em ${elapsedSeconds}s. Nenhum arquivo foi alterado.\n`
                     );
+
+                    if (
+                      typeof cognitiveSession.rememberExchange ===
+                        'function'
+                    ) {
+                      cognitiveSession.rememberExchange(
+                        task.objective,
+                        recursive.response
+                      );
+                    }
 
                     resumeAndPrompt();
                     return;
@@ -792,6 +843,9 @@ function createInteractiveSession(
                           )
                         );
                       } else {
+                        const explanationStartedAt =
+                          Date.now();
+
                         output.write(
                           'Arquivo lido. Processando a explicação no modelo local...\n'
                         );
@@ -808,7 +862,8 @@ function createInteractiveSession(
                           );
 
                         output.write(
-                          cognitiveOutput
+                          cognitiveOutput +
+                          `Explicação concluída em ${Math.max(0.1, (Date.now() - explanationStartedAt) / 1000).toFixed(1)}s.\n`
                         );
                       }
                     } else {
@@ -851,6 +906,44 @@ function createInteractiveSession(
                     )
                   );
                 }
+              } else if (
+                controlled.action ===
+                  'CONVERSATION_RESET'
+              ) {
+                if (
+                  cognitiveSession &&
+                  typeof cognitiveSession.resetConversation ===
+                    'function'
+                ) {
+                  cognitiveSession.resetConversation();
+                }
+
+                output.write(
+                  'Conversa reiniciada. A memória e o cache temporários desta sessão foram limpos. A governança e o projeto ativo permanecem inalterados.\n'
+                );
+              } else if (
+                controlled.action ===
+                  'CONVERSATION_STATUS'
+              ) {
+                const state =
+                  cognitiveSession &&
+                  typeof cognitiveSession.conversationState ===
+                    'function'
+                    ? cognitiveSession.conversationState()
+                    : null;
+
+                output.write(
+                  state
+                    ? (
+                        'Estado da conversa:\n' +
+                        `  Interações lembradas: ${state.turnCount}\n` +
+                        `  Decisões cognitivas em cache: ${state.decisionCacheEntries}\n` +
+                        `  Reutilizações do cache: ${state.decisionCacheHits}\n` +
+                        '  Persistência: não\n' +
+                        '  Autoridade operacional: nenhuma\n'
+                      )
+                    : 'Memória conversacional indisponível.\n'
+                );
               } else if (
                 controlled.output
               ) {

@@ -50,6 +50,13 @@ https://semver.org/
 
 ## [Unreleased]
 
+### NATURAL Conversational Runtime
+
+- Added bounded session-local conversational memory with no content telemetry.
+- Added exact objective-and-evidence decision reuse to reduce repeated local inference.
+- Added immutable presentation-only progress observations for governed analysis.
+- Froze the runtime and non-streaming validation boundary in ADR-021.
+
 ### Local inference performance
 
 - Added the immutable `ollama-balanced-v1` local inference profile.

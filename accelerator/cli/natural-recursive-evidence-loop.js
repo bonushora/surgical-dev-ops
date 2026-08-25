@@ -50,7 +50,7 @@ const LOOP_SCHEMA =
   'sdo.natural_recursive_evidence_loop.v1';
 
 const MAX_HISTORY_ITEM_CHARS =
-  12000;
+  5000;
 
 const PROJECT_GROUNDING_TARGETS =
   Object.freeze([
@@ -478,7 +478,8 @@ async function runNaturalRecursiveEvidenceLoop(
     activation,
     cognitiveSession,
     dispatchEvidence =
-      dispatchGovernedMachineEvidence
+      dispatchGovernedMachineEvidence,
+    onProgress = null
   } = {}
 ) {
   if (
@@ -522,6 +523,33 @@ async function runNaturalRecursiveEvidenceLoop(
     );
   }
 
+  if (
+    onProgress !== null &&
+    typeof onProgress !== 'function'
+  ) {
+    throw new Error(
+      'Optional NATURAL progress observer must be a function.'
+    );
+  }
+
+  function report(stage, step, detail = null) {
+    if (!onProgress) {
+      return;
+    }
+
+    try {
+      onProgress(Object.freeze({
+        schema: 'sdo.natural_progress.v1',
+        stage,
+        step,
+        detail,
+        operationalAuthority: false
+      }));
+    } catch {
+      /* Presentation observers never affect governed execution. */
+    }
+  }
+
   const envelope =
     createNaturalTaskAuthorityEnvelope({
       task,
@@ -542,6 +570,8 @@ async function runNaturalRecursiveEvidenceLoop(
         .maxEvidenceSteps;
     step += 1
   ) {
+    report('PLANNING_EVIDENCE', step);
+
     let decision =
       deterministicProjectGroundingDecision(
         task,
@@ -603,6 +633,8 @@ async function runNaturalRecursiveEvidenceLoop(
             'Project analysis cannot respond without governed file evidence.'
         });
       }
+
+      report('COMPLETED', step);
 
       return finalResult({
         status:
@@ -756,6 +788,12 @@ async function runNaturalRecursiveEvidenceLoop(
 
     evidence.push(
       observed
+    );
+
+    report(
+      'EVIDENCE_OBTAINED',
+      step + 1,
+      observed.kind
     );
 
     history.push(

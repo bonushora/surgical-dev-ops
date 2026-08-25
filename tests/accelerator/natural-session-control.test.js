@@ -26,6 +26,20 @@ test(
   }
 );
 
+test('conversation memory controls remain deterministic session actions', () => {
+  const control = createNaturalSessionControl();
+
+  assert.deepEqual(
+    control.handle('estado da conversa'),
+    Object.freeze({ matched: true, action: 'CONVERSATION_STATUS' })
+  );
+
+  assert.deepEqual(
+    control.handle('limpar conversa'),
+    Object.freeze({ matched: true, action: 'CONVERSATION_RESET' })
+  );
+});
+
 test(
   'explicit autonomy request changes cadence only to bounded autonomy mode',
   () => {

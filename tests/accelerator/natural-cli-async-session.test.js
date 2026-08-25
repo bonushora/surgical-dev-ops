@@ -24,6 +24,56 @@ const {
   '../../accelerator/core/governed-engineering-proposal'
 );
 
+test(
+  'NATURAL exposes and resets bounded conversation state without cognition',
+  async () => {
+    const input = new PassThrough();
+    const output = new PassThrough();
+    let observed = '';
+    let resets = 0;
+
+    output.on('data', (chunk) => {
+      observed += chunk.toString();
+    });
+
+    cli.createInteractiveSession(
+      naturalActivation(),
+      {
+        input,
+        output,
+        terminal: false,
+        cognitiveSession: Object.freeze({
+          conversationState() {
+            return Object.freeze({
+              turnCount: 2,
+              decisionCacheEntries: 3,
+              decisionCacheHits: 1
+            });
+          },
+          resetConversation() {
+            resets += 1;
+            return Object.freeze({ turnCount: 0 });
+          }
+        })
+      }
+    );
+
+    input.end(
+      'estado da conversa\n' +
+      'limpar conversa\n' +
+      'exit\n'
+    );
+
+    await new Promise((resolve) => setTimeout(resolve, 50));
+
+    assert.match(observed, /Interações lembradas: 2/);
+    assert.match(observed, /Decisões cognitivas em cache: 3/);
+    assert.match(observed, /Persistência: não/);
+    assert.match(observed, /memória e o cache temporários.*limpos/i);
+    assert.equal(resets, 1);
+  }
+);
+
 function naturalActivation() {
   return Object.freeze({
     repositoryPath:
@@ -405,7 +455,7 @@ test(
 
     assert.match(
       observed,
-      /falhou de forma segura/i
+      /não consegui concluir a análise.*governança permanece ativa/i
     );
   }
 );

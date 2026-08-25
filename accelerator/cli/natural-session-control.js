@@ -50,6 +50,7 @@ function naturalHelpMessage() {
     '  "Trabalhe passo a passo."\n' +
     '  "Trabalhe sozinha até a próxima fronteira arquitetural."\n' +
     '  "Quero trocar de IA."\n\n' +
+    'Também pode dizer "estado da conversa" ou "limpar conversa".\n\n' +
     'Quando uma ação exigir nova autorização, mudança de escopo ou uma decisão sua, eu paro e explico antes de prosseguir.\n' +
     'Se quiser ver informações internas do modo atual, diga "detalhes técnicos".\n'
   );
@@ -224,6 +225,29 @@ function createNaturalSessionControl(
             governedTask,
             workspace
           )
+      });
+    }
+
+    if (
+      text === 'limpar conversa' ||
+      text === 'nova conversa' ||
+      text === 'esquecer conversa' ||
+      text === 'reiniciar conversa'
+    ) {
+      return Object.freeze({
+        matched: true,
+        action: 'CONVERSATION_RESET'
+      });
+    }
+
+    if (
+      text === 'estado da conversa' ||
+      text === 'memoria da conversa' ||
+      text === 'contexto da conversa'
+    ) {
+      return Object.freeze({
+        matched: true,
+        action: 'CONVERSATION_STATUS'
       });
     }
 

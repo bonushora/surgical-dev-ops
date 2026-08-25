@@ -779,5 +779,10 @@ test(
       observedRequest.objective,
       /VALIDATE_JS/i
     );
+
+    assert.match(
+      observedRequest.objective,
+      /obrigatoriamente escrita em português brasileiro claro/i
+    );
   }
 );

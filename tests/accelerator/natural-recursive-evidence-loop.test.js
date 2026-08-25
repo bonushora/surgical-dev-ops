@@ -962,3 +962,50 @@ test(
     }
   }
 );
+
+test(
+  'progress observations are immutable presentation-only evidence boundaries',
+  async () => {
+    const decisions = [
+      respondDecision('Análise fundamentada concluída.')
+    ];
+    const progress = [];
+
+    const result = await runNaturalRecursiveEvidenceLoop({
+      task: projectTask(),
+      activation: activation(),
+      cognitiveSession: {
+        async decideEvidence() {
+          return decisions.shift();
+        }
+      },
+      dispatchEvidence(intent) {
+        if (intent.capabilityType === 'GIT_READ') {
+          return gitEvidence(['README.md']);
+        }
+        return fileEvidence('README.md', '# Surgical DevOps\n');
+      },
+      onProgress(observation) {
+        progress.push(observation);
+      }
+    });
+
+    assert.equal(result.status, 'COMPLETED');
+    assert.deepEqual(
+      progress.map((item) => item.stage),
+      [
+        'PLANNING_EVIDENCE',
+        'EVIDENCE_OBTAINED',
+        'PLANNING_EVIDENCE',
+        'EVIDENCE_OBTAINED',
+        'PLANNING_EVIDENCE',
+        'COMPLETED'
+      ]
+    );
+    assert.equal(progress.every(Object.isFrozen), true);
+    assert.equal(
+      progress.every((item) => item.operationalAuthority === false),
+      true
+    );
+  }
+);
