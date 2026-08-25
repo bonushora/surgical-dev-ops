@@ -437,6 +437,75 @@ test(
 );
 
 test(
+  'English project analysis deterministically grounds the English README',
+  async () => {
+    const dispatched = [];
+    const task = deepFreeze({
+      ...projectTask(),
+      objective:
+        'Explain this project to me in English.'
+    });
+
+    const result =
+      await runNaturalRecursiveEvidenceLoop({
+        task,
+        activation:
+          activation(),
+        cognitiveSession: {
+          async decideEvidence(
+            _objective,
+            _activation,
+            history
+          ) {
+            assert.match(
+              history[1],
+              /TARGET: README_EN\.md/
+            );
+            return respondDecision(
+              'The project is grounded in governed evidence.'
+            );
+          }
+        },
+        dispatchEvidence(intent) {
+          dispatched.push(intent);
+          if (
+            intent.capabilityType ===
+              'GIT_READ'
+          ) {
+            return gitEvidence([
+              'README.md',
+              'README_EN.md'
+            ]);
+          }
+
+          return fileEvidence(
+            'README_EN.md',
+            '# Surgical DevOps\n' +
+              'x'.repeat(5000)
+          );
+        }
+      });
+
+    assert.equal(
+      result.status,
+      'COMPLETED'
+    );
+    assert.equal(
+      dispatched[1].target,
+      'README_EN.md'
+    );
+    assert.ok(
+      result.evidence[1].summary.length <
+        2850
+    );
+    assert.match(
+      result.evidence[1].summary,
+      /TRUNCATED_BY_SURGICAL_DEVOPS/
+    );
+  }
+);
+
+test(
   'out-of-envelope cognitive request returns to human before dispatch',
   async () => {
     let dispatches = 0;

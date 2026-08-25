@@ -76,7 +76,12 @@ function rejectForbiddenOutputKeys(
   }
 }
 
-function createMessages(request) {
+function createMessages(request, model) {
+  const structuredReasoningControl =
+    model === 'qwen3:8b'
+      ? ' /no_think'
+      : '';
+
   return deepFreeze([
     {
       role:
@@ -86,7 +91,8 @@ function createMessages(request) {
         'You are a cognitive provider inside Surgical DevOps. ' +
         'Return only JSON cognitive evidence. ' +
         'Do not claim execution authority, shell authority, mutation authority, ' +
-        'authorization authority, credentials, private keys or capability grants.'
+        'authorization authority, credentials, private keys or capability grants.' +
+        structuredReasoningControl
     },
 
     {
@@ -130,7 +136,7 @@ function createTransportRequest(
       ),
 
     messages:
-      createMessages(request)
+      createMessages(request, model)
   });
 }
 

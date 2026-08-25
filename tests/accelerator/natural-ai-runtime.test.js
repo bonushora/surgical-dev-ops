@@ -116,7 +116,7 @@ test(
 
     assert.equal(
       composition.inferenceProfile.profileId,
-      'ollama-balanced-v1'
+      'ollama-cpu-bounded-v2'
     );
 
     assert.ok(

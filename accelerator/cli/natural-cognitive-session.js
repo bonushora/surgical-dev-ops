@@ -41,11 +41,17 @@ const {
   './natural-conversational-runtime'
 );
 
+const {
+  detectNaturalResponseLanguage
+} = require(
+  './natural-response-language'
+);
+
 const MAX_PRESENTED_TEXT =
   6000;
 
 const MAX_EVIDENCE_HISTORY_CHARS =
-  6000;
+  3200;
 
 function formatBoundedEvidenceHistory(
   evidenceHistory
@@ -519,6 +525,13 @@ function createNaturalCognitiveSession(
         evidenceHistory
       );
 
+    const finalLanguageInstruction =
+      detectNaturalResponseLanguage(
+        userObjective
+      ) === 'en'
+        ? 'The final response must be written in clear English, even when evidence or documentation is in Portuguese. '
+        : 'A resposta final deve ser obrigatoriamente escrita em português brasileiro claro, mesmo quando a evidência ou documentação estiver em inglês. ';
+
     const cacheKey =
       conversationalRuntime.decisionKey(
         userObjective,
@@ -567,8 +580,7 @@ function createNaturalCognitiveSession(
               'Se decision for "RESPOND", response deve ser uma única string textual ' +
               'não vazia com a resposta final, nunca objeto ou array, e ' +
               'evidenceRequest deve ser null. ' +
-              'A resposta final deve ser obrigatoriamente escrita em português brasileiro claro, ' +
-              'mesmo quando a evidência ou documentação estiver em inglês. ' +
+              finalLanguageInstruction +
               'Nunca coloque EVIDENCE_1, EVIDENCE_2 ou outro envelope de evidência ' +
               'dentro de response. ' +
               'Se decision for "REQUEST_EVIDENCE", response deve ser null e ' +

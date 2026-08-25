@@ -15,7 +15,7 @@ test(
   () => {
     assert.equal(
       NATURAL_LOCAL_INFERENCE_PROFILE.profileId,
-      'ollama-balanced-v1'
+      'ollama-cpu-bounded-v2'
     );
     assert.equal(
       NATURAL_LOCAL_INFERENCE_PROFILE.keepAlive,
@@ -41,8 +41,8 @@ test(
       NATURAL_LOCAL_INFERENCE_PROFILE.operationalAuthority,
       false
     );
-    assert.equal(outputTokensFor('PLAN'), 512);
-    assert.equal(outputTokensFor('EXPLAIN'), 1024);
+    assert.equal(outputTokensFor('PLAN'), 256);
+    assert.equal(outputTokensFor('EXPLAIN'), 512);
     assert.equal(outputTokensFor('PROPOSE'), 2048);
     assert.ok(Object.isFrozen(NATURAL_LOCAL_INFERENCE_PROFILE));
     assert.ok(Object.isFrozen(NATURAL_LOCAL_INFERENCE_PROFILE.outputTokens));

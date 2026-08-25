@@ -46,18 +46,31 @@ const {
   './natural-task-authority'
 );
 
+const {
+  detectNaturalResponseLanguage
+} = require(
+  './natural-response-language'
+);
+
 const LOOP_SCHEMA =
   'sdo.natural_recursive_evidence_loop.v1';
 
 const MAX_HISTORY_ITEM_CHARS =
-  5000;
+  2800;
 
 const PROJECT_GROUNDING_TARGETS =
-  Object.freeze([
+  Object.freeze({
+    'pt-BR': Object.freeze([
     'README.md',
-    'README_EN.md',
-    'README_PT-BR.md'
-  ]);
+    'README_PT-BR.md',
+    'README_EN.md'
+    ]),
+    en: Object.freeze([
+      'README_EN.md',
+      'README.md',
+      'README_PT-BR.md'
+    ])
+  });
 
 function deepFreeze(value) {
   if (
@@ -439,7 +452,11 @@ function deterministicProjectGroundingDecision(
   }
 
   const target =
-    PROJECT_GROUNDING_TARGETS.find(
+    PROJECT_GROUNDING_TARGETS[
+      detectNaturalResponseLanguage(
+        task.objective
+      )
+    ].find(
       (candidate) =>
         evidence[0].files.includes(
           candidate

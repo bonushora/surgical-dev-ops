@@ -9,6 +9,12 @@ const {
   './natural-intent'
 );
 
+const {
+  detectNaturalResponseLanguage
+} = require(
+  './natural-response-language'
+);
+
 const AFFIRMATIVE =
   Object.freeze([
     'sim',
@@ -19,7 +25,12 @@ const AFFIRMATIVE =
     'prossiga',
     'continue',
     'pode continuar',
-    'confirmo'
+    'confirmo',
+    'yes',
+    'authorize',
+    'i authorize',
+    'proceed',
+    'go ahead'
   ]);
 
 const NEGATIVE =
@@ -30,7 +41,10 @@ const NEGATIVE =
     'cancele',
     'nao autorizo',
     'não autorizo',
-    'pare'
+    'pare',
+    'no',
+    'cancel',
+    'stop'
   ]);
 
 function deepFreeze(value) {
@@ -72,7 +86,12 @@ function detectWorkspaceList(text) {
       'listagem deste diretorio',
       'quais arquivos existem neste projeto',
       'quais arquivos tem neste projeto',
-      'mostre a estrutura do projeto'
+      'mostre a estrutura do projeto',
+      'list the files in this directory',
+      'list files in this directory',
+      'show the files in this directory',
+      'show the project structure',
+      'which files are in this project'
     ].some(
       (pattern) =>
         normalized.includes(pattern)
@@ -122,6 +141,20 @@ function detectExplicitFileTask(text) {
     {
       regex:
         /^(?:analise|examine|explique)\s+(?:o\s+)?arquivo\s+(.+)$/i,
+
+      analysis:
+        true
+    },
+    {
+      regex:
+        /^(?:read|open|show)\s+(?:the\s+)?file\s+(.+)$/i,
+
+      analysis:
+        false
+    },
+    {
+      regex:
+        /^(?:analy[sz]e|examine|explain)\s+(?:the\s+)?file\s+(.+)$/i,
 
       analysis:
         true
@@ -189,7 +222,13 @@ function detectProjectAnalysis(text) {
       'examine este projeto',
       'em que ponto estamos',
       'o que voce sugere fazer agora',
-      'avalie este projeto'
+      'avalie este projeto',
+      'explain this project',
+      'analyze this project',
+      'analyse this project',
+      'examine this project',
+      'evaluate this project',
+      'what do you suggest doing next'
     ].some(
       (pattern) =>
         normalized.includes(pattern)
@@ -240,6 +279,21 @@ function formatTaskProposal(
   }
 
   if (task.kind === 'PROJECT_ANALYSIS') {
+    if (
+      detectNaturalResponseLanguage(
+        task.objective
+      ) === 'en'
+    ) {
+      return (
+        'To answer from the real project, I need to consult governed workspace evidence.\n\n' +
+        `Authorized project: ${workspace}\n` +
+        'The Orchestrator may list files, read only necessary descendant files, and validate specific JavaScript files.\n' +
+        'The consultation is restricted to this project, limited to 8 steps, and permits no writes, generic shell, or authority expansion.\n' +
+        'No file will be changed.\n\n' +
+        'May I proceed?\n'
+      );
+    }
+
     return (
       'Para responder com base no projeto real, preciso consultar evidências do workspace.\n\n' +
       `Projeto autorizado: ${workspace}\n` +

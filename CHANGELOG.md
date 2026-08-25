@@ -12,6 +12,13 @@ https://semver.org/
 
 ## Unreleased
 
+### NATURAL bilingual intent and CPU latency qualification
+
+- Routes equivalent Portuguese and English project-analysis intents through the same human authorization and governed evidence boundary.
+- Selects the language-specific canonical README before final cognition while preserving immutable hashes, bounded history and zero mutation authority.
+- Qualifies a smaller CPU response budget and evidence window for common explanations without reducing the context ceiling, timeout safety or governance steps.
+- Disables hidden Qwen 3 reasoning for the structured JSON runtime while preserving Qwen as the optional local quality profile and Gemma as the fast profile.
+
 ### NATURAL qualified model selection
 
 - Froze ADR-022 with Qwen 3 8B as the default bilingual local quality profile and Gemma 3 4B as the local fast profile.

@@ -172,5 +172,45 @@ test(
       ),
       true
     );
+
+    assert.equal(
+      isAffirmative('yes'),
+      true
+    );
+
+    assert.equal(
+      isNegative('cancel'),
+      true
+    );
+  }
+);
+
+test(
+  'English project analysis receives the same governed authorization boundary',
+  () => {
+    const task =
+      detectNaturalGovernedTask(
+        'Explain this project to me in English.'
+      );
+
+    assert.equal(
+      task.kind,
+      'PROJECT_ANALYSIS'
+    );
+    assert.equal(task.mutating, false);
+    assert.match(
+      formatTaskProposal(
+        task,
+        'example-project'
+      ),
+      /May I proceed\?/i
+    );
+    assert.match(
+      formatTaskProposal(
+        task,
+        'example-project'
+      ),
+      /No file will be changed/i
+    );
   }
 );

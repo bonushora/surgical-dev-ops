@@ -161,7 +161,7 @@ test(
 
     assert.equal(
       observed.maxOutputTokens,
-      512
+      256
     );
 
     assert.ok(
@@ -222,6 +222,50 @@ test(
 
     assert.ok(Object.isFrozen(raw));
     assert.ok(Object.isFrozen(raw.output));
+  }
+);
+
+test(
+  'qualified Qwen structured requests disable hidden reasoning without affecting other models',
+  async () => {
+    const observed = [];
+
+    for (const model of [
+      'qwen3:8b',
+      'gemma3:4b'
+    ]) {
+      const adapter =
+        createOllamaAIProviderAdapter({
+          providerId:
+            `ollama:${model}`,
+          model,
+          transport:
+            async (value) => {
+              observed.push(value);
+              return Object.freeze({
+                message: Object.freeze({
+                  role: 'assistant',
+                  content: '{"summary":"bounded"}'
+                })
+              });
+            }
+        });
+
+      await adapter.invoke({
+        ...createRequest(),
+        providerId:
+          `ollama:${model}`
+      });
+    }
+
+    assert.match(
+      observed[0].messages[0].content,
+      /\/no_think/
+    );
+    assert.doesNotMatch(
+      observed[1].messages[0].content,
+      /\/no_think/
+    );
   }
 );
 

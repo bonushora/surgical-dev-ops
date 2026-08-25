@@ -12,10 +12,10 @@
 const OUTPUT_TOKENS =
   Object.freeze({
     EXPLAIN:
-      1024,
+      512,
 
     PLAN:
-      512,
+      256,
 
     PROPOSE:
       2048
@@ -27,7 +27,7 @@ const NATURAL_LOCAL_INFERENCE_PROFILE =
       'sdo.natural_local_inference_profile.v1',
 
     profileId:
-      'ollama-balanced-v1',
+      'ollama-cpu-bounded-v2',
 
     acceleration:
       'OLLAMA_AUTO',
