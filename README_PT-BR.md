@@ -19,15 +19,17 @@ sistema operacional ao redor do modelo explícito, limitado, auditável e fail-c
 
 | Evidência | Valor |
 | --- | --- |
-| Linha de release | Surgical DevOps v2.5.0 |
-| Commit canônico | [`8763198993711066e2a2e01b40aa87533ef4f019`](https://github.com/bonushora/surgical-dev-ops/commit/8763198993711066e2a2e01b40aa87533ef4f019) |
-| Run canônico do CI | [Accelerator Conformance #32772955351](https://github.com/bonushora/surgical-dev-ops/actions/runs/32772955351) |
+| Linha de release | Surgical DevOps v2.5.1 |
+| Commit canônico | [`36ef01f53690e644976668248499ab9d5031f52f`](https://github.com/bonushora/surgical-dev-ops/commit/36ef01f53690e644976668248499ab9d5031f52f) |
+| Run canônico do CI | [Accelerator Conformance #32808535616](https://github.com/bonushora/surgical-dev-ops/actions/runs/32808535616) |
 | Resultado da matriz | Ubuntu, macOS e Windows: **PASS** |
-| Suíte canônica | 849 testes descobertos; 0 falhas; skips de plataforma permanecem explícitos |
+| Suíte canônica | 864 testes descobertos; 859 aprovados; 0 falhas; 5 skips específicos de plataforma |
 | Protocolos normativos | BH-SEP v2.2 + BH-SDP v2.2 |
 
 A trilha completa, incluindo os runs que falharam antes do baseline verde, está em
 [Evidências de Engenharia](./docs/ENGINEERING_EVIDENCE.md).
+Revisores independentes podem começar pelo
+[Pacote de Revisão Externa](./docs/EXTERNAL_ENGINEERING_REVIEW.md).
 
 ## Por que este projeto existe
 
@@ -89,6 +91,11 @@ nativas diferentes avaliadas contra contratos limitados em comum. Consulte
 O provider local de referência é o Ollama quando disponível. Providers são
 substituíveis e permanecem fora da autoridade operacional. Análises amplas no modo
 NATURAL atravessam autorização humana e um loop recursivo governado de evidências.
+
+O modo ENGINEER acrescenta uma proposta imutável vinculada ao alvo READ_FILE e
+ao SHA-256 BEFORE realmente observados. O fluxo para obrigatoriamente em
+`HUMAN_AUTHORITY_REQUIRED`; a mutação física continua sendo uma operação R3
+explícita e separada.
 
 ## Início rápido
 

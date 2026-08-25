@@ -35,9 +35,9 @@ test('English and Portuguese entry points expose equivalent qualified baseline f
   const english = read('README.md');
   const portuguese = read('README_PT-BR.md');
   const facts = [
-    '8763198993711066e2a2e01b40aa87533ef4f019',
-    '32772955351',
-    '849',
+    '36ef01f53690e644976668248499ab9d5031f52f',
+    '32808535616',
+    '864',
     'POWER_LOSS_VALIDATED',
     'protocols/BH-SEP.md',
     'protocols/BH-SDP.md'
@@ -56,6 +56,7 @@ test('international documentation has no unresolved local Markdown targets', () 
     'README_PT-BR.md',
     'README_EN.md',
     'docs/ENGINEERING_EVIDENCE.md',
+    'docs/EXTERNAL_ENGINEERING_REVIEW.md',
     'docs/DOCUMENTATION.md',
     'protocols/README.md',
     'docs/adr/ADR-018-immutable-protocol-raw-and-international-documentation.md'
@@ -78,5 +79,7 @@ test('npm package preserves both public languages and no reconstruction artifact
   assert.ok(packageDefinition.files.includes('README.md'));
   assert.ok(packageDefinition.files.includes('README_EN.md'));
   assert.ok(packageDefinition.files.includes('README_PT-BR.md'));
+  assert.ok(packageDefinition.files.includes('docs/'));
+  assert.ok(packageDefinition.files.includes('examples/'));
   assert.equal(fs.existsSync(path.join(ROOT, '[Reconstrução')), false);
 });

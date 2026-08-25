@@ -50,6 +50,10 @@ https://semver.org/
 
 ## [Unreleased]
 
+No unreleased changes.
+
+## [2.5.1] - 2026-08-25
+
 ### Governed engineering loop
 
 - Added a strict immutable cognitive patch-proposal boundary with no
@@ -62,6 +66,15 @@ https://semver.org/
   patch command; conversational approval never applies the proposal.
 - Preserved NATURAL grounded explanation and EXPERT deterministic behavior.
 
+### External review readiness
+
+- Added a deterministic, zero-mutation engineering-loop demonstration.
+- Added the external engineering review package with threat cases, trust-boundary
+  inspection order, reproducible commands, supported claims and explicit
+  non-claims.
+- Included public documentation and examples in the npm package allowlist.
+- Advanced the CLI and package release line to v2.5.1.
+
 ### Documentation
 
 - Made the default repository README English-first for international engineering review.
@@ -73,8 +86,14 @@ https://semver.org/
 
 ### Qualification
 
-- Recorded canonical commit `8763198993711066e2a2e01b40aa87533ef4f019`.
-- Recorded successful GitHub Actions run `32772955351` across Ubuntu, macOS, and Windows.
+- Recorded predecessor commit `8763198993711066e2a2e01b40aa87533ef4f019`
+  and its successful native-sandbox qualification run `32772955351`.
+- Recorded canonical engineering-loop commit
+  `36ef01f53690e644976668248499ab9d5031f52f`.
+- Recorded successful GitHub Actions run `32808535616` across Ubuntu, macOS,
+  and Windows.
+- Qualified 864 discovered tests: 859 PASS, 0 FAIL and 5 explicit
+  platform-specific SKIP.
 - Preserved explicit limitations for power-loss, strict pathname CAS, and external review.
 
 ---

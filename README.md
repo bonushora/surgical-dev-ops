@@ -19,15 +19,17 @@ operational system around the model explicit, bounded, auditable, and fail-close
 
 | Evidence | Value |
 | --- | --- |
-| Release line | Surgical DevOps v2.5.0 |
-| Canonical commit | [`8763198993711066e2a2e01b40aa87533ef4f019`](https://github.com/bonushora/surgical-dev-ops/commit/8763198993711066e2a2e01b40aa87533ef4f019) |
-| Canonical CI run | [Accelerator Conformance #32772955351](https://github.com/bonushora/surgical-dev-ops/actions/runs/32772955351) |
+| Release line | Surgical DevOps v2.5.1 |
+| Canonical commit | [`36ef01f53690e644976668248499ab9d5031f52f`](https://github.com/bonushora/surgical-dev-ops/commit/36ef01f53690e644976668248499ab9d5031f52f) |
+| Canonical CI run | [Accelerator Conformance #32808535616](https://github.com/bonushora/surgical-dev-ops/actions/runs/32808535616) |
 | Matrix result | Ubuntu, macOS, and Windows: **PASS** |
-| Canonical suite | 849 tests discovered; 0 failures; platform-specific skips remain explicit |
+| Canonical suite | 864 tests discovered; 859 passed; 0 failures; 5 platform-specific skips |
 | Normative protocols | BH-SEP v2.2 + BH-SDP v2.2 |
 
 The complete trail, including failed runs that preceded the green baseline, is
 documented in [Engineering Evidence](./docs/ENGINEERING_EVIDENCE.md).
+Independent reviewers can start with the
+[External Engineering Review Package](./docs/EXTERNAL_ENGINEERING_REVIEW.md).
 
 ## Why this exists
 
@@ -101,6 +103,11 @@ unavailable, deterministic behavior remains active and fails safely.
 Broad project analysis in NATURAL mode crosses explicit human authorization and a
 governed recursive evidence loop. Workspace facts must come from
 Orchestrator-qualified evidence, not model memory or inference.
+
+ENGINEER mode extends this path with one immutable proposal bound to the exact
+governed READ_FILE target and BEFORE SHA-256. It stops at
+`HUMAN_AUTHORITY_REQUIRED`; physical mutation remains a separate explicit R3
+operation.
 
 ## Quick start
 

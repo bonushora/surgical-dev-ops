@@ -10,17 +10,34 @@ claims that remain unqualified.
 
 | Field | Evidence |
 | --- | --- |
-| Commit | [`8763198993711066e2a2e01b40aa87533ef4f019`](https://github.com/bonushora/surgical-dev-ops/commit/8763198993711066e2a2e01b40aa87533ef4f019) |
+| Commit | [`36ef01f53690e644976668248499ab9d5031f52f`](https://github.com/bonushora/surgical-dev-ops/commit/36ef01f53690e644976668248499ab9d5031f52f) |
 | Workflow | Accelerator Conformance |
-| Run | [32772955351](https://github.com/bonushora/surgical-dev-ops/actions/runs/32772955351) |
+| Run | [32808535616](https://github.com/bonushora/surgical-dev-ops/actions/runs/32808535616) |
 | Ubuntu job | PASS |
 | macOS job | PASS |
 | Windows job | PASS |
-| Canonical suite | 849 tests discovered; zero failures at the accepted baseline |
+| Canonical suite | 864 tests discovered; 859 passed; zero failures; 5 explicit platform skips |
 | Repository state after qualification | `main` synchronized with `origin/main`; clean worktree |
 
 The workflow does not hide a failing canonical suite. It captures the test
 outcome, emits diagnostics on failure, and then enforces a nonzero job result.
+
+## Governed engineering-loop evidence
+
+The v2.5.1 baseline additionally qualifies the single-agent engineering path:
+
+- workspace evidence is obtained only through the governed recursive loop;
+- an untrusted model output is materialized as one exact immutable proposal;
+- the proposal target and BEFORE SHA-256 must match a governed READ_FILE item;
+- malformed shape, authority fields, traversal, stale hashes, oversized content
+  and validation broadening fail closed;
+- ENGINEER exposes the proposal evidence but performs no implicit mutation;
+- the loop terminates at `HUMAN_AUTHORITY_REQUIRED` before the independent R3
+  mutation boundary.
+
+The local qualification for commit `36ef01f` discovered 864 tests with 859
+passes, zero failures and five platform-specific skips. GitHub Actions run
+32808535616 completed successfully across Ubuntu, macOS and Windows.
 
 ## Native platform boundaries
 
@@ -61,6 +78,7 @@ public runs show the investigation:
 | [32770963515](https://github.com/bonushora/surgical-dev-ops/actions/runs/32770963515) | `7eb5a33` | macOS failure | A native helper compiled, but external pre-bootstrap sandboxing still aborted. |
 | [32771814195](https://github.com/bonushora/surgical-dev-ops/actions/runs/32771814195) | `eb6c4c6` | macOS failure | Isolated probes identified the exact failing stage as `bootstrap`. |
 | [32772955351](https://github.com/bonushora/surgical-dev-ops/actions/runs/32772955351) | `8763198` | PASS | Native self-application of Seatbelt passed on macOS while Linux and Windows stayed green. |
+| [32808535616](https://github.com/bonushora/surgical-dev-ops/actions/runs/32808535616) | `36ef01f` | PASS | Single-agent governed engineering loop passed while the three native platform jobs remained green. |
 
 The blocking test was retained throughout. The final green run used the same
 canonical workflow and three-platform matrix.

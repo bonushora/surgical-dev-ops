@@ -5,6 +5,7 @@
 - [Project overview — English](../README.md)
 - [Visão geral — Português](../README_PT-BR.md)
 - [Engineering Evidence Trail](./ENGINEERING_EVIDENCE.md)
+- [External Engineering Review Package](./EXTERNAL_ENGINEERING_REVIEW.md)
 - [Contributing](../CONTRIBUTING.md)
 - [Changelog](../CHANGELOG.md)
 - [Roadmap](../ROADMAP.md)
