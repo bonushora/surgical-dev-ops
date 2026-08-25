@@ -52,6 +52,13 @@ const LOOP_SCHEMA =
 const MAX_HISTORY_ITEM_CHARS =
   12000;
 
+const PROJECT_GROUNDING_TARGETS =
+  Object.freeze([
+    'README.md',
+    'README_EN.md',
+    'README_PT-BR.md'
+  ]);
+
 function deepFreeze(value) {
   if (
     !value ||
@@ -174,6 +181,9 @@ function extractRecursiveEvidence(
 
       target:
         null,
+
+      files:
+        [...execution.result.files],
 
       summary:
         boundedText(
@@ -382,6 +392,86 @@ function dispatchGovernedMachineEvidence(
   );
 }
 
+function deterministicProjectGroundingDecision(
+  task,
+  evidence
+) {
+  if (
+    task.kind !==
+      'PROJECT_ANALYSIS'
+  ) {
+    return null;
+  }
+
+  if (evidence.length === 0) {
+    return deepFreeze({
+      schema:
+        'sdo.natural_evidence_decision.v1',
+
+      decision:
+        'REQUEST_EVIDENCE',
+
+      response:
+        null,
+
+      evidenceRequest: {
+        kind:
+          'WORKSPACE_FILES',
+
+        target:
+          null,
+
+        reason:
+          'Canonical project grounding begins with the authorized workspace inventory.'
+      }
+    });
+  }
+
+  if (
+    evidence.length !== 1 ||
+    evidence[0].kind !==
+      'WORKSPACE_FILES' ||
+    !Array.isArray(
+      evidence[0].files
+    )
+  ) {
+    return null;
+  }
+
+  const target =
+    PROJECT_GROUNDING_TARGETS.find(
+      (candidate) =>
+        evidence[0].files.includes(
+          candidate
+        )
+    );
+
+  if (!target) {
+    return null;
+  }
+
+  return deepFreeze({
+    schema:
+      'sdo.natural_evidence_decision.v1',
+
+    decision:
+      'REQUEST_EVIDENCE',
+
+    response:
+      null,
+
+    evidenceRequest: {
+      kind:
+        'READ_FILE',
+
+      target,
+
+      reason:
+        'Canonical project grounding requires one real project description file.'
+    }
+  });
+}
+
 async function runNaturalRecursiveEvidenceLoop(
   {
     task,
@@ -452,37 +542,68 @@ async function runNaturalRecursiveEvidenceLoop(
         .maxEvidenceSteps;
     step += 1
   ) {
-    let decision;
+    let decision =
+      deterministicProjectGroundingDecision(
+        task,
+        evidence
+      );
 
-    try {
-      decision =
-        await cognitiveSession
-          .decideEvidence(
-            task.objective,
-            activation,
-            history
-          );
-    } catch {
-      return finalResult({
-        status:
-          'FAILED',
+    if (!decision) {
+      try {
+        decision =
+          await cognitiveSession
+            .decideEvidence(
+              task.objective,
+              activation,
+              history
+            );
+      } catch {
+        return finalResult({
+          status:
+            'FAILED',
 
-        envelope,
+          envelope,
 
-        steps:
-          step,
+          steps:
+            step,
 
-        evidence,
+          evidence,
 
-        reason:
-          'Cognitive evidence planning failed safely.'
-      });
+          reason:
+            'Cognitive evidence planning failed safely.'
+        });
+      }
     }
 
     if (
       decision.decision ===
         'RESPOND'
     ) {
+      if (
+        task.kind ===
+          'PROJECT_ANALYSIS' &&
+        !evidence.some(
+          (item) =>
+            item.kind ===
+              'READ_FILE'
+        )
+      ) {
+        return finalResult({
+          status:
+            'FAILED',
+
+          envelope,
+
+          steps:
+            step,
+
+          evidence,
+
+          reason:
+            'Project analysis cannot respond without governed file evidence.'
+        });
+      }
+
       return finalResult({
         status:
           'COMPLETED',

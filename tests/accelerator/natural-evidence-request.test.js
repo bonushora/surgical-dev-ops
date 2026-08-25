@@ -76,6 +76,88 @@ test(
 );
 
 test(
+  'missing explanatory reason receives canonical local text without authority expansion',
+  () => {
+    const result =
+      parseNaturalEvidenceDecision(
+        completed({
+          decision:
+            'REQUEST_EVIDENCE',
+
+          response:
+            null,
+
+          evidenceRequest: {
+            kind:
+              'WORKSPACE_FILES',
+
+            target:
+              null
+          }
+        })
+      );
+
+    assert.deepEqual(
+      result.evidenceRequest,
+      {
+        kind:
+          'WORKSPACE_FILES',
+
+        target:
+          null,
+
+        reason:
+          'Consultar a estrutura do projeto autorizado.'
+      }
+    );
+
+    assert.deepEqual(
+      evidenceRequestToIntent(
+        result.evidenceRequest
+      ),
+      {
+        capabilityType:
+          'GIT_READ',
+
+        target:
+          'workspace-files'
+      }
+    );
+
+    assert.equal(
+      Object.isFrozen(
+        result.evidenceRequest
+      ),
+      true
+    );
+
+    assert.throws(
+      () =>
+        parseNaturalEvidenceDecision(
+          completed({
+            decision:
+              'REQUEST_EVIDENCE',
+
+            response:
+              null,
+
+            evidenceRequest: {
+              kind:
+                'WORKSPACE_FILES',
+
+              target:
+                null,
+
+              reason:
+                42
+            }
+          })
+        )
+    );
+  }
+);
+
+test(
   'cognitive provider may request one bounded file read without authority',
   () => {
     const result =

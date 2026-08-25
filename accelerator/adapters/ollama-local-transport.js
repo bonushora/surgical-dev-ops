@@ -4,7 +4,7 @@ const ENDPOINT =
   'http://127.0.0.1:11434/api/chat';
 
 const TIMEOUT_MS =
-  30000;
+  180000;
 
 const MAX_RESPONSE_BYTES =
   131072;

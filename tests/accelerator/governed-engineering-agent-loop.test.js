@@ -90,6 +90,23 @@ function respond() {
   });
 }
 
+function gitEvidence() {
+  return deepFreeze({
+    orchestration: {
+      status: 'COMPLETED'
+    },
+    execution: {
+      schema: 'sdo.git_read_result.v1',
+      selector: 'WORKSPACE_FILES',
+      result: {
+        files: [
+          'accelerator/example.js'
+        ]
+      }
+    }
+  });
+}
+
 function fileEvidence() {
   return deepFreeze({
     orchestration: {
@@ -161,9 +178,12 @@ test(
             return proposal();
           }
         },
-        dispatchEvidence() {
+        dispatchEvidence(intent) {
           dispatches += 1;
-          return fileEvidence();
+
+          return intent.capabilityType === 'GIT_READ'
+            ? gitEvidence()
+            : fileEvidence();
         }
       });
 
@@ -171,7 +191,7 @@ test(
       result.status,
       'HUMAN_AUTHORITY_REQUIRED'
     );
-    assert.equal(dispatches, 1);
+    assert.equal(dispatches, 2);
     assert.match(
       proposedEvidence,
       /accelerator\/example\.js/
@@ -214,8 +234,10 @@ test(
             });
           }
         },
-        dispatchEvidence() {
-          return fileEvidence();
+        dispatchEvidence(intent) {
+          return intent.capabilityType === 'GIT_READ'
+            ? gitEvidence()
+            : fileEvidence();
         }
       });
 

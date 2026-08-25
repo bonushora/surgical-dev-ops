@@ -190,11 +190,6 @@ test(
   async () => {
     const decisions = [
       requestDecision(
-        'WORKSPACE_FILES',
-        null
-      ),
-
-      requestDecision(
         'READ_FILE',
         'package.json'
       ),
@@ -309,26 +304,21 @@ test(
 
     assert.equal(
       observedHistory[0].length,
-      0
-    );
-
-    assert.equal(
-      observedHistory[1].length,
       1
     );
 
     assert.match(
-      observedHistory[1][0],
+      observedHistory[0][0],
       /WORKSPACE_FILES/
     );
 
     assert.equal(
-      observedHistory[2].length,
+      observedHistory[1].length,
       2
     );
 
     assert.match(
-      observedHistory[2][1],
+      observedHistory[1][1],
       /surgical-dev-ops/
     );
 
@@ -345,6 +335,103 @@ test(
     assert.equal(
       Object.isFrozen(result),
       true
+    );
+  }
+);
+
+test(
+  'project analysis deterministically grounds one canonical file before final cognition',
+  async () => {
+    let cognitiveCalls =
+      0;
+
+    const dispatched = [];
+
+    const result =
+      await runNaturalRecursiveEvidenceLoop({
+        task:
+          projectTask(),
+
+        activation:
+          activation(),
+
+        cognitiveSession: {
+          async decideEvidence(
+            _objective,
+            _activation,
+            history
+          ) {
+            cognitiveCalls += 1;
+
+            assert.equal(
+              history.length,
+              2
+            );
+
+            assert.match(
+              history[1],
+              /TARGET: README\.md/
+            );
+
+            return respondDecision(
+              'O README descreve o projeto com evidência governada.'
+            );
+          }
+        },
+
+        dispatchEvidence(
+          intent
+        ) {
+          dispatched.push(
+            intent
+          );
+
+          if (
+            intent.capabilityType ===
+              'GIT_READ'
+          ) {
+            return gitEvidence([
+              'README.md',
+              'package.json'
+            ]);
+          }
+
+          return fileEvidence(
+            'README.md',
+            '# Surgical DevOps\n'
+          );
+        }
+      });
+
+    assert.equal(
+      result.status,
+      'COMPLETED'
+    );
+
+    assert.equal(
+      cognitiveCalls,
+      1
+    );
+
+    assert.equal(
+      dispatched.length,
+      2
+    );
+
+    assert.deepEqual(
+      dispatched[1],
+      {
+        capabilityType:
+          'FILESYSTEM_READ',
+
+        target:
+          'README.md'
+      }
+    );
+
+    assert.equal(
+      result.evidence[1].kind,
+      'READ_FILE'
     );
   }
 );
@@ -444,8 +531,19 @@ test(
           }
         },
 
-        dispatchEvidence() {
+        dispatchEvidence(
+          intent
+        ) {
           dispatches += 1;
+
+          if (
+            intent.capabilityType ===
+              'GIT_READ'
+          ) {
+            return gitEvidence([
+              'package.json'
+            ]);
+          }
 
           return null;
         }
@@ -458,7 +556,7 @@ test(
 
     assert.equal(
       dispatches,
-      0
+      1
     );
   }
 );
@@ -491,8 +589,19 @@ test(
           }
         },
 
-        dispatchEvidence() {
+        dispatchEvidence(
+          intent
+        ) {
           dispatches += 1;
+
+          if (
+            intent.capabilityType ===
+              'GIT_READ'
+          ) {
+            return gitEvidence([
+              'package.json'
+            ]);
+          }
 
           return fileEvidence(
             'package.json',
@@ -508,7 +617,7 @@ test(
 
     assert.equal(
       dispatches,
-      1
+      2
     );
 
     assert.equal(
@@ -637,6 +746,10 @@ test(
 
         dispatchEvidence() {
           dispatches += 1;
+
+          return gitEvidence([
+            'package.json'
+          ]);
         }
       });
 
@@ -647,7 +760,7 @@ test(
 
     assert.equal(
       dispatches,
-      0
+      1
     );
   }
 );
@@ -693,6 +806,15 @@ test(
         dispatchEvidence(
           intent
         ) {
+          if (
+            intent.capabilityType ===
+              'GIT_READ'
+          ) {
+            return gitEvidence([
+              ...targets
+            ]);
+          }
+
           return fileEvidence(
             intent.target,
             'const value = 1;\n'
@@ -767,7 +889,18 @@ test(
           }
         },
 
-        dispatchEvidence() {
+        dispatchEvidence(
+          intent
+        ) {
+          if (
+            intent.capabilityType ===
+              'GIT_READ'
+          ) {
+            return gitEvidence([
+              'large.js'
+            ]);
+          }
+
           return fileEvidence(
             'large.js',
             huge
@@ -782,16 +915,16 @@ test(
 
     assert.equal(
       secondHistory.length,
-      1
+      2
     );
 
     assert.ok(
-      secondHistory[0].length <
+      secondHistory[1].length <
         13000
     );
 
     assert.match(
-      secondHistory[0],
+      secondHistory[1],
       /TRUNCATED_BY_SURGICAL_DEVOPS/
     );
   }

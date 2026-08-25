@@ -35,7 +35,7 @@ test(
       result.status,
       'HUMAN_AUTHORITY_REQUIRED'
     );
-    assert.equal(result.evidenceCount, 1);
+    assert.equal(result.evidenceCount, 2);
     assert.equal(
       result.target,
       'accelerator/example.js'

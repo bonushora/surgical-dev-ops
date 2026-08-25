@@ -261,6 +261,7 @@ function createNaturalSessionControl(
 
     if (
       text === 'providers' ||
+      text === 'provedores' ||
       includesAny(
         text,
         [

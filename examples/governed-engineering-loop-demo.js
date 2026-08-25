@@ -125,7 +125,27 @@ const cognitiveSession =
     }
   });
 
-function dispatchEvidence() {
+function dispatchEvidence(intent) {
+  if (intent.capabilityType === 'GIT_READ') {
+    return deepFreeze({
+      orchestration: {
+        status:
+          'COMPLETED'
+      },
+      execution: {
+        schema:
+          'sdo.git_read_result.v1',
+        selector:
+          'WORKSPACE_FILES',
+        result: {
+          files: [
+            'accelerator/example.js'
+          ]
+        }
+      }
+    });
+  }
+
   return deepFreeze({
     orchestration: {
       status:

@@ -173,7 +173,6 @@ test(
     );
 
     const histories = [];
-    let decisions = 0;
 
     const cognitiveSession =
       Object.freeze({
@@ -183,27 +182,6 @@ test(
           history
         ) {
           histories.push([...history]);
-          decisions += 1;
-
-          if (decisions === 1) {
-            return Object.freeze({
-              schema:
-                'sdo.natural_evidence_decision.v1',
-              decision:
-                'REQUEST_EVIDENCE',
-              response:
-                null,
-              evidenceRequest:
-                Object.freeze({
-                  kind:
-                    'WORKSPACE_FILES',
-                  target:
-                    null,
-                  reason:
-                    'Identificar a estrutura real do projeto.'
-                })
-            });
-          }
 
           return Object.freeze({
             schema:
@@ -226,7 +204,28 @@ test(
         terminal:
           false,
         cognitiveSession,
-        dispatchEvidence() {
+        dispatchEvidence(intent) {
+          if (intent.capabilityType === 'GIT_READ') {
+            return {
+              orchestration: {
+                status:
+                  'COMPLETED'
+              },
+              execution: {
+                schema:
+                  'sdo.git_read_result.v1',
+                selector:
+                  'WORKSPACE_FILES',
+                result: {
+                  files: [
+                    'README.md',
+                    'package.json'
+                  ]
+                }
+              }
+            };
+          }
+
           return {
             orchestration: {
               status:
@@ -234,14 +233,18 @@ test(
             },
             execution: {
               schema:
-                'sdo.git_read_result.v1',
-              selector:
-                'WORKSPACE_FILES',
-              result: {
-                files: [
-                  'package.json',
-                  'accelerator/cli/surgical.js'
-                ]
+                'sdo.filesystem_read_result.v1',
+              target: {
+                requested:
+                  'README.md'
+              },
+              evidence: {
+                bytes:
+                  19,
+                sha256:
+                  'a'.repeat(64),
+                content:
+                  '# Surgical DevOps\n'
               }
             }
           };
@@ -292,17 +295,22 @@ test(
 
     assert.equal(
       histories.length,
-      2
+      1
     );
 
     assert.equal(
       histories[0].length,
-      0
+      2
     );
 
     assert.match(
-      histories[1][0],
+      histories[0][0],
       /WORKSPACE_FILES/
+    );
+
+    assert.match(
+      histories[0][1],
+      /TARGET: README\.md/
     );
 
     assert.doesNotMatch(
@@ -355,7 +363,12 @@ test(
         output,
         terminal:
           false,
-        cognitiveSession
+        cognitiveSession,
+        dispatchEvidence() {
+          throw new Error(
+            'governed evidence unavailable'
+          );
+        }
       }
     );
 
@@ -468,7 +481,26 @@ test(
         output,
         terminal: false,
         cognitiveSession,
-        dispatchEvidence() {
+        dispatchEvidence(intent) {
+          if (intent.capabilityType === 'GIT_READ') {
+            return {
+              orchestration: {
+                status: 'COMPLETED'
+              },
+              execution: {
+                schema:
+                  'sdo.git_read_result.v1',
+                selector:
+                  'WORKSPACE_FILES',
+                result: {
+                  files: [
+                    'accelerator/example.js'
+                  ]
+                }
+              }
+            };
+          }
+
           return {
             orchestration: {
               status: 'COMPLETED'

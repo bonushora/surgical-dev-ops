@@ -133,6 +133,43 @@ function normalizeResponse(value) {
   );
 }
 
+function normalizeEvidenceReason(
+  value,
+  kind,
+  target = null
+) {
+  if (
+    value === undefined ||
+    value === null ||
+    (
+      typeof value === 'string' &&
+      !value.trim()
+    )
+  ) {
+    if (kind === 'WORKSPACE_FILES') {
+      return (
+        'Consultar a estrutura do projeto autorizado.'
+      );
+    }
+
+    if (kind === 'READ_FILE') {
+      return (
+        `Ler o arquivo autorizado ${target}.`
+      );
+    }
+
+    return (
+      `Validar o arquivo JavaScript autorizado ${target}.`
+    );
+  }
+
+  return requireBoundedText(
+    value,
+    'evidenceRequest.reason',
+    500
+  );
+}
+
 function normalizeEvidenceRequest(
   value
 ) {
@@ -165,13 +202,6 @@ function normalizeEvidenceRequest(
     );
   }
 
-  const reason =
-    requireBoundedText(
-      value.reason,
-      'evidenceRequest.reason',
-      500
-    );
-
   if (kind === 'WORKSPACE_FILES') {
     if (
       value.target !== null &&
@@ -186,7 +216,12 @@ function normalizeEvidenceRequest(
       kind,
       target:
         null,
-      reason
+
+      reason:
+        normalizeEvidenceReason(
+          value.reason,
+          kind
+        )
     });
   }
 
@@ -200,7 +235,13 @@ function normalizeEvidenceRequest(
   return deepFreeze({
     kind,
     target,
-    reason
+
+    reason:
+      normalizeEvidenceReason(
+        value.reason,
+        kind,
+        target
+      )
   });
 }
 
