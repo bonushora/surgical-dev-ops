@@ -1,5 +1,11 @@
 'use strict';
 
+const {
+  outputTokensFor
+} = require(
+  '../cli/natural-local-inference-profile'
+);
+
 const FORBIDDEN_OUTPUT_KEYS =
   new Set([
     'command',
@@ -117,6 +123,11 @@ function createTransportRequest(
 
     temperature:
       0,
+
+    maxOutputTokens:
+      outputTokensFor(
+        request.capability
+      ),
 
     messages:
       createMessages(request)

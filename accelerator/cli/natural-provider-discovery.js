@@ -25,6 +25,12 @@ const DEFAULT_PROVIDER_ID =
 const DEFAULT_MODEL =
   'llama3:latest';
 
+const {
+  NATURAL_LOCAL_INFERENCE_PROFILE
+} = require(
+  './natural-local-inference-profile'
+);
+
 const DISCOVERY_TIMEOUT_MS =
   1500;
 
@@ -72,6 +78,9 @@ function unavailable(reason) {
 
     operationalAuthority:
       false,
+
+    inferenceProfile:
+      NATURAL_LOCAL_INFERENCE_PROFILE,
 
     reason
   });
@@ -293,6 +302,9 @@ async function discoverNaturalDefaultProvider(
 
     operationalAuthority:
       false,
+
+    inferenceProfile:
+      NATURAL_LOCAL_INFERENCE_PROFILE,
 
     reason:
       'Local Ollama and Llama 3 were verified.'

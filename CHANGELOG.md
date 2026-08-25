@@ -50,6 +50,17 @@ https://semver.org/
 
 ## [Unreleased]
 
+### Local inference performance
+
+- Added the immutable `ollama-balanced-v1` local inference profile.
+- Keeps the selected Ollama model warm for ten minutes between requests.
+- Applies fixed context and capability-specific output-token budgets.
+- Delegates CPU/GPU acceleration selection to Ollama without installing or
+  mutating drivers.
+- Shows progress while governed evidence and local inference are pending.
+- Preserves content-silent operation, fixed loopback transport and zero AI
+  operational authority.
+
 ### CI maintenance
 
 - Migrated the canonical workflow from `actions/checkout@v4` to

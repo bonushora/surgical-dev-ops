@@ -111,6 +111,11 @@ test(
       false
     );
 
+    assert.equal(
+      composition.inferenceProfile.profileId,
+      'ollama-balanced-v1'
+    );
+
     assert.ok(
       Object.isFrozen(composition)
     );

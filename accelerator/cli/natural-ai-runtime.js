@@ -37,6 +37,12 @@ const {
   DEFAULT_MODEL
 } = require('./natural-provider-discovery');
 
+const {
+  NATURAL_LOCAL_INFERENCE_PROFILE
+} = require(
+  './natural-local-inference-profile'
+);
+
 function requireDiscovery(discovery) {
   if (
     !discovery ||
@@ -155,6 +161,9 @@ function createNaturalLocalAIComposition(
 
     local:
       true,
+
+    inferenceProfile:
+      NATURAL_LOCAL_INFERENCE_PROFILE,
 
     operationalAuthority:
       false,

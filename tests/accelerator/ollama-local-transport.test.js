@@ -26,6 +26,9 @@ function canonicalRequest(
     temperature:
       0,
 
+    maxOutputTokens:
+      512,
+
     messages:
       Object.freeze([
         Object.freeze({
@@ -193,10 +196,17 @@ test(
       'json'
     );
 
+    assert.equal(
+      body.keep_alive,
+      '10m'
+    );
+
     assert.deepEqual(
       body.options,
       {
-        temperature: 0
+        temperature: 0,
+        num_ctx: 4096,
+        num_predict: 512
       }
     );
 
@@ -318,6 +328,11 @@ test(
       }),
 
       canonicalRequest({
+        maxOutputTokens:
+          999999
+      }),
+
+      canonicalRequest({
         model:
           ''
       }),
@@ -344,7 +359,7 @@ test(
           transport.invoke(
             request
           ),
-        /request|operation|stream|temperature|model|messages|forbidden/i
+        /request|operation|stream|temperature|budget|model|messages|forbidden/i
       );
     }
 

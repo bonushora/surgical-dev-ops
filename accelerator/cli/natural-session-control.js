@@ -112,6 +112,8 @@ function formatProviderStatus(
       `  Provider: ${discovery.provider}\n` +
       `  Modelo: ${discovery.model}\n` +
       '  Execução: local\n' +
+      '  Aceleração: automática pelo Ollama (CPU/GPU)\n' +
+      '  Perfil: balanceado, contexto 4096, modelo aquecido por 10 minutos\n' +
       '  Estado: verificado e disponível\n' +
       '  Cobrança por chamada de API do Ollama local: não\n' +
       '  Autoridade operacional da IA: nenhuma\n\n' +

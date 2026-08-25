@@ -669,6 +669,10 @@ function createInteractiveSession(
                       activation.interactionMode.mode ===
                         'ENGINEER'
                     ) {
+                      output.write(
+                        'Consultando evidências governadas e preparando a análise local...\n'
+                      );
+
                       const engineering =
                         await runGovernedEngineeringAgentLoop({
                           task,
@@ -705,6 +709,10 @@ function createInteractiveSession(
                       resumeAndPrompt();
                       return;
                     }
+
+                    output.write(
+                      'Consultando evidências governadas e processando a resposta local...\n'
+                    );
 
                     const recursive =
                       await runNaturalRecursiveEvidenceLoop({
@@ -784,6 +792,10 @@ function createInteractiveSession(
                           )
                         );
                       } else {
+                        output.write(
+                          'Arquivo lido. Processando a explicação no modelo local...\n'
+                        );
+
                         const cognitiveOutput =
                           await cognitiveSession.ask(
                             task.objective,

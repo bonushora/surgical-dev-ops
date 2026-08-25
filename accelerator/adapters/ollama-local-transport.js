@@ -1,10 +1,17 @@
 'use strict';
 
+const {
+  NATURAL_LOCAL_INFERENCE_PROFILE
+} = require(
+  '../cli/natural-local-inference-profile'
+);
+
 const ENDPOINT =
   'http://127.0.0.1:11434/api/chat';
 
 const TIMEOUT_MS =
-  180000;
+  NATURAL_LOCAL_INFERENCE_PROFILE
+    .timeoutMs;
 
 const MAX_RESPONSE_BYTES =
   131072;
@@ -20,8 +27,17 @@ const ALLOWED_REQUEST_KEYS =
     'model',
     'stream',
     'temperature',
+    'maxOutputTokens',
     'messages'
   ]);
+
+const ALLOWED_OUTPUT_TOKEN_BUDGETS =
+  new Set(
+    Object.values(
+      NATURAL_LOCAL_INFERENCE_PROFILE
+        .outputTokens
+    )
+  );
 
 function deepFreeze(value) {
   if (
@@ -180,6 +196,19 @@ function validateRequest(
   ) {
     throw new Error(
       'Local Ollama transport request temperature must be zero.'
+    );
+  }
+
+  if (
+    !Number.isInteger(
+      request.maxOutputTokens
+    ) ||
+    !ALLOWED_OUTPUT_TOKEN_BUDGETS.has(
+      request.maxOutputTokens
+    )
+  ) {
+    throw new Error(
+      'Local Ollama transport output budget is not qualified.'
     );
   }
 
@@ -353,9 +382,20 @@ function createLocalOllamaTransport(
         format:
           'json',
 
+        keep_alive:
+          NATURAL_LOCAL_INFERENCE_PROFILE
+            .keepAlive,
+
         options: {
           temperature:
-            0
+            0,
+
+          num_ctx:
+            NATURAL_LOCAL_INFERENCE_PROFILE
+              .contextTokens,
+
+          num_predict:
+            request.maxOutputTokens
         }
       });
 
@@ -404,6 +444,9 @@ function createLocalOllamaTransport(
 
     endpoint:
       ENDPOINT,
+
+    profile:
+      NATURAL_LOCAL_INFERENCE_PROFILE,
 
     invoke
   });

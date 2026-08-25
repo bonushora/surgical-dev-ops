@@ -209,8 +209,14 @@ test(
 );
 
 test(
-  'local CPU provider timeout remains bounded at the qualified 180 second ceiling',
+  'local provider timeout remains bounded by the qualified performance profile',
   () => {
+    const {
+      NATURAL_LOCAL_INFERENCE_PROFILE
+    } = require(
+      '../../accelerator/cli/natural-local-inference-profile'
+    );
+
     const source =
       fs.readFileSync(
         require.resolve(
@@ -219,9 +225,14 @@ test(
         'utf8'
       );
 
+    assert.equal(
+      NATURAL_LOCAL_INFERENCE_PROFILE.timeoutMs,
+      180000
+    );
+
     assert.match(
       source,
-      /const TIMEOUT_MS\s*=\s*180000;/
+      /NATURAL_LOCAL_INFERENCE_PROFILE\s*\.timeoutMs/
     );
 
     assert.doesNotMatch(

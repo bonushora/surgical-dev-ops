@@ -180,6 +180,16 @@ test(
 
     assert.match(
       output,
+      /Aceleração: automática pelo Ollama/i
+    );
+
+    assert.match(
+      output,
+      /contexto 4096.*10 minutos/i
+    );
+
+    assert.match(
+      output,
       /não recebe, intermedeia ou retém/i
     );
   }

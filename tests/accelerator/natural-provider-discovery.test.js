@@ -119,6 +119,27 @@ test(
       false
     );
 
+    assert.equal(
+      result.inferenceProfile.profileId,
+      'ollama-balanced-v1'
+    );
+
+    assert.equal(
+      result.inferenceProfile.acceleration,
+      'OLLAMA_AUTO'
+    );
+
+    assert.equal(
+      result.inferenceProfile.operationalAuthority,
+      false
+    );
+
+    assert.ok(
+      Object.isFrozen(
+        result.inferenceProfile
+      )
+    );
+
     assert.ok(
       Object.isFrozen(result)
     );

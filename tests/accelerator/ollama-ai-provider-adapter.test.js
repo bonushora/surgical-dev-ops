@@ -159,6 +159,11 @@ test(
       0
     );
 
+    assert.equal(
+      observed.maxOutputTokens,
+      512
+    );
+
     assert.ok(
       Array.isArray(
         observed.messages
