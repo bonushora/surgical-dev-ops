@@ -1,5 +1,15 @@
 # Changelog
 
+## ADR-024-B — Canonical presentation stream
+
+- Added an immutable task-bound stream and progress event contract.
+- Kept acknowledgement, progress and partial cognitive text presentation-only.
+- Required a separately validated canonical-result fingerprint for completion.
+- Made interruption, malformed ordering, binding mismatch and size overflow fail
+  closed without operational or mutation authority.
+- Added deterministic demonstration, bilingual regression coverage and public
+  qualification documentation.
+
 All notable changes to the Surgical DevOps project will be documented in this file.
 
 The format is inspired by Keep a Changelog:
