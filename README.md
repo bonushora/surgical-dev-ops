@@ -1,399 +1,177 @@
-# Surgical DevOps 🚀
+# Surgical DevOps
 
-> **Open Engineering Protocol for AI-Assisted Software Development**
+[![Accelerator Conformance](https://github.com/bonushora/surgical-dev-ops/actions/workflows/accelerator-conformance.yml/badge.svg)](https://github.com/bonushora/surgical-dev-ops/actions/workflows/accelerator-conformance.yml)
+[![License: MIT](https://img.shields.io/badge/License-MIT-yellow.svg)](./LICENSE)
 
-O **Surgical DevOps** é uma especificação aberta criada para estabelecer um modelo disciplinado de colaboração entre engenheiros de software e sistemas de Inteligência Artificial.
+> A deterministic operational boundary for probabilistic AI engineering agents.
 
-Seu objetivo é tornar o desenvolvimento assistido por IA mais:
+Português: [README_PT-BR.md](./README_PT-BR.md)
 
-- previsível;
-- rastreável;
-- seguro;
-- preservável entre sessões.
+Surgical DevOps is an open-source development orchestrator that keeps AI models
+outside the operational trust boundary. Models may reason, explain, and propose.
+Human authority, scope, execution, evidence, mutation, and failure handling remain
+governed by deterministic contracts.
 
-O Surgical DevOps é independente de:
+The project does **not** claim to make a language model deterministic. It makes the
+operational system around the model explicit, bounded, auditable, and fail-closed.
 
-- modelo de IA;
-- fornecedor;
-- linguagem de programação;
-- framework;
-- IDE;
-- arquitetura de software.
+## Current qualified baseline
 
-Ele define protocolos. Ferramentas, agentes, prompts, SDKs e integrações são implementações desses protocolos.
+| Evidence | Value |
+| --- | --- |
+| Release line | Surgical DevOps v2.5.0 |
+| Canonical commit | [`8763198993711066e2a2e01b40aa87533ef4f019`](https://github.com/bonushora/surgical-dev-ops/commit/8763198993711066e2a2e01b40aa87533ef4f019) |
+| Canonical CI run | [Accelerator Conformance #32772955351](https://github.com/bonushora/surgical-dev-ops/actions/runs/32772955351) |
+| Matrix result | Ubuntu, macOS, and Windows: **PASS** |
+| Canonical suite | 849 tests discovered; 0 failures; platform-specific skips remain explicit |
+| Normative protocols | BH-SEP v2.2 + BH-SDP v2.2 |
 
----
+The complete trail, including failed runs that preceded the green baseline, is
+documented in [Engineering Evidence](./docs/ENGINEERING_EVIDENCE.md).
 
-# Protocolos Principais
+## Why this exists
 
-## BH-SEP v2.2 — Safe Evolution Protocol
-
-O BH-SEP define como evoluir software existente com segurança.
-
-Princípios fundamentais:
-
-- **Inspect First:** nenhuma alteração sem inspeção prévia.
-- **Focus Window:** arquivos grandes devem ser analisados em partes.
-- **Patch First:** alterações pontuais são o padrão.
-- **Refactor Control:** refatorações exigem autorização explícita.
-- **Red-to-Green:** validação antes de atribuir falhas às mudanças.
-
----
-
-## BH-SDP v2.2 — Snapshot & Delivery Protocol
-
-O BH-SDP define como preservar e transferir contexto técnico entre sessões.
-
-Seu objetivo é evitar perda de conhecimento operacional.
-
-O snapshot registra:
-
-- projeto;
-- versão do protocolo;
-- arquitetura;
-- fase atual;
-- nível de risco;
-- âncoras físicas;
-- componentes validados;
-- próximo passo.
-
----
-
-# Ciclo de Vida do Surgical DevOps
-
-O Surgical DevOps possui dois estados operacionais:
-
-
-Modo Livre
-|
-| /DETERMINISTICO
-v
-Modo Determinístico
-|
-| /LIVRE
-v
-Modo Livre
-
-
----
-
-# 🔓 Modo Livre
-
-Estado consultivo.
-
-Neste modo, a IA responde normalmente sem aplicar as regras operacionais do Surgical DevOps.
-
-Ativação:
-
-
-/LIVRE
-
-
-Confirmação:
-
-
-MODO LIVRE ATIVADO 🔓
-
-
----
-
-# 🚀 Modo Determinístico
-
-Estado operacional.
-
-Quando ativado, BH-SEP e BH-SDP passam a governar a sessão.
-
-Ativação:
-
-
-/DETERMINISTICO
-
-
-Confirmação:
-
-
-BH-SEP v2.2 E BH-SDP v2.2 ATIVADOS 🚀
-
-
-Após a ativação:
-
-1. O escopo operacional é exibido.
-2. O estado atual é confirmado.
-3. O primeiro artefato é solicitado para inspeção.
-
----
-
-# Escopo Permanente do Modo Determinístico
-
-Enquanto o modo determinístico estiver ativo:
-
-1. A Inspeção Declarativa precede respostas técnicas ou alterações.
-
-2. O Modo PATCH permanece como estratégia padrão.
-
-3. O Snapshot BH-SDP é mantido conforme o protocolo.
-
-4. Mudanças de estado ocorrem somente pelos gatilhos:
-
-
-/DETERMINISTICO
-/LIVRE
-
-
----
-
-# 🔒 Persistência do Estado Operacional
-
-Após ativação, o modo determinístico entra em estado operacional persistente.
-
-Enquanto ativo, a implementação não deve:
-
-- abandonar implicitamente o modo determinístico;
-- ignorar BH-SEP;
-- ignorar BH-SDP;
-- alterar estratégia sem autorização explícita.
-
-A saída ocorre somente através de:
-
-
-/LIVRE
-
-
-Na ausência desse comando, o estado determinístico permanece ativo.
-
----
-
-# ⚡ Ativação Universal RAW
-
-## Ativação agnóstica do Surgical DevOps
-
-O Surgical DevOps foi projetado para ser independente de plataforma, fornecedor ou modelo de Inteligência Artificial.
-
-A ativação do modo determinístico ocorre através de um artefato textual universal que pode ser utilizado em qualquer sistema de IA compatível.
-
-Copie o bloco abaixo e cole no início de uma nova sessão:
+AI engineering tools are probabilistic, but filesystem writes, process execution,
+Git state, credentials, and production mutation require deterministic authority.
+Surgical DevOps separates those concerns:
 
 ```text
-Surgical DevOps Activation
-
-Ative o modo determinístico do Surgical DevOps.
-
-Carregue e aplique conjuntamente:
-
-BH-SEP v2.2 — Safe Evolution Protocol
-BH-SDP v2.2 — Snapshot & Delivery Protocol
-
-Estado operacional:
-
-MODO: DETERMINÍSTICO
-
-Regras obrigatórias:
-
-1. Aplicar Inspeção Declarativa antes de qualquer alteração técnica.
-
-2. Utilizar Modo PATCH como estratégia padrão.
-
-3. Preservar o estado operacional durante toda a sessão.
-
-4. Manter o contexto através do mecanismo de snapshot definido pelo BH-SDP.
-
-5. Não alterar o modo operacional sem o comando explícito:
-
-/LIVRE
-
-Após a ativação:
-
-1. Confirmar:
-
-BH-SEP v2.2 E BH-SDP v2.2 ATIVADOS 🚀
-
-2. Exibir o escopo operacional ativo.
-
-3. Solicitar o primeiro arquivo, diretório ou artefato para inspeção.
-
-Fim da ativação.
-
-Este artefato é apenas o mecanismo de ativação.
-
-Os protocolos BH-SEP e BH-SDP permanecem como núcleo normativo independente de qualquer implementação.
-
-Sequência Operacional
-Sessão iniciada
-
+Human objective
       |
       v
-
-/DETERMINISTICO
-
+Probabilistic cognition (no operational authority)
       |
       v
-
-Surgical DevOps ativo
-
+Deterministic admission and authority contracts
       |
       v
-
-BH-SEP + BH-SDP
-
+Canonical Orchestrator
       |
       v
+Governed platform adapter -> bound evidence or fail-closed result
+```
 
-Escopo exibido
+The AI provider never becomes an authority provider. A useful answer, a plan, or
+a confident model output is not sufficient to authorize a physical operation.
 
-      |
-      v
+## Core invariants
 
-Primeiro artefato solicitado
+- **Human sovereignty:** critical authority originates from verified human intent.
+- **Intent is not authority:** natural language cannot mint capabilities.
+- **Inspect first:** mutation requires declarative inspection and bounded scope.
+- **PATCH by default:** minimal changes are preferred over broad rewrites.
+- **Exact grants:** operations bind action, target, workspace, lifecycle, risk,
+  and identity.
+- **No direct model execution:** cognitive providers receive no filesystem, shell,
+  process, network, credential, or mutation authority.
+- **Durable mutation state:** locking, journal stages, commit authority, recovery,
+  and replay handling remain explicit.
+- **Fail closed:** missing, malformed, expired, ambiguous, or unqualified evidence
+  cannot become success.
 
-      |
-      v
+## Platform qualification
 
-Inspeção Declarativa
+The core contract is operating-system agnostic. Native adapters satisfy bounded
+parts of that contract using platform-specific primitives.
 
-      |
-      v
+| Platform | Qualified mechanism | Current evidence |
+| --- | --- | --- |
+| Linux | Bubblewrap deny-default containment and POSIX primitives | Canonical matrix job: PASS |
+| macOS | Seatbelt deny-default profile applied by a fixed native helper | Canonical matrix job: PASS |
+| Windows | Fixed Win32 filesystem safety/durability helper and governed adapters | Canonical matrix job: PASS |
 
-PATCH / REFACTOR autorizado
+These mechanisms are not represented as identical operating-system sandboxes.
+They are different native implementations evaluated against common bounded
+contracts. The exact claims and limitations are in
+[Engineering Evidence](./docs/ENGINEERING_EVIDENCE.md).
 
-      |
-      v
+## Governed AI and interaction modes
 
-Snapshot BH-SDP
+Surgical DevOps v2.5 provides three interaction profiles without changing the
+underlying authority model:
 
-      |
-      v
+- **NATURAL:** outcome-oriented language and progressive disclosure.
+- **ENGINEER:** natural language plus relevant technical evidence.
+- **EXPERT:** deterministic command-oriented control.
 
-Continuidade da sessão
-Separação de Responsabilidades
-README
+The reference local cognitive provider is Ollama when available. Providers are
+replaceable and remain outside operational authority. If a cognitive provider is
+unavailable, deterministic behavior remains active and fails safely.
 
-Define:
+Broad project analysis in NATURAL mode crosses explicit human authorization and a
+governed recursive evidence loop. Workspace facts must come from
+Orchestrator-qualified evidence, not model memory or inference.
 
-visão;
-ciclo de vida;
-estados operacionais.
-BH-SEP
+## Quick start
 
-Define:
+Declared runtime: Node.js `>=24.18.0`.
 
-evolução segura;
-inspeção;
-alterações;
-validação.
-BH-SDP
+```bash
+npm install -g surgical-dev-ops
+surgical-devops --version
+surgical-devops --help
+```
 
-Define:
+Start the governed CLI:
 
-snapshots;
-preservação de contexto;
-continuidade operacional.
-Implementações
+```bash
+surgical-devops
+```
 
-O Surgical DevOps é agnóstico de plataforma.
+The compatibility executable `surgical` is also provided. Run the canonical suite
+from a checkout with:
 
-Implementações podem incluir:
+```bash
+npm ci
+npm test
+```
 
-prompts;
-agentes;
-SDKs;
-extensões;
-integrações;
-ferramentas.
+## Normative protocols and immutable RAW artifacts
 
-Esses componentes utilizam a especificação, mas não fazem parte do núcleo normativo.
+The original Portuguese BH-SEP v2.2 and BH-SDP v2.2 artifacts are frozen at
+stable paths. They are not replaced by this international README or by English
+translations.
 
-Filosofia
+- [BH-SEP v2.2 — original RAW](https://raw.githubusercontent.com/bonushora/surgical-dev-ops/main/protocols/BH-SEP.md)
+- [BH-SDP v2.2 — original RAW](https://raw.githubusercontent.com/bonushora/surgical-dev-ops/main/protocols/BH-SDP.md)
+- [BH-SEP v2.2 — English translation](./protocols/BH-SEP_EN.md)
+- [BH-SDP v2.2 — English translation](./protocols/BH-SDP_EN.md)
 
-O Surgical DevOps não substitui julgamento humano.
+Future protocol versions must use new versioned paths. They must not overwrite or
+repurpose the original v2.2 RAW URLs. See
+[Protocol Preservation and Versioning](./protocols/README.md) and
+[ADR-018](./docs/adr/ADR-018-immutable-protocol-raw-and-international-documentation.md).
 
-Ele cria uma disciplina operacional para colaboração entre humanos e sistemas de IA.
+## Architecture and evidence
 
-As decisões técnicas permanecem sob responsabilidade do engenheiro.
+- [Engineering Evidence Trail](./docs/ENGINEERING_EVIDENCE.md)
+- [Documentation Map](./docs/DOCUMENTATION.md)
+- [Orchestrator Trust Boundary — ADR-004](./docs/adr/ADR-004-surgical-devops-orchestrator-trust-boundary.md)
+- [Authenticated Human Authority — ADR-006](./docs/adr/ADR-006-authenticated-human-authority-boundary.md)
+- [Mutation Journal and Recovery — ADR-007](./docs/adr/ADR-007-governed-mutation-transaction-recovery.md)
+- [Windows Native Adapter — ADR-008](./docs/adr/ADR-008-windows-native-filesystem-safety-durability.md)
+- [Content-Addressed Mutation Authority — ADR-010](./docs/adr/ADR-010-governed-content-addressed-workspace-authority.md)
+- [Interaction Modes — ADR-011](./docs/adr/ADR-011-intent-driven-orchestration-user-modes.md)
+- [Governed AI Behavior — ADR-014](./docs/adr/ADR-014-governed-ai-behavior-contract.md)
 
-Estrutura Inicial
-surgical-dev-ops/
+## What the green CI does not claim
 
-├── README.md
-├── README_EN.md
-├── protocols/
-│   ├── BH-SEP.md
-│   └── BH-SDP.md
-└── LICENSE
-Status
+- It is not a proof of absolute security.
+- It does not make probabilistic model reasoning deterministic.
+- It does not claim universal physical power-loss durability.
+- `POWER_LOSS_VALIDATED` remains false pending physical qualification.
+- Strict pathname-level Physical Identity-Conditional CAS remains explicitly
+  unqualified at the boundary documented by ADR-009.
+- Windows, Linux, and macOS do not expose identical isolation primitives.
+- External adversarial engineering review remains a separate qualification step.
 
-🚀 Surgical DevOps v2.4.0
+Unsupported claims remain unqualified rather than being converted into green
+results.
 
-A versão v2.4.0 fecha a fronteira operacional de mutação governada do
-Surgical DevOps, preservando BH-SEP v2.2 e BH-SDP v2.2 como núcleo normativo
-independente.
+## Contributing and license
 
-Principais capacidades qualificadas no baseline atual:
+Read [CONTRIBUTING.md](./CONTRIBUTING.md). Changes must preserve the authority
+model, bilingual parity for public entry documents, stable protocol RAW artifacts,
+and fail-closed behavior.
 
-- Surgical DevOps Accelerator / Orchestrator;
-- inspeção declarativa e preparação determinística de tarefas;
-- autoridade humana autenticada para operações críticas R3;
-- grants de capacidade com escopo exato e comportamento fail-closed;
-- FILESYSTEM_PATCH governado por transação;
-- locking determinístico de alvo exato;
-- journal durável e autoridade de commit persistida;
-- recovery determinístico após process crash/restart;
-- proteção contra replay conflitante e remutação duplicada;
-- enforcement de primitivas de durabilidade de filesystem;
-- Governed Content-Addressed Workspace como autoridade de mutação;
-- conteúdo imutável e manifests content-addressed;
-- Manifest CAS com transição condicional genuína da autoridade interna;
-- worktree comum explicitamente não autoritativa;
-- managed materialization separada da transição de autoridade;
-- materialização e recovery idempotentes;
-- detecção fail-closed de projeção gerenciada corrompida;
-- Production Mutation Provider qualificado e bounded;
-- Local Offline Human Authority com assinatura Ed25519;
-- runtime de produção sem autoridade privada de assinatura;
-- integração R3 governada através de `surgical> patch`;
-- continuidade operacional através de process restart;
-- testes end-to-end usando processos reais da CLI;
-- hardening do Git preflight;
-- suíte canônica com 595 testes: 591 PASS, 0 FAIL e 4 platform-specific SKIP;
-- GitHub Actions mantendo a matriz canônica Linux / Windows / macOS.
-
-Invariantes e limites preservados:
-
-- BH-SEP e BH-SDP permanecem na versão normativa v2.2;
-- a worktree física comum não redefine a autoridade content-addressed;
-- callers não podem selecionar ou autoqualificar o Production Mutation Provider;
-- autenticação isoladamente não autoriza mutação R3;
-- private signing authority não é exposta ao runtime de produção;
-- generic shell/process authority não é exposta pela fronteira de mutação;
-- Strict Physical Identity-Conditional CAS de pathname permanece UNQUALIFIED
-  conforme ADR-009;
-- essa limitação não redefine a autoridade content-addressed adotada pela
-  ADR-010;
-- POWER_LOSS_VALIDATED permanece falso até qualificação física específica por
-  plataforma/filesystem;
-- nenhuma suíte de process crash/restart deve ser representada como prova de
-  durabilidade universal contra perda física de energia.
-
-Baseline operacional da v2.4.0: Governed Content-Addressed Mutation Authority.
-
----
-
-## Instalação da CLI v2.5.0
-
-Comando principal para engenheiros: surgical-devops
-
-Runtime atualmente qualificado: Node.js >= 24.18.0
-
-Instalação: npm install -g surgical-dev-ops
-
-Verificação: surgical-devops --version
-Verificação adicional: surgical-devops --help
-
-Para iniciar a sessão humana governada: surgical-devops
-
-O pacote também fornece o executável de compatibilidade surgical.
-Se esse nome já for usado por outro launcher ou função de shell,
-utilize surgical-devops.
-
-A v2.5.0 adiciona integração de IA governada, modos de interação, provider port, adapter local Ollama, interpretação determinística de intenção, planejamento governado e execução cognitiva R0 end-to-end, preservando a autoridade e os invariantes qualificados da v2.4.1.
-Orchestrator, Manifest CAS, journal, adapters, autoridade de mutação e
-runtime de produção permanecem semanticamente inalterados.
+[MIT](./LICENSE) © 2026 Thales Rangel.

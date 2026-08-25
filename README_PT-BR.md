@@ -1,0 +1,155 @@
+# Surgical DevOps
+
+[![Accelerator Conformance](https://github.com/bonushora/surgical-dev-ops/actions/workflows/accelerator-conformance.yml/badge.svg)](https://github.com/bonushora/surgical-dev-ops/actions/workflows/accelerator-conformance.yml)
+[![Licença: MIT](https://img.shields.io/badge/License-MIT-yellow.svg)](./LICENSE)
+
+> Uma fronteira operacional determinística para agentes probabilísticos de engenharia com IA.
+
+English: [README.md](./README.md)
+
+O Surgical DevOps é um orquestrador de desenvolvimento open source que mantém os
+modelos de IA fora da fronteira de confiança operacional. Os modelos podem
+raciocinar, explicar e propor. Autoridade humana, escopo, execução, evidência,
+mutação e tratamento de falhas permanecem governados por contratos determinísticos.
+
+O projeto **não** afirma tornar determinístico um modelo de linguagem. Ele torna o
+sistema operacional ao redor do modelo explícito, limitado, auditável e fail-closed.
+
+## Baseline qualificado atual
+
+| Evidência | Valor |
+| --- | --- |
+| Linha de release | Surgical DevOps v2.5.0 |
+| Commit canônico | [`8763198993711066e2a2e01b40aa87533ef4f019`](https://github.com/bonushora/surgical-dev-ops/commit/8763198993711066e2a2e01b40aa87533ef4f019) |
+| Run canônico do CI | [Accelerator Conformance #32772955351](https://github.com/bonushora/surgical-dev-ops/actions/runs/32772955351) |
+| Resultado da matriz | Ubuntu, macOS e Windows: **PASS** |
+| Suíte canônica | 849 testes descobertos; 0 falhas; skips de plataforma permanecem explícitos |
+| Protocolos normativos | BH-SEP v2.2 + BH-SDP v2.2 |
+
+A trilha completa, incluindo os runs que falharam antes do baseline verde, está em
+[Evidências de Engenharia](./docs/ENGINEERING_EVIDENCE.md).
+
+## Por que este projeto existe
+
+Ferramentas de engenharia com IA são probabilísticas, mas escrita em filesystem,
+execução de processos, estado Git, credenciais e mutação de produção exigem
+autoridade determinística:
+
+```text
+Objetivo humano
+      |
+      v
+Cognição probabilística (sem autoridade operacional)
+      |
+      v
+Contratos determinísticos de admissão e autoridade
+      |
+      v
+Orchestrator canônico
+      |
+      v
+Adapter governado -> evidência vinculada ou resultado fail-closed
+```
+
+O provider de IA nunca se torna provider de autoridade. Uma resposta útil, um
+plano ou uma saída confiante do modelo não autorizam uma operação física.
+
+## Invariantes centrais
+
+- **Soberania humana:** autoridade crítica nasce de intenção humana verificada.
+- **Intenção não é autoridade:** linguagem natural não cria capabilities.
+- **Inspecionar primeiro:** mutação exige inspeção declarativa e escopo limitado.
+- **PATCH por padrão:** alterações mínimas prevalecem sobre reescritas amplas.
+- **Grants exatos:** operações vinculam ação, alvo, workspace, lifecycle, risco e identidade.
+- **Sem execução direta do modelo:** providers cognitivos não recebem autoridade
+  de filesystem, shell, processo, rede, credenciais ou mutação.
+- **Estado de mutação durável:** locking, journal, autoridade de commit, recovery e
+  replay permanecem explícitos.
+- **Fail-closed:** evidência ausente, inválida, expirada, ambígua ou não qualificada
+  não pode se tornar sucesso.
+
+## Qualificação por plataforma
+
+| Plataforma | Mecanismo qualificado | Evidência atual |
+| --- | --- | --- |
+| Linux | Contenção Bubblewrap deny-default e primitivas POSIX | Matriz canônica: PASS |
+| macOS | Perfil Seatbelt deny-default aplicado por helper nativo fixo | Matriz canônica: PASS |
+| Windows | Helper fixo de segurança/durabilidade Win32 e adapters governados | Matriz canônica: PASS |
+
+Esses mecanismos não são apresentados como sandboxes idênticos. São implementações
+nativas diferentes avaliadas contra contratos limitados em comum. Consulte
+[Evidências de Engenharia](./docs/ENGINEERING_EVIDENCE.md).
+
+## IA governada e modos de interação
+
+- **NATURAL:** linguagem orientada a resultados e revelação progressiva.
+- **ENGINEER:** linguagem natural com evidências técnicas relevantes.
+- **EXPERT:** controle determinístico orientado a comandos.
+
+O provider local de referência é o Ollama quando disponível. Providers são
+substituíveis e permanecem fora da autoridade operacional. Análises amplas no modo
+NATURAL atravessam autorização humana e um loop recursivo governado de evidências.
+
+## Início rápido
+
+Runtime declarado: Node.js `>=24.18.0`.
+
+```bash
+npm install -g surgical-dev-ops
+surgical-devops --version
+surgical-devops --help
+surgical-devops
+```
+
+O executável de compatibilidade `surgical` também é fornecido. Para executar a suíte:
+
+```bash
+npm ci
+npm test
+```
+
+## Protocolos normativos e RAW imutáveis
+
+Os artefatos originais em português BH-SEP v2.2 e BH-SDP v2.2 estão congelados em
+caminhos estáveis. Eles não são substituídos pelo README internacional nem pelas
+traduções inglesas.
+
+- [BH-SEP v2.2 — RAW original](https://raw.githubusercontent.com/bonushora/surgical-dev-ops/main/protocols/BH-SEP.md)
+- [BH-SDP v2.2 — RAW original](https://raw.githubusercontent.com/bonushora/surgical-dev-ops/main/protocols/BH-SDP.md)
+- [BH-SEP v2.2 — tradução inglesa](./protocols/BH-SEP_EN.md)
+- [BH-SDP v2.2 — tradução inglesa](./protocols/BH-SDP_EN.md)
+
+Versões futuras devem usar novos caminhos versionados e não podem sobrescrever ou
+redirecionar os RAW originais. Consulte [Preservação dos Protocolos](./protocols/README.md)
+e a [ADR-018](./docs/adr/ADR-018-immutable-protocol-raw-and-international-documentation.md).
+
+## Arquitetura e evidências
+
+- [Trilha de Evidências de Engenharia](./docs/ENGINEERING_EVIDENCE.md)
+- [Mapa da Documentação](./docs/DOCUMENTATION.md)
+- [Trust Boundary — ADR-004](./docs/adr/ADR-004-surgical-devops-orchestrator-trust-boundary.md)
+- [Autoridade Humana — ADR-006](./docs/adr/ADR-006-authenticated-human-authority-boundary.md)
+- [Journal e Recovery — ADR-007](./docs/adr/ADR-007-governed-mutation-transaction-recovery.md)
+- [Adapter Windows — ADR-008](./docs/adr/ADR-008-windows-native-filesystem-safety-durability.md)
+- [Autoridade Content-Addressed — ADR-010](./docs/adr/ADR-010-governed-content-addressed-workspace-authority.md)
+- [Modos de Interação — ADR-011](./docs/adr/ADR-011-intent-driven-orchestration-user-modes.md)
+- [Comportamento Governado da IA — ADR-014](./docs/adr/ADR-014-governed-ai-behavior-contract.md)
+
+## O que o CI verde não afirma
+
+- Não é prova de segurança absoluta.
+- Não torna determinístico o raciocínio probabilístico do modelo.
+- Não afirma durabilidade universal contra perda física de energia.
+- `POWER_LOSS_VALIDATED` permanece falso até qualificação física específica.
+- O CAS estrito de pathname permanece não qualificado conforme a ADR-009.
+- Windows, Linux e macOS não possuem primitivas de isolamento idênticas.
+- Revisão adversarial externa permanece uma qualificação separada.
+
+Afirmações sem suporte permanecem não qualificadas em vez de se tornarem verdes.
+
+## Contribuindo e licença
+
+Leia [CONTRIBUTING.md](./CONTRIBUTING.md). Alterações devem preservar o modelo de
+autoridade, a paridade bilíngue, os RAW estáveis e o comportamento fail-closed.
+
+[MIT](./LICENSE) © 2026 Thales Rangel.

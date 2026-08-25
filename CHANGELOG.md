@@ -50,6 +50,21 @@ https://semver.org/
 
 ## [Unreleased]
 
+### Documentation
+
+- Made the default repository README English-first for international engineering review.
+- Added an equivalent Portuguese public entry point at `README_PT-BR.md`.
+- Added a public engineering evidence trail for the qualified multiplatform baseline.
+- Recorded the immutable protocol RAW and future versioning policy in ADR-018.
+- Preserved the original BH-SEP v2.2 and BH-SDP v2.2 Portuguese RAW paths and hashes.
+- Added a documentation map and protocol preservation index.
+
+### Qualification
+
+- Recorded canonical commit `8763198993711066e2a2e01b40aa87533ef4f019`.
+- Recorded successful GitHub Actions run `32772955351` across Ubuntu, macOS, and Windows.
+- Preserved explicit limitations for power-loss, strict pathname CAS, and external review.
+
 ---
 
 ## [2.4.1] - 2026-08-22
@@ -202,4 +217,3 @@ focusing on:
 - Minimal code intervention
 - Context preservation across long AI sessions
 - Reduction of regressions caused by LLM-assisted development
-
