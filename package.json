@@ -5,7 +5,8 @@
   "scripts": {
     "test": "node --test tests/accelerator/*.test.js",
     "evaluate:natural:contract": "node examples/natural-conversational-evaluation-demo.js",
-    "evaluate:natural:stream-contract": "node examples/natural-presentation-stream-demo.js"
+    "evaluate:natural:stream-contract": "node examples/natural-presentation-stream-demo.js",
+    "evaluate:natural:evidence-index": "node examples/natural-project-evidence-index-demo.js"
   },
   "bin": {
     "surgical": "accelerator/cli/surgical.js",

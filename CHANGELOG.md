@@ -1,5 +1,17 @@
 # Changelog
 
+## ADR-024-C — Commit-bound project evidence index
+
+- Added a bounded immutable read-only index for evidence already admitted by
+  the canonical Orchestrator.
+- Bound every entry to physical workspace identity, repository `HEAD`, worktree
+  fingerprint, canonical target, content hash, byte count, parser version and
+  observation time.
+- Made binding and content changes invalidate reuse and made fresh-evidence
+  policy bypass the index unconditionally.
+- Demonstrated lower repeated retrieval cost without filesystem, Git, process,
+  network, provider, operational or mutation authority.
+
 ## ADR-024-B — Canonical presentation stream
 
 - Added an immutable task-bound stream and progress event contract.
