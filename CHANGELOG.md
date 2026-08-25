@@ -12,6 +12,13 @@ https://semver.org/
 
 ## Unreleased
 
+### Governed Frontier Conversational Experience
+
+- Froze ADR-024 as the next NATURAL product frontier: frontier-quality cognition combined with project-native governed continuity.
+- Defined streaming, commit-bound evidence indexing, governed persistent memory, task-envelope authorization and asynchronous progress as mandatory experience capabilities.
+- Preserved qualified local models as free, private and offline options while requiring explicit qualification and activation for every external provider.
+- Established measurable latency, bilingual quality, grounding, authority and cross-platform acceptance gates before the experience may be claimed as complete.
+
 ### NATURAL bilingual intent and CPU latency qualification
 
 - Routes equivalent Portuguese and English project-analysis intents through the same human authorization and governed evidence boundary.
