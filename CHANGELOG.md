@@ -4,6 +4,9 @@
 
 ### Added
 
+- Closed ADR-024-I with paired Portuguese/English adversarial qualification for
+  injection, scope traversal, credential requests, stale evidence, interrupted
+  streams and memory-authority replay, including explicit latency disclosure.
 - Integrated ADR-024-H through one immutable NATURAL experience projection for
   terminal and web presentation, with bilingual status, visible provider and
   privacy state, bounded history and pending-authorization data, while preserving
