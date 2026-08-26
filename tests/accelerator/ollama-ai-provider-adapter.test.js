@@ -161,7 +161,7 @@ test(
 
     assert.equal(
       observed.maxOutputTokens,
-      256
+      512
     );
 
     assert.ok(

@@ -15,7 +15,7 @@ const OUTPUT_TOKENS =
       512,
 
     PLAN:
-      256,
+      512,
 
     PROPOSE:
       2048
@@ -27,7 +27,7 @@ const NATURAL_LOCAL_INFERENCE_PROFILE =
       'sdo.natural_local_inference_profile.v1',
 
     profileId:
-      'ollama-cpu-bounded-v2',
+      'ollama-cpu-bounded-v3',
 
     acceleration:
       'OLLAMA_AUTO',

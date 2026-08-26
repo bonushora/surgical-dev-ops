@@ -170,6 +170,15 @@ function createNaturalSessionControl(
       });
     }
 
+    if (
+      text === 'exit' ||
+      text === 'quit'
+    ) {
+      return Object.freeze({
+        matched: false
+      });
+    }
+
     const terminalBoundary =
       classifyNaturalTerminalInput(input);
 

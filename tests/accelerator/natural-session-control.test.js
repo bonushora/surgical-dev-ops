@@ -519,3 +519,28 @@ test(
     );
   }
 );
+
+test(
+  'exit and quit always cross to the session boundary even while authorization is pending',
+  () => {
+    for (const command of ['exit', 'quit']) {
+      const control =
+        createNaturalSessionControl({
+          workspace: 'example-project'
+        });
+
+      control.handle(
+        'Explique este projeto para mim.'
+      );
+
+      const result =
+        control.handle(command);
+
+      assert.equal(result.matched, false);
+      assert.equal(
+        control.hasPendingAuthorization(),
+        true
+      );
+    }
+  }
+);
