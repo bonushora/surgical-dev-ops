@@ -1,5 +1,17 @@
 # Changelog
 
+## ADR-024-E — Task-envelope authorization consolidation
+
+- Consolidated one explicit human decision around an immutable bounded task
+  envelope.
+- Bound objective, physical workspace, capability vocabulary, risk, evidence
+  steps, mutation policy, validity and stop conditions.
+- Allowed repeated contained R0 microreads while forcing every scope, risk,
+  mutation, credential, external-side-effect and architecture expansion back to
+  human authority.
+- Kept envelope authorization separate from grants, dispatch and reusable
+  approval authority.
+
 ## ADR-024-D — Governed persistent project memory
 
 - Added project-confined persistent memory with explicit record classes and
