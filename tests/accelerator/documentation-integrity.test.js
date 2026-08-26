@@ -58,6 +58,7 @@ test('international documentation has no unresolved local Markdown targets', () 
     'docs/ENGINEERING_EVIDENCE.md',
     'docs/EXTERNAL_ENGINEERING_REVIEW.md',
     'docs/review/TRY_TO_BREAK_IT.md',
+    'docs/evaluation/NATURAL-MANUAL-ACCEPTANCE-BILINGUAL.md',
     'docs/DOCUMENTATION.md',
     'docs/DOCUMENTATION.md',
     'protocols/README.md',
@@ -74,6 +75,25 @@ test('international documentation has no unresolved local Markdown targets', () 
     }
   }
   assert.deepEqual(unresolved, []);
+});
+
+test('manual NATURAL acceptance preserves equivalent English and Portuguese records', () => {
+  const record = read(
+    'docs/evaluation/NATURAL-MANUAL-ACCEPTANCE-BILINGUAL.md'
+  );
+  const required = [
+    '## English',
+    '## Português',
+    '**PARTIALLY ACCEPTED**',
+    '**PARCIALMENTE ACEITO**',
+    '`Explique este projeto para mim.`',
+    '`Explain this project in English.`',
+    '`sim`',
+    '`yes`',
+    '`exit`'
+  ];
+
+  for (const fact of required) assert.ok(record.includes(fact));
 });
 
 test('npm package preserves both public languages and no reconstruction artifact', () => {

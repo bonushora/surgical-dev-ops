@@ -42,6 +42,10 @@ Start with:
 - [ADR-026 — NATURAL Terminal Boundary and Input Clarity](./adr/ADR-026-natural-terminal-boundary-input-clarity.md)
 - [ADR-027 — Pre-Adversarial Local Cognition Acceptance](./adr/ADR-027-pre-adversarial-local-cognition-acceptance.md)
 
+## Manual acceptance
+
+- [NATURAL manual acceptance — English and Portuguese](./evaluation/NATURAL-MANUAL-ACCEPTANCE-BILINGUAL.md)
+
 ## Articles and regression protocol
 
 - [Technical article — English](./ARTIGO_TECNICO_EN.md)

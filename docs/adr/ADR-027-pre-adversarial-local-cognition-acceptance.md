@@ -51,3 +51,6 @@ remains available, and the workspace remains unchanged. It does not qualify the
 Portuguese or English cognitive response; those observations require separate
 manual runs with test instructions clearly labelled `TYPE`, `WAIT`, and
 `OBSERVE`.
+
+The equivalent English and Portuguese acceptance record is maintained in
+[NATURAL Manual Acceptance — Bilingual Record](../evaluation/NATURAL-MANUAL-ACCEPTANCE-BILINGUAL.md).
