@@ -24,6 +24,10 @@ test('release candidate identity is consistent across public and executable surf
   assert.match(read('accelerator/cli/surgical.js'), /const VERSION = '2\.6\.0-rc\.1';/);
   assert.match(read('README.md'), /Surgical DevOps v2\.6\.0-rc\.1/);
   assert.match(read('README_PT-BR.md'), /Surgical DevOps v2\.6\.0-rc\.1/);
+  assert.doesNotMatch(
+    read('tests/accelerator/surgical-cli-interactive.test.js'),
+    /Surgical DevOps v2\\\.5\\\.1/
+  );
 });
 
 test('release candidate keeps external-review non-claims explicit', () => {
