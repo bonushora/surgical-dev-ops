@@ -1,5 +1,15 @@
 # Changelog
 
+## ADR-024-D — Governed persistent project memory
+
+- Added project-confined persistent memory with explicit record classes and
+  evidence bindings.
+- Kept cognitive summaries non-authoritative and made repository facts stale
+  when their repository binding changes.
+- Added user inspection, correction, export and deletion while rejecting
+  credentials, secrets and remembered approvals.
+- Added atomic bounded storage with no operational or mutation authority.
+
 ## ADR-024-C — Commit-bound project evidence index
 
 - Added a bounded immutable read-only index for evidence already admitted by
