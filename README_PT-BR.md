@@ -151,6 +151,8 @@ e a [ADR-018](./docs/adr/ADR-018-immutable-protocol-raw-and-international-docume
 - O CAS estrito de pathname permanece não qualificado conforme a ADR-009.
 - Windows, Linux e macOS não possuem primitivas de isolamento idênticas.
 - Revisão adversarial externa permanece uma qualificação separada.
+- O desafio externo reproduzível está disponível em
+  [`docs/review/TRY_TO_BREAK_IT.md`](docs/review/TRY_TO_BREAK_IT.md).
 
 Afirmações sem suporte permanecem não qualificadas em vez de se tornarem verdes.
 

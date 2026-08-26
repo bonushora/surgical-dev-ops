@@ -86,6 +86,12 @@ If your proposal changes the philosophy or governance model of Surgical DevOps, 
 
 Discussion before implementation helps preserve protocol stability.
 
+# Adversarial findings
+
+Use the GitHub **Adversarial boundary report** issue form for a minimal,
+non-destructive reproduction. Follow [SECURITY.md](./SECURITY.md) and never place
+credentials, private keys, production secrets or personal data in a public issue.
+
 ---
 
 Thank you for helping improve Surgical DevOps.

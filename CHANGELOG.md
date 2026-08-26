@@ -4,6 +4,9 @@
 
 ### Added
 
+- Added ADR-025 reproducible external adversarial review package, machine-readable
+  qualification manifest, coordinated-disclosure guidance and structured report
+  form without claiming that an independent audit has occurred.
 - Closed ADR-024-I with paired Portuguese/English adversarial qualification for
   injection, scope traversal, credential requests, stale evidence, interrupted
   streams and memory-authority replay, including explicit latency disclosure.

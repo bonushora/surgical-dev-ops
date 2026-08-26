@@ -1,4 +1,21 @@
-# External Engineering Review Package — Surgical DevOps v2.5.1
+# External Engineering Review Package — Surgical DevOps
+
+## Current ADR-025 review baseline
+
+| Item | Evidence |
+| --- | --- |
+| Source baseline | `7cf628899e69c90078815ebb959f0bd97c077526` |
+| Canonical workflow run | `32956401106` |
+| Matrix | Ubuntu, macOS and Windows: PASS |
+| Governed frontier milestones | ADR-024-A through ADR-024-I: qualified |
+| Review challenge | [`review/TRY_TO_BREAK_IT.md`](review/TRY_TO_BREAK_IT.md) |
+| Machine-readable manifest | [`review/QUALIFICATION_MANIFEST.json`](review/QUALIFICATION_MANIFEST.json) |
+
+This is an invitation to independent review, not a claim that an independent
+audit has already occurred. The historical v2.5.1 baseline remains below so its
+earlier evidence is not rewritten.
+
+## Historical v2.5.1 package
 
 ## Review objective
 
@@ -9,7 +26,7 @@ through explicit deterministic contracts.
 The review target is not the accuracy of a language model. The target is the
 authority separation around it.
 
-## Canonical baseline
+### Canonical baseline
 
 | Item | Evidence |
 | --- | --- |

@@ -57,6 +57,8 @@ test('international documentation has no unresolved local Markdown targets', () 
     'README_EN.md',
     'docs/ENGINEERING_EVIDENCE.md',
     'docs/EXTERNAL_ENGINEERING_REVIEW.md',
+    'docs/review/TRY_TO_BREAK_IT.md',
+    'docs/DOCUMENTATION.md',
     'docs/DOCUMENTATION.md',
     'protocols/README.md',
     'docs/adr/ADR-018-immutable-protocol-raw-and-international-documentation.md'
@@ -79,6 +81,7 @@ test('npm package preserves both public languages and no reconstruction artifact
   assert.ok(packageDefinition.files.includes('README.md'));
   assert.ok(packageDefinition.files.includes('README_EN.md'));
   assert.ok(packageDefinition.files.includes('README_PT-BR.md'));
+  assert.ok(packageDefinition.files.includes('SECURITY.md'));
   assert.ok(packageDefinition.files.includes('docs/'));
   assert.ok(packageDefinition.files.includes('examples/'));
   assert.equal(fs.existsSync(path.join(ROOT, '[Reconstrução')), false);

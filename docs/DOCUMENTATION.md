@@ -6,6 +6,8 @@
 - [Visão geral — Português](../README_PT-BR.md)
 - [Engineering Evidence Trail](./ENGINEERING_EVIDENCE.md)
 - [External Engineering Review Package](./EXTERNAL_ENGINEERING_REVIEW.md)
+- [Try to Break It](./review/TRY_TO_BREAK_IT.md)
+- [Qualification Manifest](./review/QUALIFICATION_MANIFEST.json)
 - [Contributing](../CONTRIBUTING.md)
 - [Changelog](../CHANGELOG.md)
 - [Roadmap](../ROADMAP.md)
@@ -35,6 +37,8 @@ Start with:
 - [ADR-014 — Governed AI Behavior](./adr/ADR-014-governed-ai-behavior-contract.md)
 - [ADR-018 — Immutable Protocol RAW and International Documentation](./adr/ADR-018-immutable-protocol-raw-and-international-documentation.md)
 - [ADR-019 — Single-Agent Governed Engineering Loop](./adr/ADR-019-single-agent-governed-engineering-loop.md)
+- [ADR-024 — Governed Frontier Conversational Experience](./adr/ADR-024-governed-frontier-conversational-experience.md)
+- [ADR-025 — External Adversarial Review](./adr/ADR-025-external-adversarial-review-reproducible-release.md)
 
 ## Articles and regression protocol
 

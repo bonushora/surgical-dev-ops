@@ -6,6 +6,21 @@ This document records reproducible evidence for the current Surgical DevOps
 multiplatform baseline. It distinguishes observed results from broader security
 claims that remain unqualified.
 
+## Governed frontier qualification baseline
+
+| Field | Evidence |
+| --- | --- |
+| Commit | [`7cf628899e69c90078815ebb959f0bd97c077526`](https://github.com/bonushora/surgical-dev-ops/commit/7cf628899e69c90078815ebb959f0bd97c077526) |
+| Run | [32956401106](https://github.com/bonushora/surgical-dev-ops/actions/runs/32956401106) |
+| Ubuntu, macOS and Windows | PASS |
+| Scope | ADR-024-A through ADR-024-I |
+| External challenge | [`review/TRY_TO_BREAK_IT.md`](review/TRY_TO_BREAK_IT.md) |
+
+This newer baseline adds bounded streaming, evidence indexing, governed memory,
+task-envelope authorization, durable task state, qualified frontier-provider
+boundaries, shared experience projection and paired PT-BR/English adversarial
+qualification. It does not replace the historical evidence below.
+
 ## Canonical green baseline
 
 | Field | Evidence |
@@ -99,7 +114,8 @@ helpers before running the canonical suite on their respective platforms.
 
 - CI success is evidence for covered contracts in the observed runner
   environments; it is not proof of absolute security.
-- External adversarial review has not yet been completed.
+- External adversarial review is invited under ADR-025 but has not yet been
+  completed independently.
 - Physical power-loss qualification is not claimed.
 - `POWER_LOSS_VALIDATED` remains false.
 - Strict Physical Identity-Conditional CAS at the pathname boundary remains

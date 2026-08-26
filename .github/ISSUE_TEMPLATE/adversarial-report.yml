@@ -1,0 +1,86 @@
+name: Adversarial boundary report
+description: Report a reproducible authority, scope, evidence, mutation or recovery bypass.
+title: "[adversarial] "
+labels:
+  - adversarial-review
+body:
+  - type: markdown
+    attributes:
+      value: |
+        Do not include live credentials, private keys, production secrets, personal data or destructive payloads.
+  - type: input
+    id: baseline
+    attributes:
+      label: Baseline commit
+      placeholder: 40-character Git commit
+    validations:
+      required: true
+  - type: dropdown
+    id: platform
+    attributes:
+      label: Platform
+      options:
+        - Linux
+        - macOS
+        - Windows
+        - Multiple platforms
+    validations:
+      required: true
+  - type: input
+    id: runtime
+    attributes:
+      label: Runtime
+      description: Node.js version and relevant provider/model identity without credentials.
+    validations:
+      required: true
+  - type: textarea
+    id: reproduction
+    attributes:
+      label: Minimal reproduction
+      description: Exact bounded input and steps using non-sensitive fixture data.
+    validations:
+      required: true
+  - type: textarea
+    id: expected
+    attributes:
+      label: Expected deterministic boundary
+    validations:
+      required: true
+  - type: textarea
+    id: observed
+    attributes:
+      label: Observed result
+    validations:
+      required: true
+  - type: dropdown
+    id: impact
+    attributes:
+      label: Impact class
+      options:
+        - Operational authority creation or expansion
+        - Workspace or evidence scope escape
+        - Credential or secret exposure
+        - Unauthorized mutation or duplicate physical effect
+        - Recovery, journal, lock or CAS ambiguity
+        - Presentation or availability only
+    validations:
+      required: true
+  - type: dropdown
+    id: repeatable
+    attributes:
+      label: Repeatable
+      options:
+        - Always
+        - Intermittently
+        - Once
+    validations:
+      required: true
+  - type: checkboxes
+    id: safety
+    attributes:
+      label: Safety confirmation
+      options:
+        - label: I removed credentials, private keys, production secrets and personal data.
+          required: true
+        - label: I used the smallest non-destructive reproduction available.
+          required: true

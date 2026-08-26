@@ -171,6 +171,8 @@ repurpose the original v2.2 RAW URLs. See
   unqualified at the boundary documented by ADR-009.
 - Windows, Linux, and macOS do not expose identical isolation primitives.
 - External adversarial engineering review remains a separate qualification step.
+- The reproducible external challenge is available in
+  [`docs/review/TRY_TO_BREAK_IT.md`](docs/review/TRY_TO_BREAK_IT.md).
 
 Unsupported claims remain unqualified rather than being converted into green
 results.

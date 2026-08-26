@@ -1,0 +1,32 @@
+{
+  "schema": "sdo.external_review_qualification_manifest.v1",
+  "project": "bonushora/surgical-dev-ops",
+  "sourceBaseline": {
+    "commit": "7cf628899e69c90078815ebb959f0bd97c077526",
+    "workflow": "Accelerator Conformance",
+    "runId": "32956401106",
+    "conclusion": "success",
+    "platforms": [
+      "ubuntu-latest",
+      "macos-latest",
+      "windows-latest"
+    ]
+  },
+  "protocols": {
+    "BH-SEP-v2.2-sha256": "f4e8639163b0321fff86133a69ec59c2822ccdebcd24d2ccb459b5bc1c3b35cb",
+    "BH-SDP-v2.2-sha256": "04ea782ada1abf7fb959329054c57f87a0e86fca99a31d2e37751d3bdf7d47bc"
+  },
+  "reproduction": [
+    "npm ci",
+    "npm test",
+    "node examples/governed-engineering-loop-demo.js",
+    "npm pack --dry-run"
+  ],
+  "claims": {
+    "absoluteSecurity": false,
+    "independentAuditCompleted": false,
+    "powerLossValidated": false,
+    "modelDeterministic": false,
+    "externalReviewInvited": true
+  }
+}
