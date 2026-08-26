@@ -192,6 +192,11 @@ test(
     );
 
     assert.equal(
+      body.think,
+      false
+    );
+
+    assert.equal(
       body.format,
       'json'
     );

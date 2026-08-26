@@ -4,6 +4,8 @@
 
 - Added ADR-026 NATURAL terminal-boundary clarity so pasted shell commands are
   rejected as presentation-only input and cannot be confused with authority.
+- Disabled Ollama thinking at the fixed transport boundary for Qwen-compatible
+  final JSON output; hidden reasoning is never accepted as cognitive evidence.
 - Published the first reproducible release candidate for the governed frontier
   conversational experience and ADR-025 external adversarial review boundary.
 - Kept the candidate explicitly pre-release: canonical green qualification does

@@ -379,6 +379,9 @@ function createLocalOllamaTransport(
         stream:
           false,
 
+        think:
+          false,
+
         format:
           'json',
 
