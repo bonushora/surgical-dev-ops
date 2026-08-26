@@ -129,6 +129,49 @@ test(
   }
 );
 
+test(
+  'NATURAL terminal renders the shared bilingual experience projection',
+  async () => {
+    const input = new PassThrough();
+    const output = new PassThrough();
+    let observed = '';
+
+    output.on('data', (chunk) => {
+      observed += chunk.toString();
+    });
+
+    cli.createInteractiveSession(
+      naturalActivation(),
+      {
+        input,
+        output,
+        terminal: false,
+        cognitiveSession: Object.freeze({
+          async describe() {
+            return Object.freeze({
+              available: true,
+              provider: 'Ollama',
+              model: 'qwen3:8b'
+            });
+          },
+          conversationState() {
+            return Object.freeze({ turnCount: 1 });
+          }
+        })
+      }
+    );
+
+    input.end('estado da experiência\nexperience status\nexit\n');
+    await new Promise((resolve) => setTimeout(resolve, 50));
+
+    assert.match(observed, /Estado da experiência/);
+    assert.match(observed, /Experience state/);
+    assert.match(observed, /Ollama\/qwen3:8b/);
+    assert.match(observed, /Autoridade operacional.*nenhuma/);
+    assert.match(observed, /Operational authority.*none/);
+  }
+);
+
 function naturalActivation() {
   return Object.freeze({
     repositoryPath:

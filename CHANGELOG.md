@@ -4,6 +4,10 @@
 
 ### Added
 
+- Integrated ADR-024-H through one immutable NATURAL experience projection for
+  terminal and web presentation, with bilingual status, visible provider and
+  privacy state, bounded history and pending-authorization data, while preserving
+  the canonical Orchestrator as the only operational path.
 - ADR-024-G qualified OpenAI Responses frontier adapter and guided setup
   boundary with fixed identity, bounded streaming and credential confinement.
 - ADR-024-F durable asynchronous NATURAL task state with exact resume binding,

@@ -52,6 +52,11 @@ const {
 } = require('./natural-session-control');
 
 const {
+  createNaturalExperienceSnapshot,
+  formatNaturalTerminalExperience
+} = require('./natural-experience-surface');
+
+const {
   formatWorkspaceFiles,
   extractFilesystemEvidence,
   formatFileReadEvidence
@@ -974,6 +979,46 @@ function createInteractiveSession(
                         '  Autoridade operacional: nenhuma\n'
                       )
                     : 'Memória conversacional indisponível.\n'
+                );
+              } else if (
+                controlled.action ===
+                  'EXPERIENCE_STATUS'
+              ) {
+                const discovery =
+                  cognitiveSession &&
+                  typeof cognitiveSession.describe === 'function'
+                    ? await cognitiveSession.describe()
+                    : null;
+
+                const conversation =
+                  cognitiveSession &&
+                  typeof cognitiveSession.conversationState === 'function'
+                    ? cognitiveSession.conversationState()
+                    : null;
+
+                const controlState =
+                  sessionControl.experienceState();
+
+                const snapshot =
+                  createNaturalExperienceSnapshot({
+                    project: activation.workspace,
+                    provider: discovery && discovery.available
+                      ? `${discovery.provider}/${discovery.model}`
+                      : 'deterministic-only',
+                    privacyMode: discovery && discovery.available
+                      ? 'provider-qualified'
+                      : 'local-deterministic',
+                    workMode: controlState.workMode,
+                    pendingAuthorization: controlState.pendingAuthorization,
+                    conversation,
+                    history: []
+                  });
+
+                output.write(
+                  formatNaturalTerminalExperience(
+                    snapshot,
+                    controlled.language
+                  )
                 );
               } else if (
                 controlled.output

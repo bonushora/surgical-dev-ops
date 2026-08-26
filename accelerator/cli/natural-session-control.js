@@ -255,6 +255,18 @@ function createNaturalSessionControl(
     }
 
     if (
+      text === 'estado da experiencia' ||
+      text === 'experience status' ||
+      text === 'session experience'
+    ) {
+      return Object.freeze({
+        matched: true,
+        action: 'EXPERIENCE_STATUS',
+        language: text === 'estado da experiencia' ? 'pt-BR' : 'en'
+      });
+    }
+
+    if (
       text === 'ajuda' ||
       text === 'help' ||
       includesAny(
@@ -477,6 +489,20 @@ function createNaturalSessionControl(
 
     handle,
     currentWorkMode,
+
+    experienceState() {
+      return Object.freeze({
+        workMode,
+        pendingAuthorization: pendingTask === null
+          ? null
+          : Object.freeze({
+              kind: pendingTask.kind,
+              objective: pendingTask.objective
+            }),
+        operationalAuthority: false,
+        mutationAuthority: false
+      });
+    },
 
     hasPendingAuthorization() {
       return pendingTask !== null;
