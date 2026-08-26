@@ -1,5 +1,12 @@
 # Changelog
 
+## [Unreleased]
+
+### Added
+
+- ADR-024-F durable asynchronous NATURAL task state with exact resume binding,
+  integrity-checked transitions and duplicate physical-effect prevention.
+
 ## ADR-024-E — Task-envelope authorization consolidation
 
 - Consolidated one explicit human decision around an immutable bounded task
