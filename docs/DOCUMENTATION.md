@@ -39,6 +39,7 @@ Start with:
 - [ADR-019 — Single-Agent Governed Engineering Loop](./adr/ADR-019-single-agent-governed-engineering-loop.md)
 - [ADR-024 — Governed Frontier Conversational Experience](./adr/ADR-024-governed-frontier-conversational-experience.md)
 - [ADR-025 — External Adversarial Review](./adr/ADR-025-external-adversarial-review-reproducible-release.md)
+- [ADR-026 — NATURAL Terminal Boundary and Input Clarity](./adr/ADR-026-natural-terminal-boundary-input-clarity.md)
 
 ## Articles and regression protocol
 

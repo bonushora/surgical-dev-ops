@@ -15,6 +15,13 @@ const {
   './natural-governed-task'
 );
 
+const {
+  classifyNaturalTerminalInput,
+  formatNaturalTerminalBoundary
+} = require(
+  './natural-terminal-boundary'
+);
+
 function normalize(value) {
   return String(value || '')
     .normalize('NFD')
@@ -160,6 +167,17 @@ function createNaturalSessionControl(
     if (!text) {
       return Object.freeze({
         matched: false
+      });
+    }
+
+    const terminalBoundary =
+      classifyNaturalTerminalInput(input);
+
+    if (terminalBoundary.boundary !== 'NONE') {
+      return Object.freeze({
+        matched: true,
+        action: 'CONTINUE',
+        output: formatNaturalTerminalBoundary(terminalBoundary)
       });
     }
 
