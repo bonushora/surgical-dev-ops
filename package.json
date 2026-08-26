@@ -15,7 +15,7 @@
     "surgical-telemetry-server": "accelerator/cli/surgical-telemetry-server.js"
   },
   "name": "surgical-dev-ops",
-  "version": "2.5.1",
+  "version": "2.6.0-rc.1",
   "description": "Governed deterministic development orchestration runtime.",
   "license": "MIT",
   "repository": {

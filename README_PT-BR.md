@@ -19,7 +19,7 @@ sistema operacional ao redor do modelo explícito, limitado, auditável e fail-c
 
 | Evidência | Valor |
 | --- | --- |
-| Linha de release | Surgical DevOps v2.5.1 |
+| Linha de release | Surgical DevOps v2.6.0-rc.1 |
 | Commit canônico | [`36ef01f53690e644976668248499ab9d5031f52f`](https://github.com/bonushora/surgical-dev-ops/commit/36ef01f53690e644976668248499ab9d5031f52f) |
 | Run canônico do CI | [Accelerator Conformance #32808535616](https://github.com/bonushora/surgical-dev-ops/actions/runs/32808535616) |
 | Resultado da matriz | Ubuntu, macOS e Windows: **PASS** |

@@ -1,0 +1,37 @@
+'use strict';
+
+const assert = require('node:assert/strict');
+const fs = require('node:fs');
+const path = require('node:path');
+const test = require('node:test');
+
+const ROOT = path.resolve(__dirname, '../..');
+const VERSION = '2.6.0-rc.1';
+
+function read(relativePath) {
+  return fs.readFileSync(path.join(ROOT, relativePath), 'utf8');
+}
+
+test('release candidate identity is consistent across public and executable surfaces', () => {
+  const packageJson = JSON.parse(read('package.json'));
+  const packageLock = JSON.parse(read('package-lock.json'));
+  const manifest = JSON.parse(read('docs/review/QUALIFICATION_MANIFEST.json'));
+
+  assert.equal(packageJson.version, VERSION);
+  assert.equal(packageLock.version, VERSION);
+  assert.equal(packageLock.packages[''].version, VERSION);
+  assert.equal(manifest.releaseCandidate, `v${VERSION}`);
+  assert.match(read('accelerator/cli/surgical.js'), /const VERSION = '2\.6\.0-rc\.1';/);
+  assert.match(read('README.md'), /Surgical DevOps v2\.6\.0-rc\.1/);
+  assert.match(read('README_PT-BR.md'), /Surgical DevOps v2\.6\.0-rc\.1/);
+});
+
+test('release candidate keeps external-review non-claims explicit', () => {
+  const manifest = JSON.parse(read('docs/review/QUALIFICATION_MANIFEST.json'));
+
+  assert.equal(manifest.claims.absoluteSecurity, false);
+  assert.equal(manifest.claims.independentAuditCompleted, false);
+  assert.equal(manifest.claims.powerLossValidated, false);
+  assert.equal(manifest.claims.modelDeterministic, false);
+  assert.equal(manifest.claims.externalReviewInvited, true);
+});

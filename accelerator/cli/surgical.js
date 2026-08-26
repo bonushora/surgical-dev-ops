@@ -74,7 +74,7 @@ const {
   './governed-engineering-agent-loop'
 );
 
-const VERSION = '2.5.1';
+const VERSION = '2.6.0-rc.1';
 
 function printVersion() {
   process.stdout.write(`Surgical DevOps v${VERSION}\n`);
