@@ -171,7 +171,7 @@ test(
 );
 
 test(
-  'Codex request stops at remote provider qualification boundary',
+  'OpenAI request enters qualified guided setup without automatic activation',
   () => {
     const control =
       createNaturalSessionControl();
@@ -186,14 +186,12 @@ test(
       true
     );
 
-    assert.match(
-      result.output,
-      /Codex \/ OpenAI/
-    );
+    assert.equal(result.action, 'FRONTIER_PROVIDER_SETUP');
+    assert.equal(result.providerId, 'openai:gpt-5.6');
 
     assert.match(
       result.output,
-      /nenhuma credencial será solicitada/i
+      /nunca é ativado automaticamente/i
     );
 
     assert.match(

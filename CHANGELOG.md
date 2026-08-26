@@ -4,6 +4,8 @@
 
 ### Added
 
+- ADR-024-G qualified OpenAI Responses frontier adapter and guided setup
+  boundary with fixed identity, bounded streaming and credential confinement.
 - ADR-024-F durable asynchronous NATURAL task state with exact resume binding,
   integrity-checked transitions and duplicate physical-effect prevention.
 

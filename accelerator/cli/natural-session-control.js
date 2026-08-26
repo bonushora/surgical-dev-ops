@@ -83,11 +83,11 @@ function providerSetupOverview() {
 
 function codexSetupGuide() {
   return (
-    'Configuração guiada: Codex / OpenAI\n\n' +
-    'Nesta versão, a integração remota Codex/OpenAI ainda não está qualificada para ativação automática.\n' +
-    'Por isso nenhuma credencial será solicitada ou armazenada agora.\n\n' +
-    'Quando o adapter correspondente estiver qualificado, seguirei estas etapas:\n' +
-    '  1. confirmar se você quer Codex por conta/plano compatível ou OpenAI via API;\n' +
+    'Configuração guiada: OpenAI via API\n\n' +
+    'O adapter OpenAI Responses está qualificado, mas nunca é ativado automaticamente.\n' +
+    'A assinatura do ChatGPT e o uso da API são relações comerciais distintas.\n\n' +
+    'Para ativá-lo, seguirei estas etapas:\n' +
+    '  1. confirmar explicitamente que você quer OpenAI via API;\n' +
     '  2. consultar a documentação oficial vigente do provider;\n' +
     '  3. mostrar planos, limites e custos confirmados, com fonte e data;\n' +
     '  4. explicar quais dados poderão ser enviados ao provider;\n' +
@@ -99,7 +99,7 @@ function codexSetupGuide() {
     'Se preços atuais não puderem ser confirmados, o sistema deverá dizer isso explicitamente.\n' +
     'Cobranças externas são feitas pelo próprio provider.\n' +
     'O Surgical DevOps não recebe nem retém comissão desse consumo.\n\n' +
-    'FRONTEIRA ATUAL: adapter remoto + credential boundary + commercial-information boundary ainda precisam ser qualificados.\n' +
+    'FRONTEIRA ATUAL: confirmar informações comerciais atuais e sua escolha explícita antes de receber qualquer credencial.\n' +
     'Nenhuma alteração foi realizada.\n'
   );
 }
@@ -385,10 +385,9 @@ function createNaturalSessionControl(
     ) {
       return Object.freeze({
         matched: true,
-        action:
-          'CONTINUE',
-        output:
-          codexSetupGuide()
+        action: 'FRONTIER_PROVIDER_SETUP',
+        providerId: 'openai:gpt-5.6',
+        output: codexSetupGuide()
       });
     }
 
