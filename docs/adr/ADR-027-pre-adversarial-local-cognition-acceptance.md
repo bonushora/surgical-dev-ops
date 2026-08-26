@@ -34,3 +34,20 @@ authority-bearing cognitive output continues to fail closed.
 The change requires deterministic tests, real bilingual Qwen acceptance, a clean
 worktree and the unchanged canonical Ubuntu, macOS and Windows workflow before
 release publication.
+
+## Manual acceptance observation
+
+During the first post-change manual run, an operator instruction intended for
+the test procedure (`Confirm a complete response in Portuguese`) was entered at
+the `surgical>` prompt while authorization was pending. The input was not an
+affirmative authorization and the application correctly continued to require an
+explicit `sim` or `não`. A subsequent English request was contained by the same
+pending decision, and `exit` closed the session immediately.
+
+This execution is recorded as **partially accepted**, not as successful
+bilingual cognitive acceptance. It confirms that ambiguous text grants no
+authority, unrelated input does not replace a pending decision, session exit
+remains available, and the workspace remains unchanged. It does not qualify the
+Portuguese or English cognitive response; those observations require separate
+manual runs with test instructions clearly labelled `TYPE`, `WAIT`, and
+`OBSERVE`.
