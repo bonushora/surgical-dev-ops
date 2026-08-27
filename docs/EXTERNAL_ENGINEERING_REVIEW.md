@@ -4,8 +4,8 @@
 
 | Item | Evidence |
 | --- | --- |
-| Source baseline | `7cf628899e69c90078815ebb959f0bd97c077526` |
-| Canonical workflow run | `32956401106` |
+| Source baseline | `b82a845a3f30d44c8073cdda8a1354a286ce1ae4` |
+| Canonical workflow run | `33034046356` |
 | Matrix | Ubuntu, macOS and Windows: PASS |
 | Governed frontier milestones | ADR-024-A through ADR-024-I: qualified |
 | Review challenge | [`review/TRY_TO_BREAK_IT.md`](review/TRY_TO_BREAK_IT.md) |
