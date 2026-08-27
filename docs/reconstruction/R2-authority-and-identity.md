@@ -1,6 +1,6 @@
 # Reconstruction v3 — R2 Authority and Identity
 
-Status: IMPLEMENTATION CANDIDATE
+Status: QUALIFIED
 
 Baseline: R1 qualified at commit
 `d3aa6071e15f8d45abde3f903e7c1b0b101ce2ba`.
@@ -124,3 +124,41 @@ and zero dependency vulnerabilities.
 
 An R2.3 commit is qualified for promotion only when that exact commit passes
 the canonical Ubuntu, macOS and Windows workflow.
+## R2 formal qualification
+
+R2 satisfies every promotion gate defined above.
+
+Qualified lineage:
+
+- R2.1 canonical authority-binding contract:
+  `ab1d37a44053e36689ae3acbf6d2d839e8a2ac5c`;
+- R2.2 qualified production-evidence projection:
+  `7e29a78233d08d9a652ad2e00d84da4c271302e9`;
+- R2.3 production dispatch enforcement:
+  `d892d4436165816a4cf344e8e4bcf65747dd0048`;
+- R2.3 canonical workflow:
+  `33042188598`, with Ubuntu, macOS and Windows passing.
+
+Qualification evidence:
+
+- identity verification remains provider-neutral and external;
+- authentication never implies authorization;
+- R3 approval remains a separate human authority;
+- identity, approval and grant form one exact immutable binding;
+- operation, workspace, tenant, project, capability, action and logical scope
+  must agree across the complete chain;
+- approval and grant fingerprints are independently reproduced;
+- incomplete, conflicting, substituted and actionless authority fails closed;
+- the R2 projection can deny but cannot grant or dispatch;
+- real CLI, restart, replay, journal and recovery behavior remains compatible;
+- R1 remains qualified;
+- the complete suite discovers 988 tests, with 983 passes, zero failures and
+  five platform-specific skips;
+- dependency audits report zero vulnerabilities.
+
+This qualification does not claim that an identity provider, cognitive model or
+compatibility adapter gains operational authority. Human sovereignty and the
+Orchestrator trust boundary remain unchanged.
+
+The formal R2 qualification commit is promotable only when that exact commit
+passes the canonical Ubuntu, macOS and Windows workflow.
