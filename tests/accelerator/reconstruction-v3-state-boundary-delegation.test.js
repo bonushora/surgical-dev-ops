@@ -97,3 +97,49 @@ test(
     );
   }
 );
+
+
+test(
+  'R1.4 production state boundary delegates classification with legacy-compatible inputs',
+  () => {
+    const source = fs.readFileSync(
+      SOURCE,
+      'utf8'
+    );
+
+    assert.match(
+      source,
+      /classifyStateBoundary/
+    );
+
+    assert.match(
+      source,
+      /authorizationStatus:[\s\S]*'NOT_AUTHORIZED'/
+    );
+
+    assert.match(
+      source,
+      /outcome:[\s\S]*=== 'FAILED'[\s\S]*\? 'FAILED'[\s\S]*: null/
+    );
+
+    assert.match(
+      source,
+      /afterPresent:[\s\S]*boundary\.state\.after !== null/
+    );
+
+    assert.match(
+      source,
+      /status: classification\.status/
+    );
+
+    assert.doesNotMatch(
+      source,
+      /status: 'UNKNOWN'/
+    );
+
+    assert.doesNotMatch(
+      source,
+      /status: 'PENDING_AFTER_STATE'/
+    );
+  }
+);

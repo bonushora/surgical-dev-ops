@@ -5,7 +5,8 @@
 const fs = require('fs');
 const {
   describeOperationStateContract,
-  resolveLifecycleTransition
+  resolveLifecycleTransition,
+  classifyStateBoundary
 } = require('../reconstruction/v3/core/operation-state-contract');
 
 const SCHEMA = 'sdo.state.v1';
@@ -377,59 +378,31 @@ function assertTransition(boundary) {
   }
 
   /*
-   * FAILED has precedence over PENDING_AFTER_STATE.
+   * Preserve the qualified legacy input boundary:
+   * every non-AUTHORIZED value remains non-executable
+   * and only the exact FAILED outcome represents failure.
    *
-   * A failed operation intentionally has no AFTER
-   * snapshot in this boundary. The absence of AFTER
-   * therefore cannot by itself imply that execution
-   * is merely pending.
+   * Normative precedence and status resolution belong
+   * exclusively to the canonical R1 contract.
    */
-  if (
-    boundary.state.operation.authorizationStatus ===
-      'AUTHORIZED' &&
-    boundary.state.operation.outcome === 'FAILED'
-  ) {
-    return {
-      valid: true,
-      status: 'FAILED'
-    };
-  }
-
-  if (
-    boundary.state.operation.authorizationStatus ===
-      'AUTHORIZED' &&
-    boundary.state.after === null
-  ) {
-    return {
-      valid: true,
-      status: 'PENDING_AFTER_STATE'
-    };
-  }
-
-  if (
-    boundary.state.operation.authorizationStatus ===
-      'AUTHORIZED' &&
-    boundary.state.after !== null
-  ) {
-    return {
-      valid: true,
-      status: 'COMPLETED'
-    };
-  }
-
-  if (
-    boundary.state.operation.authorizationStatus !==
-    'AUTHORIZED'
-  ) {
-    return {
-      valid: true,
-      status: 'NOT_EXECUTABLE'
-    };
-  }
+  const classification =
+    classifyStateBoundary({
+      authorizationStatus:
+        boundary.state.operation.authorizationStatus ===
+          'AUTHORIZED'
+          ? 'AUTHORIZED'
+          : 'NOT_AUTHORIZED',
+      outcome:
+        boundary.state.operation.outcome === 'FAILED'
+          ? 'FAILED'
+          : null,
+      afterPresent:
+        boundary.state.after !== null
+    });
 
   return {
     valid: true,
-    status: 'UNKNOWN'
+    status: classification.status
   };
 }
 
