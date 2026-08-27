@@ -4,13 +4,22 @@
 
 const fs = require('fs');
 const {
+  describeOperationStateContract,
   resolveLifecycleTransition
 } = require('../reconstruction/v3/core/operation-state-contract');
 
 const SCHEMA = 'sdo.state.v1';
 const LIFECYCLE_SCHEMA = 'sdo.lifecycle.v1';
-const LIFECYCLE_STATES = new Set(['PENDING', 'COMPLETED', 'FAILED', 'NOT_EXECUTABLE']);
-const TERMINAL_STATES = new Set(['COMPLETED', 'FAILED', 'NOT_EXECUTABLE']);
+const OPERATION_STATE_CONTRACT =
+  describeOperationStateContract();
+const LIFECYCLE_STATES =
+  new Set(OPERATION_STATE_CONTRACT.lifecycleStates);
+const INITIAL_LIFECYCLE_STATES =
+  new Set(OPERATION_STATE_CONTRACT.initialLifecycleStates);
+const TERMINAL_STATES =
+  new Set(OPERATION_STATE_CONTRACT.terminalLifecycleStates);
+const TRANSITION_TYPES =
+  new Set(OPERATION_STATE_CONTRACT.transitionTypes);
 
 function requireObject(value, name) {
   if (!value || typeof value !== 'object') {
@@ -83,7 +92,7 @@ function createLifecycle({ operationId, initialState, before, createdAt }) {
   if (!LIFECYCLE_STATES.has(state)) {
     throw new Error(`Unknown lifecycle state: ${state}`);
   }
-  if (state !== 'PENDING' && state !== 'NOT_EXECUTABLE') {
+  if (!INITIAL_LIFECYCLE_STATES.has(state)) {
     throw new Error(`Invalid initial lifecycle state: ${state}`);
   }
   return deepFreeze({
@@ -107,7 +116,7 @@ function createLifecycle({ operationId, initialState, before, createdAt }) {
 function normalizeLifecycleTransition(transition) {
   requireObject(transition, 'transition');
   const type = requireString(transition.type, 'transition.type').toUpperCase();
-  if (type !== 'COMPLETE' && type !== 'FAIL') {
+  if (!TRANSITION_TYPES.has(type)) {
     throw new Error(`Unknown lifecycle transition: ${type}`);
   }
   const normalized = {

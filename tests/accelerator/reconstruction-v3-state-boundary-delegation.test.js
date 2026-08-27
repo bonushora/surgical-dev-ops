@@ -46,3 +46,54 @@ test(
     );
   }
 );
+
+
+test(
+  'R1.3 production state boundary derives all lifecycle vocabulary from the canonical contract',
+  () => {
+    const source = fs.readFileSync(
+      SOURCE,
+      'utf8'
+    );
+
+    assert.match(
+      source,
+      /describeOperationStateContract/
+    );
+
+    assert.match(
+      source,
+      /OPERATION_STATE_CONTRACT\.lifecycleStates/
+    );
+
+    assert.match(
+      source,
+      /OPERATION_STATE_CONTRACT\.initialLifecycleStates/
+    );
+
+    assert.match(
+      source,
+      /OPERATION_STATE_CONTRACT\.terminalLifecycleStates/
+    );
+
+    assert.match(
+      source,
+      /OPERATION_STATE_CONTRACT\.transitionTypes/
+    );
+
+    assert.doesNotMatch(
+      source,
+      /new Set\(\['PENDING', 'COMPLETED', 'FAILED', 'NOT_EXECUTABLE'\]\)/
+    );
+
+    assert.doesNotMatch(
+      source,
+      /state !== 'PENDING' && state !== 'NOT_EXECUTABLE'/
+    );
+
+    assert.doesNotMatch(
+      source,
+      /type !== 'COMPLETE' && type !== 'FAIL'/
+    );
+  }
+);
