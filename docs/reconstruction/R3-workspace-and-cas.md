@@ -1,6 +1,6 @@
 # R3 — Workspace and CAS reconstruction
 
-Status: **R3.1 qualified candidate**
+Status: **QUALIFIED ON RECONSTRUCTION LINE**
 
 Baseline: `87deb3dc145b43022690bfb3fd8f96180efca800`.
 
@@ -161,5 +161,14 @@ Local R3.4 qualification:
 - dependency audits: 0 vulnerabilities;
 - package dry run: 178 files.
 
-R3.4 is locally qualified. Promotion remains conditional on successful Linux,
-macOS and Windows CI for the exact committed candidate.
+R3 satisfies its reconstruction promotion gates at commit
+`aa5d798feaef72e64065d2304962f6b885b018cb`. Canonical workflow run
+`33093386335` completed successfully on Ubuntu, macOS and Windows.
+
+## Final R3 status
+
+R3 is **QUALIFIED** on `reconstruction/v3`.
+
+This qualification binds production success and finalized replay to canonical
+workspace, provider, Manifest CAS and materialization evidence while preserving
+historical replay compatibility and the non-authoritative ordinary worktree.
