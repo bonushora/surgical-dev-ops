@@ -103,6 +103,38 @@ test('deep adversarial release requires attacks beyond adjacent layers', () => {
   );
 });
 
+test('public framing is narrow falsifiable and counterexample driven', () => {
+  const challenge = read(
+    'docs/review/TRY_TO_BREAK_IT.md'
+  );
+
+  for (const required of [
+    'one narrow, falsifiable claim',
+    'untrusted cognitive output',
+    'has no operational authority',
+    'exact human-authorized evidence',
+    'Do not trust the test count',
+    'attack the internal implementation directly',
+    'smallest reproducible counterexample',
+    'A reproducible bypass is a valuable result',
+    'turn the affected qualification red',
+    'permanent regression test'
+  ]) {
+    assert.match(
+      challenge,
+      new RegExp(
+        required.replace(/\s+/g, '\\s+'),
+        'i'
+      )
+    );
+  }
+
+  assert.doesNotMatch(
+    challenge,
+    /proven secure|guaranteed secure|unbreakable|mathematically proven|100% secure/i
+  );
+});
+
 test('public adversarial report form requires reproducibility impact and secret hygiene', () => {
   const form = read('.github/ISSUE_TEMPLATE/adversarial-report.yml');
   for (const required of [

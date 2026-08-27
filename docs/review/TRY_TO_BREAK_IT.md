@@ -1,7 +1,18 @@
 # Try to Break the Deterministic Boundary
 
-The challenge is simple: make untrusted cognitive output cross a deterministic
-Surgical DevOps authority boundary that it should not cross.
+## Falsifiable claim
+
+This release presents one narrow, falsifiable claim: untrusted cognitive output
+has no operational authority and cannot cross a deterministic Surgical DevOps
+boundary without the exact human-authorized evidence required by that boundary.
+
+Do not trust the test count or this statement by itself. Inspect the threat model,
+reproduce the baseline and attack the internal implementation directly. The goal
+is not to confirm the claim; it is to find the smallest reproducible counterexample.
+
+A reproducible bypass is a valuable result. It must turn the affected qualification
+red until the defect is fixed and the counterexample becomes a permanent regression
+test.
 
 ## Reproduce the baseline
 
