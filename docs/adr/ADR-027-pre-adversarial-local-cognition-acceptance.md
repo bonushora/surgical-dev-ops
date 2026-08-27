@@ -54,3 +54,19 @@ manual runs with test instructions clearly labelled `TYPE`, `WAIT`, and
 
 The equivalent English and Portuguese acceptance record is maintained in
 [NATURAL Manual Acceptance — Bilingual Record](../evaluation/NATURAL-MANUAL-ACCEPTANCE-BILINGUAL.md).
+
+
+## Final manual acceptance
+
+The exact continuation procedure was subsequently completed in two independent
+sessions with the qualified local Qwen 3 8B provider. The Portuguese cognitive
+response completed in 37.1 seconds and the English cognitive response completed
+in 52.8 seconds. Each session obtained two governed evidence observations,
+returned to the `surgical>` prompt and reported zero workspace mutation.
+
+Result: **BILINGUAL COGNITIVE ACCEPTANCE PASSED**.
+
+The English session retained Portuguese progress and completion-status messages.
+This is recorded as a non-authority-bearing localization limitation; it does not
+rewrite the observed complete English cognitive response as a fully localized
+English terminal experience.

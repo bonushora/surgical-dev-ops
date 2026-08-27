@@ -55,7 +55,7 @@ state is:
 
 ```text
 status: HUMAN_AUTHORITY_REQUIRED
-evidenceCount: 1
+evidenceCount: 2
 operationalAuthority: false
 mutationAuthority: false
 approvalAuthority: false

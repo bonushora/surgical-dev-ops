@@ -121,7 +121,7 @@ test(
 
     assert.equal(
       result.inferenceProfile.profileId,
-      'ollama-cpu-bounded-v2'
+      'ollama-cpu-bounded-v3'
     );
 
     assert.equal(

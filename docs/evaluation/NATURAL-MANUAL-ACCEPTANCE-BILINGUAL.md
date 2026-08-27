@@ -75,3 +75,38 @@ Ainda não qualificado por essa execução:
 8. **DIGITE:** `yes`
 9. **AGUARDE E OBSERVE:** uma resposta completa em inglês.
 
+## Final bilingual acceptance outcome
+
+### English
+
+The continuation procedure was completed in two separate sessions using the
+qualified local Qwen 3 8B provider.
+
+- Portuguese: complete governed cognitive response in 37.1 seconds.
+- English: complete governed cognitive response in 52.8 seconds.
+- Both sessions: two governed evidence observations, return to the `surgical>`
+  prompt and zero workspace mutation.
+
+Result: **BILINGUAL COGNITIVE ACCEPTANCE PASSED**.
+
+The English cognitive response was complete and in English. Progress and
+completion-status messages remained in Portuguese. This is preserved as a
+localization limitation and is not represented as a fully localized English
+terminal experience.
+
+### Português
+
+O procedimento de continuação foi concluído em duas sessões separadas usando o
+provider local qualificado Qwen 3 8B.
+
+- Português: resposta cognitiva governada completa em 37,1 segundos.
+- Inglês: resposta cognitiva governada completa em 52,8 segundos.
+- Ambas as sessões: duas observações de evidência governada, retorno ao prompt
+  `surgical>` e nenhuma mutação no workspace.
+
+Resultado: **ACEITAÇÃO COGNITIVA BILÍNGUE APROVADA**.
+
+A resposta cognitiva inglesa foi completa e em inglês. As mensagens de progresso
+e conclusão permaneceram em português. Isso fica preservado como uma limitação
+de localização e não é apresentado como uma experiência de terminal inglesa
+integralmente localizada.
