@@ -29,6 +29,13 @@ jobs:
       - name: Checkout repository
         uses: actions/checkout@v6
 
+      - name: Materialize deterministic pull-request merge branch
+        if: github.event_name == 'pull_request'
+        shell: bash
+        run: |
+          git switch -c sdo-ci-pr-merge
+          test "$(git branch --show-current)" = "sdo-ci-pr-merge"
+
       - name: Setup Node.js
         uses: actions/setup-node@v6
         with:

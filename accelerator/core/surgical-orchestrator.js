@@ -40,6 +40,11 @@ const gitReadAdapter = require('../adapters/git-read-adapter');
 const processValidationAdapter = require('../adapters/process-validation-adapter');
 const filesystemPatchAdapter = require('../adapters/filesystem-patch-adapter');
 const identityVerificationAdapter = require('../adapters/identity-verification-adapter');
+const {
+  projectQualifiedAuthority
+} = require(
+  '../reconstruction/v3/adapters/qualified-authority-projection'
+);
 const { deriveCapabilityGrantFingerprint } = require('./capability-grant');
 const { classifyMutationAuthority } = require('./authoritative-clock');
 const { requireDurabilityReceipt } = require('./mutation-durability');
@@ -321,7 +326,46 @@ function validateControlledRequest(request, repositoryPath, expectedRisk, runtim
         request.projectId !== operationRecord.projectId) {
       return executionDenial('R3 approval authority is missing or mismatched.');
     }
-    runtime = { ...runtime, authorityTimeEvidence };
+
+    const authorityBinding =
+      projectQualifiedAuthority({
+        identityVerification,
+        expectedIdentity: {
+          subjectId:
+            operationRecord.approvalAuthority.approver.id,
+          audience:
+            runtime.identityAudience,
+          operationId:
+            request.operationId,
+          workspace:
+            repositoryPath,
+          tenantId:
+            operationRecord.tenantId,
+          projectId:
+            operationRecord.projectId,
+          fingerprint:
+            operationRecord
+              .verifiedIdentityAssertionFingerprint
+        },
+        temporalAuthority:
+          temporal,
+        approvalAuthority:
+          approval.authority,
+        capabilityGrantEvaluation:
+          evaluation
+      });
+
+    if (authorityBinding.decision !== 'ALLOWED') {
+      return executionDenial(
+        'Canonical R2 authority binding is missing or mismatched.'
+      );
+    }
+
+    runtime = {
+      ...runtime,
+      authorityTimeEvidence,
+      authorityBinding
+    };
   }
   const lifecycle = request.lifecycle;
   if (!lifecycle || lifecycle.schema !== 'sdo.lifecycle.v1' ||

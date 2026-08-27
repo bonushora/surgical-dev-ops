@@ -17,6 +17,13 @@ const {
   validateMutationProviderResult
 } = require('../core/mutation-provider');
 
+const {
+  projectQualifiedWorkspaceCasEvidence
+} = require(
+  '../reconstruction/v3/adapters/' +
+  'qualified-workspace-cas-projection'
+);
+
 const MAX_BYTES = 1024 * 1024;
 
 function deepFreeze(value) {
@@ -163,12 +170,12 @@ function transactionEvidence(context) {
 
 function evidence({ operationId, workspace, requested, canonical, beforeHash, afterHash,
   outcome, recovery, observedAt, temporalAuthority, commitAuthority, transaction,
-  durability = null, mutationProvider = null }) {
+  durability = null, mutationProvider = null, workspaceCasBinding = null }) {
   return deepFreeze({
     schema: 'sdo.filesystem_patch_result.v1', operationId, workspace,
     target: { requested, canonical }, beforeSha256: beforeHash, afterSha256: afterHash,
     outcome, recovery, observedAt, temporalAuthority, commitAuthority: commitAuthority || null,
-    transaction, durability, mutationProvider
+    transaction, durability, mutationProvider, workspaceCasBinding
   });
 }
 
@@ -215,6 +222,141 @@ function contentAddressedDurability(providerEvidence) {
     durability.schema === 'sdo.content_addressed_provider_evidence.v1'
     ? durability
     : null;
+}
+
+function verifyPersistedWorkspaceCasBinding({
+  priorEvidence,
+  providerEvidence,
+  workspace,
+  target,
+  expectedSha256
+}) {
+  const schema =
+    'sdo.workspace_cas_replay_binding_verification.v1';
+
+  if (
+    !Object.prototype.hasOwnProperty.call(
+      priorEvidence,
+      'workspaceCasBinding'
+    )
+  ) {
+    return deepFreeze({
+      schema,
+      decision:
+        'HISTORICAL_EVIDENCE',
+      bindingRequired:
+        false
+    });
+  }
+
+  const projected =
+    priorEvidence.workspaceCasBinding;
+
+  if (
+    !projected ||
+    typeof projected !== 'object' ||
+    !Object.isFrozen(projected) ||
+    projected.schema !==
+      'sdo.reconstruction.workspace_cas_binding.v1' ||
+    projected.decision !== 'ALLOWED' ||
+    !projected.binding ||
+    typeof projected.binding !== 'object' ||
+    !Object.isFrozen(projected.binding)
+  ) {
+    throw new Error(
+      'Persisted workspace/CAS binding is missing, mutable or denied.'
+    );
+  }
+
+  const canonicalWorkspace =
+    canonicalizeAuthorizedRoot(workspace);
+
+  const resolved =
+    resolveInspectedFile(
+      canonicalWorkspace,
+      requireText(target, 'target')
+    );
+
+  const binding =
+    projected.binding;
+
+  const durability =
+    contentAddressedDurability(providerEvidence);
+
+  const authority =
+    durability &&
+    durability.authority;
+
+  const expectedKeys = [
+    'requestedRoot',
+    'physicalRoot',
+    'requestedTarget',
+    'physicalTarget',
+    'providerId',
+    'qualificationFingerprint',
+    'operation',
+    'beforeSha256',
+    'replacementSha256',
+    'beforeManifestOid',
+    'afterManifestOid',
+    'ordinaryWorktreeAuthoritative'
+  ].sort();
+
+  const actualKeys =
+    Object.keys(binding).sort();
+
+  if (
+    actualKeys.length !== expectedKeys.length ||
+    actualKeys.some(
+      (key, index) =>
+        key !== expectedKeys[index]
+    ) ||
+    !authority ||
+    binding.requestedRoot !==
+      canonicalWorkspace ||
+    binding.physicalRoot !==
+      canonicalWorkspace ||
+    binding.requestedTarget !==
+      resolved.canonicalTarget ||
+    binding.physicalTarget !==
+      resolved.canonicalTarget ||
+    binding.providerId !==
+      providerEvidence.providerId ||
+    binding.qualificationFingerprint !==
+      providerEvidence.qualificationFingerprint ||
+    binding.operation !==
+      'COMPARE_AND_REPLACE' ||
+    binding.beforeSha256 !==
+      providerEvidence.beforeSha256 ||
+    binding.replacementSha256 !==
+      expectedSha256 ||
+    binding.replacementSha256 !==
+      providerEvidence.replacementSha256 ||
+    binding.beforeManifestOid !==
+      authority.beforeManifestOid ||
+    binding.afterManifestOid !==
+      authority.afterManifestOid ||
+    binding.ordinaryWorktreeAuthoritative !==
+      false
+  ) {
+    throw new Error(
+      'Persisted workspace/CAS binding conflicts with authoritative replay evidence.'
+    );
+  }
+
+  return deepFreeze({
+    schema,
+    decision:
+      'PROVEN_BOUND',
+    bindingRequired:
+      true,
+    afterManifestOid:
+      binding.afterManifestOid,
+    replacementSha256:
+      binding.replacementSha256,
+    ordinaryWorktreeAuthoritative:
+      false
+  });
 }
 
 function verifyContentAddressedProjection(providerEvidence, expectedSha256) {
@@ -404,6 +546,7 @@ function patchFileWithGrant({
   }
   let physicalDurability;
   let providerEvidence;
+  let workspaceCasBinding = null;
   try {
     const providerRequest = deepFreeze({
       schema: 'sdo.compare_and_replace_request.v1',
@@ -430,6 +573,27 @@ function patchFileWithGrant({
       throw providerError;
     }
     physicalDurability = providerEvidence.durability || null;
+
+    if (contentAddressedDurability(providerEvidence)) {
+      workspaceCasBinding =
+        projectQualifiedWorkspaceCasEvidence({
+          request: providerRequest,
+          result: providerEvidence
+        });
+
+      if (
+        workspaceCasBinding.decision !== 'ALLOWED' ||
+        !workspaceCasBinding.binding
+      ) {
+        const projectionError = new Error(
+          'Qualified workspace/CAS projection was denied after provider APPLIED.'
+        );
+
+        projectionError.physicalCommitOccurred = true;
+        projectionError.authoritativeProjectionDenied = true;
+        throw projectionError;
+      }
+    }
   } catch (commitError) {
     if (!commitError.physicalCommitOccurred) throw commitError;
     try { transactionContext.requireRecovery(); } catch {}
@@ -437,12 +601,20 @@ function patchFileWithGrant({
     error.evidence = evidence({ operationId: normalizedOperationId,
       workspace: canonicalWorkspace, requested, canonical: resolved.canonicalTarget,
       beforeHash, afterHash, outcome: 'FAILED',
-      recovery: 'RECOVERY_REQUIRED_JOURNAL_AMBIGUITY',
+      recovery: commitError.authoritativeProjectionDenied
+        ? 'RECOVERY_REQUIRED_AUTHORITATIVE_PROJECTION'
+        : 'RECOVERY_REQUIRED_JOURNAL_AMBIGUITY',
       observedAt: commitAuthority.reading.wallTime, temporalAuthority: commitEvidence,
       commitAuthority: durableCommitAuthority,
       transaction: transactionEvidence(transactionContext),
-      durability: deepFreeze({ classification: 'POST_RENAME_AMBIGUOUS',
-        claims: durabilityClaims() }) });
+      durability: deepFreeze({
+        classification: commitError.authoritativeProjectionDenied
+          ? 'AUTHORITATIVE_PROJECTION_DENIED'
+          : 'POST_RENAME_AMBIGUOUS',
+        claims: durabilityClaims()
+      }),
+      mutationProvider: providerEvidence,
+      workspaceCasBinding });
     throw error;
   }
   try {
@@ -568,7 +740,7 @@ function patchFileWithGrant({
     observedAt: commitAuthority.reading.wallTime, temporalAuthority: commitEvidence,
     commitAuthority: durableCommitAuthority,
     transaction: transactionEvidence(transactionContext), durability: physicalDurability,
-    mutationProvider: providerEvidence });
+    mutationProvider: providerEvidence, workspaceCasBinding });
 }
 
 function verifyAppliedFile({ workspace, target, expectedSha256 }) {
@@ -603,8 +775,20 @@ function verifyAppliedMutation({
       : null;
 
   if (contentAddressedDurability(providerEvidence)) {
+    const persistedBinding =
+      verifyPersistedWorkspaceCasBinding({
+        priorEvidence,
+        providerEvidence,
+        workspace,
+        target,
+        expectedSha256
+      });
+
     const verification =
-      verifyContentAddressedProjection(providerEvidence, expectedSha256);
+      verifyContentAddressedProjection(
+        providerEvidence,
+        expectedSha256
+      );
 
     return deepFreeze({
       schema: 'sdo.filesystem_patch_replay_verification.v1',
@@ -615,6 +799,8 @@ function verifyAppliedMutation({
       authority: 'CONTENT_ADDRESSED_MANIFEST',
       manifestOid: verification.manifestOid,
       projection: verification.projection,
+      workspaceCasBinding:
+        persistedBinding,
       ordinaryWorktreeAuthoritative: false,
       decision: 'PROVEN_APPLIED'
     });

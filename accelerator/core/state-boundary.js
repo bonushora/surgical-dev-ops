@@ -3,11 +3,24 @@
 'use strict';
 
 const fs = require('fs');
+const {
+  describeOperationStateContract,
+  resolveLifecycleTransition,
+  classifyStateBoundary
+} = require('../reconstruction/v3/core/operation-state-contract');
 
 const SCHEMA = 'sdo.state.v1';
 const LIFECYCLE_SCHEMA = 'sdo.lifecycle.v1';
-const LIFECYCLE_STATES = new Set(['PENDING', 'COMPLETED', 'FAILED', 'NOT_EXECUTABLE']);
-const TERMINAL_STATES = new Set(['COMPLETED', 'FAILED', 'NOT_EXECUTABLE']);
+const OPERATION_STATE_CONTRACT =
+  describeOperationStateContract();
+const LIFECYCLE_STATES =
+  new Set(OPERATION_STATE_CONTRACT.lifecycleStates);
+const INITIAL_LIFECYCLE_STATES =
+  new Set(OPERATION_STATE_CONTRACT.initialLifecycleStates);
+const TERMINAL_STATES =
+  new Set(OPERATION_STATE_CONTRACT.terminalLifecycleStates);
+const TRANSITION_TYPES =
+  new Set(OPERATION_STATE_CONTRACT.transitionTypes);
 
 function requireObject(value, name) {
   if (!value || typeof value !== 'object') {
@@ -80,7 +93,7 @@ function createLifecycle({ operationId, initialState, before, createdAt }) {
   if (!LIFECYCLE_STATES.has(state)) {
     throw new Error(`Unknown lifecycle state: ${state}`);
   }
-  if (state !== 'PENDING' && state !== 'NOT_EXECUTABLE') {
+  if (!INITIAL_LIFECYCLE_STATES.has(state)) {
     throw new Error(`Invalid initial lifecycle state: ${state}`);
   }
   return deepFreeze({
@@ -104,7 +117,7 @@ function createLifecycle({ operationId, initialState, before, createdAt }) {
 function normalizeLifecycleTransition(transition) {
   requireObject(transition, 'transition');
   const type = requireString(transition.type, 'transition.type').toUpperCase();
-  if (type !== 'COMPLETE' && type !== 'FAIL') {
+  if (!TRANSITION_TYPES.has(type)) {
     throw new Error(`Unknown lifecycle transition: ${type}`);
   }
   const normalized = {
@@ -159,7 +172,10 @@ function transitionLifecycle(lifecycle, transition) {
   if (lifecycle.status !== 'PENDING') {
     throw new Error(`Transition from ${lifecycle.status} is forbidden.`);
   }
-  const nextStatus = normalized.type === 'COMPLETE' ? 'COMPLETED' : 'FAILED';
+  const nextStatus = resolveLifecycleTransition({
+    currentStatus: lifecycle.status,
+    transitionType: normalized.type
+  }).to;
   const after = normalized.type === 'COMPLETE'
     ? normalized.after
     : normalized.failure.physicalEvidence;
@@ -362,59 +378,31 @@ function assertTransition(boundary) {
   }
 
   /*
-   * FAILED has precedence over PENDING_AFTER_STATE.
+   * Preserve the qualified legacy input boundary:
+   * every non-AUTHORIZED value remains non-executable
+   * and only the exact FAILED outcome represents failure.
    *
-   * A failed operation intentionally has no AFTER
-   * snapshot in this boundary. The absence of AFTER
-   * therefore cannot by itself imply that execution
-   * is merely pending.
+   * Normative precedence and status resolution belong
+   * exclusively to the canonical R1 contract.
    */
-  if (
-    boundary.state.operation.authorizationStatus ===
-      'AUTHORIZED' &&
-    boundary.state.operation.outcome === 'FAILED'
-  ) {
-    return {
-      valid: true,
-      status: 'FAILED'
-    };
-  }
-
-  if (
-    boundary.state.operation.authorizationStatus ===
-      'AUTHORIZED' &&
-    boundary.state.after === null
-  ) {
-    return {
-      valid: true,
-      status: 'PENDING_AFTER_STATE'
-    };
-  }
-
-  if (
-    boundary.state.operation.authorizationStatus ===
-      'AUTHORIZED' &&
-    boundary.state.after !== null
-  ) {
-    return {
-      valid: true,
-      status: 'COMPLETED'
-    };
-  }
-
-  if (
-    boundary.state.operation.authorizationStatus !==
-    'AUTHORIZED'
-  ) {
-    return {
-      valid: true,
-      status: 'NOT_EXECUTABLE'
-    };
-  }
+  const classification =
+    classifyStateBoundary({
+      authorizationStatus:
+        boundary.state.operation.authorizationStatus ===
+          'AUTHORIZED'
+          ? 'AUTHORIZED'
+          : 'NOT_AUTHORIZED',
+      outcome:
+        boundary.state.operation.outcome === 'FAILED'
+          ? 'FAILED'
+          : null,
+      afterPresent:
+        boundary.state.after !== null
+    });
 
   return {
     valid: true,
-    status: 'UNKNOWN'
+    status: classification.status
   };
 }
 

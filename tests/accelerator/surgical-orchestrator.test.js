@@ -19,7 +19,7 @@ const { createQualifiedTestMutationProvider, createTestBoundary, bindMutationPro
   require('./helpers/qualified-mutation-provider');
 const { createMutationJournalAdapter } =
   require('../../accelerator/adapters/mutation-journal-adapter');
-const { evaluateCapabilityGrant } = require('../../accelerator/core/capability-grant');
+const { evaluateCapabilityGrant, deriveCapabilityGrantFingerprint } = require('../../accelerator/core/capability-grant');
 const { evaluateR3ApprovalAuthority } = require('../../accelerator/core/risk-classification');
 const { evaluateVerifiedHumanIdentityAssertion } = require('../../accelerator/core/human-identity-assertion');
 const { createOperationRecord } = require('../../accelerator/core/operation-record');
@@ -141,8 +141,9 @@ function r3Execution(repo, overrides = {}) {
     assertion: approvalAuthority.verifiedIdentityAssertion, verifierId: 'test-port' }; } },
   { reading: clockAt().read(), requireCurrent: true });
   const common = { operationId: 'op-1', workspace: repo, policyDecision: 'APPROVAL_REQUIRED',
-    riskLevel: 'R3', lifecycleState: 'PENDING', capabilityType: 'FILESYSTEM_PATCH', scope,
-    idempotency: 'IDEMPOTENT', approvalAuthority, identityVerification,
+    riskLevel: 'R3', lifecycleState: 'PENDING', capabilityType: 'FILESYSTEM_PATCH',
+    action: 'PATCH_FILE', scope, idempotency: 'IDEMPOTENT',
+    approvalAuthority, identityVerification,
     tenantId: 'tenant-1', projectId: 'project-1' };
   const grantEvaluation = evaluateCapabilityGrant(
     { ...common, expiresAt: EXPIRY }, { ...common, evaluatedAt: CREATED }, clockAt());
@@ -485,6 +486,61 @@ test('valid verified R3 authority physically applies one exact FILESYSTEM_PATCH'
       'FINALIZED_SUCCESS');
     assert.equal(result.governed.operationRecord.finalization.mutationTransaction.lockDisposition,
       'RELEASED');
+  }));
+
+test('canonical R2 binding denies a fingerprint-valid actionless R3 grant', (context) =>
+  withFixture((repo) => {
+    const request = r3Execution(repo);
+    const {
+      fingerprint,
+      action,
+      ...grantFields
+    } = request.grantEvaluation.grant;
+
+    const actionlessGrant = frozen({
+      ...grantFields,
+      fingerprint:
+        deriveCapabilityGrantFingerprint(grantFields)
+    });
+
+    const actionlessEvaluation = frozen({
+      ...request.grantEvaluation,
+      grant: actionlessGrant
+    });
+
+    let calls = 0;
+    context.mock.method(
+      filesystemPatchAdapter,
+      'patchFileWithGrant',
+      () => {
+        calls += 1;
+      }
+    );
+
+    const result = orchestrate(
+      input(repo, {
+        ...request,
+        grantEvaluation: actionlessEvaluation
+      }, {
+        risk: 'ALTO',
+        policy: {
+          decision: 'APPROVAL_REQUIRED',
+          approvalAuthority:
+            request.operationRecord.approvalAuthority
+        }
+      }),
+      r3Runtime(request)
+    );
+
+    assert.notEqual(
+      result.orchestration.status,
+      'COMPLETED'
+    );
+    assert.match(
+      result.execution.reason,
+      /Canonical R2 authority binding/
+    );
+    assert.equal(calls, 0);
   }));
 
 test('journal failure matrix is zero-mutation before commit and recovery-required after commit', () => {
@@ -1039,6 +1095,41 @@ test('H: R3 orchestrator commits content-addressed authority while ordinary work
     assert.ok(provider);
     assert.equal(provider.providerId, 'sdo:git-manifest-cas-v1');
 
+    const workspaceCasBinding =
+      result.execution.workspaceCasBinding;
+
+    assert.ok(workspaceCasBinding);
+    assert.equal(
+      workspaceCasBinding.decision,
+      'ALLOWED'
+    );
+    assert.ok(
+      Object.isFrozen(workspaceCasBinding)
+    );
+    assert.ok(
+      Object.isFrozen(
+        workspaceCasBinding.binding
+      )
+    );
+    assert.equal(
+      workspaceCasBinding.binding.providerId,
+      provider.providerId
+    );
+    assert.equal(
+      workspaceCasBinding.binding.replacementSha256,
+      request.grantEvaluation.grant
+        .scope.target.replacementSha256
+    );
+    assert.equal(
+      workspaceCasBinding.binding.afterManifestOid,
+      provider.durability.authority.afterManifestOid
+    );
+    assert.equal(
+      workspaceCasBinding.binding
+        .ordinaryWorktreeAuthoritative,
+      false
+    );
+
     const authority = provider.durability;
     assert.equal(authority.schema, 'sdo.content_addressed_provider_evidence.v1');
     assert.equal(authority.ordinaryWorktreeAuthoritative, false);
@@ -1116,6 +1207,252 @@ test('H: finalized R3 replay proves manifest authority instead of ordinary pathn
 
     assert.equal(
       fs.readFileSync(path.join(repo, 'target.js'), 'utf8'),
+      'const value = 1;\n'
+    );
+  }));
+
+test('R3.4 substituted or null persisted CAS binding denies finalized replay',
+  (context) => withFixture((repo) => {
+    const request = r3Execution(repo);
+    const runtime = r3Runtime(request, {
+      mutationProvider: contentAddressedProviderBoundary
+    });
+
+    const policy = {
+      decision: 'APPROVAL_REQUIRED',
+      approvalAuthority:
+        request.operationRecord.approvalAuthority
+    };
+
+    const first = orchestrate(
+      input(
+        repo,
+        request,
+        {
+          risk: 'ALTO',
+          policy
+        }
+      ),
+      runtime
+    );
+
+    assert.equal(
+      first.orchestration.status,
+      'COMPLETED'
+    );
+
+    let physicalCalls = 0;
+
+    context.mock.method(
+      filesystemPatchAdapter,
+      'patchFileWithGrant',
+      () => {
+        physicalCalls += 1;
+      }
+    );
+
+    function changedRecord(change) {
+      const record =
+        JSON.parse(
+          JSON.stringify(
+            first.governed.operationRecord
+          )
+        );
+
+      const patchEvidence =
+        record.adapterEvidence.find(
+          (entry) =>
+            entry.adapterType ===
+              'FILESYSTEM_PATCH'
+        );
+
+      change(patchEvidence.payload);
+
+      return frozen(record);
+    }
+
+    const cases = [
+      changedRecord((payload) => {
+        payload.workspaceCasBinding = null;
+      }),
+
+      changedRecord((payload) => {
+        payload.workspaceCasBinding
+          .binding.afterManifestOid =
+            '0'.repeat(40);
+      }),
+
+      changedRecord((payload) => {
+        payload.workspaceCasBinding
+          .binding.providerId =
+            'sdo:substituted-provider';
+      })
+    ];
+
+    for (const operationRecord of cases) {
+      const replayRequest = {
+        ...request,
+        operationRecord,
+        lifecycle:
+          first.governed.lifecycle
+      };
+
+      const replay = orchestrate(
+        input(
+          repo,
+          replayRequest,
+          {
+            risk: 'ALTO',
+            policy
+          }
+        ),
+        runtime
+      );
+
+      assert.notEqual(
+        replay.orchestration.status,
+        'COMPLETED'
+      );
+
+      assert.equal(
+        replay.orchestration.executionAttempted,
+        false
+      );
+
+      assert.match(
+        replay.execution.reason,
+        /replay|conflict/i
+      );
+    }
+
+    assert.equal(physicalCalls, 0);
+
+    assert.equal(
+      fs.readFileSync(
+        path.join(repo, 'target.js'),
+        'utf8'
+      ),
+      'const value = 1;\n'
+    );
+  }));
+
+test('R3.4 historical finalized CAS evidence remains replay-compatible',
+  (context) => withFixture((repo) => {
+    const request = r3Execution(repo);
+    const runtime = r3Runtime(request, {
+      mutationProvider: contentAddressedProviderBoundary
+    });
+
+    const policy = {
+      decision: 'APPROVAL_REQUIRED',
+      approvalAuthority:
+        request.operationRecord.approvalAuthority
+    };
+
+    const first = orchestrate(
+      input(
+        repo,
+        request,
+        {
+          risk: 'ALTO',
+          policy
+        }
+      ),
+      runtime
+    );
+
+    assert.equal(
+      first.orchestration.status,
+      'COMPLETED'
+    );
+
+    const historicalRecord =
+      JSON.parse(
+        JSON.stringify(
+          first.governed.operationRecord
+        )
+      );
+
+    const patchEvidence =
+      historicalRecord.adapterEvidence.find(
+        (entry) =>
+          entry.adapterType ===
+            'FILESYSTEM_PATCH'
+      );
+
+    delete patchEvidence
+      .payload.workspaceCasBinding;
+
+    const operationRecord =
+      frozen(historicalRecord);
+
+    let physicalCalls = 0;
+
+    context.mock.method(
+      filesystemPatchAdapter,
+      'patchFileWithGrant',
+      () => {
+        physicalCalls += 1;
+      }
+    );
+
+    const replayRequest = {
+      ...request,
+      operationRecord,
+      lifecycle:
+        first.governed.lifecycle
+    };
+
+    const replay = orchestrate(
+      input(
+        repo,
+        replayRequest,
+        {
+          risk: 'ALTO',
+          policy
+        }
+      ),
+      runtime
+    );
+
+    assert.equal(
+      replay.orchestration.status,
+      'COMPLETED',
+      JSON.stringify(replay.execution)
+    );
+
+    assert.equal(
+      replay.orchestration.executionAttempted,
+      false
+    );
+
+    assert.equal(
+      replay.governed.replay,
+      true
+    );
+
+    assert.equal(physicalCalls, 0);
+
+    assert.equal(
+      Object.prototype.hasOwnProperty.call(
+        replay.execution,
+        'workspaceCasBinding'
+      ),
+      false
+    );
+
+    assert.equal(
+      replay.execution.mutationProvider
+        .durability
+        .ordinaryWorktreeAuthoritative,
+      false
+    );
+
+    assert.equal(
+      fs.readFileSync(
+        path.join(repo, 'target.js'),
+        'utf8'
+      ),
       'const value = 1;\n'
     );
   }));
