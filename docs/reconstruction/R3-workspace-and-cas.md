@@ -52,3 +52,32 @@ The ordinary worktree remains a non-authoritative projection.
 R3.1 is an evidence-binding foundation. No production consumer is migrated by
 this step. Production projection and promotion require later controlled gates
 and successful Linux, macOS and Windows qualification.
+
+## R3.2 qualified production evidence projection
+
+R3.2 adds a pure compatibility projection from the existing trusted production
+provider result into the R3.1 binding contract.
+
+The projection:
+
+- derives provider qualification from the fixed trusted production boundary;
+- accepts no caller-selected provider or qualification decision;
+- validates the deeply frozen compare-and-replace result through the canonical
+  production validator;
+- requires the exact request, transaction, target and content hashes;
+- requires an `APPLIED` manifest CAS result;
+- requires matching materialization and non-authoritative worktree evidence;
+- reduces only qualified production fields into the R3.1 contract;
+- fails closed for stale, mutable, substituted, incomplete or extra evidence;
+- invokes no filesystem, Git, process, shell or mutation operation.
+
+R3.2 does not migrate a production consumer and does not alter the production
+provider, filesystem adapter, Orchestrator, CAS implementation or R3.1
+contract.
+
+Local R3.2 qualification:
+
+- production projection tests: 7 passed, 0 failed;
+- complete suite: 1001 discovered, 996 passed, 0 failed, 5 platform skips;
+- dependency audits: 0 vulnerabilities;
+- package dry run includes both the R3.1 contract and R3.2 projection.
