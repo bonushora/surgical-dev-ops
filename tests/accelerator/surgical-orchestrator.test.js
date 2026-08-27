@@ -19,7 +19,7 @@ const { createQualifiedTestMutationProvider, createTestBoundary, bindMutationPro
   require('./helpers/qualified-mutation-provider');
 const { createMutationJournalAdapter } =
   require('../../accelerator/adapters/mutation-journal-adapter');
-const { evaluateCapabilityGrant } = require('../../accelerator/core/capability-grant');
+const { evaluateCapabilityGrant, deriveCapabilityGrantFingerprint } = require('../../accelerator/core/capability-grant');
 const { evaluateR3ApprovalAuthority } = require('../../accelerator/core/risk-classification');
 const { evaluateVerifiedHumanIdentityAssertion } = require('../../accelerator/core/human-identity-assertion');
 const { createOperationRecord } = require('../../accelerator/core/operation-record');
@@ -141,8 +141,9 @@ function r3Execution(repo, overrides = {}) {
     assertion: approvalAuthority.verifiedIdentityAssertion, verifierId: 'test-port' }; } },
   { reading: clockAt().read(), requireCurrent: true });
   const common = { operationId: 'op-1', workspace: repo, policyDecision: 'APPROVAL_REQUIRED',
-    riskLevel: 'R3', lifecycleState: 'PENDING', capabilityType: 'FILESYSTEM_PATCH', scope,
-    idempotency: 'IDEMPOTENT', approvalAuthority, identityVerification,
+    riskLevel: 'R3', lifecycleState: 'PENDING', capabilityType: 'FILESYSTEM_PATCH',
+    action: 'PATCH_FILE', scope, idempotency: 'IDEMPOTENT',
+    approvalAuthority, identityVerification,
     tenantId: 'tenant-1', projectId: 'project-1' };
   const grantEvaluation = evaluateCapabilityGrant(
     { ...common, expiresAt: EXPIRY }, { ...common, evaluatedAt: CREATED }, clockAt());
@@ -485,6 +486,61 @@ test('valid verified R3 authority physically applies one exact FILESYSTEM_PATCH'
       'FINALIZED_SUCCESS');
     assert.equal(result.governed.operationRecord.finalization.mutationTransaction.lockDisposition,
       'RELEASED');
+  }));
+
+test('canonical R2 binding denies a fingerprint-valid actionless R3 grant', (context) =>
+  withFixture((repo) => {
+    const request = r3Execution(repo);
+    const {
+      fingerprint,
+      action,
+      ...grantFields
+    } = request.grantEvaluation.grant;
+
+    const actionlessGrant = frozen({
+      ...grantFields,
+      fingerprint:
+        deriveCapabilityGrantFingerprint(grantFields)
+    });
+
+    const actionlessEvaluation = frozen({
+      ...request.grantEvaluation,
+      grant: actionlessGrant
+    });
+
+    let calls = 0;
+    context.mock.method(
+      filesystemPatchAdapter,
+      'patchFileWithGrant',
+      () => {
+        calls += 1;
+      }
+    );
+
+    const result = orchestrate(
+      input(repo, {
+        ...request,
+        grantEvaluation: actionlessEvaluation
+      }, {
+        risk: 'ALTO',
+        policy: {
+          decision: 'APPROVAL_REQUIRED',
+          approvalAuthority:
+            request.operationRecord.approvalAuthority
+        }
+      }),
+      r3Runtime(request)
+    );
+
+    assert.notEqual(
+      result.orchestration.status,
+      'COMPLETED'
+    );
+    assert.match(
+      result.execution.reason,
+      /Canonical R2 authority binding/
+    );
+    assert.equal(calls, 0);
   }));
 
 test('journal failure matrix is zero-mutation before commit and recovery-required after commit', () => {

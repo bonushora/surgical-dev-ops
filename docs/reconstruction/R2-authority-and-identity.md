@@ -91,3 +91,36 @@ Local qualification at the R2.2 candidate boundary demonstrated:
 
 An R2.2 commit is qualified for promotion only when that exact commit passes
 the canonical Ubuntu, macOS and Windows workflow.
+## R2.3 production enforcement
+
+R2.3 promotes the qualified R2.2 projection into the production R3 filesystem
+patch validation boundary.
+
+The existing production checks remain mandatory. After the Orchestrator
+reproduces the grant fingerprint, re-evaluates human approval, verifies human
+identity, checks time authority and compares operation-record bindings, it also
+requires the canonical R2 authority chain to resolve as `ALLOWED`.
+
+The R2 projection therefore has denial authority only. It cannot:
+
+- authenticate a human;
+- issue or replace R3 approval;
+- mint or broaden a capability grant;
+- bypass an existing production denial;
+- dispatch an adapter;
+- mutate physical state.
+
+R2.3 also binds `PATCH_FILE` into the production capability-grant emission.
+The grant, operation record, controlled request and Orchestrator must now agree
+on the exact action.
+
+A regression test constructs a fingerprint-valid R3 grant without `action`.
+The Orchestrator denies it before adapter dispatch, demonstrating that a valid
+fingerprint alone cannot compensate for incomplete semantic authority.
+
+Local qualification demonstrated 988 discovered tests, 983 passes, zero
+failures, five platform-specific skips, real CLI and restart E2E compatibility,
+and zero dependency vulnerabilities.
+
+An R2.3 commit is qualified for promotion only when that exact commit passes
+the canonical Ubuntu, macOS and Windows workflow.

@@ -489,6 +489,8 @@ function createGovernedPatchRequest(
       'PENDING',
     capabilityType:
       'FILESYSTEM_PATCH',
+    action:
+      'PATCH_FILE',
     scope,
     idempotency:
       'IDEMPOTENT',
