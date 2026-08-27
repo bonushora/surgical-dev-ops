@@ -10,8 +10,8 @@ claims that remain unqualified.
 
 | Field | Evidence |
 | --- | --- |
-| Commit | [`7cf628899e69c90078815ebb959f0bd97c077526`](https://github.com/bonushora/surgical-dev-ops/commit/7cf628899e69c90078815ebb959f0bd97c077526) |
-| Run | [32956401106](https://github.com/bonushora/surgical-dev-ops/actions/runs/32956401106) |
+| Commit | [`a3a4e2941914f14457ed1932ea4024fc495bfff1`](https://github.com/bonushora/surgical-dev-ops/commit/a3a4e2941914f14457ed1932ea4024fc495bfff1) |
+| Run | [33110168939](https://github.com/bonushora/surgical-dev-ops/actions/runs/33110168939) |
 | Ubuntu, macOS and Windows | PASS |
 | Scope | ADR-024-A through ADR-024-I |
 | External challenge | [`review/TRY_TO_BREAK_IT.md`](review/TRY_TO_BREAK_IT.md) |

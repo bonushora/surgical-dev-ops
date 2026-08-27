@@ -16,7 +16,7 @@ Use o [playbook de revisão adversarial](./ADVERSARIAL_PLAYBOOK_PT-BR.md) para o
 
 ## Reproduza o baseline
 
-Use um checkout limpo do commit `7cf628899e69c90078815ebb959f0bd97c077526` com Node.js `24.18.0`:
+Use um checkout limpo do commit `a3a4e2941914f14457ed1932ea4024fc495bfff1` com Node.js `24.18.0`:
 
 ```bash
 npm ci
@@ -25,7 +25,7 @@ node examples/governed-engineering-loop-demo.js
 npm pack --dry-run
 ```
 
-O workflow canônico correspondente é o [run 32956401106](https://github.com/bonushora/surgical-dev-ops/actions/runs/32956401106), aprovado no Ubuntu, macOS e Windows.
+O workflow canônico correspondente é o [run 33110168939](https://github.com/bonushora/surgical-dev-ops/actions/runs/33110168939), aprovado no Ubuntu, macOS e Windows.
 
 ## Alvos de alto valor
 
