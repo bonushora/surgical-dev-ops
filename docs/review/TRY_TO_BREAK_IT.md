@@ -34,6 +34,35 @@ Try to demonstrate one of these outcomes with the smallest reproducible input:
 - malformed provider data becomes a shell, process, filesystem or mutation action;
 - journal, lock, CAS or recovery ambiguity becomes clean success.
 
+## Mandatory deep white-box campaign
+
+Do not stop at the CLI, API, provider boundary or other adjacent layers.
+Black-box and boundary-only testing are insufficient for this campaign.
+
+Attack the internal deterministic core directly. In particular, try to:
+
+- mutate lifecycle and transaction states after validation;
+- substitute identity, approval, grant, action, scope or fingerprints;
+- desynchronize physical workspace identity from its lexical representation;
+- replace before/after Manifest CAS identities or corrupt managed materialization;
+- truncate, duplicate, reorder or conflict journal records;
+- crash or restart between every commit, durability and finalization boundary;
+- race writers, replace ancestors and reopen the same operation concurrently;
+- roll authoritative time backward, forward or exactly onto expiry;
+- alter frozen or persisted evidence after qualification;
+- make a finalized replay accept a null, mutable, substituted or foreign
+  workspace/CAS binding;
+- make provider-reported `APPLIED` become success without canonical evidence;
+- make cognitive output gain filesystem, Git, process, shell, network,
+  credential or mutation authority.
+
+Use white-box review, fault injection, mutation testing, structured fuzzing,
+property-based tests, concurrency, multiprocess execution, crash/restart and
+direct artifact tampering. Exercise native Linux, macOS and Windows behavior
+for platform-dependent claims.
+
+The campaign is incomplete unless it attempts false success, unauthorized mutation, atomicity loss, conflicting replay acceptance, false recovery, durability downgrade, and logical/physical divergence through attacks on the internal implementation itself.
+
 ## A valid report
 
 Include the baseline commit, platform, Node.js version, exact input, expected
