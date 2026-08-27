@@ -135,11 +135,64 @@ test('public framing is narrow falsifiable and counterexample driven', () => {
   );
 });
 
+test('public playbook provides safe progressive adversarial review', () => {
+  const challenge = read(
+    'docs/review/TRY_TO_BREAK_IT.md'
+  );
+  const playbook = read(
+    'docs/review/ADVERSARIAL_PLAYBOOK.md'
+  );
+
+  assert.match(
+    challenge,
+    /\[adversarial review playbook\]\(\.\/ADVERSARIAL_PLAYBOOK\.md\)/i
+  );
+
+  for (const required of [
+    'Five-minute quick start',
+    'Safe laboratory rules',
+    'Level 1 — Quick boundary probes',
+    'Level 2 — Deep deterministic core',
+    'Level 3 — Native platform and failure injection',
+    'Property-to-attack matrix',
+    'Safe directed demonstrations',
+    'What constitutes a valid bypass',
+    'Severity guide',
+    'Minimal report contract',
+    'Responsible handling',
+    'disposable checkout',
+    'zero-mutation',
+    'Critical',
+    'High',
+    'Medium',
+    'Low'
+  ]) {
+    assert.match(
+      playbook,
+      new RegExp(
+        required.replace(/\s+/g, '\\s+'),
+        'i'
+      )
+    );
+  }
+
+  assert.match(
+    playbook,
+    /node --test[\s\S]+--test-name-pattern/
+  );
+
+  assert.doesNotMatch(
+    playbook,
+    /sudo |guaranteed secure|100% secure/i
+  );
+});
+
 test('public adversarial report form requires reproducibility impact and secret hygiene', () => {
   const form = read('.github/ISSUE_TEMPLATE/adversarial-report.yml');
   for (const required of [
     'Baseline commit', 'Platform', 'Runtime', 'Minimal reproduction',
     'Expected deterministic boundary', 'Observed result', 'Impact class',
+    'Proposed severity', 'Critical', 'High', 'Medium', 'Low',
     'private keys', 'production secrets'
   ]) assert.match(form, new RegExp(required.replace(/\s+/g, '\\s+'), 'i'));
   assert.doesNotMatch(form, /password:|token:|api[_-]?key:/i);

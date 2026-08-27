@@ -14,6 +14,13 @@ A reproducible bypass is a valuable result. It must turn the affected qualificat
 red until the defect is fixed and the counterexample becomes a permanent regression
 test.
 
+## Start here
+
+Use the [adversarial review playbook](./ADVERSARIAL_PLAYBOOK.md) for the
+five-minute quick start, safe laboratory rules, three campaign levels,
+property-to-attack matrix, directed demonstrations, severity guide and
+minimal report contract.
+
 ## Reproduce the baseline
 
 Use a clean checkout of commit
