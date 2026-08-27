@@ -93,3 +93,36 @@ test(
     );
   }
 );
+
+
+test(
+  'pull-request merge checkout receives deterministic physical branch identity',
+  () => {
+    const workflow = source();
+
+    assert.match(
+      workflow,
+      /name: Materialize deterministic pull-request merge branch/
+    );
+
+    assert.match(
+      workflow,
+      /if: github\.event_name == 'pull_request'/
+    );
+
+    assert.match(
+      workflow,
+      /git switch -c sdo-ci-pr-merge/
+    );
+
+    assert.match(
+      workflow,
+      /test "\$\(git branch --show-current\)" = "sdo-ci-pr-merge"/
+    );
+
+    assert.doesNotMatch(
+      workflow,
+      /ref:\s*\$\{\{\s*github\.(?:head_ref|event\.pull_request\.head\.sha)/
+    );
+  }
+);
