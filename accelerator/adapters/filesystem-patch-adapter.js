@@ -17,6 +17,13 @@ const {
   validateMutationProviderResult
 } = require('../core/mutation-provider');
 
+const {
+  projectQualifiedWorkspaceCasEvidence
+} = require(
+  '../reconstruction/v3/adapters/' +
+  'qualified-workspace-cas-projection'
+);
+
 const MAX_BYTES = 1024 * 1024;
 
 function deepFreeze(value) {
@@ -163,12 +170,12 @@ function transactionEvidence(context) {
 
 function evidence({ operationId, workspace, requested, canonical, beforeHash, afterHash,
   outcome, recovery, observedAt, temporalAuthority, commitAuthority, transaction,
-  durability = null, mutationProvider = null }) {
+  durability = null, mutationProvider = null, workspaceCasBinding = null }) {
   return deepFreeze({
     schema: 'sdo.filesystem_patch_result.v1', operationId, workspace,
     target: { requested, canonical }, beforeSha256: beforeHash, afterSha256: afterHash,
     outcome, recovery, observedAt, temporalAuthority, commitAuthority: commitAuthority || null,
-    transaction, durability, mutationProvider
+    transaction, durability, mutationProvider, workspaceCasBinding
   });
 }
 
@@ -404,6 +411,7 @@ function patchFileWithGrant({
   }
   let physicalDurability;
   let providerEvidence;
+  let workspaceCasBinding = null;
   try {
     const providerRequest = deepFreeze({
       schema: 'sdo.compare_and_replace_request.v1',
@@ -430,6 +438,27 @@ function patchFileWithGrant({
       throw providerError;
     }
     physicalDurability = providerEvidence.durability || null;
+
+    if (contentAddressedDurability(providerEvidence)) {
+      workspaceCasBinding =
+        projectQualifiedWorkspaceCasEvidence({
+          request: providerRequest,
+          result: providerEvidence
+        });
+
+      if (
+        workspaceCasBinding.decision !== 'ALLOWED' ||
+        !workspaceCasBinding.binding
+      ) {
+        const projectionError = new Error(
+          'Qualified workspace/CAS projection was denied after provider APPLIED.'
+        );
+
+        projectionError.physicalCommitOccurred = true;
+        projectionError.authoritativeProjectionDenied = true;
+        throw projectionError;
+      }
+    }
   } catch (commitError) {
     if (!commitError.physicalCommitOccurred) throw commitError;
     try { transactionContext.requireRecovery(); } catch {}
@@ -437,12 +466,20 @@ function patchFileWithGrant({
     error.evidence = evidence({ operationId: normalizedOperationId,
       workspace: canonicalWorkspace, requested, canonical: resolved.canonicalTarget,
       beforeHash, afterHash, outcome: 'FAILED',
-      recovery: 'RECOVERY_REQUIRED_JOURNAL_AMBIGUITY',
+      recovery: commitError.authoritativeProjectionDenied
+        ? 'RECOVERY_REQUIRED_AUTHORITATIVE_PROJECTION'
+        : 'RECOVERY_REQUIRED_JOURNAL_AMBIGUITY',
       observedAt: commitAuthority.reading.wallTime, temporalAuthority: commitEvidence,
       commitAuthority: durableCommitAuthority,
       transaction: transactionEvidence(transactionContext),
-      durability: deepFreeze({ classification: 'POST_RENAME_AMBIGUOUS',
-        claims: durabilityClaims() }) });
+      durability: deepFreeze({
+        classification: commitError.authoritativeProjectionDenied
+          ? 'AUTHORITATIVE_PROJECTION_DENIED'
+          : 'POST_RENAME_AMBIGUOUS',
+        claims: durabilityClaims()
+      }),
+      mutationProvider: providerEvidence,
+      workspaceCasBinding });
     throw error;
   }
   try {
@@ -568,7 +605,7 @@ function patchFileWithGrant({
     observedAt: commitAuthority.reading.wallTime, temporalAuthority: commitEvidence,
     commitAuthority: durableCommitAuthority,
     transaction: transactionEvidence(transactionContext), durability: physicalDurability,
-    mutationProvider: providerEvidence });
+    mutationProvider: providerEvidence, workspaceCasBinding });
 }
 
 function verifyAppliedFile({ workspace, target, expectedSha256 }) {

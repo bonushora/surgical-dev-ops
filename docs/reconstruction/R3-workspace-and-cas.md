@@ -81,3 +81,49 @@ Local R3.2 qualification:
 - complete suite: 1001 discovered, 996 passed, 0 failed, 5 platform skips;
 - dependency audits: 0 vulnerabilities;
 - package dry run includes both the R3.1 contract and R3.2 projection.
+
+## R3.3 production success qualification
+
+R3.3 promotes the qualified R3.2 projection into the production filesystem
+patch boundary.
+
+For a content-addressed provider result to become successful production
+evidence, the adapter now requires:
+
+- a validated qualified provider result with outcome `APPLIED`;
+- an `ALLOWED` R3.2 workspace/CAS projection;
+- one immutable binding between physical workspace, target, provider,
+  authoritative manifest transition and replacement content;
+- explicit preservation of the ordinary worktree as non-authoritative.
+
+If the physical provider reports `APPLIED` but the canonical projection is
+denied, the operation never becomes successful. It is classified as
+`RECOVERY_REQUIRED_AUTHORITATIVE_PROJECTION`, the transaction advances to
+`RECOVERY_REQUIRED`, and the denied projection and provider evidence remain
+available for diagnosis.
+
+This closes the gap between a provider-reported physical result and canonical
+workspace/CAS success without granting filesystem, Git, process, shell,
+provider-selection or mutation authority to the reconstruction contracts.
+
+R3.3 preserves:
+
+- zero mutation before physical commit;
+- explicit recovery after an ambiguous or unqualified post-commit state;
+- exact R3 human authority and capability binding;
+- immutable production success evidence;
+- R1 and R2 semantics;
+- historical finalized replay compatibility;
+- the existing durability, journal and platform boundaries.
+
+Local R3.3 qualification:
+
+- directed production and reconstruction gate: 103 passed, 0 failed;
+- complete suite: 1002 discovered, 997 passed, 0 failed,
+  5 platform-specific skips;
+- dependency audit: 0 vulnerabilities;
+- production-only dependency audit: 0 vulnerabilities;
+- package dry run: 178 files, including the R3.1 contract and R3.2 projection.
+
+R3.3 is locally qualified. Promotion remains conditional on successful Linux,
+macOS and Windows CI for the exact committed candidate.

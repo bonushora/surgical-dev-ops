@@ -1095,6 +1095,41 @@ test('H: R3 orchestrator commits content-addressed authority while ordinary work
     assert.ok(provider);
     assert.equal(provider.providerId, 'sdo:git-manifest-cas-v1');
 
+    const workspaceCasBinding =
+      result.execution.workspaceCasBinding;
+
+    assert.ok(workspaceCasBinding);
+    assert.equal(
+      workspaceCasBinding.decision,
+      'ALLOWED'
+    );
+    assert.ok(
+      Object.isFrozen(workspaceCasBinding)
+    );
+    assert.ok(
+      Object.isFrozen(
+        workspaceCasBinding.binding
+      )
+    );
+    assert.equal(
+      workspaceCasBinding.binding.providerId,
+      provider.providerId
+    );
+    assert.equal(
+      workspaceCasBinding.binding.replacementSha256,
+      request.grantEvaluation.grant
+        .scope.target.replacementSha256
+    );
+    assert.equal(
+      workspaceCasBinding.binding.afterManifestOid,
+      provider.durability.authority.afterManifestOid
+    );
+    assert.equal(
+      workspaceCasBinding.binding
+        .ordinaryWorktreeAuthoritative,
+      false
+    );
+
     const authority = provider.durability;
     assert.equal(authority.schema, 'sdo.content_addressed_provider_evidence.v1');
     assert.equal(authority.ordinaryWorktreeAuthoritative, false);

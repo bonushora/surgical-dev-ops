@@ -12,8 +12,10 @@ const { evaluateVerifiedHumanIdentityAssertion } = require('../../accelerator/co
 const { verifyHumanIdentityAssertion } = require('../../accelerator/adapters/identity-verification-adapter');
 const { patchFileWithGrant } = require('../../accelerator/adapters/filesystem-patch-adapter');
 const { createAuthoritativeClock } = require('../../accelerator/core/authoritative-clock');
-const { createQualifiedTestMutationProvider } =
-  require('./helpers/qualified-mutation-provider');
+const {
+  createQualifiedTestMutationProvider,
+  providerResult
+} = require('./helpers/qualified-mutation-provider');
 const {
   createMutationTransaction, bindMutationLock, createCommitAuthorityEvidence,
   bindCommitAuthorityEvidence, transitionMutationTransaction,
@@ -200,6 +202,80 @@ test('malformed qualified provider response causes zero physical mutation', () =
   });
   assert.throws(() => patch({ mutationProvider }), /malformed or unbound/);
   assert.equal(fs.readFileSync(targetPath, 'utf8'), 'before\n');
+});
+
+test('R3.3 denied CAS projection requires recovery and never success', () => {
+  const mutationProvider =
+    createQualifiedTestMutationProvider({
+      compareAndReplace(request, runtime, boundary) {
+        return providerResult(
+          request,
+          boundary,
+          'APPLIED',
+          frozen({
+            schema:
+              'sdo.content_addressed_provider_evidence.v1',
+            authority: {
+              decision: 'APPLIED',
+              workspace: request.workspace,
+              beforeManifestOid: 'a'.repeat(40),
+              afterManifestOid: 'b'.repeat(40),
+              beforeSha256: request.beforeSha256,
+              replacementSha256:
+                request.replacementSha256
+            },
+            materialization: {
+              decision: 'MATERIALIZED',
+              expectedManifestOid: 'b'.repeat(40),
+              observedManifestOid: 'b'.repeat(40),
+              contentSha256:
+                request.replacementSha256
+            },
+            ordinaryWorktreeAuthoritative: false
+          })
+        );
+      }
+    });
+
+  assert.throws(
+    () => patch({ mutationProvider }),
+    (error) => {
+      assert.match(
+        error.message,
+        /workspace\/CAS projection was denied/
+      );
+      assert.equal(
+        error.evidence.outcome,
+        'FAILED'
+      );
+      assert.equal(
+        error.evidence.recovery,
+        'RECOVERY_REQUIRED_AUTHORITATIVE_PROJECTION'
+      );
+      assert.equal(
+        error.evidence.transaction.stage,
+        'RECOVERY_REQUIRED'
+      );
+      assert.equal(
+        error.evidence.durability.classification,
+        'AUTHORITATIVE_PROJECTION_DENIED'
+      );
+      assert.equal(
+        error.evidence.mutationProvider.outcome,
+        'APPLIED'
+      );
+      assert.equal(
+        error.evidence.workspaceCasBinding.decision,
+        'DENIED'
+      );
+      return true;
+    }
+  );
+
+  assert.equal(
+    fs.readFileSync(targetPath, 'utf8'),
+    'before\n'
+  );
 });
 
 test('physical replacement requires durable commit-authority journal acceptance', () => {
