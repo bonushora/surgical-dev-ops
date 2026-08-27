@@ -60,3 +60,34 @@ R2 may be promoted only after:
 6. existing R3 and non-R3 behavior remains compatible;
 7. the complete historical suite remains green;
 8. Linux, macOS and Windows CI passes.
+## R2.2 qualified compatibility projection
+
+R2.2 introduces an additive compatibility adapter between the qualified
+production authority evidence and the pure R2.1 binding contract.
+
+The adapter:
+
+- accepts only an externally verified human identity result;
+- reproduces and validates the R3 approval-authority fingerprint;
+- reproduces and validates the capability-grant fingerprint;
+- projects identity, approval and grant into the exact R2.1 shapes;
+- derives one deterministic logical-scope fingerprint;
+- excludes only the physical `canonicalPath` projection from logical scope;
+- preserves path, before hash, replacement hash and every other scope field;
+- rejects missing, substituted or mismatched evidence fail closed.
+
+R2.2 does not replace a production consumer, mint authority, authenticate a
+human, issue approval, dispatch an operation or mutate the workspace. Existing
+identity, R3 approval and capability-grant contracts remain authoritative.
+
+Local qualification at the R2.2 candidate boundary demonstrated:
+
+- the real identity → R3 approval → capability-grant chain is accepted;
+- post-qualification grant substitution is denied;
+- logical scope remains stable across the qualified physical-path projection;
+- the complete suite discovers 987 tests, with 982 passing, zero failures and
+  five platform-specific skips;
+- dependency audits report zero vulnerabilities.
+
+An R2.2 commit is qualified for promotion only when that exact commit passes
+the canonical Ubuntu, macOS and Windows workflow.
