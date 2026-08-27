@@ -127,3 +127,39 @@ Local R3.3 qualification:
 
 R3.3 is locally qualified. Promotion remains conditional on successful Linux,
 macOS and Windows CI for the exact committed candidate.
+
+
+## R3.4 finalized replay binding qualification
+
+R3.4 extends finalized content-addressed replay verification to the canonical
+workspace/CAS binding persisted by R3.3.
+
+For R3.3 evidence, replay now requires the persisted binding to remain deeply
+immutable and exactly consistent with the physical workspace, canonical target,
+qualified provider identity, qualification fingerprint, content hashes,
+authoritative manifest identities and non-authoritative worktree invariant.
+
+A present binding that is null, mutable, denied, incomplete or substituted
+fails closed before physical execution. Provider and manifest substitution
+cannot be replayed as success.
+
+Historical evidence created before R3.3 has no `workspaceCasBinding` property.
+It remains eligible only through the existing Manifest CAS proof, managed
+projection hash and `FINALIZED_SUCCESS` journal identity. A present but null
+property is not historical evidence and is denied.
+
+R3.4 adds no filesystem, Git, process, shell, provider-selection or mutation
+authority. It does not rewrite journals or migrate historical records.
+
+Local R3.4 qualification:
+
+- directed gate: 105 passed, 0 failed;
+- substituted provider, manifest and null binding: denied with zero dispatch;
+- historical finalized CAS replay: compatible with zero duplicate mutation;
+- complete suite: 1004 discovered, 999 passed, 0 failed,
+  5 platform-specific skips;
+- dependency audits: 0 vulnerabilities;
+- package dry run: 178 files.
+
+R3.4 is locally qualified. Promotion remains conditional on successful Linux,
+macOS and Windows CI for the exact committed candidate.

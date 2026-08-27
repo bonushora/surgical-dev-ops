@@ -224,6 +224,141 @@ function contentAddressedDurability(providerEvidence) {
     : null;
 }
 
+function verifyPersistedWorkspaceCasBinding({
+  priorEvidence,
+  providerEvidence,
+  workspace,
+  target,
+  expectedSha256
+}) {
+  const schema =
+    'sdo.workspace_cas_replay_binding_verification.v1';
+
+  if (
+    !Object.prototype.hasOwnProperty.call(
+      priorEvidence,
+      'workspaceCasBinding'
+    )
+  ) {
+    return deepFreeze({
+      schema,
+      decision:
+        'HISTORICAL_EVIDENCE',
+      bindingRequired:
+        false
+    });
+  }
+
+  const projected =
+    priorEvidence.workspaceCasBinding;
+
+  if (
+    !projected ||
+    typeof projected !== 'object' ||
+    !Object.isFrozen(projected) ||
+    projected.schema !==
+      'sdo.reconstruction.workspace_cas_binding.v1' ||
+    projected.decision !== 'ALLOWED' ||
+    !projected.binding ||
+    typeof projected.binding !== 'object' ||
+    !Object.isFrozen(projected.binding)
+  ) {
+    throw new Error(
+      'Persisted workspace/CAS binding is missing, mutable or denied.'
+    );
+  }
+
+  const canonicalWorkspace =
+    canonicalizeAuthorizedRoot(workspace);
+
+  const resolved =
+    resolveInspectedFile(
+      canonicalWorkspace,
+      requireText(target, 'target')
+    );
+
+  const binding =
+    projected.binding;
+
+  const durability =
+    contentAddressedDurability(providerEvidence);
+
+  const authority =
+    durability &&
+    durability.authority;
+
+  const expectedKeys = [
+    'requestedRoot',
+    'physicalRoot',
+    'requestedTarget',
+    'physicalTarget',
+    'providerId',
+    'qualificationFingerprint',
+    'operation',
+    'beforeSha256',
+    'replacementSha256',
+    'beforeManifestOid',
+    'afterManifestOid',
+    'ordinaryWorktreeAuthoritative'
+  ].sort();
+
+  const actualKeys =
+    Object.keys(binding).sort();
+
+  if (
+    actualKeys.length !== expectedKeys.length ||
+    actualKeys.some(
+      (key, index) =>
+        key !== expectedKeys[index]
+    ) ||
+    !authority ||
+    binding.requestedRoot !==
+      canonicalWorkspace ||
+    binding.physicalRoot !==
+      canonicalWorkspace ||
+    binding.requestedTarget !==
+      resolved.canonicalTarget ||
+    binding.physicalTarget !==
+      resolved.canonicalTarget ||
+    binding.providerId !==
+      providerEvidence.providerId ||
+    binding.qualificationFingerprint !==
+      providerEvidence.qualificationFingerprint ||
+    binding.operation !==
+      'COMPARE_AND_REPLACE' ||
+    binding.beforeSha256 !==
+      providerEvidence.beforeSha256 ||
+    binding.replacementSha256 !==
+      expectedSha256 ||
+    binding.replacementSha256 !==
+      providerEvidence.replacementSha256 ||
+    binding.beforeManifestOid !==
+      authority.beforeManifestOid ||
+    binding.afterManifestOid !==
+      authority.afterManifestOid ||
+    binding.ordinaryWorktreeAuthoritative !==
+      false
+  ) {
+    throw new Error(
+      'Persisted workspace/CAS binding conflicts with authoritative replay evidence.'
+    );
+  }
+
+  return deepFreeze({
+    schema,
+    decision:
+      'PROVEN_BOUND',
+    bindingRequired:
+      true,
+    afterManifestOid:
+      binding.afterManifestOid,
+    replacementSha256:
+      binding.replacementSha256,
+    ordinaryWorktreeAuthoritative:
+      false
+  });
+}
+
 function verifyContentAddressedProjection(providerEvidence, expectedSha256) {
   if (!/^[a-f0-9]{64}$/.test(expectedSha256 || '')) {
     throw new Error('Content-addressed expected SHA-256 is malformed.');
@@ -640,8 +775,20 @@ function verifyAppliedMutation({
       : null;
 
   if (contentAddressedDurability(providerEvidence)) {
+    const persistedBinding =
+      verifyPersistedWorkspaceCasBinding({
+        priorEvidence,
+        providerEvidence,
+        workspace,
+        target,
+        expectedSha256
+      });
+
     const verification =
-      verifyContentAddressedProjection(providerEvidence, expectedSha256);
+      verifyContentAddressedProjection(
+        providerEvidence,
+        expectedSha256
+      );
 
     return deepFreeze({
       schema: 'sdo.filesystem_patch_replay_verification.v1',
@@ -652,6 +799,8 @@ function verifyAppliedMutation({
       authority: 'CONTENT_ADDRESSED_MANIFEST',
       manifestOid: verification.manifestOid,
       projection: verification.projection,
+      workspaceCasBinding:
+        persistedBinding,
       ordinaryWorktreeAuthoritative: false,
       decision: 'PROVEN_APPLIED'
     });

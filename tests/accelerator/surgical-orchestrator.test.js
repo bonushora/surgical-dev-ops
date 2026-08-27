@@ -1211,6 +1211,252 @@ test('H: finalized R3 replay proves manifest authority instead of ordinary pathn
     );
   }));
 
+test('R3.4 substituted or null persisted CAS binding denies finalized replay',
+  (context) => withFixture((repo) => {
+    const request = r3Execution(repo);
+    const runtime = r3Runtime(request, {
+      mutationProvider: contentAddressedProviderBoundary
+    });
+
+    const policy = {
+      decision: 'APPROVAL_REQUIRED',
+      approvalAuthority:
+        request.operationRecord.approvalAuthority
+    };
+
+    const first = orchestrate(
+      input(
+        repo,
+        request,
+        {
+          risk: 'ALTO',
+          policy
+        }
+      ),
+      runtime
+    );
+
+    assert.equal(
+      first.orchestration.status,
+      'COMPLETED'
+    );
+
+    let physicalCalls = 0;
+
+    context.mock.method(
+      filesystemPatchAdapter,
+      'patchFileWithGrant',
+      () => {
+        physicalCalls += 1;
+      }
+    );
+
+    function changedRecord(change) {
+      const record =
+        JSON.parse(
+          JSON.stringify(
+            first.governed.operationRecord
+          )
+        );
+
+      const patchEvidence =
+        record.adapterEvidence.find(
+          (entry) =>
+            entry.adapterType ===
+              'FILESYSTEM_PATCH'
+        );
+
+      change(patchEvidence.payload);
+
+      return frozen(record);
+    }
+
+    const cases = [
+      changedRecord((payload) => {
+        payload.workspaceCasBinding = null;
+      }),
+
+      changedRecord((payload) => {
+        payload.workspaceCasBinding
+          .binding.afterManifestOid =
+            '0'.repeat(40);
+      }),
+
+      changedRecord((payload) => {
+        payload.workspaceCasBinding
+          .binding.providerId =
+            'sdo:substituted-provider';
+      })
+    ];
+
+    for (const operationRecord of cases) {
+      const replayRequest = {
+        ...request,
+        operationRecord,
+        lifecycle:
+          first.governed.lifecycle
+      };
+
+      const replay = orchestrate(
+        input(
+          repo,
+          replayRequest,
+          {
+            risk: 'ALTO',
+            policy
+          }
+        ),
+        runtime
+      );
+
+      assert.notEqual(
+        replay.orchestration.status,
+        'COMPLETED'
+      );
+
+      assert.equal(
+        replay.orchestration.executionAttempted,
+        false
+      );
+
+      assert.match(
+        replay.execution.reason,
+        /replay|conflict/i
+      );
+    }
+
+    assert.equal(physicalCalls, 0);
+
+    assert.equal(
+      fs.readFileSync(
+        path.join(repo, 'target.js'),
+        'utf8'
+      ),
+      'const value = 1;\n'
+    );
+  }));
+
+test('R3.4 historical finalized CAS evidence remains replay-compatible',
+  (context) => withFixture((repo) => {
+    const request = r3Execution(repo);
+    const runtime = r3Runtime(request, {
+      mutationProvider: contentAddressedProviderBoundary
+    });
+
+    const policy = {
+      decision: 'APPROVAL_REQUIRED',
+      approvalAuthority:
+        request.operationRecord.approvalAuthority
+    };
+
+    const first = orchestrate(
+      input(
+        repo,
+        request,
+        {
+          risk: 'ALTO',
+          policy
+        }
+      ),
+      runtime
+    );
+
+    assert.equal(
+      first.orchestration.status,
+      'COMPLETED'
+    );
+
+    const historicalRecord =
+      JSON.parse(
+        JSON.stringify(
+          first.governed.operationRecord
+        )
+      );
+
+    const patchEvidence =
+      historicalRecord.adapterEvidence.find(
+        (entry) =>
+          entry.adapterType ===
+            'FILESYSTEM_PATCH'
+      );
+
+    delete patchEvidence
+      .payload.workspaceCasBinding;
+
+    const operationRecord =
+      frozen(historicalRecord);
+
+    let physicalCalls = 0;
+
+    context.mock.method(
+      filesystemPatchAdapter,
+      'patchFileWithGrant',
+      () => {
+        physicalCalls += 1;
+      }
+    );
+
+    const replayRequest = {
+      ...request,
+      operationRecord,
+      lifecycle:
+        first.governed.lifecycle
+    };
+
+    const replay = orchestrate(
+      input(
+        repo,
+        replayRequest,
+        {
+          risk: 'ALTO',
+          policy
+        }
+      ),
+      runtime
+    );
+
+    assert.equal(
+      replay.orchestration.status,
+      'COMPLETED',
+      JSON.stringify(replay.execution)
+    );
+
+    assert.equal(
+      replay.orchestration.executionAttempted,
+      false
+    );
+
+    assert.equal(
+      replay.governed.replay,
+      true
+    );
+
+    assert.equal(physicalCalls, 0);
+
+    assert.equal(
+      Object.prototype.hasOwnProperty.call(
+        replay.execution,
+        'workspaceCasBinding'
+      ),
+      false
+    );
+
+    assert.equal(
+      replay.execution.mutationProvider
+        .durability
+        .ordinaryWorktreeAuthoritative,
+      false
+    );
+
+    assert.equal(
+      fs.readFileSync(
+        path.join(repo, 'target.js'),
+        'utf8'
+      ),
+      'const value = 1;\n'
+    );
+  }));
+
 test('H: corrupt managed projection cannot replay a finalized R3 mutation as success',
   () => withFixture((repo) => {
     const request = r3Execution(repo);
