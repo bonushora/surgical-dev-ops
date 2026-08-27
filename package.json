@@ -1,7 +1,4 @@
 {
-  "devDependencies": {
-    "prisma": "^7.9.0"
-  },
   "scripts": {
     "test": "node --test tests/accelerator/*.test.js",
     "evaluate:natural:contract": "node examples/natural-conversational-evaluation-demo.js",
