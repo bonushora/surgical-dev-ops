@@ -1,5 +1,18 @@
 # Changelog
 
+## [2.6.0-rc.2] - 2026-08-27
+
+- EN: Qualified Reconstruction v3 across canonical state, human authority,
+  physical workspace and Manifest CAS production/replay boundaries.
+- PT-BR: Qualificou a Reconstruction v3 nas fronteiras canônicas de estado,
+  autoridade humana, workspace físico e Manifest CAS em produção e replay.
+- EN: Published a bilingual deep white-box adversarial challenge, progressive
+  playbook, safe demonstrations and structured severity report.
+- PT-BR: Publicou desafio adversarial white-box profundo, playbook progressivo,
+  demonstrações seguras e relatório estruturado de severidade em dois idiomas.
+- EN/PT-BR: Qualified source baseline `a3a4e2941914f14457ed1932ea4024fc495bfff1`, workflow `33110168939`,
+  Ubuntu/macOS/Windows PASS, with explicit denial of absolute-security claims.
+- Preserved the immutable `v2.6.0-rc.1` historical baseline.
 ## [2.6.0-rc.1] - 2026-08-26
 
 - Added ADR-026 NATURAL terminal-boundary clarity so pasted shell commands are

@@ -13,8 +13,8 @@ const sha = (relative) => crypto.createHash('sha256').update(read(relative), 'ut
 test('ADR-025 manifest binds the public green baseline and immutable protocol bytes', () => {
   const manifest = JSON.parse(read('docs/review/QUALIFICATION_MANIFEST.json'));
   assert.equal(manifest.schema, 'sdo.external_review_qualification_manifest.v1');
-  assert.equal(manifest.sourceBaseline.commit, 'b82a845a3f30d44c8073cdda8a1354a286ce1ae4');
-  assert.equal(manifest.sourceBaseline.runId, '33034046356');
+  assert.equal(manifest.sourceBaseline.commit, 'a3a4e2941914f14457ed1932ea4024fc495bfff1');
+  assert.equal(manifest.sourceBaseline.runId, '33110168939');
   assert.equal(manifest.sourceBaseline.conclusion, 'success');
   assert.deepEqual(manifest.sourceBaseline.platforms, [
     'ubuntu-latest', 'macos-latest', 'windows-latest'

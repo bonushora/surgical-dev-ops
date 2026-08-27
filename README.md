@@ -19,7 +19,7 @@ operational system around the model explicit, bounded, auditable, and fail-close
 
 | Evidence | Value |
 | --- | --- |
-| Release line | Surgical DevOps v2.6.0-rc.1 |
+| Release line | Surgical DevOps v2.6.0-rc.2 |
 | Canonical commit | [`36ef01f53690e644976668248499ab9d5031f52f`](https://github.com/bonushora/surgical-dev-ops/commit/36ef01f53690e644976668248499ab9d5031f52f) |
 | Canonical CI run | [Accelerator Conformance #32808535616](https://github.com/bonushora/surgical-dev-ops/actions/runs/32808535616) |
 | Matrix result | Ubuntu, macOS, and Windows: **PASS** |

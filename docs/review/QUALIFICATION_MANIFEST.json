@@ -1,11 +1,11 @@
 {
   "schema": "sdo.external_review_qualification_manifest.v1",
   "project": "bonushora/surgical-dev-ops",
-  "releaseCandidate": "v2.6.0-rc.1",
+  "releaseCandidate": "v2.6.0-rc.2",
   "sourceBaseline": {
-    "commit": "b82a845a3f30d44c8073cdda8a1354a286ce1ae4",
+    "commit": "a3a4e2941914f14457ed1932ea4024fc495bfff1",
     "workflow": "Accelerator Conformance",
-    "runId": "33034046356",
+    "runId": "33110168939",
     "conclusion": "success",
     "platforms": [
       "ubuntu-latest",

@@ -26,7 +26,7 @@ minimal report contract.
 ## Reproduce the baseline
 
 Use a clean checkout of commit
-`7cf628899e69c90078815ebb959f0bd97c077526` with Node.js `24.18.0`:
+`a3a4e2941914f14457ed1932ea4024fc495bfff1` with Node.js `24.18.0`:
 
 ```bash
 npm ci
@@ -36,7 +36,7 @@ npm pack --dry-run
 ```
 
 The corresponding canonical workflow is
-[run 32956401106](https://github.com/bonushora/surgical-dev-ops/actions/runs/32956401106),
+[run 33110168939](https://github.com/bonushora/surgical-dev-ops/actions/runs/33110168939),
 which passed on Ubuntu, macOS and Windows.
 
 ## High-value targets

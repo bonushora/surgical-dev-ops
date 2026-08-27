@@ -7,7 +7,7 @@ Date: 2026-08-26
 
 ADR-024-A through ADR-024-I are implemented and qualified by the canonical
 Linux, macOS and Windows workflow at commit
-`7cf628899e69c90078815ebb959f0bd97c077526`, run `32956401106`.
+`a3a4e2941914f14457ed1932ea4024fc495bfff1`, run `33110168939`.
 
 Internal green tests are necessary evidence, but they are not independent
 security review. The next release must make its claims, limitations, reproduction
