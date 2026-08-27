@@ -187,6 +187,134 @@ test('public playbook provides safe progressive adversarial review', () => {
   );
 });
 
+
+test('English and Portuguese adversarial packages preserve semantic parity', () => {
+  const englishChallenge = read(
+    'docs/review/TRY_TO_BREAK_IT.md'
+  );
+  const portugueseChallenge = read(
+    'docs/review/TRY_TO_BREAK_IT_PT-BR.md'
+  );
+  const englishPlaybook = read(
+    'docs/review/ADVERSARIAL_PLAYBOOK.md'
+  );
+  const portuguesePlaybook = read(
+    'docs/review/ADVERSARIAL_PLAYBOOK_PT-BR.md'
+  );
+  const form = read(
+    '.github/ISSUE_TEMPLATE/adversarial-report.yml'
+  );
+
+  assert.match(
+    englishChallenge,
+    /\[TRY_TO_BREAK_IT_PT-BR\.md\]\(\.\/TRY_TO_BREAK_IT_PT-BR\.md\)/
+  );
+  assert.match(
+    portugueseChallenge,
+    /\[TRY_TO_BREAK_IT\.md\]\(\.\/TRY_TO_BREAK_IT\.md\)/
+  );
+  assert.match(
+    englishPlaybook,
+    /\[ADVERSARIAL_PLAYBOOK_PT-BR\.md\]\(\.\/ADVERSARIAL_PLAYBOOK_PT-BR\.md\)/
+  );
+  assert.match(
+    portuguesePlaybook,
+    /\[ADVERSARIAL_PLAYBOOK\.md\]\(\.\/ADVERSARIAL_PLAYBOOK\.md\)/
+  );
+
+  const reproductionPattern =
+    /^(?:npm ci|npm test|node examples\/governed-engineering-loop-demo\.js|npm pack --dry-run)$/gm;
+
+  assert.deepEqual(
+    portugueseChallenge.match(reproductionPattern),
+    englishChallenge.match(reproductionPattern)
+  );
+
+  const directedCommands = (document) =>
+    [...document.matchAll(/```bash\s*([\s\S]*?)```/g)]
+      .map((match) =>
+        match[1]
+          .replace(/\\\r?\n/g, ' ')
+          .replace(/\s+/g, ' ')
+          .trim()
+      )
+      .filter((command) =>
+        command.startsWith('node --test ')
+      );
+
+  assert.deepEqual(
+    directedCommands(portuguesePlaybook),
+    directedCommands(englishPlaybook)
+  );
+
+  for (const required of [
+    [englishChallenge, 'one narrow, falsifiable claim'],
+    [portugueseChallenge, 'afirmação estreita e falsificável'],
+    [englishChallenge, 'Mandatory deep white-box campaign'],
+    [portugueseChallenge, 'Campanha white-box profunda obrigatória'],
+    [englishChallenge, 'Manifest CAS'],
+    [portugueseChallenge, 'Manifest CAS'],
+    [englishChallenge, 'Linux, macOS and Windows'],
+    [portugueseChallenge, 'Linux, macOS e Windows'],
+    [englishPlaybook, 'Five-minute quick start'],
+    [portuguesePlaybook, 'Acesso rápido em cinco minutos'],
+    [englishPlaybook, 'Level 1 — Quick boundary probes'],
+    [portuguesePlaybook, 'Nível 1 — Sondagens rápidas de fronteira'],
+    [englishPlaybook, 'Level 2 — Deep deterministic core'],
+    [portuguesePlaybook, 'Nível 2 — Núcleo determinístico profundo'],
+    [englishPlaybook, 'Level 3 — Native platform and failure injection'],
+    [portuguesePlaybook, 'Nível 3 — Plataforma nativa e injeção de falhas'],
+    [englishPlaybook, 'Critical'],
+    [portuguesePlaybook, 'Crítica / Critical'],
+    [englishPlaybook, 'High'],
+    [portuguesePlaybook, 'Alta / High'],
+    [englishPlaybook, 'Medium'],
+    [portuguesePlaybook, 'Média / Medium'],
+    [englishPlaybook, 'Low'],
+    [portuguesePlaybook, 'Baixa / Low']
+  ]) {
+    assert.match(
+      required[0],
+      new RegExp(
+        required[1].replace(/\s+/g, '\\s+'),
+        'i'
+      )
+    );
+  }
+
+  for (const required of [
+    'Adversarial boundary report / Relatório adversarial da fronteira',
+    'Baseline commit / Commit do baseline',
+    'Minimal reproduction / Reprodução mínima',
+    'Expected deterministic boundary / Fronteira determinística esperada',
+    'Observed result / Resultado observado',
+    'Impact class / Classe de impacto',
+    'Proposed severity / Severidade proposta',
+    'Critical / Crítica',
+    'High / Alta',
+    'Medium / Média',
+    'Low / Baixa',
+    'Safety confirmation / Confirmação de segurança'
+  ]) {
+    assert.match(
+      form,
+      new RegExp(
+        required.replace(/\s+/g, '\\s+'),
+        'i'
+      )
+    );
+  }
+
+  assert.doesNotMatch(
+    englishChallenge + englishPlaybook,
+    /guaranteed secure|unbreakable|100% secure/i
+  );
+  assert.doesNotMatch(
+    portugueseChallenge + portuguesePlaybook,
+    /segurança garantida|inquebrável|100% seguro/i
+  );
+});
+
 test('public adversarial report form requires reproducibility impact and secret hygiene', () => {
   const form = read('.github/ISSUE_TEMPLATE/adversarial-report.yml');
   for (const required of [

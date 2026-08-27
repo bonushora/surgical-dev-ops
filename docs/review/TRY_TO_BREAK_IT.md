@@ -1,5 +1,7 @@
 # Try to Break the Deterministic Boundary
 
+Português: [TRY_TO_BREAK_IT_PT-BR.md](./TRY_TO_BREAK_IT_PT-BR.md)
+
 ## Falsifiable claim
 
 This release presents one narrow, falsifiable claim: untrusted cognitive output

@@ -1,5 +1,5 @@
-name: Adversarial boundary report
-description: Report a reproducible authority, scope, evidence, mutation or recovery bypass.
+name: Adversarial boundary report / Relatório adversarial da fronteira
+description: Report a reproducible authority, scope, evidence, mutation or recovery bypass. / Relate um bypass reproduzível de autoridade, escopo, evidência, mutação ou recuperação.
 title: "[adversarial] "
 labels:
   - adversarial-review
@@ -7,92 +7,92 @@ body:
   - type: markdown
     attributes:
       value: |
-        Do not include live credentials, private keys, production secrets, personal data or destructive payloads.
+        Do not include live credentials, private keys, production secrets, personal data or destructive payloads. / Não inclua credenciais ativas, chaves privadas, segredos de produção, dados pessoais nem payloads destrutivos.
   - type: input
     id: baseline
     attributes:
-      label: Baseline commit
-      placeholder: 40-character Git commit
+      label: Baseline commit / Commit do baseline
+      placeholder: 40-character Git commit / Commit Git de 40 caracteres
     validations:
       required: true
   - type: dropdown
     id: platform
     attributes:
-      label: Platform
+      label: Platform / Plataforma
       options:
         - Linux
         - macOS
         - Windows
-        - Multiple platforms
+        - Multiple platforms / Múltiplas plataformas
     validations:
       required: true
   - type: input
     id: runtime
     attributes:
-      label: Runtime
-      description: Node.js version and relevant provider/model identity without credentials.
+      label: Runtime / Ambiente de execução
+      description: Node.js version and relevant provider/model identity without credentials. / Versão do Node.js e identidade relevante do provider/modelo sem credenciais.
     validations:
       required: true
   - type: textarea
     id: reproduction
     attributes:
-      label: Minimal reproduction
-      description: Exact bounded input and steps using non-sensitive fixture data.
+      label: Minimal reproduction / Reprodução mínima
+      description: Exact bounded input and steps using non-sensitive fixture data. / Entrada limitada e passos exatos usando dados de fixture não sensíveis.
     validations:
       required: true
   - type: textarea
     id: expected
     attributes:
-      label: Expected deterministic boundary
+      label: Expected deterministic boundary / Fronteira determinística esperada
     validations:
       required: true
   - type: textarea
     id: observed
     attributes:
-      label: Observed result
+      label: Observed result / Resultado observado
     validations:
       required: true
   - type: dropdown
     id: impact
     attributes:
-      label: Impact class
+      label: Impact class / Classe de impacto
       options:
-        - Operational authority creation or expansion
-        - Workspace or evidence scope escape
-        - Credential or secret exposure
-        - Unauthorized mutation or duplicate physical effect
-        - Recovery, journal, lock or CAS ambiguity
-        - Presentation or availability only
+        - Operational authority creation or expansion / Criação ou expansão de autoridade operacional
+        - Workspace or evidence scope escape / Escape do workspace ou do escopo de evidência
+        - Credential or secret exposure / Exposição de credencial ou segredo
+        - Unauthorized mutation or duplicate physical effect / Mutação não autorizada ou efeito físico duplicado
+        - Recovery, journal, lock or CAS ambiguity / Ambiguidade de recuperação, journal, lock ou CAS
+        - Presentation or availability only / Somente apresentação ou disponibilidade
     validations:
       required: true
   - type: dropdown
     id: severity
     attributes:
-      label: Proposed severity
-      description: Use the playbook severity guide and explain the violated deterministic property.
+      label: Proposed severity / Severidade proposta
+      description: Use the playbook severity guide and explain the violated deterministic property. / Use o guia de severidade do playbook e explique a propriedade determinística violada.
       options:
-        - Critical
-        - High
-        - Medium
-        - Low
+        - Critical / Crítica
+        - High / Alta
+        - Medium / Média
+        - Low / Baixa
     validations:
       required: true
   - type: dropdown
     id: repeatable
     attributes:
-      label: Repeatable
+      label: Repeatable / Repetibilidade
       options:
-        - Always
-        - Intermittently
-        - Once
+        - Always / Sempre
+        - Intermittently / Intermitentemente
+        - Once / Uma vez
     validations:
       required: true
   - type: checkboxes
     id: safety
     attributes:
-      label: Safety confirmation
+      label: Safety confirmation / Confirmação de segurança
       options:
-        - label: I removed credentials, private keys, production secrets and personal data.
+        - label: I removed credentials, private keys, production secrets and personal data. / Removi credenciais, chaves privadas, segredos de produção e dados pessoais.
           required: true
-        - label: I used the smallest non-destructive reproduction available.
+        - label: I used the smallest non-destructive reproduction available. / Usei a menor reprodução não destrutiva disponível.
           required: true

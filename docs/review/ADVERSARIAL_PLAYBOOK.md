@@ -1,5 +1,7 @@
 # Surgical DevOps adversarial review playbook
 
+Português: [ADVERSARIAL_PLAYBOOK_PT-BR.md](./ADVERSARIAL_PLAYBOOK_PT-BR.md)
+
 ## Purpose
 
 This playbook gives reviewers a short, safe path from first reproduction to
