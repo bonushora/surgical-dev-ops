@@ -3,6 +3,9 @@
 'use strict';
 
 const fs = require('fs');
+const {
+  resolveLifecycleTransition
+} = require('../reconstruction/v3/core/operation-state-contract');
 
 const SCHEMA = 'sdo.state.v1';
 const LIFECYCLE_SCHEMA = 'sdo.lifecycle.v1';
@@ -159,7 +162,10 @@ function transitionLifecycle(lifecycle, transition) {
   if (lifecycle.status !== 'PENDING') {
     throw new Error(`Transition from ${lifecycle.status} is forbidden.`);
   }
-  const nextStatus = normalized.type === 'COMPLETE' ? 'COMPLETED' : 'FAILED';
+  const nextStatus = resolveLifecycleTransition({
+    currentStatus: lifecycle.status,
+    transitionType: normalized.type
+  }).to;
   const after = normalized.type === 'COMPLETE'
     ? normalized.after
     : normalized.failure.physicalEvidence;
