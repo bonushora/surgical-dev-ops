@@ -2,7 +2,7 @@
 
 Português: [ADR-028 em PT-BR](./ADR-028-natural-governed-development-execution-loop_PT-BR.md)
 
-**Status:** G1 CONTRACT IMPLEMENTED / LATER STAGES NOT IMPLEMENTED
+**Status:** G1–G2 IMPLEMENTED / LATER STAGES NOT IMPLEMENTED
 **Date:** 2026-08-28
 **Scope:** Surgical DevOps / NATURAL governed development
 **Extends:** ADR-004, ADR-006, ADR-007, ADR-010, ADR-014 and ADR-019
@@ -57,6 +57,31 @@ G1 can only classify whether a proposed step remains within the declared task
 boundary. A contained mutating proposal still carries
 `requiresExactR3Authority: true` and zero mutation or dispatch authority.
 
+## G2 governed planning and evidence
+
+G2 introduces `sdo.natural_development_planning_loop.v1` as an authority-free
+composition over the existing recursive read-only evidence loop. Before any
+cognitive planning or governed dispatch, it verifies the task-contract
+fingerprint, physical workspace identity and repository HEAD.
+
+The cognitive provider may request only:
+
+- `WORKSPACE_FILES`, a read-only inventory of the already-authorized repository;
+- `READ_FILE` for a target present in the contract allowlist; or
+- `VALIDATE_JS` for an allowed JavaScript target.
+
+The G2 policy is evaluated after the existing NATURAL containment envelope and
+before the canonical read-only dispatcher. Target or evidence-step expansion
+returns `STOPPED`, preserves the pending request for human review and performs
+zero dispatch. The existing deterministic project-grounding behavior remains
+the default for all prior callers; G2 disables it only for its exact-target
+planning composition so the provider cannot be redirected to an undeclared
+README target.
+
+G2 results bind all evidence and the final cognitive response to the G1
+contract fingerprint. They remain deeply immutable and explicitly carry zero
+operational, mutation, approval and dispatch authority.
+
 ## Security invariants
 
 - Cognitive output never becomes operational authority.
@@ -73,7 +98,9 @@ boundary. A contained mutating proposal still carries
 
 ## Explicit non-claims
 
-G1 does not authorize evidence collection, apply a patch, run validation,
-resume recovery or implement the autonomous correction loop. Those capabilities
-require independent later-stage qualification. A green G1 suite proves only the
-canonical task contract and its fail-closed containment decisions.
+G1 does not authorize evidence collection. G2 composes only already-qualified
+read-only evidence and fixed validation boundaries; it does not apply a patch,
+authorize mutation, resume recovery or implement the autonomous correction
+loop. Those capabilities require independent later-stage qualification. A green
+G1–G2 suite proves only the canonical task contract, governed planning and
+fail-closed read-only evidence containment.

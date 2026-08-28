@@ -2,7 +2,7 @@
 
 English: [ADR-028 in English](./ADR-028-natural-governed-development-execution-loop.md)
 
-**Status:** CONTRATO G1 IMPLEMENTADO / ETAPAS POSTERIORES NÃO IMPLEMENTADAS
+**Status:** G1–G2 IMPLEMENTADOS / ETAPAS POSTERIORES NÃO IMPLEMENTADAS
 **Data:** 2026-08-28
 **Escopo:** Surgical DevOps / desenvolvimento governado no modo NATURAL
 **Estende:** ADR-004, ADR-006, ADR-007, ADR-010, ADR-014 e ADR-019
@@ -60,6 +60,32 @@ O G1 pode apenas classificar se uma etapa proposta permanece dentro da fronteira
 declarada da tarefa. Uma proposta mutante contida ainda carrega
 `requiresExactR3Authority: true` e autoridade zero de mutação ou dispatch.
 
+## G2 — planejamento e evidências governadas
+
+O G2 introduz `sdo.natural_development_planning_loop.v1` como composição sem
+autoridade sobre o loop recursivo read-only já existente. Antes de qualquer
+planejamento cognitivo ou dispatch governado, ele verifica o fingerprint do
+contrato, a identidade física do workspace e o HEAD do repositório.
+
+O provider cognitivo pode solicitar somente:
+
+- `WORKSPACE_FILES`, inventário read-only do repositório já autorizado;
+- `READ_FILE` para um alvo presente na lista permitida do contrato; ou
+- `VALIDATE_JS` para um alvo JavaScript permitido.
+
+A política G2 é avaliada depois do envelope de contenção NATURAL existente e
+antes do dispatcher read-only canônico. Expansão de alvo ou de etapas de
+evidência retorna `STOPPED`, preserva o pedido pendente para revisão humana e
+realiza zero dispatch. O grounding determinístico existente permanece padrão
+para todos os consumidores anteriores; somente a composição G2 o desativa para
+seu planejamento de alvos exatos, impedindo redirecionamento para um README não
+declarado.
+
+Os resultados G2 vinculam todas as evidências e a resposta cognitiva final ao
+fingerprint do contrato G1. Eles permanecem profundamente imutáveis e carregam
+explicitamente autoridade operacional, de mutação, aprovação e dispatch iguais
+a zero.
+
 ## Invariantes de segurança
 
 - Saída cognitiva nunca se torna autoridade operacional.
@@ -76,8 +102,9 @@ declarada da tarefa. Uma proposta mutante contida ainda carrega
 
 ## Não alegações explícitas
 
-O G1 não autoriza coleta de evidências, não aplica patch, não executa validação,
-não retoma recovery e não implementa o loop autônomo de correção. Essas
+O G1 não autoriza coleta de evidências. O G2 compõe somente as fronteiras
+read-only e de validação fixa já qualificadas; ele não aplica patch, não autoriza
+mutação, não retoma recovery e não implementa o loop autônomo de correção. Essas
 capacidades exigem qualificação independente em etapas posteriores. Uma suíte
-G1 verde comprova apenas o contrato canônico da tarefa e suas decisões de
-contenção fail-closed.
+G1–G2 verde comprova somente o contrato canônico, o planejamento governado e a
+contenção fail-closed de evidências read-only.

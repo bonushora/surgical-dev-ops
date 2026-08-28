@@ -496,7 +496,9 @@ async function runNaturalRecursiveEvidenceLoop(
     cognitiveSession,
     dispatchEvidence =
       dispatchGovernedMachineEvidence,
-    onProgress = null
+    onProgress = null,
+    evaluateEvidenceIntent = null,
+    deterministicProjectGrounding = true
   } = {}
 ) {
   if (
@@ -549,6 +551,21 @@ async function runNaturalRecursiveEvidenceLoop(
     );
   }
 
+  if (
+    evaluateEvidenceIntent !== null &&
+    typeof evaluateEvidenceIntent !== 'function'
+  ) {
+    throw new Error(
+      'Optional evidence-intent evaluator must be a function.'
+    );
+  }
+
+  if (typeof deterministicProjectGrounding !== 'boolean') {
+    throw new Error(
+      'Deterministic project-grounding policy must be explicit.'
+    );
+  }
+
   function report(stage, step, detail = null) {
     if (!onProgress) {
       return;
@@ -590,10 +607,12 @@ async function runNaturalRecursiveEvidenceLoop(
     report('PLANNING_EVIDENCE', step);
 
     let decision =
-      deterministicProjectGroundingDecision(
-        task,
-        evidence
-      );
+      deterministicProjectGrounding
+        ? deterministicProjectGroundingDecision(
+            task,
+            evidence
+          )
+        : null;
 
     if (!decision) {
       try {
@@ -751,6 +770,84 @@ async function runNaturalRecursiveEvidenceLoop(
         pendingRequest:
           decision.evidenceRequest
       });
+    }
+
+    if (evaluateEvidenceIntent) {
+      let policy;
+
+      try {
+        policy = evaluateEvidenceIntent(
+          containment.governedIntent,
+          decision.evidenceRequest,
+          step + 1
+        );
+      } catch {
+        return finalResult({
+          status:
+            'FAILED',
+
+          envelope,
+
+          steps:
+            step,
+
+          evidence,
+
+          reason:
+            'Development evidence policy failed safely.',
+
+          pendingRequest:
+            decision.evidenceRequest
+        });
+      }
+
+      if (
+        !policy ||
+        Object.isFrozen(policy) !== true ||
+        !['CONTAINED', 'STOPPED'].includes(
+          policy.decision
+        ) ||
+        typeof policy.reason !== 'string' ||
+        !policy.reason
+      ) {
+        return finalResult({
+          status:
+            'FAILED',
+
+          envelope,
+
+          steps:
+            step,
+
+          evidence,
+
+          reason:
+            'Development evidence policy returned malformed evidence.',
+
+          pendingRequest:
+            decision.evidenceRequest
+        });
+      }
+
+      if (policy.decision !== 'CONTAINED') {
+        return finalResult({
+          status:
+            'HUMAN_AUTHORITY_REQUIRED',
+
+          envelope,
+
+          steps:
+            step,
+
+          evidence,
+
+          reason:
+            policy.reason,
+
+          pendingRequest:
+            decision.evidenceRequest
+        });
+      }
     }
 
     let governed;
