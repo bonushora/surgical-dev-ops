@@ -216,3 +216,35 @@ suíte G1–G6 verde comprova o contrato canônico, o planejamento governado, a
 contenção de evidências, a proposta exata de patch/diff sem autoridade, o
 vínculo exato e não reutilizável da autorização humana, uma composição R3 de
 produção exata e validação fixa delimitada de sua projeção autoritativa.
+
+---
+
+## G7 — Consumo durável e de uso único da autorização R3
+
+A autorização exata de patch do G4 DEVE tornar-se duravelmente reivindicada
+antes que uma nova tentativa de dispatch de mutação física possa atravessar a
+composição R3 de produção do G5.
+
+A reivindicação durável é vinculada ao fingerprint exato da autorização, à
+identidade física do workspace, à operação, ao alvo canônico, ao hash BEFORE e
+ao hash da substituição. Depois que a reivindicação existe, a mesma autorização
+NÃO DEVE ser reivindicada novamente, inclusive após reinício do processo.
+
+A conclusão autoritativa bem-sucedida PODE substituir a reivindicação por
+evidência imutável de consumo vinculada à transação de mutação, ao journal
+durável, ao fingerprint do efeito confirmado e à identidade AFTER do Manifest
+CAS. Um replay idêntico do consumo é somente reconciliação de evidência
+read-only; ele NÃO DEVE recriar autoridade de dispatch, mutação, grant ou
+aprovação.
+
+Uma queda após a reivindicação durável, mas antes da conclusão bem-sucedida,
+não faz a autorização humana renascer. A recuperação pode inspecionar a
+reivindicação, o journal e a evidência CAS, mas uma nova tentativa física exige
+nova autoridade humana, salvo quando a recuperação de produção já existente
+provar que a transação previamente autorizada pode ser reconciliada sem nova
+mutação.
+
+O store G7 não possui superfície de delete, release, reset, execução genérica,
+shell, rede, grant ou criação de autoridade. G7 afirma durabilidade contra
+reinício de processo e não introduz uma nova alegação universal de power-loss
+além dos adapters de durabilidade já qualificados.

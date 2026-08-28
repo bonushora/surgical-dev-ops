@@ -209,3 +209,33 @@ G1–G6 suite proves the canonical task contract, governed planning, evidence
 containment, exact authority-free patch/diff proposal, exact non-reusable human
 authorization binding, one exact production R3 composition and bounded fixed
 validation of its authoritative projection.
+
+---
+
+## G7 — Durable single-use R3 authorization consumption
+
+The exact G4 patch authorization SHALL become durably claimed before a new
+physical mutation dispatch can be attempted through the G5 production R3
+composition.
+
+A durable claim is bound to the exact authorization fingerprint, physical
+workspace identity, operation, canonical target, BEFORE hash and replacement
+hash. Once the claim exists, the same authorization SHALL NOT be claimed again,
+including after process restart.
+
+Successful authoritative completion MAY replace the claim with immutable
+consumption evidence bound to the mutation transaction, durable journal,
+committed effect fingerprint and Manifest CAS AFTER identity. An identical
+consumption replay is read-only evidence reconciliation only; it SHALL NOT
+recreate dispatch, mutation, grant or approval authority.
+
+A crash after durable claim but before successful completion does not resurrect
+the human authorization. Recovery may inspect durable claim/journal/CAS evidence
+but a new physical attempt requires new human authority unless existing
+production recovery proves the already-authorized transaction can be reconciled
+without remutation.
+
+The G7 store has no delete, release, reset, generic execution, shell, network,
+grant or authority-minting surface. G7 claims process-restart durability and does
+not introduce a new universal power-loss claim beyond the already-qualified
+durability adapters.
