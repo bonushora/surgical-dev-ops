@@ -131,6 +131,25 @@ Start the governed CLI:
 surgical-devops
 ```
 
+On the first human terminal launch, a bilingual onboarding selects one of the
+three experiences provided by this same installation: `NATURAL`, `ENGINEER` or
+`EXPERT`. Reconfigure the saved interface preference with:
+
+```bash
+surgical-devops --configure
+```
+
+Use an invocation-scoped override without changing the saved preference:
+
+```bash
+surgical-devops --interaction NATURAL
+surgical-devops --interaction ENGINEER
+surgical-devops --interaction EXPERT
+```
+
+The preference contains no operational authority. All profiles use the same
+Orchestrator, BH-SEP/BH-SDP, R3, journal, Manifest CAS and anti-replay contracts.
+
 The compatibility executable `surgical` is also provided. Run the canonical suite
 from a checkout with:
 

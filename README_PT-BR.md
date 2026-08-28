@@ -116,6 +116,28 @@ surgical-devops
 
 O executável de compatibilidade `surgical` também é fornecido. Para executar a suíte:
 
+Na primeira execução em um terminal humano, um onboarding bilíngue seleciona uma
+das três experiências fornecidas pela mesma instalação: `NATURAL`, `ENGINEER` ou
+`EXPERT`. Para refazer a preferência de interface:
+
+```bash
+surgical-devops --configure
+```
+
+Para usar um perfil somente na invocação atual, sem alterar a preferência salva:
+
+```bash
+surgical-devops --interaction NATURAL
+surgical-devops --interaction ENGINEER
+surgical-devops --interaction EXPERT
+```
+
+A preferência não contém autoridade operacional. Todos os perfis usam o mesmo
+Orchestrator e os mesmos contratos BH-SEP/BH-SDP, R3, journal, Manifest CAS e
+anti-replay.
+
+Para executar a suíte:
+
 ```bash
 npm ci
 npm test
