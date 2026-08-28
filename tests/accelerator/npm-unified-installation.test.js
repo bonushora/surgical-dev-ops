@@ -9,18 +9,27 @@ const { execFileSync } = require('node:child_process');
 
 const ROOT = path.resolve(__dirname, '../..');
 const NPM_CLI = process.env.npm_execpath;
+const NPM_COMMAND =
+  process.platform === 'win32'
+    ? 'npm.cmd'
+    : 'npm';
 
 function npm(arguments_, options) {
-  assert.equal(
-    typeof NPM_CLI,
-    'string',
-    'npm_execpath is required by the canonical npm test command'
-  );
+  if (typeof NPM_CLI === 'string' && NPM_CLI.length > 0) {
+    return execFileSync(
+      process.execPath,
+      [NPM_CLI, ...arguments_],
+      options
+    );
+  }
 
   return execFileSync(
-    process.execPath,
-    [NPM_CLI, ...arguments_],
-    options
+    NPM_COMMAND,
+    arguments_,
+    {
+      ...options,
+      shell: process.platform === 'win32'
+    }
   );
 }
 
