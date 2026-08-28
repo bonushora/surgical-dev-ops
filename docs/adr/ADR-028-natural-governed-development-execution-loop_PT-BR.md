@@ -308,3 +308,54 @@ G9 não introduz nova primitiva de filesystem patch, shell, processo, rede,
 provider, fábrica de autoridade ou execução genérica. O caminho R3 de produção
 existente, com Journal + Manifest CAS, permanece como única autoridade de
 mutação física.
+
+---
+
+## Congelamento G9 — Fronteira de dispatch de produção
+
+**Decisão:** APROVADA / CONGELADA.
+
+A fronteira G9 de anti-replay em produção fica aprovada e congelada no commit
+`3f0a6608ee1bd4bef7f28ed897951c9744a9f2fc`.
+
+A ordem qualificada em produção é:
+
+1. a validação exata da autorização G4 de uso único permanece dentro do G5;
+2. a claim durável do G7 é registrada imediatamente antes do único dispatch
+   canônico de produção ao Orchestrator;
+3. o retorno real do Orchestrator é preservado;
+4. a evidência de Journal e Manifest CAS é validada a partir desse resultado
+   real de produção.
+
+Evidência de qualificação na fronteira congelada:
+
+- 1.091 testes;
+- 1.086 aprovados;
+- 0 falhas;
+- 5 ignorados;
+- auditorias de dependências: 0 vulnerabilidades;
+- worktree final limpa;
+- nenhum push realizado pelo executor de qualificação.
+
+Este congelamento **não** declara encerrado o ciclo durável completo de
+anti-replay. O G9 qualifica a claim-before-dispatch no caminho real de produção
+do G5.
+
+### Próximo gate obrigatório — G10
+
+O G10 DEVE qualificar o consumo durável pós-dispatch e fechar a fronteira
+restante do ciclo anti-replay, exigindo:
+
+- transição de `CLAIMED` para `CONSUMED` vinculada ao resultado real do G5 em
+  produção;
+- binding exato à transação de Journal e à evidência de Manifest CAS/efeito
+  resultante;
+- transição `CLAIMED -> CONSUMED` linearizável sob tentativas concorrentes;
+- prova adversarial end-to-end de que uma mesma autorização G4 exata não pode
+  alcançar duas vezes o dispatch físico real do Orchestrator;
+- comportamento fail-closed para consumo conflitante, substituição de
+  resultado, ambiguidade após restart e tentativas de bypass.
+
+Esta decisão não autoriza nova autoridade, shell genérico, processo, rede,
+superfície de mutação de filesystem ou caminho alternativo de mutação em
+produção.

@@ -297,3 +297,52 @@ G9 introduces no new filesystem-patch primitive, shell, process, network,
 provider, authority factory or generic execution surface. The existing
 production R3 Journal + Manifest CAS path remains the sole physical mutation
 authority.
+
+---
+
+## G9 Freeze — Production dispatch boundary
+
+**Decision:** ACCEPTED / FROZEN.
+
+The G9 production anti-replay boundary is accepted and frozen at commit
+`3f0a6608ee1bd4bef7f28ed897951c9744a9f2fc`.
+
+The qualified production ordering is:
+
+1. exact G4 single-use authorization validation remains inside G5;
+2. the durable G7 claim is recorded immediately before the one canonical
+   production Orchestrator dispatch;
+3. the real Orchestrator return value is preserved;
+4. Journal and Manifest CAS evidence are validated from that real production
+   result.
+
+Qualification evidence at the freeze boundary:
+
+- 1,091 tests;
+- 1,086 passed;
+- 0 failed;
+- 5 skipped;
+- dependency audits: 0 vulnerabilities;
+- final worktree clean;
+- no push performed by the qualification executor.
+
+This freeze does **not** assert that the complete durable anti-replay lifecycle
+is closed. G9 qualifies claim-before-dispatch on the real G5 production path.
+
+### Next required gate — G10
+
+G10 SHALL qualify durable post-dispatch consumption and close the remaining
+anti-replay lifecycle boundary by requiring:
+
+- transition from `CLAIMED` to `CONSUMED` bound to the actual production G5
+  result;
+- exact binding to the resulting Journal transaction and Manifest CAS/effect
+  evidence;
+- a linearizable `CLAIMED -> CONSUMED` transition under concurrent attempts;
+- adversarial end-to-end proof that one exact G4 authorization cannot reach the
+  real physical Orchestrator dispatch twice;
+- fail-closed behavior for conflicting consumption, result substitution,
+  restart ambiguity, and bypass attempts.
+
+No new authority, generic shell, process, network, filesystem mutation surface,
+or alternate production mutation path is authorized by this decision.
