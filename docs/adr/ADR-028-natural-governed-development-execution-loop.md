@@ -269,3 +269,31 @@ G8 is a read-only reconciliation boundary. It exposes no filesystem mutation,
 process, shell, network, delete, release, reset, authority factory or generic
 execution surface. Recovery never turns expired or historical human authority
 into fresh operational authority.
+
+---
+
+## G9 — Production-path durable anti-replay integration
+
+G7 durable anti-replay SHALL be consumed by the real G5 production composition
+boundary rather than remaining an isolated helper.
+
+Immediately before the single canonical G5 call into the Surgical Orchestrator,
+after G5 has already completed its exact G1-G4, stale-HEAD, identity, expiry,
+workspace and patch-binding checks, G5 SHALL durably claim the exact G4
+single-use authorization through the qualified G7 store.
+
+The G9 claim is bound to the same operation, physical workspace identity, exact
+target, BEFORE hash and replacement hash. Its durable state root is derived
+under the already-authorized production mutation journal root; callers cannot
+select a separate replay database or broaden its authority.
+
+If durable claim confirmation fails, G5 SHALL fail closed before Orchestrator
+dispatch. If the claim already exists after a process restart, the same
+authorization SHALL NOT reach Orchestrator dispatch a second time. A crash after
+the claim does not resurrect authorization; G8 may only reconcile historical
+journal, Manifest CAS and physical evidence without remutation.
+
+G9 introduces no new filesystem-patch primitive, shell, process, network,
+provider, authority factory or generic execution surface. The existing
+production R3 Journal + Manifest CAS path remains the sole physical mutation
+authority.

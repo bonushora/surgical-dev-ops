@@ -279,3 +279,32 @@ G8 é uma fronteira de reconciliação read-only. Não expõe mutação de files
 processo, shell, rede, delete, release, reset, fábrica de autoridade ou execução
 genérica. Recovery nunca transforma autoridade humana expirada ou histórica em
 nova autoridade operacional.
+
+---
+
+## G9 — Integração do anti-replay durável no caminho de produção
+
+O anti-replay durável do G7 DEVE ser consumido pela fronteira real de composição
+G5 em produção, e não permanecer como helper isolado.
+
+Imediatamente antes da única chamada canônica do G5 ao Surgical Orchestrator,
+depois que o próprio G5 já concluiu suas verificações exatas de G1-G4, HEAD
+obsoleto, identidade, expiração, workspace e binding do patch, o G5 DEVE
+reivindicar duravelmente a autorização G4 exata de uso único através do store
+qualificado do G7.
+
+A claim G9 fica vinculada à mesma operação, identidade física do workspace, alvo
+exato, hash BEFORE e hash da substituição. Sua raiz durável é derivada dentro da
+raiz já autorizada do mutation journal de produção; o chamador não pode escolher
+um banco de replay separado nem ampliar autoridade.
+
+Se a confirmação da claim durável falhar, o G5 DEVE falhar fechado antes do
+dispatch ao Orchestrator. Se a claim já existir depois de restart do processo, a
+mesma autorização NÃO DEVE alcançar o dispatch do Orchestrator uma segunda vez.
+Crash depois da claim não ressuscita autorização; G8 só pode reconciliar
+evidência histórica de journal, Manifest CAS e estado físico sem remutação.
+
+G9 não introduz nova primitiva de filesystem patch, shell, processo, rede,
+provider, fábrica de autoridade ou execução genérica. O caminho R3 de produção
+existente, com Journal + Manifest CAS, permanece como única autoridade de
+mutação física.

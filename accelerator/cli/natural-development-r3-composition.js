@@ -229,6 +229,8 @@ function composeAndDispatchNaturalDevelopmentPatch({
     );
   }
 
+  _g9ClaimBeforeRealG5Dispatch(arguments);
+
   const orchestration = orchestrate(
     prepared.request,
     prepared.runtime
@@ -270,6 +272,360 @@ function composeAndDispatchNaturalDevelopmentPatch({
     ...binding,
     compositionFingerprint: fingerprint(binding)
   });
+}
+
+
+/*
+ * G9_DURABLE_CLAIM_BEFORE_REAL_G5_DISPATCH
+ *
+ * This boundary intentionally performs only the G7 durable authorization
+ * claim.  It creates no dispatch authority.  The claim is invoked only at the
+ * already-qualified G5 orchestration point, after G5 has completed its own
+ * stale-HEAD, identity, expiry, G1-G4 and exact-patch checks.
+ *
+ * If the process stops after this durable claim, G8 recovery may reconcile
+ * physical/journal/CAS evidence, but the same human authorization cannot be
+ * replayed for another physical attempt.
+ */
+const _g9Path =
+  require('node:path');
+
+const _g9Authorization =
+  require(
+    './natural-development-authorization-consumption'
+  );
+
+const _g9AuthorizationStore =
+  require(
+    '../adapters/natural-development-authorization-consumption-store'
+  );
+
+function _g9Objects(value, seen = new Set(), output = []) {
+  if (
+    !value ||
+    typeof value !== 'object' ||
+    seen.has(value)
+  ) {
+    return output;
+  }
+
+  seen.add(value);
+  output.push(value);
+
+  if (Array.isArray(value)) {
+    for (const child of value) {
+      _g9Objects(child, seen, output);
+    }
+    return output;
+  }
+
+  for (const child of Object.values(value)) {
+    _g9Objects(child, seen, output);
+  }
+
+  return output;
+}
+
+function _g9CanonicalSha(value) {
+  return (
+    typeof value === 'string' &&
+    /^[a-f0-9]{64}$/.test(value)
+  );
+}
+
+function _g9Text(value) {
+  return (
+    typeof value === 'string' &&
+    value.trim()
+  )
+    ? value.trim()
+    : null;
+}
+
+function _g9Unique(values, label) {
+  const normalized =
+    [...new Set(values.filter((value) => value !== null && value !== undefined))];
+
+  if (normalized.length !== 1) {
+    throw new Error(
+      'G9 could not derive one exact ' +
+      label +
+      ' from the already-validated G5 invocation.'
+    );
+  }
+
+  return normalized[0];
+}
+
+function _g9PropertyValues(objects, keys, predicate = () => true) {
+  const output = [];
+
+  for (const object of objects) {
+    for (const key of keys) {
+      if (
+        Object.prototype.hasOwnProperty.call(object, key) &&
+        predicate(object[key])
+      ) {
+        output.push(object[key]);
+      }
+    }
+  }
+
+  return output;
+}
+
+function _g9AuthorizationEvidence(objects) {
+  const candidates =
+    objects.filter((object) => {
+      if (
+        !_g9CanonicalSha(
+          object.authorizationFingerprint
+        )
+      ) {
+        return false;
+      }
+
+      return (
+        object.singleUse === true ||
+        object.reusable === false ||
+        object.reusableApproval === false
+      );
+    });
+
+  if (candidates.length === 0) {
+    throw new Error(
+      'G9 requires the exact immutable G4 single-use authorization at the real G5 dispatch boundary.'
+    );
+  }
+
+  const fingerprints =
+    [...new Set(
+      candidates.map(
+        (candidate) =>
+          candidate.authorizationFingerprint
+      )
+    )];
+
+  if (fingerprints.length !== 1) {
+    throw new Error(
+      'G9 found conflicting G4 authorization fingerprints.'
+    );
+  }
+
+  const exact =
+    candidates.find(
+      (candidate) =>
+        Object.isFrozen(candidate) &&
+        candidate.authorizationFingerprint ===
+          fingerprints[0]
+    );
+
+  if (!exact) {
+    throw new Error(
+      'G9 requires immutable G4 authorization evidence.'
+    );
+  }
+
+  return exact;
+}
+
+function _g9PatchBinding(objects, authorization) {
+  const patchCandidates =
+    objects.filter((object) => {
+      const before =
+        object.beforeSha256;
+      const replacement =
+        object.replacementSha256;
+
+      return (
+        _g9CanonicalSha(before) &&
+        _g9CanonicalSha(replacement)
+      );
+    });
+
+  if (patchCandidates.length === 0) {
+    throw new Error(
+      'G9 could not locate exact BEFORE/replacement evidence.'
+    );
+  }
+
+  const targetValues = [];
+
+  for (const candidate of patchCandidates) {
+    const direct =
+      _g9Text(candidate.target);
+
+    if (direct) {
+      targetValues.push({
+        target: direct,
+        beforeSha256:
+          candidate.beforeSha256,
+        replacementSha256:
+          candidate.replacementSha256
+      });
+      continue;
+    }
+
+    const nested =
+      candidate.target &&
+      typeof candidate.target === 'object'
+        ? _g9Text(
+            candidate.target.path ||
+            candidate.target.requested
+          )
+        : null;
+
+    if (nested) {
+      targetValues.push({
+        target: nested,
+        beforeSha256:
+          candidate.beforeSha256,
+        replacementSha256:
+          candidate.replacementSha256
+      });
+    }
+  }
+
+  if (
+    authorization.target &&
+    _g9Text(authorization.target)
+  ) {
+    const expected =
+      _g9Text(authorization.target);
+
+    const filtered =
+      targetValues.filter(
+        (item) => item.target === expected
+      );
+
+    if (filtered.length > 0) {
+      targetValues.splice(
+        0,
+        targetValues.length,
+        ...filtered
+      );
+    }
+  }
+
+  const tuples =
+    new Map();
+
+  for (const item of targetValues) {
+    const key =
+      JSON.stringify(item);
+    tuples.set(key, item);
+  }
+
+  if (tuples.size !== 1) {
+    throw new Error(
+      'G9 exact target/BEFORE/replacement binding is ambiguous.'
+    );
+  }
+
+  return [...tuples.values()][0];
+}
+
+function _g9ClaimBeforeRealG5Dispatch(invocationArguments) {
+  const objects =
+    _g9Objects(
+      Array.from(invocationArguments)
+    );
+
+  const authorization =
+    _g9AuthorizationEvidence(objects);
+
+  const patch =
+    _g9PatchBinding(
+      objects,
+      authorization
+    );
+
+  const operationId =
+    _g9Text(
+      authorization.operationId
+    ) ||
+    _g9Unique(
+      _g9PropertyValues(
+        objects,
+        ['operationId'],
+        (value) => Boolean(_g9Text(value))
+      ).map(_g9Text),
+      'operationId'
+    );
+
+  const physicalWorkspaceIdentity =
+    (
+      _g9CanonicalSha(
+        authorization.physicalWorkspaceIdentity
+      )
+        ? authorization.physicalWorkspaceIdentity
+        : null
+    ) ||
+    _g9Unique(
+      _g9PropertyValues(
+        objects,
+        ['physicalWorkspaceIdentity'],
+        _g9CanonicalSha
+      ),
+      'physical workspace identity'
+    );
+
+  const journalStorageRoot =
+    _g9Unique(
+      _g9PropertyValues(
+        objects,
+        [
+          'journalStorageRoot',
+          'mutationJournalStorageRoot'
+        ],
+        (value) =>
+          Boolean(_g9Text(value)) &&
+          _g9Path.isAbsolute(value)
+      ).map(_g9Text),
+      'production mutation journal storage root'
+    );
+
+  const claim =
+    _g9Authorization
+      .createNaturalDevelopmentAuthorizationClaim({
+        authorization,
+        operationId,
+        physicalWorkspaceIdentity,
+        target:
+          patch.target,
+        beforeSha256:
+          patch.beforeSha256,
+        replacementSha256:
+          patch.replacementSha256
+      });
+
+  const stateRoot =
+    _g9Path.join(
+      journalStorageRoot,
+      '.natural-development-authorization-consumption'
+    );
+
+  const receipt =
+    _g9AuthorizationStore
+      .claimNaturalDevelopmentAuthorization({
+        stateRoot,
+        claim
+      });
+
+  if (
+    !receipt ||
+    receipt.state !== 'CLAIMED' ||
+    receipt.authorizationFingerprint !==
+      claim.authorizationFingerprint ||
+    receipt.operationalAuthority !== false ||
+    receipt.mutationAuthority !== false
+  ) {
+    throw new Error(
+      'G9 durable authorization claim was not confirmed before real G5 dispatch.'
+    );
+  }
+
+  return receipt;
 }
 
 module.exports = Object.freeze({
