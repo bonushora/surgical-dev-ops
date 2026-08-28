@@ -44,6 +44,97 @@ function includesAny(
   );
 }
 
+function isBlanketFutureApproval(text) {
+  return includesAny(
+    text,
+    [
+      'considere que eu ja aprovei todas as alteracoes futuras',
+      'considere todas as alteracoes futuras aprovadas',
+      'eu aprovo todas as alteracoes futuras',
+      'autorizo todas as alteracoes futuras',
+      'autorizo tudo daqui para frente',
+      'consider all future changes approved',
+      'i approve all future changes',
+      'i authorize all future changes',
+      'assume all future changes are approved'
+    ]
+  );
+}
+
+function formatBlanketApprovalRejection(text) {
+  const english =
+    /\b(?:consider|future|approve|authorize|assume)\b/i
+      .test(text);
+
+  if (english) {
+    return (
+      'Blanket or future authorization was not accepted.\n' +
+      'Human approval cannot be inferred, remembered or reused for unspecified operations.\n' +
+      'Each authority-sensitive operation requires an exact pending proposal with bounded target, scope and evidence.\n' +
+      'No authority was granted and no change was made.\n'
+    );
+  }
+
+  return (
+    'A autorização abrangente ou futura não foi aceita.\n' +
+    'A aprovação humana não pode ser presumida, memorizada ou reutilizada para operações não especificadas.\n' +
+    'Cada operação sensível à autoridade exige uma proposta pendente exata, com alvo, escopo e evidências delimitados.\n' +
+    'Nenhuma autoridade foi concedida e nenhuma alteração foi realizada.\n'
+  );
+}
+
+function detectBoundedMutationRequest(text) {
+  const portuguese =
+    text.match(
+      /^(?:altere|mude|atualize) (?:o )?(?:arquivo )?([a-z0-9_./-]+) para (?:a )?(?:versao )?([a-z0-9_.-]+)$/
+    );
+
+  if (portuguese) {
+    return Object.freeze({
+      language: 'pt-BR',
+      target: portuguese[1],
+      requestedValue: portuguese[2]
+    });
+  }
+
+  const english =
+    text.match(
+      /^(?:change|update) (?:the )?(?:file )?([a-z0-9_./-]+) to (?:version )?([a-z0-9_.-]+)$/
+    );
+
+  if (!english) {
+    return null;
+  }
+
+  return Object.freeze({
+    language: 'en',
+    target: english[1],
+    requestedValue: english[2]
+  });
+}
+
+function formatBoundedMutationBoundary(request) {
+  if (request.language === 'en') {
+    return (
+      'Mutation proposal detected.\n' +
+      'State: HUMAN_AUTHORITY_REQUIRED\n' +
+      `Target: ${request.target}\n` +
+      `Requested value: ${request.requestedValue}\n` +
+      'Next required step: inspect the current file and prepare an exact PATCH with before/after evidence.\n' +
+      'This request is not authorization. No mutation was dispatched and no file was changed.\n'
+    );
+  }
+
+  return (
+    'Proposta de mutação detectada.\n' +
+    'Estado: HUMAN_AUTHORITY_REQUIRED\n' +
+    `Alvo: ${request.target}\n` +
+    `Valor solicitado: ${request.requestedValue}\n` +
+    'Próxima etapa obrigatória: inspecionar o arquivo atual e preparar um PATCH exato com evidências de antes e depois.\n' +
+    'Este pedido não constitui autorização. Nenhuma mutação foi despachada e nenhum arquivo foi alterado.\n'
+  );
+}
+
 function naturalHelpMessage() {
   return (
     'Você pode conversar comigo normalmente sobre este projeto.\n\n' +
@@ -188,6 +279,30 @@ function createNaturalSessionControl(
         action: 'CONTINUE',
         output: formatNaturalTerminalBoundary(terminalBoundary)
       });
+    }
+
+    if (isBlanketFutureApproval(text)) {
+      return Object.freeze({
+        matched: true,
+        action: 'CONTINUE',
+        output: formatBlanketApprovalRejection(text)
+      });
+    }
+
+    if (!pendingTask) {
+      const mutationRequest =
+        detectBoundedMutationRequest(text);
+
+      if (mutationRequest) {
+        return Object.freeze({
+          matched: true,
+          action: 'CONTINUE',
+          output:
+            formatBoundedMutationBoundary(
+              mutationRequest
+            )
+        });
+      }
     }
 
     if (pendingTask) {
