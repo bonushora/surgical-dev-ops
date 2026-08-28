@@ -2,7 +2,7 @@
 
 English: [ADR-028 in English](./ADR-028-natural-governed-development-execution-loop.md)
 
-**Status:** G1–G3 IMPLEMENTADOS / ETAPAS POSTERIORES NÃO IMPLEMENTADAS
+**Status:** G1–G4 IMPLEMENTADOS / ETAPAS POSTERIORES NÃO IMPLEMENTADAS
 **Data:** 2026-08-28
 **Escopo:** Surgical DevOps / desenvolvimento governado no modo NATURAL
 **Estende:** ADR-004, ADR-006, ADR-007, ADR-010, ADR-014 e ADR-019
@@ -110,6 +110,28 @@ da substituição, o tipo de validação e fingerprints necessários às etapas
 posteriores de autoridade, mas continua expondo autoridade operacional, de
 mutação, aprovação e dispatch iguais a zero.
 
+## G4 — autorização humana exata
+
+O G4 introduz `sdo.natural_development_patch_authorization.v1`. Ele aceita
+somente uma proposta G3 imutável, uma decisão explícita e imutável denominada
+`APPROVE_EXACT_PATCH` e uma asserção verificada de identidade humana. A decisão
+deve repetir os fingerprints da proposta e do diff, o alvo e os hashes exatos
+BEFORE e AFTER. Aprovação abrangente, futura, implícita ou mutável falha
+fechada.
+
+A identidade verificada deve identificar o mesmo sujeito humano, incluir a
+audience fixa `surgical-devops:natural-development-r3` e usar um operation ID
+derivado exclusivamente do fingerprint da proposta G3. O instante da
+autorização deve ser igual ao instante de verificação da identidade, permanecer
+dentro do intervalo verificado da identidade e expirar em no máximo dez
+minutos.
+
+A autorização vincula toda a cadeia de fingerprints G1–G4. Ela é marcada como
+de uso único, não reutilizável e `AUTHORIZED_FOR_R3_COMPOSITION`, mas permanece
+não consumida e expõe autoridade operacional, de mutação, aprovação e dispatch
+iguais a zero. Consumo, estado anti-replay e mutação física pertencem ao G5 e ao
+G7, não a esta fronteira de materialização de evidência.
+
 ## Invariantes de segurança
 
 - Saída cognitiva nunca se torna autoridade operacional.
@@ -120,6 +142,7 @@ mutação, aprovação e dispatch iguais a zero.
   vocabulário de validação.
 - O G1 não exporta método de filesystem, processo, execução, aprovação, grant
   ou dispatch.
+- O G4 não exporta método de execução, mutação, dispatch, grant ou consumo.
 - O envelope read-only existente permanece inalterado.
 - A fronteira R3 de produção existente permanece inalterada.
 - A versão `v2.6.0-rc.2` permanece imutável.
@@ -128,8 +151,10 @@ mutação, aprovação e dispatch iguais a zero.
 
 O G1 não autoriza coleta de evidências. O G2 compõe somente as fronteiras
 read-only e de validação fixa já qualificadas. O G3 materializa apenas dados
-para revisão; ele não aplica patch, não autoriza mutação, não retoma recovery e
-não implementa o loop autônomo de correção. Essas capacidades exigem
-qualificação independente em etapas posteriores. Uma suíte G1–G3 verde comprova
-somente o contrato canônico, o planejamento governado, a contenção de evidências
-e a proposta exata de patch/diff sem autoridade.
+para revisão. O G4 materializa somente evidência de autorização humana exata;
+ele não consome essa evidência, não cria grant R3, não aplica patch, não retoma
+recovery e não implementa o loop autônomo de correção. Essas capacidades exigem
+qualificação independente em etapas posteriores. Uma suíte G1–G4 verde comprova
+somente o contrato canônico, o planejamento governado, a contenção de
+evidências, a proposta exata de patch/diff sem autoridade e o vínculo exato e
+não reutilizável da autorização humana.

@@ -2,7 +2,7 @@
 
 Português: [ADR-028 em PT-BR](./ADR-028-natural-governed-development-execution-loop_PT-BR.md)
 
-**Status:** G1–G3 IMPLEMENTED / LATER STAGES NOT IMPLEMENTED
+**Status:** G1–G4 IMPLEMENTED / LATER STAGES NOT IMPLEMENTED
 **Date:** 2026-08-28
 **Scope:** Surgical DevOps / NATURAL governed development
 **Extends:** ADR-004, ADR-006, ADR-007, ADR-010, ADR-014 and ADR-019
@@ -105,6 +105,26 @@ replacement bytes, validation kind and fingerprints needed by later authority
 stages, but continues to expose zero operational, mutation, approval or
 dispatch authority.
 
+## G4 exact human authorization
+
+G4 introduces `sdo.natural_development_patch_authorization.v1`. It accepts only
+an immutable G3 proposal, an immutable explicit decision named
+`APPROVE_EXACT_PATCH`, and a verified human identity assertion. The decision
+must repeat the proposal and diff fingerprints, target and exact BEFORE and
+AFTER hashes. Blanket, future, implicit or mutable approval fails closed.
+
+The verified identity must identify the same human subject, include the fixed
+`surgical-devops:natural-development-r3` audience and use an operation ID
+derived exclusively from the G3 proposal fingerprint. Authorization time must
+equal the identity verification time, remain inside the verified identity
+interval and expire within at most ten minutes.
+
+The authorization binds the complete G1–G4 fingerprint chain. It is marked
+single-use, non-reusable and `AUTHORIZED_FOR_R3_COMPOSITION`, but remains
+unconsumed and exposes zero operational, mutation, approval or dispatch
+authority. Consumption, anti-replay state and physical mutation belong to G5
+and G7 rather than this evidence-materialization boundary.
+
 ## Security invariants
 
 - Cognitive output never becomes operational authority.
@@ -115,6 +135,7 @@ dispatch authority.
   validation vocabulary.
 - G1 exports no filesystem, process, execution, approval, grant or dispatch
   method.
+- G4 exports no execution, mutation, dispatch, grant or consumption method.
 - The existing read-only task envelope remains unchanged.
 - The existing production R3 boundary remains unchanged.
 - `v2.6.0-rc.2` remains immutable.
@@ -123,8 +144,10 @@ dispatch authority.
 
 G1 does not authorize evidence collection. G2 composes only already-qualified
 read-only evidence and fixed validation boundaries. G3 materializes review data
-only; it does not apply a patch, authorize mutation, resume recovery or
+only. G4 materializes exact human-authorization evidence only; it does not
+consume that evidence, mint an R3 grant, apply a patch, resume recovery or
 implement the autonomous correction loop. Those capabilities require
-independent later-stage qualification. A green G1–G3 suite proves only the
-canonical task contract, governed planning, evidence containment and exact
-authority-free patch/diff proposal.
+independent later-stage qualification. A green G1–G4 suite proves only the
+canonical task contract, governed planning, evidence containment, exact
+authority-free patch/diff proposal and exact non-reusable human-authorization
+binding.
