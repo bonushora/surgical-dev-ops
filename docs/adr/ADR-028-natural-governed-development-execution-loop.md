@@ -239,3 +239,33 @@ The G7 store has no delete, release, reset, generic execution, shell, network,
 grant or authority-minting surface. G7 claims process-restart durability and does
 not introduce a new universal power-loss claim beyond the already-qualified
 durability adapters.
+
+---
+
+## G8 — Durable recovery reconciliation without authorization resurrection
+
+After G7 has durably claimed or consumed an exact G4 authorization, restart
+recovery SHALL NOT recreate dispatch or mutation authority from that historical
+authorization.
+
+G8 classifies recovery only from immutable evidence bound to the same operation,
+physical workspace, exact target, BEFORE hash and replacement hash. The closed
+recovery outcomes are:
+
+- `COMPLETED`: terminal journal evidence, authoritative Manifest CAS evidence and
+  physical AFTER evidence prove the already-authorized effect without remutation;
+- `NOT_APPLIED_REAUTH_REQUIRED`: terminal finalized journal evidence proves the
+  effect was not applied and physical state remains BEFORE, so any new physical
+  attempt requires new human authority;
+- `RECOVERY_UNRESOLVED`: evidence is incomplete, conflicting, unavailable or
+  ambiguous, and the system remains fail-closed.
+
+A durable `CLAIMED` state may corroborate an already-applied historical effect
+when production journal, Manifest CAS and physical evidence agree, but it can
+never itself authorize another attempt. A durable `CONSUMED` state must match its
+exact transaction, journal, effect fingerprint and Manifest CAS AFTER identity.
+
+G8 is a read-only reconciliation boundary. It exposes no filesystem mutation,
+process, shell, network, delete, release, reset, authority factory or generic
+execution surface. Recovery never turns expired or historical human authority
+into fresh operational authority.

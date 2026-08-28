@@ -248,3 +248,34 @@ O store G7 não possui superfície de delete, release, reset, execução genéri
 shell, rede, grant ou criação de autoridade. G7 afirma durabilidade contra
 reinício de processo e não introduz uma nova alegação universal de power-loss
 além dos adapters de durabilidade já qualificados.
+
+---
+
+## G8 — Reconciliação durável de recovery sem ressurreição de autorização
+
+Depois que o G7 reivindica ou consome duravelmente uma autorização G4 exata, o
+recovery após reinício NÃO DEVE recriar autoridade de dispatch ou mutação a
+partir dessa autorização histórica.
+
+G8 classifica o recovery somente a partir de evidência imutável vinculada à
+mesma operação, workspace físico, alvo exato, hash BEFORE e hash da substituição.
+Os resultados fechados de recovery são:
+
+- `COMPLETED`: evidência terminal do journal, evidência autoritativa do Manifest
+  CAS e evidência física AFTER provam o efeito já autorizado sem remutação;
+- `NOT_APPLIED_REAUTH_REQUIRED`: journal terminal e finalizado prova que o efeito
+  não foi aplicado e o estado físico permanece BEFORE, portanto nova tentativa
+  física exige nova autoridade humana;
+- `RECOVERY_UNRESOLVED`: evidência incompleta, conflitante, indisponível ou
+  ambígua mantém o sistema em fail-closed.
+
+Um estado durável `CLAIMED` pode corroborar um efeito histórico já aplicado
+quando journal de produção, Manifest CAS e evidência física concordam, mas nunca
+pode por si mesmo autorizar nova tentativa. Um estado durável `CONSUMED` deve
+corresponder exatamente à sua transação, journal, fingerprint do efeito e
+identidade AFTER do Manifest CAS.
+
+G8 é uma fronteira de reconciliação read-only. Não expõe mutação de filesystem,
+processo, shell, rede, delete, release, reset, fábrica de autoridade ou execução
+genérica. Recovery nunca transforma autoridade humana expirada ou histórica em
+nova autoridade operacional.
