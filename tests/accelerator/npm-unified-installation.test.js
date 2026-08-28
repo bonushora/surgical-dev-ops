@@ -93,9 +93,12 @@ test('one npm installation exposes all three interaction experiences', () => {
         cwd: ROOT,
         input: '',
         encoding: 'utf8',
+        shell: process.platform === 'win32',
         env: {
           ...process.env,
-          XDG_CONFIG_HOME: temporary
+          XDG_CONFIG_HOME: temporary,
+          LOCALAPPDATA: temporary,
+          APPDATA: temporary
         }
       }
     );
