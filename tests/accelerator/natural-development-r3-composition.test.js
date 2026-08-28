@@ -276,7 +276,15 @@ test('G5 composes G1-G4 through existing R3 journal and Manifest CAS', () => {
     assert.match(result.afterManifestOid, /^[a-f0-9]{40,64}$/);
     assert.equal(result.ordinaryWorktreeAuthoritative, false);
     assert.equal(result.authorizationUseRecorded, true);
-    assert.equal(result.durableAntiReplayQualified, false);
+    assert.equal(result.durableAntiReplayQualified, true);
+    assert.match(
+      result.authorizationConsumptionFingerprint,
+      /^[a-f0-9]{64}$/
+    );
+    assert.match(
+      result.effectFingerprint,
+      /^[a-f0-9]{64}$/
+    );
     assert.equal(Object.isFrozen(result), true);
 
     assert.equal(
@@ -284,6 +292,11 @@ test('G5 composes G1-G4 through existing R3 journal and Manifest CAS', () => {
       before
     );
     assert.equal(fs.readFileSync(result.managedProjection, 'utf8'), after);
+
+    assert.throws(
+      () => dispatch(state, values),
+      /replay denied|durable claim|consumed|anti-replay/i
+    );
 
     const validation = runNaturalDevelopmentValidationLoop({
       contract: values.contract,

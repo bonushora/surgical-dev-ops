@@ -359,3 +359,41 @@ restante do ciclo anti-replay, exigindo:
 Esta decisão não autoriza nova autoridade, shell genérico, processo, rede,
 superfície de mutação de filesystem ou caminho alternativo de mutação em
 produção.
+
+---
+
+## G10 — Consumo durável pós-dispatch e anti-replay linearizável
+
+**Decisão:** GATE DE QUALIFICAÇÃO.
+
+O G10 fecha a fronteira do ciclo de vida da autorização em produção que o G9
+deixou explicitamente em aberto.
+
+A claim durável exata do G9 DEVE ser preservada como dado durante o único
+dispatch canônico de produção do G5 ao Orchestrator. Somente depois que o
+resultado real do Orchestrator tiver passado pela qualificação existente de
+Journal e Manifest CAS do G5 essa mesma claim poderá transicionar de `CLAIMED`
+para `CONSUMED`.
+
+O consumo durável DEVE vincular a autorização G4 exata, operação, workspace
+físico, alvo, hash BEFORE, hash de replacement, transaction de produção,
+identidade do Journal, after OID do Manifest CAS e um único effect fingerprint
+determinístico derivado desses fatos qualificados de produção.
+
+A transição persistente `CLAIMED -> CONSUMED` DEVE ser serializada por lock
+durável exclusivo por autorização. Tentativas concorrentes de transição não
+podem prosseguir simultaneamente. Propriedade ambígua do lock permanece
+fail-closed e este gate não autoriza recuperação automática de stale lock.
+
+Replay de consumo idêntico pode convergir de forma read-only para o mesmo
+consumption fingerprint durável, mas nunca restaura autoridade de dispatch.
+Evidência conflitante de transaction, Journal, Manifest CAS ou efeito falha
+fechada.
+
+O G10 não introduz nova primitiva física de patch, shell, processo genérico,
+rede, provider, credencial ou autoridade alternativa de mutação. O caminho
+qualificado existente do Orchestrator R3 com Journal + Manifest CAS permanece a
+única autoridade de mutação física.
+
+O contrato bilíngue do produto permanece ativo: apresentação humana do G10 deve
+preservar paridade semântica EN-US/PT-BR sem alterar autoridade determinística.

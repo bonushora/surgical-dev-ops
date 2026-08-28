@@ -346,3 +346,40 @@ anti-replay lifecycle boundary by requiring:
 
 No new authority, generic shell, process, network, filesystem mutation surface,
 or alternate production mutation path is authorized by this decision.
+
+---
+
+## G10 — Durable post-dispatch consumption and linearizable anti-replay
+
+**Decision:** QUALIFICATION GATE.
+
+G10 closes the production authorization lifecycle boundary left explicitly open
+by G9.
+
+The exact G9 durable claim SHALL be retained as data across the one canonical
+G5 production Orchestrator dispatch. Only after the real Orchestrator result has
+passed the existing G5 Journal and Manifest CAS qualification may that exact
+claim transition from `CLAIMED` to `CONSUMED`.
+
+Durable consumption SHALL bind the exact G4 authorization, operation, physical
+workspace, target, BEFORE hash, replacement hash, production transaction,
+Journal identity, Manifest CAS after OID and one deterministic effect
+fingerprint derived from those qualified production facts.
+
+The `CLAIMED -> CONSUMED` persistence transition SHALL be serialized by an
+exclusive durable per-authorization lock. Concurrent transition attempts cannot
+both proceed. Ambiguous lock ownership remains fail-closed and this gate does
+not authorize automatic stale-lock reclamation.
+
+Identical consumption replay may converge read-only to the same durable
+consumption fingerprint, but it never restores dispatch authority. Conflicting
+transaction, Journal, Manifest CAS or effect evidence fails closed.
+
+G10 introduces no new physical patch primitive, shell, generic process,
+network, provider, credential or alternate mutation authority. The existing
+qualified R3 Journal + Manifest CAS Orchestrator path remains the sole physical
+mutation authority.
+
+The bilingual product contract remains active: human-facing G10 presentation
+must preserve EN-US/PT-BR semantic parity without changing deterministic
+authority.

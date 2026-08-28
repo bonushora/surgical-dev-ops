@@ -229,7 +229,8 @@ function composeAndDispatchNaturalDevelopmentPatch({
     );
   }
 
-  _g9ClaimBeforeRealG5Dispatch(arguments);
+  const g10ClaimContext =
+    _g9ClaimBeforeRealG5Dispatch(arguments);
 
   const orchestration = orchestrate(
     prepared.request,
@@ -237,6 +238,77 @@ function composeAndDispatchNaturalDevelopmentPatch({
   );
 
   const cas = successfulCasEvidence(orchestration);
+
+  /*
+   * G10_DURABLE_POST_DISPATCH_CONSUMPTION
+   *
+   * The exact G9 claim is consumed only after the real G5 Orchestrator result
+   * has passed the existing Journal + Manifest CAS qualification.
+   */
+  const g10EffectBinding = deepFreeze({
+    schema:
+      'sdo.natural_development_production_effect_binding.v1',
+    authorizationFingerprint:
+      patchAuthorization.authorizationFingerprint,
+    operationId:
+      prepared.authority.operationId,
+    physicalWorkspaceIdentity,
+    target:
+      patchProposal.target,
+    beforeSha256:
+      patchProposal.beforeSha256,
+    replacementSha256:
+      patchProposal.replacementSha256,
+    transactionId:
+      cas.transactionId,
+    journalId:
+      cas.journalId,
+    manifestAfterOid:
+      cas.afterManifestOid
+  });
+
+  const g10EffectFingerprint =
+    fingerprint(g10EffectBinding);
+
+  const g10Consumption =
+    _g10LinearizableConsumption
+      .commitLinearizableNaturalDevelopmentAuthorizationConsumption({
+        stateRoot:
+          g10ClaimContext.stateRoot,
+        claim:
+          g10ClaimContext.claim,
+        transactionId:
+          cas.transactionId,
+        journalId:
+          cas.journalId,
+        effectFingerprint:
+          g10EffectFingerprint,
+        manifestAfterOid:
+          cas.afterManifestOid
+      });
+
+  if (
+    !g10Consumption ||
+    g10Consumption.state !== 'CONSUMED' ||
+    g10Consumption.authorizationFingerprint !==
+      patchAuthorization.authorizationFingerprint ||
+    g10Consumption.transactionId !==
+      cas.transactionId ||
+    g10Consumption.journalId !==
+      cas.journalId ||
+    g10Consumption.effectFingerprint !==
+      g10EffectFingerprint ||
+    g10Consumption.manifestAfterOid !==
+      cas.afterManifestOid ||
+    g10Consumption.operationalAuthority !== false ||
+    g10Consumption.mutationAuthority !== false ||
+    g10Consumption.dispatchAuthority !== false
+  ) {
+    throw new Error(
+      'G10 durable post-dispatch authorization consumption was not exactly confirmed.'
+    );
+  }
+
 
   const binding = deepFreeze({
     schema: RESULT_SCHEMA,
@@ -261,8 +333,12 @@ function composeAndDispatchNaturalDevelopmentPatch({
     ordinaryWorktreeAuthoritative:
       cas.ordinaryWorktreeAuthoritative,
     authorizationUseRecorded: true,
-    durableAntiReplayQualified: false,
-    nextRequiredStage: 'G6_VALIDATION_THEN_G7_ANTI_REPLAY',
+    durableAntiReplayQualified: true,
+    authorizationConsumptionFingerprint:
+      g10Consumption.consumptionFingerprint,
+    effectFingerprint:
+      g10EffectFingerprint,
+    nextRequiredStage: 'G6_VALIDATION_AND_RECOVERY_RECONCILIATION',
     genericShellAuthority: false,
     credentialAuthority: false,
     externalSideEffectAuthority: false
@@ -298,6 +374,11 @@ const _g9Authorization =
 const _g9AuthorizationStore =
   require(
     '../adapters/natural-development-authorization-consumption-store'
+  );
+
+const _g10LinearizableConsumption =
+  require(
+    '../adapters/natural-development-linearizable-consumption'
   );
 
 function _g9Objects(value, seen = new Set(), output = []) {
@@ -625,7 +706,14 @@ function _g9ClaimBeforeRealG5Dispatch(invocationArguments) {
     );
   }
 
-  return receipt;
+  const g9Receipt =
+    receipt;
+
+  return Object.freeze({
+    receipt: g9Receipt,
+    claim,
+    stateRoot
+  });
 }
 
 module.exports = Object.freeze({
