@@ -78,6 +78,14 @@ const {
   './governed-engineering-agent-loop'
 );
 
+const {
+  createInteractionPreferenceStore
+} = require('./interaction-preference-store');
+
+const {
+  runUnifiedInteractionOnboarding
+} = require('./unified-interaction-onboarding');
+
 const VERSION = '2.6.0-rc.2';
 
 function printVersion() {
@@ -95,6 +103,7 @@ Options:
   --help                 Show this help
   --version              Show the Surgical DevOps version
   --interaction <mode>   Select NATURAL, ENGINEER or EXPERT
+  --configure            Choose and persist the interaction experience
 `
   );
 }
@@ -1162,7 +1171,10 @@ function activateInteractive(repositoryPath = process.cwd()) {
   return activation;
 }
 
-function main(argv = process.argv.slice(2)) {
+async function main(
+  argv = process.argv.slice(2),
+  options = {}
+) {
   if (argv.includes('--version')) {
     printVersion();
     return;
@@ -1192,7 +1204,7 @@ function main(argv = process.argv.slice(2)) {
   }
 
   let interactionMode =
-    'EXPERT';
+    null;
 
   if (interactionIndexes.length === 1) {
     const interactionIndex =
@@ -1211,6 +1223,47 @@ function main(argv = process.argv.slice(2)) {
       argv[interactionIndex + 1];
   }
 
+  const input = options.input || process.stdin;
+  const output = options.output || process.stdout;
+  const preferenceStore =
+    options.preferenceStore ||
+    createInteractionPreferenceStore();
+  const configure = argv.includes('--configure');
+
+  if (
+    configure &&
+    interactionIndexes.length === 1
+  ) {
+    throw new Error(
+      '--configure and --interaction cannot be combined.'
+    );
+  }
+
+  if (configure || interactionMode === null) {
+    const savedPreference =
+      configure ? null : preferenceStore.load();
+
+    if (savedPreference) {
+      interactionMode =
+        savedPreference.interactionMode;
+    } else if (
+      configure ||
+      Boolean(input.isTTY && output.isTTY)
+    ) {
+      const selected =
+        await runUnifiedInteractionOnboarding({
+          input,
+          output,
+          preferenceStore
+        });
+
+      interactionMode =
+        selected.interactionMode;
+    } else {
+      interactionMode = 'EXPERT';
+    }
+  }
+
   const activation =
     createInteractiveActivation(
       process.cwd(),
@@ -1227,13 +1280,15 @@ function main(argv = process.argv.slice(2)) {
     version: VERSION
   }).catch(() => {});
 
-  process.stdout.write(
+  output.write(
     formatInteractiveActivation(activation)
   );
 
   createInteractiveSession(
     activation,
     {
+      input,
+      output,
       patchOptions:
         patchOptionsFromEnvironment()
     }
@@ -1241,7 +1296,12 @@ function main(argv = process.argv.slice(2)) {
 }
 
 if (require.main === module) {
-  main();
+  main().catch((error) => {
+    process.stderr.write(
+      `Surgical initialization failed closed: ${error.message}\n`
+    );
+    process.exitCode = 1;
+  });
 }
 
 module.exports = {

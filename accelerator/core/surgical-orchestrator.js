@@ -233,6 +233,19 @@ function validateControlledRequest(request, repositoryPath, expectedRisk, runtim
         !Array.isArray(selectors) || !selectors.includes(request.action)) {
       return executionDenial('Capability scope mismatch.');
     }
+    if (request.projectionEvidence && (
+      !isDeepFrozen(request.projectionEvidence) ||
+      request.projectionEvidence.schema !==
+        'sdo.natural_development_r3_composition_result.v1' ||
+      request.projectionEvidence.status !== 'COMPLETED' ||
+      request.projectionEvidence.workspace !== repositoryPath ||
+      request.projectionEvidence.target !== request.target ||
+      !/^[a-f0-9]{64}$/.test(
+        request.projectionEvidence.compositionFingerprint || ''
+      )
+    )) {
+      return executionDenial('Manifest CAS projection evidence is malformed or mismatched.');
+    }
   } else if (request.adapter === 'FILESYSTEM_PATCH') {
     const target = grant.scope && grant.scope.target;
     if (!target || target.path !== request.target || !target.beforeSha256 ||
@@ -414,6 +427,9 @@ function evidenceIdentity(request, grantFingerprint) {
         request.grantEvaluation.grant.approvalAuthorityFingerprint || null,
       verifiedIdentityAssertionFingerprint:
         request.grantEvaluation.grant.verifiedIdentityAssertionFingerprint || null
+    } : request.adapter === 'PROCESS_VALIDATION' && request.projectionEvidence ? {
+      projectionCompositionFingerprint:
+        request.projectionEvidence.compositionFingerprint
     } : {}),
     grantFingerprint
   });
@@ -618,9 +634,21 @@ function invokeControlledAdapter(request, runtime, validation, mutationCoordinat
       mutationProvider: resolveMutationProviderRuntime(runtime),
       mutationTransaction: mutationCoordinator });
   }
-  return processValidationAdapter.validateJavaScriptWithGrant({
-    ...common, selector: request.action, target: request.target
-  });
+  const validationRequest = {
+    ...common,
+    selector: request.action,
+    target: request.target,
+    ...(request.projectionEvidence
+      ? { projectionEvidence: request.projectionEvidence }
+      : {})
+  };
+  return request.projectionEvidence
+    ? processValidationAdapter.validateJavaScriptProjectionWithGrant(
+        validationRequest
+      )
+    : processValidationAdapter.validateJavaScriptWithGrant(
+        validationRequest
+      );
 }
 
 function validateAdapterResult(request, result) {

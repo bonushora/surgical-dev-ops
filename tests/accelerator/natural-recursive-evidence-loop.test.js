@@ -1078,3 +1078,76 @@ test(
     );
   }
 );
+
+test(
+  'optional development evidence policy stops before governed dispatch',
+  async () => {
+    let dispatches = 0;
+
+    const result = await runNaturalRecursiveEvidenceLoop({
+      task: projectTask(),
+      activation: activation(),
+      cognitiveSession: {
+        async decideEvidence() {
+          return requestDecision(
+            'READ_FILE',
+            'package.json'
+          );
+        }
+      },
+      dispatchEvidence() {
+        dispatches += 1;
+        throw new Error('must not dispatch');
+      },
+      evaluateEvidenceIntent() {
+        return Object.freeze({
+          decision: 'STOPPED',
+          reason: 'Exact development target is outside the contract.'
+        });
+      },
+      deterministicProjectGrounding: false
+    });
+
+    assert.equal(
+      result.status,
+      'HUMAN_AUTHORITY_REQUIRED'
+    );
+    assert.equal(dispatches, 0);
+    assert.match(result.reason, /outside the contract/i);
+  }
+);
+
+test(
+  'malformed development evidence policy fails closed before dispatch',
+  async () => {
+    let dispatches = 0;
+
+    const result = await runNaturalRecursiveEvidenceLoop({
+      task: projectTask(),
+      activation: activation(),
+      cognitiveSession: {
+        async decideEvidence() {
+          return requestDecision(
+            'READ_FILE',
+            'package.json'
+          );
+        }
+      },
+      dispatchEvidence() {
+        dispatches += 1;
+        throw new Error('must not dispatch');
+      },
+      evaluateEvidenceIntent() {
+        return {
+          decision: 'CONTAINED',
+          reason: 'Mutable policy evidence is invalid.'
+        };
+      },
+      deterministicProjectGrounding: false
+    });
+
+    assert.equal(result.status, 'FAILED');
+    assert.equal(dispatches, 0);
+    assert.match(result.reason, /malformed evidence/i);
+  }
+);

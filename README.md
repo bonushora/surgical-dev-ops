@@ -100,6 +100,12 @@ The reference local cognitive provider is Ollama when available. Providers are
 replaceable and remain outside operational authority. If a cognitive provider is
 unavailable, deterministic behavior remains active and fails safely.
 
+For advanced repository engineering, OpenAI Codex is the recommended reference
+agent and the target closest to the complete conversational development loop.
+This recommendation does not grant privileged authority and does not claim
+universal comparative superiority. See the bilingual
+[AI provider selection guide](./docs/AI_PROVIDER_SELECTION.md).
+
 Broad project analysis in NATURAL mode crosses explicit human authorization and a
 governed recursive evidence loop. Workspace facts must come from
 Orchestrator-qualified evidence, not model memory or inference.
@@ -124,6 +130,25 @@ Start the governed CLI:
 ```bash
 surgical-devops
 ```
+
+On the first human terminal launch, a bilingual onboarding selects one of the
+three experiences provided by this same installation: `NATURAL`, `ENGINEER` or
+`EXPERT`. Reconfigure the saved interface preference with:
+
+```bash
+surgical-devops --configure
+```
+
+Use an invocation-scoped override without changing the saved preference:
+
+```bash
+surgical-devops --interaction NATURAL
+surgical-devops --interaction ENGINEER
+surgical-devops --interaction EXPERT
+```
+
+The preference contains no operational authority. All profiles use the same
+Orchestrator, BH-SEP/BH-SDP, R3, journal, Manifest CAS and anti-replay contracts.
 
 The compatibility executable `surgical` is also provided. Run the canonical suite
 from a checkout with:
