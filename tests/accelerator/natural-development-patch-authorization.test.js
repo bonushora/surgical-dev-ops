@@ -194,6 +194,10 @@ test('G4 binds exact G1 G2 G3 content to verified human identity', () => {
   assert.equal(result.beforeSha256, proposal.beforeSha256);
   assert.equal(result.afterSha256, proposal.replacementSha256);
   assert.equal(result.humanSubject, 'human-1');
+  assert.equal(
+    result.humanIdentityIssuer,
+    'local-qualified-human-verifier'
+  );
   assert.match(result.humanIdentityFingerprint, /^[a-f0-9]{64}$/);
   assert.match(result.authorizationFingerprint, /^[a-f0-9]{64}$/);
   assert.equal(Object.isFrozen(result), true);
@@ -301,7 +305,10 @@ test('G4 exports no execution mutation dispatch grant or consumption surface', (
 
   assert.deepEqual(
     Object.keys(api).filter((key) => typeof api[key] === 'function'),
-    ['materializeNaturalDevelopmentPatchAuthorization']
+    [
+      'materializeNaturalDevelopmentPatchAuthorization',
+      'evaluateNaturalDevelopmentPatchAuthorization'
+    ]
   );
 
   for (const forbidden of [
@@ -310,6 +317,54 @@ test('G4 exports no execution mutation dispatch grant or consumption surface', (
     assert.equal(
       Object.keys(api).some((key) => key.toLowerCase().includes(forbidden)),
       false
+    );
+  }
+});
+
+test('G4 evaluation requires current authoritative time and exact R3 identity', () => {
+  const proposal = patchProposal();
+  const authorization = authorize(proposal);
+  const api = require(
+    '../../accelerator/cli/natural-development-patch-authorization'
+  );
+
+  const allowed = api.evaluateNaturalDevelopmentPatchAuthorization(
+    authorization,
+    proposal,
+    {
+      temporalAuthority: temporal(),
+      expectedHumanSubject: 'human-1',
+      expectedHumanIdentityIssuer: 'local-qualified-human-verifier'
+    }
+  );
+
+  assert.equal(allowed.decision, 'ALLOWED');
+  assert.equal(allowed.operationalAuthority, false);
+
+  for (const options of [
+    {
+      temporalAuthority: temporal(),
+      expectedHumanSubject: 'other-human',
+      expectedHumanIdentityIssuer: 'local-qualified-human-verifier'
+    },
+    {
+      temporalAuthority: temporal(),
+      expectedHumanSubject: 'human-1',
+      expectedHumanIdentityIssuer: 'other-issuer'
+    },
+    {
+      temporalAuthority: temporal('2026-08-28T04:10:00.000Z'),
+      expectedHumanSubject: 'human-1',
+      expectedHumanIdentityIssuer: 'local-qualified-human-verifier'
+    }
+  ]) {
+    assert.equal(
+      api.evaluateNaturalDevelopmentPatchAuthorization(
+        authorization,
+        proposal,
+        options
+      ).decision,
+      'DENIED'
     );
   }
 });

@@ -2,7 +2,7 @@
 
 English: [ADR-028 in English](./ADR-028-natural-governed-development-execution-loop.md)
 
-**Status:** G1–G4 IMPLEMENTADOS / ETAPAS POSTERIORES NÃO IMPLEMENTADAS
+**Status:** G1–G5 IMPLEMENTADOS / ETAPAS POSTERIORES NÃO IMPLEMENTADAS
 **Data:** 2026-08-28
 **Escopo:** Surgical DevOps / desenvolvimento governado no modo NATURAL
 **Estende:** ADR-004, ADR-006, ADR-007, ADR-010, ADR-014 e ADR-019
@@ -132,6 +132,35 @@ não consumida e expõe autoridade operacional, de mutação, aprovação e disp
 iguais a zero. Consumo, estado anti-replay e mutação física pertencem ao G5 e ao
 G7, não a esta fronteira de materialização de evidência.
 
+## G5 — composição R3 qualificada
+
+O G5 introduz `sdo.natural_development_r3_composition_result.v1` como única
+ponte do desenvolvimento NATURAL para o caminho de mutação de produção já
+existente. Ele não implementa novo signer, clock, avaliador de aprovação, grant,
+adapter de mutação, journal nem provider de Manifest CAS. Ele prepara o patch
+exato por `createGovernedPatchRequest` e despacha esse pedido preparado pelo
+Surgical Orchestrator canônico.
+
+Antes do dispatch, o G5 exige independentemente:
+
+- que o HEAD físico atual do repositório seja igual ao HEAD do G1;
+- que a identidade física fornecida do workspace e o alvo permaneçam no G1;
+- que os bytes canônicos da substituição G3 reproduzam o hash AFTER exato;
+- que a preparação R3 de produção reproduza alvo, BEFORE e AFTER do G3;
+- evidência atual do clock autoritativo para o intervalo G4; e
+- que o sujeito humano e o emissor da identidade G4 sejam iguais à autoridade
+  humana local R3 de produção.
+
+Sucesso exige evidência de produção `COMPLETED` e `APPLIED`, transação e journal
+de mutação vinculados e OIDs do Manifest AFTER esperado, observado e autoritativo
+iguais. O resultado registra a projeção gerenciada e declara explicitamente que
+o pathname comum do worktree não é autoritativo.
+
+O G5 registra que esta composição usou a autorização G4, mas não alega
+qualificação anti-replay durável entre processos. Consumo durável e imposição
+contra replay conflitante permanecem trabalho G7. Validação qualificada e a
+decisão delimitada de correção permanecem trabalho G6.
+
 ## Invariantes de segurança
 
 - Saída cognitiva nunca se torna autoridade operacional.
@@ -143,6 +172,9 @@ G7, não a esta fronteira de materialização de evidência.
 - O G1 não exporta método de filesystem, processo, execução, aprovação, grant
   ou dispatch.
 - O G4 não exporta método de execução, mutação, dispatch, grant ou consumo.
+- O G5 alcança mutação somente pela preparação R3 governada existente e pelo
+  Orchestrator canônico; ele não exporta superfície genérica de processo ou
+  shell.
 - O envelope read-only existente permanece inalterado.
 - A fronteira R3 de produção existente permanece inalterada.
 - A versão `v2.6.0-rc.2` permanece imutável.
@@ -151,10 +183,11 @@ G7, não a esta fronteira de materialização de evidência.
 
 O G1 não autoriza coleta de evidências. O G2 compõe somente as fronteiras
 read-only e de validação fixa já qualificadas. O G3 materializa apenas dados
-para revisão. O G4 materializa somente evidência de autorização humana exata;
-ele não consome essa evidência, não cria grant R3, não aplica patch, não retoma
-recovery e não implementa o loop autônomo de correção. Essas capacidades exigem
-qualificação independente em etapas posteriores. Uma suíte G1–G4 verde comprova
-somente o contrato canônico, o planejamento governado, a contenção de
-evidências, a proposta exata de patch/diff sem autoridade e o vínculo exato e
-não reutilizável da autorização humana.
+para revisão. O G4 materializa somente evidência de autorização humana exata. O
+G5 compõe essa evidência com o caminho de produção R3, journal e Manifest CAS já
+qualificado, mas não qualifica validação pós-mutação, correção delimitada,
+consumo durável da autorização, recovery nem anti-replay conflitante. Essas
+capacidades exigem qualificação independente em etapas posteriores. Uma suíte
+G1–G5 verde comprova o contrato canônico, o planejamento governado, a contenção
+de evidências, a proposta exata de patch/diff sem autoridade, o vínculo exato e
+não reutilizável da autorização humana e uma composição R3 de produção exata.

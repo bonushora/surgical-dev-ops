@@ -12,6 +12,10 @@ const {
   evaluateVerifiedHumanIdentityAssertion
 } = require('../core/human-identity-assertion');
 
+const {
+  classifyExpiry
+} = require('../core/authoritative-clock');
+
 const AUTHORIZATION_SCHEMA =
   'sdo.natural_development_patch_authorization.v1';
 
@@ -198,6 +202,9 @@ function materializeNaturalDevelopmentPatchAuthorization({
     afterSha256: patchProposal.replacementSha256,
     patchAttempt: patchProposal.patchAttempt,
     humanSubject: identity.subject.id,
+    humanIdentityIssuer: identity.issuer,
+    humanIdentityAuthenticationMethod:
+      identity.authentication.method,
     humanIdentityFingerprint: identity.fingerprint,
     humanIdentityAssertionId: identity.assertionId,
     operationId,
@@ -219,9 +226,134 @@ function materializeNaturalDevelopmentPatchAuthorization({
   });
 }
 
+function denied(reason) {
+  return deepFreeze({
+    schema:
+      'sdo.natural_development_patch_authorization_evaluation.v1',
+    decision: 'DENIED',
+    reason,
+    authorization: null,
+    operationalAuthority: false,
+    mutationAuthority: false,
+    dispatchAuthority: false
+  });
+}
+
+function evaluateNaturalDevelopmentPatchAuthorization(
+  authorization,
+  patchProposal,
+  {
+    temporalAuthority,
+    expectedHumanSubject,
+    expectedHumanIdentityIssuer
+  } = {}
+) {
+  try {
+    validatePatchProposal(patchProposal);
+  } catch (error) {
+    return denied(error.message);
+  }
+
+  if (
+    !authorization ||
+    authorization.schema !== AUTHORIZATION_SCHEMA ||
+    authorization.state !== 'AUTHORIZED_FOR_R3_COMPOSITION' ||
+    !Object.isFrozen(authorization) ||
+    authorization.singleUse !== true ||
+    authorization.reusableApproval !== false ||
+    authorization.consumed !== false ||
+    authorization.operationalAuthority !== false ||
+    authorization.mutationAuthority !== false ||
+    authorization.approvalAuthority !== false ||
+    authorization.dispatchAuthority !== false
+  ) {
+    return denied(
+      'Immutable unconsumed G4 authorization evidence is required.'
+    );
+  }
+
+  const {
+    authorizationFingerprint,
+    ...binding
+  } = authorization;
+
+  if (
+    !/^[a-f0-9]{64}$/.test(authorizationFingerprint) ||
+    fingerprint(binding) !== authorizationFingerprint
+  ) {
+    return denied('G4 authorization binding is malformed.');
+  }
+
+  const exact = [
+    ['proposalFingerprint', patchProposal.proposalFingerprint],
+    ['contractFingerprint', patchProposal.contractFingerprint],
+    ['planningFingerprint', patchProposal.planningFingerprint],
+    ['diffFingerprint', patchProposal.exactDiff.diffFingerprint],
+    ['target', patchProposal.target],
+    ['beforeSha256', patchProposal.beforeSha256],
+    ['afterSha256', patchProposal.replacementSha256],
+    ['patchAttempt', patchProposal.patchAttempt]
+  ];
+
+  if (exact.some(([field, value]) => authorization[field] !== value)) {
+    return denied('G4 authorization differs from the exact G3 proposal.');
+  }
+
+  if (
+    typeof expectedHumanSubject !== 'string' ||
+    authorization.humanSubject !== expectedHumanSubject ||
+    typeof expectedHumanIdentityIssuer !== 'string' ||
+    authorization.humanIdentityIssuer !== expectedHumanIdentityIssuer
+  ) {
+    return denied('G4 human identity differs from the R3 authority.');
+  }
+
+  if (
+    !temporalAuthority ||
+    !temporalAuthority.reading ||
+    temporalAuthority.requireCurrent !== true
+  ) {
+    return denied(
+      'Authoritative clock evidence is required for G4 validity.'
+    );
+  }
+
+  let expiry;
+
+  try {
+    expiry = classifyExpiry(temporalAuthority.reading, {
+      issuedAt: authorization.authorizedAt,
+      expiresAt: authorization.expiresAt
+    });
+  } catch {
+    return denied('Authoritative G4 time evidence is malformed.');
+  }
+
+  if (expiry.decision !== 'ALLOWED') {
+    return denied(
+      expiry.classification === 'ISSUED_IN_FUTURE'
+        ? 'G4 authorization is not yet valid.'
+        : 'G4 authorization is expired.'
+    );
+  }
+
+  return deepFreeze({
+    schema:
+      'sdo.natural_development_patch_authorization_evaluation.v1',
+    decision: 'ALLOWED',
+    reason:
+      'Exact G4 authorization is current and bound to the R3 human authority.',
+    authorization,
+    operationalAuthority: false,
+    mutationAuthority: false,
+    dispatchAuthority: false
+  });
+}
+
 module.exports = Object.freeze({
   AUTHORIZATION_SCHEMA,
   HUMAN_DECISION_SCHEMA,
   AUTHORIZATION_AUDIENCE,
-  materializeNaturalDevelopmentPatchAuthorization
+  materializeNaturalDevelopmentPatchAuthorization,
+  evaluateNaturalDevelopmentPatchAuthorization
 });

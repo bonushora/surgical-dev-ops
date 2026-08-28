@@ -2,7 +2,7 @@
 
 Português: [ADR-028 em PT-BR](./ADR-028-natural-governed-development-execution-loop_PT-BR.md)
 
-**Status:** G1–G4 IMPLEMENTED / LATER STAGES NOT IMPLEMENTED
+**Status:** G1–G5 IMPLEMENTED / LATER STAGES NOT IMPLEMENTED
 **Date:** 2026-08-28
 **Scope:** Surgical DevOps / NATURAL governed development
 **Extends:** ADR-004, ADR-006, ADR-007, ADR-010, ADR-014 and ADR-019
@@ -125,6 +125,35 @@ unconsumed and exposes zero operational, mutation, approval or dispatch
 authority. Consumption, anti-replay state and physical mutation belong to G5
 and G7 rather than this evidence-materialization boundary.
 
+## G5 qualified R3 composition
+
+G5 introduces `sdo.natural_development_r3_composition_result.v1` as the only
+NATURAL development bridge into the existing production mutation path. It does
+not implement a new signer, clock, approval evaluator, grant, mutation adapter,
+journal or Manifest CAS provider. It prepares the exact patch through
+`createGovernedPatchRequest` and dispatches that prepared request through the
+canonical Surgical Orchestrator.
+
+Before dispatch, G5 independently requires:
+
+- the current physical repository HEAD to equal the G1 HEAD;
+- the supplied physical workspace identity and target to remain inside G1;
+- the canonical G3 replacement bytes to reproduce the exact AFTER hash;
+- the production R3 preparation to reproduce the G3 target, BEFORE and AFTER;
+- current authoritative-clock evidence for the G4 interval; and
+- the G4 human subject and identity issuer to equal the production R3 local
+  human authority.
+
+Success requires `COMPLETED` and `APPLIED` production evidence, a bound mutation
+transaction and journal, and equal expected, observed and authoritative AFTER
+Manifest OIDs. The result records the managed projection and explicitly states
+that the ordinary worktree pathname is not authoritative.
+
+G5 records that this composition used the G4 authorization, but it does not
+claim durable cross-process anti-replay qualification. Durable consumption and
+conflicting replay enforcement remain G7 work. Qualified validation and the
+bounded correction decision remain G6 work.
+
 ## Security invariants
 
 - Cognitive output never becomes operational authority.
@@ -136,6 +165,8 @@ and G7 rather than this evidence-materialization boundary.
 - G1 exports no filesystem, process, execution, approval, grant or dispatch
   method.
 - G4 exports no execution, mutation, dispatch, grant or consumption method.
+- G5 reaches mutation only through the existing governed R3 preparation and
+  canonical Orchestrator; it exports no generic process or shell surface.
 - The existing read-only task envelope remains unchanged.
 - The existing production R3 boundary remains unchanged.
 - `v2.6.0-rc.2` remains immutable.
@@ -144,10 +175,11 @@ and G7 rather than this evidence-materialization boundary.
 
 G1 does not authorize evidence collection. G2 composes only already-qualified
 read-only evidence and fixed validation boundaries. G3 materializes review data
-only. G4 materializes exact human-authorization evidence only; it does not
-consume that evidence, mint an R3 grant, apply a patch, resume recovery or
-implement the autonomous correction loop. Those capabilities require
-independent later-stage qualification. A green G1–G4 suite proves only the
-canonical task contract, governed planning, evidence containment, exact
-authority-free patch/diff proposal and exact non-reusable human-authorization
-binding.
+only. G4 materializes exact human-authorization evidence only. G5 composes that
+evidence with the already-qualified production R3, journal and Manifest CAS
+path, but does not qualify post-mutation validation, bounded correction,
+durable authorization consumption, recovery or conflicting anti-replay. Those
+capabilities require independent later-stage qualification. A green G1–G5
+suite proves the canonical task contract, governed planning, evidence
+containment, exact authority-free patch/diff proposal, exact non-reusable human
+authorization binding and one exact production R3 composition.
