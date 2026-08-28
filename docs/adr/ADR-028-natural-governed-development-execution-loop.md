@@ -383,3 +383,49 @@ mutation authority.
 The bilingual product contract remains active: human-facing G10 presentation
 must preserve EN-US/PT-BR semantic parity without changing deterministic
 authority.
+
+---
+
+## G10 Freeze — Production anti-replay closure
+
+**Decision:** ACCEPTED / FROZEN.
+
+The qualified physical G10 implementation is anchored at:
+
+`0fd113bd726f0d55eca3dd759c9fc259fafe07d5`
+
+Commit subject:
+
+`feat(natural): consume real R3 result with linearizable anti-replay`
+
+The frozen production invariant is:
+
+`exact G4 authorization -> durable CLAIM -> one real G5 Orchestrator dispatch -> qualified Journal + Manifest CAS result -> durable CONSUMED`
+
+The same exact authorization cannot reach a second real Orchestrator dispatch.
+Identical completed consumption may converge read-only. Conflicting transaction,
+Journal, Manifest CAS or effect evidence fails closed.
+
+G10 adds no generic filesystem mutation, shell, process, network, credential,
+provider or alternate mutation authority. The existing qualified R3 Journal +
+Manifest CAS path remains the sole physical mutation authority.
+
+Qualification evidence recorded for the implementation gate:
+
+- directed G10: 7 PASS / 0 FAIL;
+- G5-G10 regression: 37 PASS / 0 FAIL;
+- native suite at G10 commit: 1,098 tests, 1,093 PASS, 0 FAIL, 5 SKIPPED;
+- dependency audits: 0 vulnerabilities;
+- worktree clean;
+- no push at implementation time.
+
+The later bilingual onboarding commit
+`0e434a6f51a3b921129914c21f564f04df1cebf3` is a descendant of the G10
+implementation and does not replace or reopen this invariant.
+
+Explicit non-claims remain unchanged: this freeze does not claim universal
+power-loss safety, distributed cross-host locking or automatic stale-lock
+reclamation.
+
+`BILINGUAL_PRODUCT_CONTRACT = EN_US + PT_BR` remains binding and language does
+not alter authority or deterministic state.

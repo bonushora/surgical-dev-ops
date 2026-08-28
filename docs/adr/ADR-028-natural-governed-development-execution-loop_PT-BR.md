@@ -397,3 +397,51 @@ qualificado existente do Orchestrator R3 com Journal + Manifest CAS permanece a
 
 O contrato bilíngue do produto permanece ativo: apresentação humana do G10 deve
 preservar paridade semântica EN-US/PT-BR sem alterar autoridade determinística.
+
+---
+
+## Congelamento G10 — Fechamento do anti-replay em produção
+
+**Decisão:** APROVADA / CONGELADA.
+
+A implementação física qualificada do G10 está ancorada em:
+
+`0fd113bd726f0d55eca3dd759c9fc259fafe07d5`
+
+Subject do commit:
+
+`feat(natural): consume real R3 result with linearizable anti-replay`
+
+O invariante de produção congelado é:
+
+`autorização G4 exata -> CLAIM durável -> um dispatch real G5 ao Orchestrator -> resultado qualificado de Journal + Manifest CAS -> CONSUMED durável`
+
+A mesma autorização exata não pode alcançar um segundo dispatch real ao
+Orchestrator. Consumo completo idêntico pode convergir em modo read-only.
+Evidência conflitante de transaction, Journal, Manifest CAS ou efeito falha
+fechada.
+
+O G10 não adiciona autoridade genérica de mutação de filesystem, shell,
+processo, rede, credencial, provider ou caminho alternativo de mutação. O
+caminho R3 já qualificado com Journal + Manifest CAS permanece a única
+autoridade de mutação física.
+
+Evidência registrada no gate de implementação:
+
+- G10 dirigido: 7 PASS / 0 FAIL;
+- regressão G5-G10: 37 PASS / 0 FAIL;
+- suíte nativa no commit G10: 1.098 testes, 1.093 PASS, 0 FAIL, 5 SKIPPED;
+- auditorias de dependência: 0 vulnerabilidades;
+- worktree limpo;
+- nenhum push no momento da implementação.
+
+O commit posterior de onboarding bilíngue
+`0e434a6f51a3b921129914c21f564f04df1cebf3` é descendente da implementação
+G10 e não substitui nem reabre este invariante.
+
+As não-afirmações explícitas permanecem: este congelamento não afirma segurança
+universal contra perda de energia, locking distribuído entre hosts ou
+recuperação automática de stale lock.
+
+`BILINGUAL_PRODUCT_CONTRACT = EN_US + PT_BR` permanece vinculante e idioma não
+altera autoridade nem estado determinístico.
