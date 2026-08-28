@@ -417,27 +417,16 @@ function createNaturalCognitiveSession(
         );
       }
 
-      let result =
+      const result =
         await invokeOnce();
 
       /*
-       * Cognitive retry is bounded to exactly one additional
-       * attempt and carries zero operational authority.
+       * Cognitive failure is returned immediately.
        *
-       * This does not retry an operation, patch, command,
-       * approval or filesystem action.
+       * Automatic retry is forbidden because it doubles
+       * human-visible latency without adding governed evidence
+       * or operational authority.
        */
-      if (
-        result &&
-        result.schema ===
-          'sdo.ai_cognitive_result.v1' &&
-        result.status ===
-          'FAILED'
-      ) {
-        result =
-          await invokeOnce();
-      }
-
       const formatted =
         formatCognitiveResult(result);
 

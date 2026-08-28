@@ -47,6 +47,10 @@ const {
 } = require('./natural-assistance-context');
 
 const {
+  detectNaturalResponseLanguage
+} = require('./natural-response-language');
+
+const {
   createNaturalSessionControl,
   formatProviderStatus
 } = require('./natural-session-control');
@@ -541,6 +545,25 @@ function dispatchInteractiveIntent(
   );
 }
 
+function formatCognitiveProgressMessage(
+  input
+) {
+  if (
+    detectNaturalResponseLanguage(input) ===
+      'en'
+  ) {
+    return (
+      'Processing with the local cognitive provider. ' +
+      'This attempt is limited to 60 seconds; on failure, deterministic governance remains active.\n'
+    );
+  }
+
+  return (
+    'Processando com o provider cognitivo local. ' +
+    'Esta tentativa está limitada a 60 segundos; em caso de falha, a governança determinística permanece ativa.\n'
+  );
+}
+
 function createInteractiveSession(
   activation,
   options = {}
@@ -582,6 +605,11 @@ function createInteractiveSession(
       return;
     }
 
+    /*
+     * Separate the completed response from the next prompt
+     * by one canonical visual blank line.
+     */
+    output.write('\n');
     rl.resume();
 
     if (!interfaceClosed) {
@@ -1073,6 +1101,12 @@ function createInteractiveSession(
                 naturalUnknownMessage()
               );
             } else {
+              output.write(
+                formatCognitiveProgressMessage(
+                  result.cognitiveInput
+                )
+              );
+
               const cognitiveOutput =
                 await cognitiveSession.ask(
                   result.cognitiveInput,
@@ -1215,6 +1249,7 @@ module.exports = {
   orchestrate,
   createInteractiveActivation,
   formatInteractiveActivation,
+  formatCognitiveProgressMessage,
   activateInteractive,
   handleInteractiveCommand,
   createInteractiveSession,
