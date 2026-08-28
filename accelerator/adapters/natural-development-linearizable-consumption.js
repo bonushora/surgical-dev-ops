@@ -9,6 +9,10 @@ const core =
 const store =
   require('./natural-development-authorization-consumption-store');
 
+const {
+  defaultFilesystemDurabilityAdapter
+} = require('./filesystem-durability-adapter');
+
 const SCHEMA =
   'sdo.natural_development_linearizable_consumption_receipt.v1';
 
@@ -27,15 +31,14 @@ function canonicalRoot(value) {
 
   if (
     !stat.isDirectory() ||
-    stat.isSymbolicLink() ||
-    fs.realpathSync(value) !== value
+    stat.isSymbolicLink()
   ) {
     throw new Error(
       'G10 authorization-consumption state root is unsafe or ambiguous.'
     );
   }
 
-  return value;
+  return fs.realpathSync(value);
 }
 
 function fingerprint(value) {
@@ -57,14 +60,8 @@ function lockPath(stateRoot, authorizationFingerprint) {
   try {
     fs.mkdirSync(lockRoot, { mode: 0o700 });
 
-    const parent =
-      fs.openSync(root, fs.constants.O_RDONLY);
-
-    try {
-      fs.fsyncSync(parent);
-    } finally {
-      fs.closeSync(parent);
-    }
+    defaultFilesystemDurabilityAdapter
+      .confirmLock(root);
   } catch (error) {
     if (!error || error.code !== 'EEXIST') throw error;
   }
@@ -130,17 +127,8 @@ function acquire(stateRoot, authorizationFingerprint) {
 
   fs.closeSync(descriptor);
 
-  const parent =
-    fs.openSync(
-      path.dirname(file),
-      fs.constants.O_RDONLY
-    );
-
-  try {
-    fs.fsyncSync(parent);
-  } finally {
-    fs.closeSync(parent);
-  }
+  defaultFilesystemDurabilityAdapter
+    .confirmLock(path.dirname(file));
 
   return Object.freeze({
     file,
@@ -180,17 +168,8 @@ function release(lock) {
 
   fs.unlinkSync(lock.file);
 
-  const parent =
-    fs.openSync(
-      path.dirname(lock.file),
-      fs.constants.O_RDONLY
-    );
-
-  try {
-    fs.fsyncSync(parent);
-  } finally {
-    fs.closeSync(parent);
-  }
+  defaultFilesystemDurabilityAdapter
+    .confirmLock(path.dirname(lock.file));
 }
 
 function commitLinearizableNaturalDevelopmentAuthorizationConsumption({

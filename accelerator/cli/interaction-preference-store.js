@@ -79,18 +79,14 @@ function safeDirectory(directory, { create = false } = {}) {
 
   if (
     !stat.isDirectory() ||
-    stat.isSymbolicLink() ||
-    !samePhysicalPath(
-      fs.realpathSync(directory),
-      directory
-    )
+    stat.isSymbolicLink()
   ) {
     throw new Error(
       'Interaction preference directory is unsafe or ambiguous.'
     );
   }
 
-  return directory;
+  return fs.realpathSync(directory);
 }
 
 function createInteractionPreferenceStore(options = {}) {

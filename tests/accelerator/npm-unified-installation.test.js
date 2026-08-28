@@ -8,15 +8,28 @@ const test = require('node:test');
 const { execFileSync } = require('node:child_process');
 
 const ROOT = path.resolve(__dirname, '../..');
-const NPM = process.platform === 'win32' ? 'npm.cmd' : 'npm';
+const NPM_CLI = process.env.npm_execpath;
+
+function npm(arguments_, options) {
+  assert.equal(
+    typeof NPM_CLI,
+    'string',
+    'npm_execpath is required by the canonical npm test command'
+  );
+
+  return execFileSync(
+    process.execPath,
+    [NPM_CLI, ...arguments_],
+    options
+  );
+}
 
 test('one npm installation exposes all three interaction experiences', () => {
   const temporary = fs.mkdtempSync(
     path.join(os.tmpdir(), 'sdo-unified-install-')
   );
   const packOutput = JSON.parse(
-    execFileSync(
-      NPM,
+    npm(
       [
         'pack',
         '--json',
@@ -36,8 +49,7 @@ test('one npm installation exposes all three interaction experiences', () => {
   );
   const prefix = path.join(temporary, 'prefix');
 
-  execFileSync(
-    NPM,
+  npm(
     [
       'install',
       '--global',

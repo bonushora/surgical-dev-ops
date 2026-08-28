@@ -22,9 +22,18 @@ const CLI = path.join(
 );
 
 function temporaryDirectory() {
-  return fs.mkdtempSync(
+  return fs.realpathSync(fs.mkdtempSync(
     path.join(os.tmpdir(), 'sdo-onboarding-')
-  );
+  ));
+}
+
+function configurationEnvironment(configurationBase) {
+  return {
+    ...process.env,
+    XDG_CONFIG_HOME: configurationBase,
+    LOCALAPPDATA: configurationBase,
+    APPDATA: configurationBase
+  };
 }
 
 test('one preference store persists interface only and never authority', () => {
@@ -83,10 +92,8 @@ test('corrupt or authority-bearing preference fails closed', () => {
 
 test('bilingual onboarding persists NATURAL and subsequent launch reuses it', () => {
   const configurationBase = temporaryDirectory();
-  const environment = {
-    ...process.env,
-    XDG_CONFIG_HOME: configurationBase
-  };
+  const environment =
+    configurationEnvironment(configurationBase);
 
   const configured = spawnSync(
     process.execPath,
@@ -143,10 +150,7 @@ test('explicit interaction override wins without rewriting saved preference', ()
     [CLI, '--interaction', 'EXPERT'],
     {
       cwd: ROOT,
-      env: {
-        ...process.env,
-        XDG_CONFIG_HOME: configurationBase
-      },
+      env: configurationEnvironment(configurationBase),
       input: '',
       encoding: 'utf8'
     }
@@ -167,10 +171,7 @@ test('non-interactive launch without preference preserves EXPERT compatibility',
     [CLI],
     {
       cwd: ROOT,
-      env: {
-        ...process.env,
-        XDG_CONFIG_HOME: configurationBase
-      },
+      env: configurationEnvironment(configurationBase),
       input: '',
       encoding: 'utf8'
     }
