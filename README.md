@@ -100,6 +100,12 @@ The reference local cognitive provider is Ollama when available. Providers are
 replaceable and remain outside operational authority. If a cognitive provider is
 unavailable, deterministic behavior remains active and fails safely.
 
+For advanced repository engineering, OpenAI Codex is the recommended reference
+agent and the target closest to the complete conversational development loop.
+This recommendation does not grant privileged authority and does not claim
+universal comparative superiority. See the bilingual
+[AI provider selection guide](./docs/AI_PROVIDER_SELECTION.md).
+
 Broad project analysis in NATURAL mode crosses explicit human authorization and a
 governed recursive evidence loop. Workspace facts must come from
 Orchestrator-qualified evidence, not model memory or inference.

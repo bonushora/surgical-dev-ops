@@ -92,6 +92,12 @@ O provider local de referência é o Ollama quando disponível. Providers são
 substituíveis e permanecem fora da autoridade operacional. Análises amplas no modo
 NATURAL atravessam autorização humana e um loop recursivo governado de evidências.
 
+Para engenharia avançada de repositório, OpenAI Codex é o agente de referência
+recomendado e o alvo mais próximo do ciclo conversacional completo de
+desenvolvimento. Essa recomendação não concede autoridade privilegiada nem
+alega superioridade comparativa universal. Consulte o
+[guia bilíngue de seleção de agentes de IA](./docs/AI_PROVIDER_SELECTION_PT-BR.md).
+
 O modo ENGINEER acrescenta uma proposta imutável vinculada ao alvo READ_FILE e
 ao SHA-256 BEFORE realmente observados. O fluxo para obrigatoriamente em
 `HUMAN_AUTHORITY_REQUIRED`; a mutação física continua sendo uma operação R3

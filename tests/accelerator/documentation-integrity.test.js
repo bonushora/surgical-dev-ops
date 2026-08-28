@@ -55,6 +55,8 @@ test('international documentation has no unresolved local Markdown targets', () 
     'README.md',
     'README_PT-BR.md',
     'README_EN.md',
+    'docs/AI_PROVIDER_SELECTION.md',
+    'docs/AI_PROVIDER_SELECTION_PT-BR.md',
     'docs/ENGINEERING_EVIDENCE.md',
     'docs/EXTERNAL_ENGINEERING_REVIEW.md',
     'docs/review/TRY_TO_BREAK_IT.md',
@@ -75,6 +77,33 @@ test('international documentation has no unresolved local Markdown targets', () 
     }
   }
   assert.deepEqual(unresolved, []);
+});
+
+test('public AI provider recommendation is bilingual bounded and honest', () => {
+  const english = read('docs/AI_PROVIDER_SELECTION.md');
+  const portuguese = read('docs/AI_PROVIDER_SELECTION_PT-BR.md');
+
+  for (const source of [english, portuguese]) {
+    for (const required of [
+      'OpenAI Codex',
+      'OpenAI Responses',
+      'Qwen 3 8B',
+      'Gemma 3 4B',
+      'Claude Code',
+      'Gemini',
+      'G1–G6',
+      'G7',
+      'G8',
+      'Manifest CAS'
+    ]) assert.match(source, new RegExp(required));
+  }
+
+  assert.match(english, /recommended advanced engineering-agent option/i);
+  assert.match(portuguese, /opção recomendada de agente avançado de engenharia/i);
+  assert.match(english, /not a claim that Codex is\s+universally superior/i);
+  assert.match(portuguese, /não uma alegação de que o\s+Codex é universalmente superior/i);
+  assert.match(english, /does not grant it shell, filesystem, Git, mutation or approval/i);
+  assert.match(portuguese, /não lhe concede autoridade de shell, filesystem, Git, mutação\s+ou aprovação/i);
 });
 
 test('manual NATURAL acceptance preserves equivalent English and Portuguese records', () => {
