@@ -2,7 +2,7 @@
 
 Português: [ADR-028 em PT-BR](./ADR-028-natural-governed-development-execution-loop_PT-BR.md)
 
-**Status:** G1–G2 IMPLEMENTED / LATER STAGES NOT IMPLEMENTED
+**Status:** G1–G3 IMPLEMENTED / LATER STAGES NOT IMPLEMENTED
 **Date:** 2026-08-28
 **Scope:** Surgical DevOps / NATURAL governed development
 **Extends:** ADR-004, ADR-006, ADR-007, ADR-010, ADR-014 and ADR-019
@@ -82,6 +82,29 @@ G2 results bind all evidence and the final cognitive response to the G1
 contract fingerprint. They remain deeply immutable and explicitly carry zero
 operational, mutation, approval and dispatch authority.
 
+## G3 exact patch and diff proposal
+
+G3 introduces `sdo.natural_development_patch_proposal.v1`. It accepts only an
+immutable completed G2 result and an authority-free governed engineering
+proposal. The objective, target and BEFORE SHA-256 must match the G1 contract
+and one exact governed `READ_FILE` evidence item.
+
+The G2 result now carries its own deterministic planning fingerprint. G3
+revalidates that fingerprint and independently verifies the canonical Base64,
+byte length and SHA-256 of the proposed replacement. A no-op replacement,
+target substitution, stale BEFORE evidence or patch-attempt overflow fails
+closed.
+
+G3 emits `sdo.natural_development_exact_diff.v1` using the explicit
+`FULL_FILE_REPLACEMENT` representation. The diff binds target, BEFORE and AFTER
+hashes and byte counts into its own fingerprint. It is exact machine-review
+data, not a claim that truncated evidence is a complete textual line diff.
+
+The final state is `HUMAN_REVIEW_REQUIRED`. The proposal carries the complete
+replacement bytes, validation kind and fingerprints needed by later authority
+stages, but continues to expose zero operational, mutation, approval or
+dispatch authority.
+
 ## Security invariants
 
 - Cognitive output never becomes operational authority.
@@ -99,8 +122,9 @@ operational, mutation, approval and dispatch authority.
 ## Explicit non-claims
 
 G1 does not authorize evidence collection. G2 composes only already-qualified
-read-only evidence and fixed validation boundaries; it does not apply a patch,
-authorize mutation, resume recovery or implement the autonomous correction
-loop. Those capabilities require independent later-stage qualification. A green
-G1–G2 suite proves only the canonical task contract, governed planning and
-fail-closed read-only evidence containment.
+read-only evidence and fixed validation boundaries. G3 materializes review data
+only; it does not apply a patch, authorize mutation, resume recovery or
+implement the autonomous correction loop. Those capabilities require
+independent later-stage qualification. A green G1–G3 suite proves only the
+canonical task contract, governed planning, evidence containment and exact
+authority-free patch/diff proposal.

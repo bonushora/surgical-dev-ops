@@ -200,6 +200,10 @@ test(
     assert.equal(result.mutationAuthority, false);
     assert.equal(result.dispatchAuthority, false);
     assert.equal(Object.isFrozen(result), true);
+    assert.match(
+      result.planningFingerprint,
+      /^[a-f0-9]{64}$/
+    );
   }
 );
 

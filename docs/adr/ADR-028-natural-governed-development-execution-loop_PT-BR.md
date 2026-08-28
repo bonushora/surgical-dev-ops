@@ -2,7 +2,7 @@
 
 English: [ADR-028 in English](./ADR-028-natural-governed-development-execution-loop.md)
 
-**Status:** G1–G2 IMPLEMENTADOS / ETAPAS POSTERIORES NÃO IMPLEMENTADAS
+**Status:** G1–G3 IMPLEMENTADOS / ETAPAS POSTERIORES NÃO IMPLEMENTADAS
 **Data:** 2026-08-28
 **Escopo:** Surgical DevOps / desenvolvimento governado no modo NATURAL
 **Estende:** ADR-004, ADR-006, ADR-007, ADR-010, ADR-014 e ADR-019
@@ -86,6 +86,30 @@ fingerprint do contrato G1. Eles permanecem profundamente imutáveis e carregam
 explicitamente autoridade operacional, de mutação, aprovação e dispatch iguais
 a zero.
 
+## G3 — proposta exata de patch e diff
+
+O G3 introduz `sdo.natural_development_patch_proposal.v1`. Ele aceita somente
+um resultado G2 concluído e imutável e uma proposta governada de engenharia sem
+autoridade. Objetivo, alvo e SHA-256 BEFORE devem corresponder ao contrato G1 e
+a um item exato de evidência governada `READ_FILE`.
+
+O resultado G2 passa a carregar seu próprio fingerprint determinístico de
+planejamento. O G3 revalida esse fingerprint e verifica independentemente o
+Base64 canônico, o tamanho em bytes e o SHA-256 da substituição proposta. Uma
+substituição sem mudança, troca de alvo, evidência BEFORE obsoleta ou estouro do
+limite de tentativas falha fechada.
+
+O G3 emite `sdo.natural_development_exact_diff.v1` com a representação explícita
+`FULL_FILE_REPLACEMENT`. O diff vincula alvo, hashes BEFORE e AFTER e tamanhos em
+bytes em seu próprio fingerprint. Ele é dado exato para revisão mecânica, não
+uma alegação de que evidência truncada representa um diff textual completo por
+linhas.
+
+O estado final é `HUMAN_REVIEW_REQUIRED`. A proposta carrega os bytes completos
+da substituição, o tipo de validação e fingerprints necessários às etapas
+posteriores de autoridade, mas continua expondo autoridade operacional, de
+mutação, aprovação e dispatch iguais a zero.
+
 ## Invariantes de segurança
 
 - Saída cognitiva nunca se torna autoridade operacional.
@@ -103,8 +127,9 @@ a zero.
 ## Não alegações explícitas
 
 O G1 não autoriza coleta de evidências. O G2 compõe somente as fronteiras
-read-only e de validação fixa já qualificadas; ele não aplica patch, não autoriza
-mutação, não retoma recovery e não implementa o loop autônomo de correção. Essas
-capacidades exigem qualificação independente em etapas posteriores. Uma suíte
-G1–G2 verde comprova somente o contrato canônico, o planejamento governado e a
-contenção fail-closed de evidências read-only.
+read-only e de validação fixa já qualificadas. O G3 materializa apenas dados
+para revisão; ele não aplica patch, não autoriza mutação, não retoma recovery e
+não implementa o loop autônomo de correção. Essas capacidades exigem
+qualificação independente em etapas posteriores. Uma suíte G1–G3 verde comprova
+somente o contrato canônico, o planejamento governado, a contenção de evidências
+e a proposta exata de patch/diff sem autoridade.

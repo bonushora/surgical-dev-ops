@@ -6,6 +6,8 @@
  * dispatch an operational effect outside that already-qualified read boundary.
  */
 
+const crypto = require('node:crypto');
+
 const {
   evaluateNaturalDevelopmentTaskBoundary
 } = require('./natural-development-task-contract');
@@ -16,6 +18,13 @@ const {
 
 const RESULT_SCHEMA =
   'sdo.natural_development_planning_loop.v1';
+
+function fingerprint(value) {
+  return crypto
+    .createHash('sha256')
+    .update(JSON.stringify(value))
+    .digest('hex');
+}
 
 function deepFreeze(value) {
   if (
@@ -34,7 +43,7 @@ function deepFreeze(value) {
 }
 
 function result(contract, analysis) {
-  return deepFreeze({
+  const binding = deepFreeze({
     schema: RESULT_SCHEMA,
     status:
       analysis.status === 'HUMAN_AUTHORITY_REQUIRED'
@@ -58,6 +67,11 @@ function result(contract, analysis) {
     mutationAuthority: false,
     approvalAuthority: false,
     dispatchAuthority: false
+  });
+
+  return deepFreeze({
+    ...binding,
+    planningFingerprint: fingerprint(binding)
   });
 }
 
