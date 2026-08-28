@@ -50,6 +50,12 @@ const {
   '../../accelerator/cli/natural-development-r3-composition'
 );
 
+const {
+  runNaturalDevelopmentValidationLoop
+} = require(
+  '../../accelerator/cli/natural-development-validation-loop'
+);
+
 const before = 'const value = 1;\n';
 const after = 'const value = 2;\n';
 const target = 'target.js';
@@ -128,7 +134,10 @@ function artifacts(state, {
   humanSubject = 'human-test',
   issuer = 'local:test-human',
   authorizedAt = new Date().toISOString(),
-  expiresAt = null
+  expiresAt = null,
+  replacement = after,
+  patchAttempt = 1,
+  patchAttemptCeiling = 2
 } = {}) {
   const expiry = expiresAt || new Date(
     Date.parse(authorizedAt) + 5 * 60_000
@@ -139,7 +148,7 @@ function artifacts(state, {
     physicalWorkspaceIdentity,
     repositoryHead: git(state.repo, ['rev-parse', 'HEAD']),
     allowedTargets: [target],
-    patchAttemptCeiling: 2
+    patchAttemptCeiling
   });
 
   const planningBinding = deepFreeze({
@@ -176,7 +185,7 @@ function artifacts(state, {
     objective,
     target,
     beforeSha256: sha(before),
-    replacementBase64: Buffer.from(after).toString('base64'),
+    replacementBase64: Buffer.from(replacement).toString('base64'),
     reason: 'Apply the exact reviewed correction.',
     validationKind: 'VALIDATE_JS'
   });
@@ -184,7 +193,8 @@ function artifacts(state, {
   const patchProposal = materializeNaturalDevelopmentPatchProposal({
     contract,
     planningResult,
-    governedProposal
+    governedProposal,
+    patchAttempt
   });
 
   const humanDecision = deepFreeze({
@@ -274,9 +284,147 @@ test('G5 composes G1-G4 through existing R3 journal and Manifest CAS', () => {
       before
     );
     assert.equal(fs.readFileSync(result.managedProjection, 'utf8'), after);
+
+    const validation = runNaturalDevelopmentValidationLoop({
+      contract: values.contract,
+      patchProposal: values.patchProposal,
+      r3Composition: result
+    });
+
+    assert.equal(validation.status, 'VALIDATED');
+    assert.equal(validation.validationStatus, 'PASSED');
+    assert.equal(
+      validation.authoritativeProjection,
+      result.managedProjection
+    );
+    assert.equal(
+      validation.nextState,
+      'READY_FOR_G7_ANTI_REPLAY_QUALIFICATION'
+    );
   } finally {
     fs.rmSync(state.root, { recursive: true, force: true });
   }
+});
+
+test('G6 failed validation permits only one new bounded human-review attempt', () => {
+  const state = fixture();
+
+  try {
+    const values = artifacts(state, {
+      replacement: 'const value = ;\n',
+      patchAttempt: 1,
+      patchAttemptCeiling: 2
+    });
+    const composition = dispatch(state, values);
+    const validation = runNaturalDevelopmentValidationLoop({
+      contract: values.contract,
+      patchProposal: values.patchProposal,
+      r3Composition: composition
+    });
+
+    assert.equal(validation.status, 'CORRECTION_REQUIRED');
+    assert.equal(validation.validationStatus, 'FAILED');
+    assert.equal(validation.nextPatchAttempt, 2);
+    assert.equal(validation.nextState, 'HUMAN_REVIEW_REQUIRED');
+    assert.equal(validation.automaticCorrection, false);
+    assert.equal(validation.mutationAuthority, false);
+    assert.equal(validation.approvalAuthority, false);
+  } finally {
+    fs.rmSync(state.root, { recursive: true, force: true });
+  }
+});
+
+test('G6 stops when the patch-attempt ceiling is reached', () => {
+  const state = fixture();
+
+  try {
+    const values = artifacts(state, {
+      replacement: 'const value = ;\n',
+      patchAttempt: 2,
+      patchAttemptCeiling: 2
+    });
+    const composition = dispatch(state, values);
+    const validation = runNaturalDevelopmentValidationLoop({
+      contract: values.contract,
+      patchProposal: values.patchProposal,
+      r3Composition: composition
+    });
+
+    assert.equal(validation.status, 'STOPPED');
+    assert.equal(validation.validationStatus, 'FAILED');
+    assert.equal(validation.nextPatchAttempt, null);
+    assert.equal(validation.nextState, 'PATCH_ATTEMPT_BOUND_REACHED');
+  } finally {
+    fs.rmSync(state.root, { recursive: true, force: true });
+  }
+});
+
+test('G6 rejects a corrupt managed projection instead of validating stale worktree content', () => {
+  const state = fixture();
+
+  try {
+    const values = artifacts(state);
+    const composition = dispatch(state, values);
+
+    fs.chmodSync(composition.managedProjection, 0o600);
+    fs.writeFileSync(composition.managedProjection, before);
+
+    assert.throws(
+      () => runNaturalDevelopmentValidationLoop({
+        contract: values.contract,
+        patchProposal: values.patchProposal,
+        r3Composition: composition
+      }),
+      /independently verified Manifest CAS projection/i
+    );
+  } finally {
+    fs.rmSync(state.root, { recursive: true, force: true });
+  }
+});
+
+test('G6 never materializes a missing managed projection during validation', () => {
+  const state = fixture();
+
+  try {
+    const values = artifacts(state);
+    const composition = dispatch(state, values);
+
+    fs.unlinkSync(composition.managedProjection);
+
+    assert.throws(
+      () => runNaturalDevelopmentValidationLoop({
+        contract: values.contract,
+        patchProposal: values.patchProposal,
+        r3Composition: composition
+      }),
+      /independently verified Manifest CAS projection/i
+    );
+    assert.equal(fs.existsSync(composition.managedProjection), false);
+  } finally {
+    fs.rmSync(state.root, { recursive: true, force: true });
+  }
+});
+
+test('G6 exports one bounded validation loop with no correction authority', () => {
+  const api = require(
+    '../../accelerator/cli/natural-development-validation-loop'
+  );
+
+  assert.deepEqual(
+    Object.keys(api).filter((key) => typeof api[key] === 'function'),
+    ['runNaturalDevelopmentValidationLoop']
+  );
+
+  const source = fs.readFileSync(
+    require.resolve(
+      '../../accelerator/cli/natural-development-validation-loop'
+    ),
+    'utf8'
+  );
+
+  assert.doesNotMatch(source, /child_process|execFile|spawn|shell:/);
+  assert.match(source, /NODE_SYNTAX_CHECK/);
+  assert.match(source, /automaticCorrection:\s*false/);
 });
 
 test('G5 rejects stale HEAD before R3 dispatch', () => {
@@ -377,7 +525,6 @@ test('ADR-028 preserves equivalent English and Portuguese G5 claims', () => {
 
   for (const source of [english, portuguese]) {
     for (const marker of [
-      'G1–G5',
       'sdo.natural_development_r3_composition_result.v1',
       'createGovernedPatchRequest',
       'Manifest CAS',
@@ -387,4 +534,34 @@ test('ADR-028 preserves equivalent English and Portuguese G5 claims', () => {
 
   assert.match(english, /does not\s+claim durable cross-process anti-replay/i);
   assert.match(portuguese, /não alega\s+qualificação anti-replay durável/i);
+});
+
+test('ADR-028 preserves equivalent English and Portuguese G6 claims', () => {
+  const english = fs.readFileSync(
+    path.join(
+      __dirname,
+      '../../docs/adr/ADR-028-natural-governed-development-execution-loop.md'
+    ),
+    'utf8'
+  );
+  const portuguese = fs.readFileSync(
+    path.join(
+      __dirname,
+      '../../docs/adr/ADR-028-natural-governed-development-execution-loop_PT-BR.md'
+    ),
+    'utf8'
+  );
+
+  for (const source of [english, portuguese]) {
+    for (const marker of [
+      'G1–G6',
+      'sdo.natural_development_validation_loop.v1',
+      'NODE_SYNTAX_CHECK',
+      'CORRECTION_REQUIRED',
+      'PATCH_ATTEMPT_BOUND_REACHED'
+    ]) assert.match(source, new RegExp(marker));
+  }
+
+  assert.match(english, /Correction is never automatic/i);
+  assert.match(portuguese, /correção nunca é automática/i);
 });

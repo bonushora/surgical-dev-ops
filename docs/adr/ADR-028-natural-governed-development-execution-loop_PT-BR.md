@@ -2,7 +2,7 @@
 
 English: [ADR-028 in English](./ADR-028-natural-governed-development-execution-loop.md)
 
-**Status:** G1–G5 IMPLEMENTADOS / ETAPAS POSTERIORES NÃO IMPLEMENTADAS
+**Status:** G1–G6 IMPLEMENTADOS / ETAPAS POSTERIORES NÃO IMPLEMENTADAS
 **Data:** 2026-08-28
 **Escopo:** Surgical DevOps / desenvolvimento governado no modo NATURAL
 **Estende:** ADR-004, ADR-006, ADR-007, ADR-010, ADR-014 e ADR-019
@@ -161,6 +161,27 @@ qualificação anti-replay durável entre processos. Consumo durável e imposiç
 contra replay conflitante permanecem trabalho G7. Validação qualificada e a
 decisão delimitada de correção permanecem trabalho G6.
 
+## G6 — validação autoritativa e correção delimitada
+
+O G6 introduz `sdo.natural_development_validation_loop.v1`. Ele reabre
+independentemente a autoridade Manifest CAS exata registrada pelo G5 e exige a
+convergência da projeção já materializada, OID atual do Manifest, alvo e SHA-256
+AFTER. Ele nunca valida o worktree comum não autoritativo como substituto da
+projeção gerenciada AFTER.
+
+O Orchestrator canônico recebe o grant R1 `PROCESS_VALIDATION` existente para o
+alvo lógico. Seu adapter controlado é estendido somente para consumir a
+evidência vinculada da projeção G5 e executa o `NODE_SYNTAX_CHECK` fixo já
+existente; nenhum executável, argumento, ambiente ou shell controlado pelo
+chamador é introduzido. O fingerprint da composição da projeção integra a
+identidade da evidência governada.
+
+Uma validação aprovada produz `VALIDATED` e avança somente para qualificação G7.
+Uma validação reprovada produz `CORRECTION_REQUIRED` apenas quando a próxima
+tentativa permanece abaixo do teto G1; caso contrário produz `STOPPED` com
+`PATCH_ATTEMPT_BOUND_REACHED`. A correção nunca é automática. Todo patch
+corrigido deve retornar pela revisão G3, nova autorização G4 e composição R3 G5.
+
 ## Invariantes de segurança
 
 - Saída cognitiva nunca se torna autoridade operacional.
@@ -175,6 +196,8 @@ decisão delimitada de correção permanecem trabalho G6.
 - O G5 alcança mutação somente pela preparação R3 governada existente e pelo
   Orchestrator canônico; ele não exporta superfície genérica de processo ou
   shell.
+- O G6 valida somente a projeção autoritativa recuperada independentemente e
+  não pode aprovar, mutar nem despachar uma correção.
 - O envelope read-only existente permanece inalterado.
 - A fronteira R3 de produção existente permanece inalterada.
 - A versão `v2.6.0-rc.2` permanece imutável.
@@ -185,9 +208,11 @@ O G1 não autoriza coleta de evidências. O G2 compõe somente as fronteiras
 read-only e de validação fixa já qualificadas. O G3 materializa apenas dados
 para revisão. O G4 materializa somente evidência de autorização humana exata. O
 G5 compõe essa evidência com o caminho de produção R3, journal e Manifest CAS já
-qualificado, mas não qualifica validação pós-mutação, correção delimitada,
-consumo durável da autorização, recovery nem anti-replay conflitante. Essas
-capacidades exigem qualificação independente em etapas posteriores. Uma suíte
-G1–G5 verde comprova o contrato canônico, o planejamento governado, a contenção
-de evidências, a proposta exata de patch/diff sem autoridade, o vínculo exato e
-não reutilizável da autorização humana e uma composição R3 de produção exata.
+qualificado. O G6 qualifica a validação fixa da projeção AFTER autoritativa e a
+decisão delimitada de solicitar nova tentativa revisada pelo humano. Ele não
+qualifica consumo durável da autorização, recovery nem anti-replay conflitante.
+Essas capacidades exigem qualificação independente em etapas posteriores. Uma
+suíte G1–G6 verde comprova o contrato canônico, o planejamento governado, a
+contenção de evidências, a proposta exata de patch/diff sem autoridade, o
+vínculo exato e não reutilizável da autorização humana, uma composição R3 de
+produção exata e validação fixa delimitada de sua projeção autoritativa.

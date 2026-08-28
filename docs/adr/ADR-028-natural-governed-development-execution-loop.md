@@ -2,7 +2,7 @@
 
 Português: [ADR-028 em PT-BR](./ADR-028-natural-governed-development-execution-loop_PT-BR.md)
 
-**Status:** G1–G5 IMPLEMENTED / LATER STAGES NOT IMPLEMENTED
+**Status:** G1–G6 IMPLEMENTED / LATER STAGES NOT IMPLEMENTED
 **Date:** 2026-08-28
 **Scope:** Surgical DevOps / NATURAL governed development
 **Extends:** ADR-004, ADR-006, ADR-007, ADR-010, ADR-014 and ADR-019
@@ -154,6 +154,28 @@ claim durable cross-process anti-replay qualification. Durable consumption and
 conflicting replay enforcement remain G7 work. Qualified validation and the
 bounded correction decision remain G6 work.
 
+## G6 authoritative validation and bounded correction
+
+G6 introduces `sdo.natural_development_validation_loop.v1`. It independently
+reopens the exact Manifest CAS authority recorded by G5 and requires the
+already-materialized projection, current Manifest OID, target and AFTER SHA-256
+to converge. It never validates the non-authoritative ordinary worktree as a
+substitute for the managed AFTER projection.
+
+The canonical Orchestrator receives the existing R1 `PROCESS_VALIDATION` grant
+for the logical target. Its controlled adapter is extended only to consume the
+bound G5 projection evidence and runs the existing fixed
+`NODE_SYNTAX_CHECK`; no caller-controlled executable, arguments, environment or
+shell is introduced. The projection composition fingerprint is part of the
+governed evidence identity.
+
+A passed validation produces `VALIDATED` and advances only to G7 qualification.
+A failed validation produces `CORRECTION_REQUIRED` only when the next patch
+attempt remains below the G1 ceiling; otherwise it produces `STOPPED` with
+`PATCH_ATTEMPT_BOUND_REACHED`. Correction is never automatic. Every corrected
+patch must return through G3 review, a fresh G4 authorization and G5 R3
+composition.
+
 ## Security invariants
 
 - Cognitive output never becomes operational authority.
@@ -167,6 +189,8 @@ bounded correction decision remain G6 work.
 - G4 exports no execution, mutation, dispatch, grant or consumption method.
 - G5 reaches mutation only through the existing governed R3 preparation and
   canonical Orchestrator; it exports no generic process or shell surface.
+- G6 validates only the independently recovered authoritative projection and
+  cannot approve, mutate or dispatch a correction.
 - The existing read-only task envelope remains unchanged.
 - The existing production R3 boundary remains unchanged.
 - `v2.6.0-rc.2` remains immutable.
@@ -177,9 +201,11 @@ G1 does not authorize evidence collection. G2 composes only already-qualified
 read-only evidence and fixed validation boundaries. G3 materializes review data
 only. G4 materializes exact human-authorization evidence only. G5 composes that
 evidence with the already-qualified production R3, journal and Manifest CAS
-path, but does not qualify post-mutation validation, bounded correction,
-durable authorization consumption, recovery or conflicting anti-replay. Those
-capabilities require independent later-stage qualification. A green G1–G5
-suite proves the canonical task contract, governed planning, evidence
+path. G6 qualifies fixed validation of the authoritative AFTER projection and
+the bounded decision to request a new human-reviewed attempt. It does not
+qualify durable authorization consumption, recovery or conflicting anti-replay.
+Those capabilities require independent later-stage qualification. A green
+G1–G6 suite proves the canonical task contract, governed planning, evidence
 containment, exact authority-free patch/diff proposal, exact non-reusable human
-authorization binding and one exact production R3 composition.
+authorization binding, one exact production R3 composition and bounded fixed
+validation of its authoritative projection.

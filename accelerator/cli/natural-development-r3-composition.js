@@ -245,6 +245,9 @@ function composeAndDispatchNaturalDevelopmentPatch({
     authorizationFingerprint:
       patchAuthorization.authorizationFingerprint,
     diffFingerprint: patchProposal.exactDiff.diffFingerprint,
+    workspace: repository.repository.path,
+    physicalWorkspaceIdentity,
+    repositoryHead: repository.repository.commit,
     r3OperationId: prepared.authority.operationId,
     target: patchProposal.target,
     beforeSha256: patchProposal.beforeSha256,

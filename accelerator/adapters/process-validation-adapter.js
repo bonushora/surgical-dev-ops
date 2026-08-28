@@ -1,6 +1,7 @@
 'use strict';
 
 const childProcess = require('child_process');
+const crypto = require('crypto');
 const fs = require('fs');
 const path = require('path');
 const { openVerifiedRegularRead } = require('./filesystem-safe-read-adapter');
@@ -15,6 +16,10 @@ const MAX_OUTPUT_BYTES = 32 * 1024;
 const MAX_INPUT_BYTES = 1024 * 1024;
 const REQUEST_KEYS = new Set([
   'operationId', 'workspace', 'selector', 'target', 'grantEvaluation', 'observedAt'
+]);
+const PROJECTION_REQUEST_KEYS = new Set([
+  ...REQUEST_KEYS,
+  'projectionEvidence'
 ]);
 
 function deepFreeze(value) {
@@ -47,13 +52,17 @@ function requireTimestamp(value, name) {
   return timestamp;
 }
 
-function validateRequest(request) {
+function validateRequest(request, allowedKeys = REQUEST_KEYS) {
   if (!request || typeof request !== 'object' || Array.isArray(request)) {
     throw new Error('Validation request is missing or malformed.');
   }
-  if (Object.keys(request).some((key) => !REQUEST_KEYS.has(key))) {
+  if (Object.keys(request).some((key) => !allowedKeys.has(key))) {
     throw new Error('Caller-controlled executable, arguments or environment are forbidden.');
   }
+}
+
+function sha256(value) {
+  return crypto.createHash('sha256').update(value).digest('hex');
 }
 
 function validateGrant(evaluation) {
@@ -98,8 +107,8 @@ function sanitizedEnvironment() {
   };
 }
 
-function validateJavaScriptWithGrant(request) {
-  validateRequest(request);
+function authorizeJavaScriptValidation(request, allowedKeys = REQUEST_KEYS) {
+  validateRequest(request, allowedKeys);
   const grant = validateGrant(request.grantEvaluation);
   const operationId = requireText(request.operationId, 'operationId');
   if (operationId !== grant.operationId) throw new Error('Validation operationId mismatch.');
@@ -137,7 +146,10 @@ function validateJavaScriptWithGrant(request) {
     throw new Error('Validation target is outside the authorized capability scope.');
   }
 
-  const source = readBoundedSource(resolved.canonicalTarget);
+  return { operationId, workspace, observedAt, selector, target, resolved };
+}
+
+function executeNodeSyntaxCheck(source, workspace) {
   const args = ['--check', '-'];
   const result = childProcess.spawnSync(process.execPath, args, {
     cwd: workspace,
@@ -162,15 +174,26 @@ function validateJavaScriptWithGrant(request) {
   if (Buffer.byteLength(stdout) > MAX_OUTPUT_BYTES || Buffer.byteLength(stderr) > MAX_OUTPUT_BYTES) {
     throw new Error('Validation output exceeded limit.');
   }
+
+  return { args, result, stdout, stderr };
+}
+
+function validationResult(binding, source, projection = null) {
+  const { args, result, stdout, stderr } =
+    executeNodeSyntaxCheck(source, binding.workspace);
   const passed = result.status === 0;
 
   return deepFreeze({
     schema: 'sdo.process_validation_result.v1',
-    operationId,
-    workspace,
-    selector,
-    target: { requested: target, canonical: resolved.canonicalTarget },
-    observedAt,
+    operationId: binding.operationId,
+    workspace: binding.workspace,
+    selector: binding.selector,
+    target: {
+      requested: binding.target,
+      canonical: binding.resolved.canonicalTarget,
+      ...(projection ? { authoritativeProjection: projection } : {})
+    },
+    observedAt: binding.observedAt,
     validation: {
       status: passed ? 'PASSED' : 'FAILED',
       successfulCompletionEligible: passed,
@@ -182,7 +205,7 @@ function validateJavaScriptWithGrant(request) {
       executable: process.execPath,
       arguments: [...args],
       shell: false,
-      cwd: workspace,
+      cwd: binding.workspace,
       timeoutMs: TIMEOUT_MS,
       maxInputBytes: MAX_INPUT_BYTES,
       maxOutputBytes: MAX_OUTPUT_BYTES,
@@ -191,4 +214,63 @@ function validateJavaScriptWithGrant(request) {
   });
 }
 
-module.exports = { validateJavaScriptWithGrant };
+function validateJavaScriptWithGrant(request) {
+  const binding = authorizeJavaScriptValidation(request);
+
+  return validationResult(
+    binding,
+    readBoundedSource(binding.resolved.canonicalTarget)
+  );
+}
+
+function validateJavaScriptProjectionWithGrant(request) {
+  const binding = authorizeJavaScriptValidation(
+    request,
+    PROJECTION_REQUEST_KEYS
+  );
+  const evidence = request.projectionEvidence;
+
+  if (
+    !evidence ||
+    !Object.isFrozen(evidence) ||
+    evidence.schema !== 'sdo.natural_development_r3_composition_result.v1' ||
+    evidence.status !== 'COMPLETED' ||
+    evidence.target !== binding.target ||
+    evidence.ordinaryWorktreeAuthoritative !== false ||
+    typeof evidence.managedProjection !== 'string' ||
+    !path.isAbsolute(evidence.managedProjection) ||
+    !/^[a-f0-9]{64}$/.test(evidence.afterSha256 || '')
+  ) {
+    throw new Error('Qualified Manifest CAS projection evidence is required.');
+  }
+
+  const projection = path.normalize(evidence.managedProjection);
+  let stat;
+
+  try {
+    stat = fs.lstatSync(projection);
+  } catch {
+    throw new Error('Authoritative validation projection is unavailable.');
+  }
+
+  if (
+    !stat.isFile() ||
+    stat.isSymbolicLink() ||
+    fs.realpathSync(projection) !== projection
+  ) {
+    throw new Error('Authoritative validation projection is unsafe.');
+  }
+
+  const source = readBoundedSource(projection);
+
+  if (sha256(source) !== evidence.afterSha256) {
+    throw new Error('Authoritative validation projection hash mismatch.');
+  }
+
+  return validationResult(binding, source, projection);
+}
+
+module.exports = {
+  validateJavaScriptWithGrant,
+  validateJavaScriptProjectionWithGrant
+};
