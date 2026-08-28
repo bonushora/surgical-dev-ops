@@ -64,9 +64,24 @@ function deepFreeze(value) {
 }
 
 function normalizePathText(value) {
-  return String(value || '')
-    .trim()
-    .replace(/^["']|["']$/g, '');
+  let normalized =
+    String(value || '')
+      .trim()
+      .replace(/^["']|["']$/g, '');
+
+  let previous;
+
+  do {
+    previous = normalized;
+
+    normalized =
+      normalized.replace(
+        /([A-Za-z0-9_-])\s+\.\s+([A-Za-z0-9_-])/g,
+        '$1.$2'
+      );
+  } while (normalized !== previous);
+
+  return normalized;
 }
 
 function detectWorkspaceList(text) {
@@ -131,6 +146,20 @@ function detectExplicitFileTask(text) {
     String(text || '').trim();
 
   const patterns = [
+    {
+      regex:
+        /^(?:leia|abra|mostre)\s+(?:o\s+)?(?:arquivo\s+)?([A-Za-z0-9_-]+(?:\s+\.\s+|\.)[A-Za-z0-9_.-]+?)(?:\s+e\s+.+)?$/i,
+
+      analysis:
+        false
+    },
+    {
+      regex:
+        /^(?:read|open|show)\s+(?:the\s+)?(?:file\s+)?([A-Za-z0-9_-]+(?:\s+\.\s+|\.)[A-Za-z0-9_.-]+?)(?:\s+and\s+.+)?$/i,
+
+      analysis:
+        false
+    },
     {
       regex:
         /^(?:leia|abra|mostre)\s+(?:o\s+)?arquivo\s+(.+)$/i,
