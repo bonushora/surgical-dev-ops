@@ -363,7 +363,7 @@ test(
 );
 
 test(
-  'NATURAL retries at most once after failed cognitive evidence and performs no operational action',
+  'NATURAL returns safe fallback after one failed cognitive attempt and performs no operational action',
   async () => {
     let chatCalls =
       0;
@@ -469,12 +469,12 @@ test(
 
     assert.equal(
       chatCalls,
-      2
+      1
     );
 
     assert.match(
       output,
-      /Resposta cognitiva recuperada com segurança/
+      /não conseguiu concluir esta resposta/i
     );
 
     assert.doesNotMatch(

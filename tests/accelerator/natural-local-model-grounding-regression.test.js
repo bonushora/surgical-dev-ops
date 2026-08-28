@@ -227,7 +227,7 @@ test(
 
     assert.equal(
       NATURAL_LOCAL_INFERENCE_PROFILE.timeoutMs,
-      180000
+      60000
     );
 
     assert.match(
@@ -238,6 +238,53 @@ test(
     assert.doesNotMatch(
       source,
       /const TIMEOUT_MS\s*=\s*30000;/
+    );
+  }
+);
+
+
+test(
+  'generic NATURAL cognition performs one bounded provider attempt',
+  () => {
+    const source =
+      fs.readFileSync(
+        require.resolve(
+          '../../accelerator/cli/natural-cognitive-session'
+        ),
+        'utf8'
+      );
+
+    const askStart =
+      source.indexOf(
+        '  async function ask('
+      );
+
+    const decideStart =
+      source.indexOf(
+        '  async function decideEvidence('
+      );
+
+    assert.ok(askStart >= 0);
+    assert.ok(decideStart > askStart);
+
+    const askSource =
+      source.slice(
+        askStart,
+        decideStart
+      );
+
+    assert.equal(
+      (
+        askSource.match(
+          /await invokeOnce\(\)/g
+        ) || []
+      ).length,
+      1
+    );
+
+    assert.doesNotMatch(
+      askSource,
+      /Cognitive retry|additional attempt/
     );
   }
 );

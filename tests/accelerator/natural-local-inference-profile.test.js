@@ -27,7 +27,7 @@ test(
     );
     assert.equal(
       NATURAL_LOCAL_INFERENCE_PROFILE.timeoutMs,
-      180000
+      60000
     );
     assert.equal(
       NATURAL_LOCAL_INFERENCE_PROFILE.acceleration,
