@@ -62,7 +62,7 @@ test(
 
     assert.match(
       execution.stdout,
-      /Nenhuma alteração foi realizada\.\n\nsurgical> Surgical session closed\./
+      /Nenhuma alteração foi realizada\.\n\nsurgical> Sessão Surgical encerrada\./
     );
 
     assert.doesNotMatch(

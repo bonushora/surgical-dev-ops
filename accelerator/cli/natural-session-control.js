@@ -22,6 +22,11 @@ const {
   './natural-terminal-boundary'
 );
 
+const {
+  normalizeHumanLanguage,
+  isEnglish
+} = require('./human-language');
+
 function normalize(value) {
   return String(value || '')
     .normalize('NFD')
@@ -61,10 +66,11 @@ function isBlanketFutureApproval(text) {
   );
 }
 
-function formatBlanketApprovalRejection(text) {
+function formatBlanketApprovalRejection(text, preferredLanguage = null) {
   const english =
-    /\b(?:consider|future|approve|authorize|assume)\b/i
-      .test(text);
+    preferredLanguage
+      ? isEnglish(preferredLanguage)
+      : /\b(?:consider|future|approve|authorize|assume)\b/i.test(text);
 
   if (english) {
     return (
@@ -113,8 +119,8 @@ function detectBoundedMutationRequest(text) {
   });
 }
 
-function formatBoundedMutationBoundary(request) {
-  if (request.language === 'en') {
+function formatBoundedMutationBoundary(request, preferredLanguage = null) {
+  if (preferredLanguage ? isEnglish(preferredLanguage) : request.language === 'en') {
     return (
       'Mutation proposal detected.\n' +
       'State: HUMAN_AUTHORITY_REQUIRED\n' +
@@ -135,7 +141,26 @@ function formatBoundedMutationBoundary(request) {
   );
 }
 
-function naturalHelpMessage() {
+function naturalHelpMessage(language = 'pt-BR') {
+  if (isEnglish(language)) {
+    return (
+      'You can talk to me normally about this project.\n\n' +
+      'For example, you can say:\n' +
+      '  "Where are we now?"\n' +
+      '  "Explain this project to me."\n' +
+      '  "Check whether there are pending changes."\n' +
+      '  "What is the current branch?"\n' +
+      '  "Explain this file."\n' +
+      '  "What do you suggest doing next?"\n' +
+      '  "Work step by step."\n' +
+      '  "Work until the next architectural boundary."\n' +
+      '  "I want to switch AI providers."\n\n' +
+      'You can also say "conversation status" or "clear conversation".\n\n' +
+      'When an action requires new authorization, a scope change, or your decision, I will stop and explain before proceeding.\n' +
+      'To see internal details for the current mode, say "technical details".\n'
+    );
+  }
+
   return (
     'Você pode conversar comigo normalmente sobre este projeto.\n\n' +
     'Por exemplo, pode dizer:\n' +
@@ -154,7 +179,24 @@ function naturalHelpMessage() {
   );
 }
 
-function providerSetupOverview() {
+function providerSetupOverview(language = 'pt-BR') {
+  if (isEnglish(language)) {
+    return (
+      'I can help you switch or configure the AI step by step.\n\n' +
+      'Qualified free local models:\n' +
+      '  qwen3:8b  — default bilingual quality profile.\n' +
+      '  gemma3:4b — fast bilingual profile.\n' +
+      '  Local execution: no Ollama API call charge.\n' +
+      '  Local computing resources and applicable licenses remain the user’s responsibility.\n\n' +
+      'Other providers may replace the cognitive provider without changing the Orchestrator or governance.\n' +
+      'External providers may charge under their own plans and terms.\n' +
+      'Surgical DevOps does not receive, intermediate, or retain provider fees or commissions.\n' +
+      'Use "use qwen3:8b" or "use gemma3:4b".\n' +
+      'Selection applies only to this session and requires the model to be installed already.\n' +
+      'No change was made.\n'
+    );
+  }
+
   return (
     'Posso ajudá-lo a trocar ou configurar a IA passo a passo.\n\n' +
     'Modelos locais gratuitos qualificados:\n' +
@@ -179,7 +221,19 @@ function providerSetupOverview() {
   );
 }
 
-function codexSetupGuide() {
+function codexSetupGuide(language = 'pt-BR') {
+  if (isEnglish(language)) {
+    return (
+      'Guided setup: OpenAI via API\n\n' +
+      'The OpenAI Responses adapter is qualified, but it is never activated automatically.\n' +
+      'A ChatGPT subscription and API usage are separate commercial relationships.\n\n' +
+      'Before activation, Surgical DevOps must confirm current official terms, explain data exposure and costs, obtain explicit authorization, receive credentials only through the provider boundary, and verify compatibility.\n' +
+      'Prices are not hardcoded. External charges are made by the provider, and Surgical DevOps receives no commission.\n\n' +
+      'CURRENT BOUNDARY: confirm current commercial information and your explicit choice before receiving any credential.\n' +
+      'No change was made.\n'
+    );
+  }
+
   return (
     'Configuração guiada: OpenAI via API\n\n' +
     'O adapter OpenAI Responses está qualificado, mas nunca é ativado automaticamente.\n' +
@@ -203,12 +257,26 @@ function codexSetupGuide() {
 }
 
 function formatProviderStatus(
-  discovery
+  discovery,
+  language = 'pt-BR'
 ) {
+  const english = isEnglish(language);
   if (
     discovery &&
     discovery.available === true
   ) {
+    if (english) {
+      return (
+        'Current cognitive assistant:\n' +
+        `  Provider: ${discovery.provider}\n` +
+        `  Model: ${discovery.model}\n` +
+        '  Execution: local\n' +
+        '  State: verified and available\n' +
+        '  Operational authority of the AI: none\n\n' +
+        'Compatible providers may replace this model without changing governance.\n'
+      );
+    }
+
     return (
       'Assistente cognitivo atual:\n' +
       `  Provider: ${discovery.provider}\n` +
@@ -225,16 +293,28 @@ function formatProviderStatus(
     );
   }
 
-  return (
+  return english
+    ? (
+        'Local cognitive assistant: unavailable or unqualified.\n' +
+        'Deterministic mode remains available.\n' +
+        'No external provider will be selected automatically.\n'
+      )
+    : (
     'Assistente cognitivo local: indisponível ou não qualificado.\n' +
     'O modo determinístico continua disponível.\n' +
     'Nenhum provider externo será selecionado automaticamente.\n'
-  );
+      );
 }
 
 function createNaturalSessionControl(
   options = {}
 ) {
+  const preferredLanguage =
+    typeof options.language === 'string' && options.language.trim()
+      ? normalizeHumanLanguage(options.language)
+      : null;
+  const language = preferredLanguage || 'pt-BR';
+  const english = isEnglish(language);
   let workMode =
     WORK_MODES.SUPERVISED;
 
@@ -277,7 +357,7 @@ function createNaturalSessionControl(
       return Object.freeze({
         matched: true,
         action: 'CONTINUE',
-        output: formatNaturalTerminalBoundary(terminalBoundary)
+        output: formatNaturalTerminalBoundary(terminalBoundary, language)
       });
     }
 
@@ -285,7 +365,7 @@ function createNaturalSessionControl(
       return Object.freeze({
         matched: true,
         action: 'CONTINUE',
-        output: formatBlanketApprovalRejection(text)
+        output: formatBlanketApprovalRejection(text, preferredLanguage)
       });
     }
 
@@ -299,7 +379,8 @@ function createNaturalSessionControl(
           action: 'CONTINUE',
           output:
             formatBoundedMutationBoundary(
-              mutationRequest
+              mutationRequest,
+              preferredLanguage
             )
         });
       }
@@ -334,8 +415,9 @@ function createNaturalSessionControl(
           action:
             'CONTINUE',
 
-          output:
-            'Tudo bem. A operação foi cancelada e nenhuma autoridade nova foi materializada.\n'
+          output: english
+            ? 'All right. The operation was cancelled and no new authority was materialized.\n'
+            : 'Tudo bem. A operação foi cancelada e nenhuma autoridade nova foi materializada.\n'
         });
       }
 
@@ -345,8 +427,9 @@ function createNaturalSessionControl(
         action:
           'CONTINUE',
 
-        output:
-          'Há uma operação aguardando sua decisão. Responda "sim" para autorizar ou "não" para cancelar.\n'
+        output: english
+          ? 'An operation is waiting for your decision. Answer "yes" to authorize or "no" to cancel.\n'
+          : 'Há uma operação aguardando sua decisão. Responda "sim" para autorizar ou "não" para cancelar.\n'
       });
     }
 
@@ -368,7 +451,8 @@ function createNaturalSessionControl(
         output:
           formatTaskProposal(
             governedTask,
-            workspace
+            workspace,
+            preferredLanguage
           )
       });
     }
@@ -377,7 +461,10 @@ function createNaturalSessionControl(
       text === 'limpar conversa' ||
       text === 'nova conversa' ||
       text === 'esquecer conversa' ||
-      text === 'reiniciar conversa'
+      text === 'reiniciar conversa' ||
+      text === 'clear conversation' ||
+      text === 'new conversation' ||
+      text === 'reset conversation'
     ) {
       return Object.freeze({
         matched: true,
@@ -388,7 +475,10 @@ function createNaturalSessionControl(
     if (
       text === 'estado da conversa' ||
       text === 'memoria da conversa' ||
-      text === 'contexto da conversa'
+      text === 'contexto da conversa' ||
+      text === 'conversation status' ||
+      text === 'conversation memory' ||
+      text === 'conversation context'
     ) {
       return Object.freeze({
         matched: true,
@@ -417,7 +507,10 @@ function createNaturalSessionControl(
           'o que voce pode fazer',
           'como voce pode me ajudar',
           'como posso usar voce',
-          'como posso usar o surgical devops'
+          'como posso usar o surgical devops',
+          'what can you do',
+          'how can you help me',
+          'how can i use surgical devops'
         ]
       )
     ) {
@@ -426,14 +519,16 @@ function createNaturalSessionControl(
         action:
           'CONTINUE',
         output:
-          naturalHelpMessage()
+          naturalHelpMessage(language)
       });
     }
 
     if (
       text === 'detalhes tecnicos' ||
       text === 'mostrar detalhes tecnicos' ||
-      text === 'ver detalhes tecnicos'
+      text === 'ver detalhes tecnicos' ||
+      text === 'technical details' ||
+      text === 'show technical details'
     ) {
       return Object.freeze({
         matched: true,
@@ -445,14 +540,17 @@ function createNaturalSessionControl(
     if (
       text === 'listar modelos' ||
       text === 'modelos' ||
-      text === 'listar ias'
+      text === 'listar ias' ||
+      text === 'list models' ||
+      text === 'models' ||
+      text === 'list ais'
     ) {
       return Object.freeze({
         matched: true,
         action:
           'CONTINUE',
         output:
-          providerSetupOverview()
+          providerSetupOverview(language)
       });
     }
 
@@ -466,7 +564,10 @@ function createNaturalSessionControl(
           'qual ia esta sendo usada',
           'qual provider esta ativo',
           'qual provider esta sendo usado',
-          'qual e a ia atual'
+          'qual e a ia atual',
+          'which ai is active',
+          'which provider is active',
+          'current ai provider'
         ]
       )
     ) {
@@ -510,7 +611,11 @@ function createNaturalSessionControl(
           'conectar outra ia',
           'usar outra ia',
           'quais ias posso usar',
-          'quais providers posso usar'
+          'quais providers posso usar',
+          'i want to switch ai providers',
+          'switch ai provider',
+          'use another ai',
+          'which providers can i use'
         ]
       )
     ) {
@@ -519,7 +624,7 @@ function createNaturalSessionControl(
         action:
           'CONTINUE',
         output:
-          providerSetupOverview()
+          providerSetupOverview(language)
       });
     }
 
@@ -533,7 +638,12 @@ function createNaturalSessionControl(
           'usar codex',
           'conectar codex',
           'usar openai',
-          'quero usar openai'
+          'quero usar openai',
+          'i want to use codex',
+          'use codex',
+          'connect codex',
+          'use openai',
+          'i want to use openai'
         ]
       )
     ) {
@@ -541,7 +651,7 @@ function createNaturalSessionControl(
         matched: true,
         action: 'FRONTIER_PROVIDER_SETUP',
         providerId: 'openai:gpt-5.6',
-        output: codexSetupGuide()
+        output: codexSetupGuide(language)
       });
     }
 
@@ -555,7 +665,10 @@ function createNaturalSessionControl(
           'trabalhe sozinha ate a proxima fronteira arquitetural',
           'trabalhe sozinho ate a proxima fronteira arquitetural',
           'modo autonomia',
-          'modo autonomo'
+          'modo autonomo',
+          'work until the next boundary',
+          'work until the next architectural boundary',
+          'bounded autonomy mode'
         ]
       )
     ) {
@@ -566,11 +679,19 @@ function createNaturalSessionControl(
         matched: true,
         action:
           'CONTINUE',
-        output:
+        output: english
+          ? (
+              'Assistance mode: BOUNDED AUTONOMY UNTIL THE BOUNDARY.\n' +
+              'I will preserve continuity only within the already valid workspace, capabilities, and authority.\n' +
+              'I will stop at a new architectural decision, scope expansion, new authority, required human approval, material ambiguity, or unqualified state.\n' +
+              'This mode does not expand my authority.\n'
+            )
+          : (
           'Modo de assistência: AUTONOMIA LIMITADA ATÉ A FRONTEIRA.\n' +
           'Vou manter continuidade apenas dentro do workspace, capabilities e autoridade já válidos.\n' +
           'Pararei diante de nova decisão arquitetural, expansão de escopo, nova autoridade, aprovação humana necessária, ambiguidade material ou estado não qualificado.\n' +
           'Este modo não amplia minha autoridade.\n'
+            )
       });
     }
 
@@ -582,7 +703,10 @@ function createNaturalSessionControl(
           'microtarefas supervisionadas',
           'quero supervisionar cada etapa',
           'volte para microtarefas',
-          'trabalhe passo a passo'
+          'trabalhe passo a passo',
+          'supervised microtasks',
+          'work step by step',
+          'return to supervised microtasks'
         ]
       )
     ) {
@@ -593,10 +717,17 @@ function createNaturalSessionControl(
         matched: true,
         action:
           'CONTINUE',
-        output:
+        output: english
+          ? (
+              'Assistance mode: SUPERVISED MICROTASKS.\n' +
+              'I will work in small units and return control between relevant steps.\n' +
+              'Governance and authority remain unchanged.\n'
+            )
+          : (
           'Modo de assistência: MICROTAREFAS SUPERVISIONADAS.\n' +
           'Vou trabalhar em unidades pequenas e devolver o controle entre etapas relevantes.\n' +
           'A governança e a autoridade permanecem inalteradas.\n'
+            )
       });
     }
 
@@ -607,7 +738,10 @@ function createNaturalSessionControl(
           'qual e o modo de trabalho',
           'qual o modo de trabalho',
           'como estamos trabalhando',
-          'modo de assistencia'
+          'modo de assistencia',
+          'what is the work mode',
+          'current assistance mode',
+          'how are we working'
         ]
       )
     ) {
@@ -615,8 +749,9 @@ function createNaturalSessionControl(
         matched: true,
         action:
           'CONTINUE',
-        output:
-          `Modo de assistência atual: ${workMode}.\n`
+        output: english
+          ? `Current assistance mode: ${workMode}.\n`
+          : `Modo de assistência atual: ${workMode}.\n`
       });
     }
 

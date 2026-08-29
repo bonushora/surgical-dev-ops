@@ -295,7 +295,8 @@ function detectNaturalGovernedTask(input) {
 
 function formatTaskProposal(
   task,
-  workspace
+  workspace,
+  preferredLanguage = null
 ) {
   if (
     !task ||
@@ -307,12 +308,14 @@ function formatTaskProposal(
     );
   }
 
+  const language =
+    preferredLanguage ||
+    detectNaturalResponseLanguage(
+      task.objective
+    );
+
   if (task.kind === 'PROJECT_ANALYSIS') {
-    if (
-      detectNaturalResponseLanguage(
-        task.objective
-      ) === 'en'
-    ) {
+    if (language === 'en') {
       return (
         'To answer from the real project, I need to consult governed workspace evidence.\n\n' +
         `Authorized project: ${workspace}\n` +
@@ -334,6 +337,17 @@ function formatTaskProposal(
   }
 
   if (task.kind === 'WORKSPACE_LIST') {
+    if (language === 'en') {
+      return (
+        'To answer, I need to inspect the real project structure.\n\n' +
+        `Authorized project: ${workspace}\n` +
+        'I will only list files visible in this repository.\n' +
+        'I will not access parent directories, sibling directories, or other projects.\n' +
+        'No file will be changed.\n\n' +
+        'May I proceed?\n'
+      );
+    }
+
     return (
       'Para responder, preciso consultar a estrutura real do projeto.\n\n' +
       `Projeto autorizado: ${workspace}\n` +
@@ -341,6 +355,16 @@ function formatTaskProposal(
       'Não acessarei diretórios pais, irmãos ou outros projetos.\n' +
       'Nenhum arquivo será alterado.\n\n' +
       'Posso prosseguir?\n'
+    );
+  }
+
+  if (language === 'en') {
+    return (
+      `To answer, I need to read the file "${task.target}".\n\n` +
+      `Authorized project: ${workspace}\n` +
+      'The read will remain confined to this project and pass through the Orchestrator.\n' +
+      'No file will be changed.\n\n' +
+      'May I proceed?\n'
     );
   }
 
@@ -372,7 +396,8 @@ function isNegative(input) {
 }
 
 function formatWorkspaceFiles(
-  result
+  result,
+  language = 'pt-BR'
 ) {
   const execution =
     result &&
@@ -411,6 +436,19 @@ function formatWorkspaceFiles(
           : parts[0];
       })
     )].sort();
+
+  if (language === 'en') {
+    return (
+      `I found ${files.length} visible file(s) in the project.\n\n` +
+      'Top-level content:\n' +
+      (
+        topLevel.length
+          ? topLevel.map((entry) => `  ${entry}`).join('\n')
+          : '  (no files found)'
+      ) +
+      '\n\nThe query remained confined to the authorized project. No file was changed.\n'
+    );
+  }
 
   return (
     `Encontrei ${files.length} arquivo(s) visível(is) no projeto.\n\n` +
@@ -465,10 +503,13 @@ function extractFilesystemEvidence(
 }
 
 function formatFileReadEvidence(
-  evidence
+  evidence,
+  language = 'pt-BR'
 ) {
+  const english = language === 'en';
+
   return (
-    `Arquivo: ${evidence.target}\n` +
+    `${english ? 'File' : 'Arquivo'}: ${evidence.target}\n` +
     `Bytes: ${evidence.bytes}\n` +
     `SHA256: ${evidence.sha256}\n\n` +
     evidence.content +
@@ -477,7 +518,11 @@ function formatFileReadEvidence(
         ? ''
         : '\n'
     ) +
-    '\nA leitura ficou restrita ao projeto autorizado. Nenhum arquivo foi alterado.\n'
+    (
+      english
+        ? '\nThe read remained confined to the authorized project. No file was changed.\n'
+        : '\nA leitura ficou restrita ao projeto autorizado. Nenhum arquivo foi alterado.\n'
+    )
   );
 }
 
