@@ -84,6 +84,10 @@ const {
 } = require('./natural-development-interactive');
 
 const {
+  createNaturalRunnerRuntime
+} = require('./natural-runner-runtime');
+
+const {
   createInteractionPreferenceStore
 } = require('./interaction-preference-store');
 
@@ -773,6 +777,11 @@ function createInteractiveSession(
   let pendingDevelopment =
     null;
 
+  const runnerRuntime =
+    cognitiveMode
+      ? createNaturalRunnerRuntime()
+      : null;
+
   rl.on('line', (line) => {
     rl.pause();
 
@@ -805,6 +814,16 @@ function createInteractiveSession(
                   ...patchOptions
                 });
 
+                if (
+                  runnerRuntime &&
+                  sessionControl.currentWorkMode() ===
+                    'BOUNDED_AUTONOMY_TO_BOUNDARY'
+                ) {
+                  runnerRuntime.authorizedEffectCompleted(
+                    completed
+                  );
+                }
+
                 output.write(
                   humanText(
                     activation,
@@ -823,6 +842,11 @@ function createInteractiveSession(
                   )
                 );
               } catch {
+                if (runnerRuntime) {
+                  runnerRuntime.failClosed(
+                    'Governed mutation or validation failed closed.'
+                  );
+                }
                 output.write(
                   humanText(
                     activation,
@@ -838,6 +862,9 @@ function createInteractiveSession(
 
             if (/^(?:nao|não|no|cancelar|cancel)$/i.test(normalizedLine)) {
               pendingDevelopment = null;
+              if (runnerRuntime) {
+                runnerRuntime.cancelPending();
+              }
               output.write(
                 humanText(
                   activation,
@@ -867,7 +894,28 @@ function createInteractiveSession(
               );
 
             if (controlled.matched) {
-              if (controlled.action === 'DEVELOPMENT_REQUEST') {
+              if (controlled.action === 'RUNNER_START') {
+                const runner = runnerRuntime.start();
+                output.write(
+                  controlled.output + '\n' +
+                  `Boundary: ${runner.boundary}\n` +
+                  'Mutation approval: EXACT_HUMAN_REVIEW_REQUIRED\n'
+                );
+              } else if (controlled.action === 'RUNNER_STATUS') {
+                const runner = runnerRuntime.status();
+                output.write(
+                  controlled.output + '\n' +
+                  `Runtime state: ${runner.state}\n` +
+                  `Boundary: ${runner.boundary}\n`
+                );
+              } else if (controlled.action === 'RUNNER_STOP') {
+                const runner = runnerRuntime.stop();
+                output.write(
+                  controlled.output + '\n' +
+                  `Runtime state: ${runner.state}\n` +
+                  `Boundary: ${runner.boundary}\n`
+                );
+              } else if (controlled.action === 'DEVELOPMENT_REQUEST') {
                 try {
                   output.write(
                     humanText(
@@ -885,6 +933,15 @@ function createInteractiveSession(
                       workMode: sessionControl.currentWorkMode()
                     });
                   const proposal = pendingDevelopment.patchProposal;
+                  if (
+                    runnerRuntime &&
+                    sessionControl.currentWorkMode() ===
+                      'BOUNDED_AUTONOMY_TO_BOUNDARY'
+                  ) {
+                    runnerRuntime.exactHumanReviewRequired(
+                      pendingDevelopment
+                    );
+                  }
                   output.write(
                     humanText(
                       activation,
