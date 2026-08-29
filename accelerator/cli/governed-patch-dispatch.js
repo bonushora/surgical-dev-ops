@@ -527,7 +527,8 @@ function createGovernedPatchRequest(
     !grantEvaluation.grant
   ) {
     throw new Error(
-      'R3 filesystem patch capability was denied.'
+      'R3 filesystem patch capability was denied: ' +
+      String(grantEvaluation && grantEvaluation.reason || 'unknown reason')
     );
   }
 
