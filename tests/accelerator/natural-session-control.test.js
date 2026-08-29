@@ -544,3 +544,37 @@ test(
     }
   }
 );
+
+
+test('RUNNER maps to autonomous-until-green without authority expansion', () => {
+  const control = createNaturalSessionControl();
+  const start = control.handle('runner');
+  assert.equal(start.action, 'RUNNER_START');
+  assert.equal(start.intent, 'AUTONOMOUS_UNTIL_GREEN');
+  assert.equal(start.authorityExpansion, false);
+  assert.equal(start.publicationAuthority, false);
+  assert.equal(control.currentWorkMode(), 'BOUNDED_AUTONOMY_TO_BOUNDARY');
+});
+
+test('RUNNER STATUS is read-only and reports bounded authority', () => {
+  const control = createNaturalSessionControl();
+  control.handle('runner');
+  const status = control.handle('runner status');
+  assert.equal(status.action, 'RUNNER_STATUS');
+  assert.equal(status.readOnly, true);
+  assert.equal(status.intent, 'AUTONOMOUS_UNTIL_GREEN');
+  assert.equal(status.authorityExpansion, false);
+  assert.equal(status.publicationAuthority, false);
+  assert.match(status.output, /publication denied|publicação negada/i);
+});
+
+test('RUNNER STOP revokes continuation without minting authority', () => {
+  const control = createNaturalSessionControl();
+  control.handle('runner');
+  const stop = control.handle('runner stop');
+  assert.equal(stop.action, 'RUNNER_STOP');
+  assert.equal(stop.safeStopRequested, true);
+  assert.equal(stop.authorityExpansion, false);
+  assert.equal(stop.publicationAuthority, false);
+  assert.equal(control.currentWorkMode(), 'SUPERVISED_MICROTASKS');
+});

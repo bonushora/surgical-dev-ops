@@ -1,5 +1,7 @@
 'use strict';
 
+const RUNNER_INTENT = 'AUTONOMOUS_UNTIL_GREEN';
+
 const {
   WORK_MODES
 } = require(
@@ -479,6 +481,68 @@ function createNaturalSessionControl(
       return Object.freeze({
         matched: true,
         action: 'CONVERSATION_RESET'
+      });
+    }
+
+    if (
+      text === 'runner' ||
+      text === 'run until green' ||
+      text === 'execute until green' ||
+      text === 'executar ate o verde' ||
+      text === 'executar até o verde'
+    ) {
+      workMode = WORK_MODES.AUTONOMY;
+      return Object.freeze({
+        matched: true,
+        action: 'RUNNER_START',
+        intent: RUNNER_INTENT,
+        workMode,
+        authorityExpansion: false,
+        publicationAuthority: false,
+        output:
+          language === 'en'
+            ? 'RUNNER active: governed continuity until GREEN or an external/authority boundary.'
+            : 'RUNNER ativo: continuidade governada até GREEN ou uma fronteira externa/de autoridade.'
+      });
+    }
+
+    if (
+      text === 'runner status' ||
+      text === 'status runner'
+    ) {
+      return Object.freeze({
+        matched: true,
+        action: 'RUNNER_STATUS',
+        intent: RUNNER_INTENT,
+        readOnly: true,
+        workMode,
+        authorityExpansion: false,
+        publicationAuthority: false,
+        output:
+          language === 'en'
+            ? `RUNNER status: ${workMode === WORK_MODES.AUTONOMY ? 'ACTIVE' : 'INACTIVE'}; publication denied; authority expansion denied.`
+            : `Status RUNNER: ${workMode === WORK_MODES.AUTONOMY ? 'ATIVO' : 'INATIVO'}; publicação negada; expansão de autoridade negada.`
+      });
+    }
+
+    if (
+      text === 'runner stop' ||
+      text === 'stop runner' ||
+      text === 'parar runner'
+    ) {
+      workMode = WORK_MODES.SUPERVISED;
+      return Object.freeze({
+        matched: true,
+        action: 'RUNNER_STOP',
+        intent: RUNNER_INTENT,
+        safeStopRequested: true,
+        workMode,
+        authorityExpansion: false,
+        publicationAuthority: false,
+        output:
+          language === 'en'
+            ? 'RUNNER stop requested: continuation revoked at the next deterministic safe boundary.'
+            : 'Parada do RUNNER solicitada: continuidade revogada na próxima fronteira determinística segura.'
       });
     }
 
