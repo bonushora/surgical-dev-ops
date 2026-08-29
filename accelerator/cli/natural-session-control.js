@@ -59,9 +59,11 @@ function isBlanketFutureApproval(text) {
       'autorizo todas as alteracoes futuras',
       'autorizo tudo daqui para frente',
       'consider all future changes approved',
+      'consider all future changes already approved',
       'i approve all future changes',
       'i authorize all future changes',
-      'assume all future changes are approved'
+      'assume all future changes are approved',
+      'assume all future changes are already approved'
     ]
   );
 }
