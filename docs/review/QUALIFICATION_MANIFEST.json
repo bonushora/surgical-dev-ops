@@ -1,7 +1,7 @@
 {
   "schema": "sdo.external_review_qualification_manifest.v1",
   "project": "bonushora/surgical-dev-ops",
-  "releaseCandidate": "v2.6.0-rc.2",
+  "releaseCandidate": "v2.6.0-rc.3",
   "sourceBaseline": {
     "commit": "a3a4e2941914f14457ed1932ea4024fc495bfff1",
     "workflow": "Accelerator Conformance",
@@ -13,9 +13,26 @@
       "windows-latest"
     ]
   },
+  "releaseCandidateBaseline": {
+    "commit": "3a938dc42ae449a8280f48cdddff39e7a74c04d8",
+    "workflow": "Accelerator Conformance",
+    "runId": "33269040867",
+    "conclusion": "success",
+    "platforms": [
+      "ubuntu-latest",
+      "macos-latest",
+      "windows-latest"
+    ]
+  },
   "protocols": {
     "BH-SEP-v2.2-sha256": "f4e8639163b0321fff86133a69ec59c2822ccdebcd24d2ccb459b5bc1c3b35cb",
     "BH-SDP-v2.2-sha256": "04ea782ada1abf7fb959329054c57f87a0e86fca99a31d2e37751d3bdf7d47bc"
+  },
+  "incrementalAdversarialCampaign": {
+    "scope": "G1-G10 interactive governed development loop",
+    "english": "docs/review/TRY_TO_BREAK_G1_G10.md",
+    "portuguese": "docs/review/TRY_TO_BREAK_G1_G10_PT-BR.md",
+    "preservesRc2Baseline": true
   },
   "reproduction": [
     "npm ci",
