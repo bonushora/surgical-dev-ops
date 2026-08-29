@@ -406,58 +406,46 @@ test('NATURAL maps bounded branch question without changing governance authority
   const state =
     activation('NATURAL');
 
-  const result =
-    cli.handleInteractiveCommand(
-      'Qual é a branch atual?',
-      state
-    );
+  for (const input of [
+    'Qual é a branch atual?',
+    'What is the current branch?'
+  ]) {
+    const result =
+      cli.handleInteractiveCommand(
+        input,
+        state
+      );
 
-  assert.equal(
-    result.action,
-    'DISPATCH'
-  );
-
-  assert.deepEqual(
-    result.intent,
-    {
+    assert.equal(result.action, 'DISPATCH');
+    assert.deepEqual(result.intent, {
       capabilityType: 'GIT_READ',
       target: 'branch'
-    }
-  );
+    });
+  }
 });
 
 test('NATURAL maps bounded commit question without provider or shell authority', () => {
   const state =
     activation('NATURAL');
 
-  const result =
-    cli.handleInteractiveCommand(
-      'Qual é o commit atual?',
-      state
-    );
+  for (const input of [
+    'Qual é o commit atual?',
+    'What is the current commit?'
+  ]) {
+    const result =
+      cli.handleInteractiveCommand(
+        input,
+        state
+      );
 
-  assert.equal(
-    result.action,
-    'DISPATCH'
-  );
-
-  assert.deepEqual(
-    result.intent,
-    {
+    assert.equal(result.action, 'DISPATCH');
+    assert.deepEqual(result.intent, {
       capabilityType: 'GIT_READ',
       target: 'head'
-    }
-  );
-
-  assert.equal(
-    'command' in result.intent,
-    false
-  );
-
-  assert.equal(
-    'shell' in result.intent,
-    false
-  );
+    });
+    assert.equal('command' in result.intent, false);
+    assert.equal('shell' in result.intent, false);
+  }
 });
 
 test('NATURAL unsupported deterministic language becomes cognitive-only input with zero operational intent', () => {

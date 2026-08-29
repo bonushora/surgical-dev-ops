@@ -94,7 +94,11 @@ function interpretNaturalIntent(input) {
         'qual branch',
         'branch atual',
         'em qual branch',
-        'ramo atual'
+        'ramo atual',
+        'what is the current branch',
+        'which branch am i on',
+        'what branch am i on',
+        'current branch'
       ]
     )
   ) {
@@ -118,7 +122,11 @@ function interpretNaturalIntent(input) {
         'ultimo commit',
         'head atual',
         'qual e o head',
-        'qual o head'
+        'qual o head',
+        'what is the current commit',
+        'what is the current head',
+        'current commit',
+        'current head'
       ]
     )
   ) {

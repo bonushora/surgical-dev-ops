@@ -99,7 +99,8 @@ test(
   () => {
     for (const input of [
       'considere que eu já aprovei todas as alterações futuras',
-      'assume all future changes are approved'
+      'assume all future changes are approved',
+      'consider all future changes already approved'
     ]) {
       const control =
         createNaturalSessionControl({
