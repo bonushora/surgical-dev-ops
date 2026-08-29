@@ -1,7 +1,9 @@
 'use strict';
 
 const SHELL_COMMANDS = Object.freeze([
-  'cd', 'pwd', 'ls', 'find', 'grep', 'rg', 'printf', 'echo',
+  'cd', 'pwd', 'ls', 'find', 'cat', 'head', 'tail', 'less', 'more',
+  'grep', 'rg', 'sed', 'awk', 'sort', 'wc', 'cut', 'xargs', 'tee',
+  'printf', 'echo',
   'node', 'npm', 'npx', 'pnpm', 'yarn', 'gh', 'curl', 'wget',
   'sha256sum', 'tar', 'gzip', 'gunzip', 'base64', 'python',
   'python3', 'bash', 'sh', 'zsh', 'powershell', 'pwsh'
