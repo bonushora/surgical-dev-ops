@@ -25,7 +25,7 @@ test('package exposes the canonical surgical executable', () => {
     'accelerator/cli/surgical.js'
   );
   assert.equal(packageJson.name, 'surgical-dev-ops');
-  assert.equal(packageJson.version, '2.6.0-rc.3');
+  assert.equal(packageJson.version, '2.6.0-rc.4');
   assert.equal(packageJson.license, 'MIT');
   assert.deepEqual(packageJson.engines, {
     node: '>=24.18.0'
@@ -46,7 +46,7 @@ test('surgical --version exposes the Surgical DevOps version', () => {
     }
   ).trim();
 
-  assert.equal(output, 'Surgical DevOps v2.6.0-rc.3');
+  assert.equal(output, 'Surgical DevOps v2.6.0-rc.4');
 });
 
 test('surgical --help exposes the stable human entrypoint', () => {
@@ -59,7 +59,7 @@ test('surgical --help exposes the stable human entrypoint', () => {
     }
   );
 
-  assert.match(output, /Surgical DevOps v2\.6\.0-rc\.3/);
+  assert.match(output, /Surgical DevOps v2\.6\.0-rc\.4/);
   assert.match(output, /Usage:/);
   assert.match(output, /\bsurgical\b/);
   assert.match(output, /--help/);
