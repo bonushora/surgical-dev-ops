@@ -1,5 +1,20 @@
 # Changelog
 
+## [2.6.0-rc.3] - 2026-08-29
+
+- EN: Connected the interactive NATURAL G1-G10 development loop from exact
+  proposal through signed authorization, real R3 dispatch, validation and
+  linearizable anti-replay consumption.
+- PT-BR: Conectou o ciclo interativo de desenvolvimento NATURAL G1-G10, da
+  proposta exata à autorização assinada, despacho R3 real, validação e consumo
+  anti-replay linearizável.
+- EN/PT-BR: Completed bilingual human surfaces, bounded cognitive latency,
+  deterministic terminal-command interception and unified npm onboarding.
+- EN/PT-BR: Qualified a real signed mutation in a temporary repository while
+  preserving the ordinary repository, with Ubuntu/macOS/Windows PASS.
+- Extended the rc.2 white-box challenge with incremental G1-G10 adversarial
+  targets; absolute security and completed independent audit remain non-claims.
+
 ## [2.6.0-rc.2] - 2026-08-27
 
 - EN: Qualified Reconstruction v3 across canonical state, human authority,
