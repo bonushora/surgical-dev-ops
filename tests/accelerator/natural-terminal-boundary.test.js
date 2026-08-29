@@ -19,6 +19,11 @@ test('system shell commands are identified as presentation-only terminal boundar
     'git diff --check',
     'npm test',
     'node accelerator/cli/surgical.js',
+    'cat /etc/passwd',
+    'head -n 20 README.md',
+    'tail -n 20 package.json',
+    'sed -n "1,20p" README.md',
+    'awk "{print $1}" README.md',
     'cd "$HOME/project"',
     'printf "snapshot"',
     'HEAD_SHA="abc"',
@@ -27,6 +32,34 @@ test('system shell commands are identified as presentation-only terminal boundar
     const result = classifyNaturalTerminalInput(input);
     assert.equal(result.boundary, 'SYSTEM_TERMINAL', input);
     assert.match(formatNaturalTerminalBoundary(result), /Nada foi executado/);
+  }
+});
+
+test('common read-only shell commands are intercepted before cognition in both languages', () => {
+  for (const input of [
+    'cat /etc/passwd',
+    'head README.md',
+    'tail package.json',
+    'less CHANGELOG.md',
+    'more README.md',
+    'sed -n 1p README.md',
+    'awk {print} README.md',
+    'sort README.md',
+    'wc -l README.md',
+    'cut -d: -f1 /etc/passwd',
+    'xargs echo',
+    'tee output.txt'
+  ]) {
+    const result = classifyNaturalTerminalInput(input);
+    assert.equal(result.boundary, 'SYSTEM_TERMINAL', input);
+    assert.match(
+      formatNaturalTerminalBoundary(result, 'pt-BR'),
+      /Nada foi executado/
+    );
+    assert.match(
+      formatNaturalTerminalBoundary(result, 'en'),
+      /Nothing was executed/
+    );
   }
 });
 
