@@ -147,6 +147,14 @@ surgical-devops --interaction ENGINEER
 surgical-devops --interaction EXPERT
 ```
 
+Select the complete human-facing language for one invocation without rewriting
+the saved preference:
+
+```bash
+surgical-devops --language en
+surgical-devops --language pt-BR
+```
+
 The preference contains no operational authority. All profiles use the same
 Orchestrator, BH-SEP/BH-SDP, R3, journal, Manifest CAS and anti-replay contracts.
 
@@ -185,6 +193,7 @@ repurpose the original v2.2 RAW URLs. See
 - [Content-Addressed Mutation Authority — ADR-010](./docs/adr/ADR-010-governed-content-addressed-workspace-authority.md)
 - [Interaction Modes — ADR-011](./docs/adr/ADR-011-intent-driven-orchestration-user-modes.md)
 - [Governed AI Behavior — ADR-014](./docs/adr/ADR-014-governed-ai-behavior-contract.md)
+- [Complete Bilingual Human Experience — ADR-031](./docs/adr/ADR-031-complete-bilingual-human-experience.md)
 
 ## What the green CI does not claim
 

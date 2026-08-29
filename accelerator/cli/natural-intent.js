@@ -137,7 +137,18 @@ function interpretNaturalIntent(input) {
   });
 }
 
-function naturalUnknownMessage() {
+function naturalUnknownMessage(language = 'pt-BR') {
+  if (language === 'en') {
+    return (
+      'I cannot safely execute this natural-language request yet.\n' +
+      'For example, you can ask:\n' +
+      '  "What is the current state of this repository?"\n' +
+      '  "What is the current branch?"\n' +
+      '  "What is the current commit?"\n' +
+      'No change was made.\n'
+    );
+  }
+
   return (
     'Ainda não consigo executar esse pedido em linguagem natural com segurança.\n' +
     'Você pode perguntar, por exemplo:\n' +

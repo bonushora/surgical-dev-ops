@@ -49,16 +49,32 @@ function classifyNaturalTerminalInput(value) {
   return Object.freeze({ boundary: 'NONE' });
 }
 
-function formatNaturalTerminalBoundary(result) {
+function formatNaturalTerminalBoundary(result, language = 'pt-BR') {
   if (!result || result.boundary === 'NONE') {
     return '';
   }
 
   if (result.boundary === 'MULTILINE') {
+    if (language === 'en') {
+      return (
+        'The input contains multiple lines and will not be interpreted as a sequence of decisions.\n' +
+        'Send one request at a time. For system commands, close with "exit" and use the external terminal.\n' +
+        'No operation was executed and no authorization was granted.\n'
+      );
+    }
+
     return (
       'A entrada contém várias linhas e não será interpretada como uma sequência de decisões.\n' +
       'Envie uma solicitação por vez. Para comandos do sistema, encerre com "exit" e use o terminal externo.\n' +
       'Nenhuma operação foi executada e nenhuma autorização foi concedida.\n'
+    );
+  }
+
+  if (language === 'en') {
+    return (
+      'This appears to be a system terminal command, not a Surgical DevOps request.\n' +
+      'Nothing was executed. Type "exit" to close the session and run the command at the external "user@...$" prompt.\n' +
+      'The "surgical>" prompt accepts governed conversation and Surgical DevOps commands.\n'
     );
   }
 

@@ -132,6 +132,14 @@ surgical-devops --interaction ENGINEER
 surgical-devops --interaction EXPERT
 ```
 
+Para selecionar o idioma completo das superfícies humanas somente na invocação
+atual, sem reescrever a preferência salva:
+
+```bash
+surgical-devops --language pt-BR
+surgical-devops --language en
+```
+
 A preferência não contém autoridade operacional. Todos os perfis usam o mesmo
 Orchestrator e os mesmos contratos BH-SEP/BH-SDP, R3, journal, Manifest CAS e
 anti-replay.
@@ -169,6 +177,7 @@ e a [ADR-018](./docs/adr/ADR-018-immutable-protocol-raw-and-international-docume
 - [Autoridade Content-Addressed — ADR-010](./docs/adr/ADR-010-governed-content-addressed-workspace-authority.md)
 - [Modos de Interação — ADR-011](./docs/adr/ADR-011-intent-driven-orchestration-user-modes.md)
 - [Comportamento Governado da IA — ADR-014](./docs/adr/ADR-014-governed-ai-behavior-contract.md)
+- [Experiência Humana Bilíngue Completa — ADR-031](./docs/adr/ADR-031-complete-bilingual-human-experience_PT-BR.md)
 
 ## O que o CI verde não afirma
 

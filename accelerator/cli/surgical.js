@@ -86,7 +86,34 @@ const {
   runUnifiedInteractionOnboarding
 } = require('./unified-interaction-onboarding');
 
+const {
+  normalizeHumanLanguage,
+  isEnglish
+} = require('./human-language');
+
 const VERSION = '2.6.0-rc.2';
+
+function humanText(activation, portuguese, english) {
+  return usesEnglish(activation)
+    ? english
+    : portuguese;
+}
+
+function usesEnglish(activation) {
+  const legacyFallback =
+    activation &&
+    activation.interactionMode &&
+    ['NATURAL', 'ENGINEER'].includes(
+      activation.interactionMode.mode
+    )
+      ? 'pt-BR'
+      : 'en';
+
+  return normalizeHumanLanguage(
+    activation && activation.language,
+    legacyFallback
+  ) === 'en';
+}
 
 function printVersion() {
   process.stdout.write(`Surgical DevOps v${VERSION}\n`);
@@ -100,17 +127,19 @@ Usage:
   surgical [options]
 
 Options:
-  --help                 Show this help
-  --version              Show the Surgical DevOps version
-  --interaction <mode>   Select NATURAL, ENGINEER or EXPERT
-  --configure            Choose and persist the interaction experience
+  --help                 Show this help / Mostrar esta ajuda
+  --version              Show version / Mostrar versão
+  --interaction <mode>   Select / Selecionar NATURAL, ENGINEER or EXPERT
+  --language <language>  Select / Selecionar en or pt-BR
+  --configure            Configure and persist / Configurar e persistir
 `
   );
 }
 
 function createInteractiveActivation(
   repositoryPath = process.cwd(),
-  interactionMode = 'EXPERT'
+  interactionMode = 'EXPERT',
+  language = null
 ) {
   const discovery = discover(repositoryPath);
 
@@ -126,6 +155,12 @@ function createInteractiveActivation(
     packageManager: discovery.project.packageManager,
     mode: 'DETERMINISTIC',
     interactionMode: interaction,
+    language: normalizeHumanLanguage(
+      language,
+      ['NATURAL', 'ENGINEER'].includes(interaction.mode)
+        ? 'pt-BR'
+        : 'en'
+    ),
     strategy: 'PATCH',
     orchestrator: 'ACTIVE',
     providers:
@@ -142,6 +177,7 @@ function createInteractiveActivation(
 }
 
 function formatInteractiveActivation(activation) {
+  const english = usesEnglish(activation);
   const naturalMode =
     Boolean(
       activation.interactionMode &&
@@ -151,6 +187,24 @@ function formatInteractiveActivation(activation) {
     );
 
   if (naturalMode) {
+    if (english) {
+      return (
+        `Surgical DevOps v${VERSION}\n\n` +
+        `Hello. I am connected to project "${activation.workspace}".\n\n` +
+        'You can talk to me normally about this project.\n' +
+        'I can help you understand the code, analyze project evidence,\n' +
+        'explain problems, plan changes, and conduct development\n' +
+        'within Surgical DevOps governed permissions.\n\n' +
+        'The default cognitive assistant is Qwen 3 8B via Ollama when available locally.\n' +
+        'Deterministic project protection is active.\n' +
+        'The initial work mode is supervised microtasks.\n\n' +
+        'When an action requires your authorization, expands project scope,\n' +
+        'or introduces a new architectural decision, I will stop and explain before proceeding.\n\n' +
+        'Type "help" for examples or simply tell me what you want to do.\n\n' +
+        'surgical> '
+      );
+    }
+
     return (
       `Surgical DevOps v${VERSION}
 
@@ -176,7 +230,7 @@ surgical> `
 
   return (
     `Surgical DevOps v${VERSION}
-BH-SEP v${activation.protocols.bhSep} E BH-SDP v${activation.protocols.bhSdp} ATIVADOS 🚀
+BH-SEP v${activation.protocols.bhSep} E BH-SDP v${activation.protocols.bhSdp} ATIVADOS / ACTIVATED 🚀
 
 Workspace: ${activation.workspace}
 Branch: ${activation.branch || 'detached'}
@@ -195,23 +249,42 @@ surgical> `
 }
 
 function formatInteractiveStatus(activation) {
+  const english = usesEnglish(activation);
   return (
-`Workspace: ${activation.workspace}
-Branch: ${activation.branch || 'detached'}
-Mode: ${activation.mode}
-Interaction: ${
+`${english ? 'Workspace' : 'Workspace'}: ${activation.workspace}
+${english ? 'Branch' : 'Branch'}: ${activation.branch || (english ? 'detached' : 'destacada')}
+${english ? 'Mode' : 'Modo'}: ${activation.mode}
+${english ? 'Interaction' : 'Interação'}: ${
   activation.interactionMode
     ? activation.interactionMode.mode
     : 'EXPERT'
 }
-Strategy: ${activation.strategy}
+${english ? 'Strategy' : 'Estratégia'}: ${activation.strategy}
 Orchestrator: ${activation.orchestrator}
 Providers: ${activation.providers}
+${english ? 'Language' : 'Idioma'}: ${activation.language}
 `
   );
 }
 
-function formatSessionHelp() {
+function formatSessionHelp(language = 'en') {
+  if (!isEnglish(language)) {
+    return (
+`Comandos disponíveis:
+  help                   Mostrar comandos delimitados do Nível 1
+  status                 Mostrar estado determinístico da sessão
+  providers              Mostrar estado dos providers
+  read <arquivo>         Leitura governada e delimitada de arquivo
+  validate <arquivo.js>  Validação governada de sintaxe Node.js
+  git root|branch|head|status|tracked
+                         Leitura governada do repositório
+  patch <arquivo> --content-base64 <dados>
+                         Patch governado R3 de arquivo único
+  exit | quit            Encerrar a sessão Surgical
+`
+    );
+  }
+
   return (
 `Available commands:
   help                   Show bounded Level 1 commands
@@ -267,7 +340,7 @@ function handleInteractiveCommand(input, activation) {
   if (command === 'help') {
     return {
       action: 'CONTINUE',
-      output: formatSessionHelp()
+      output: formatSessionHelp(activation.language)
     };
   }
 
@@ -281,9 +354,9 @@ function handleInteractiveCommand(input, activation) {
   if (command === 'providers') {
     return {
       action: 'CONTINUE',
-      output:
-        `Providers: ${activation.providers}\n` +
-        'Provider is not required for the Level 1 human session.\n'
+      output: usesEnglish(activation)
+        ? `Providers: ${activation.providers}\nProvider is not required for the Level 1 human session.\n`
+        : `Providers: ${activation.providers}\nUm provider não é necessário para a sessão humana do Nível 1.\n`
     };
   }
 
@@ -291,7 +364,9 @@ function handleInteractiveCommand(input, activation) {
     if (!argument) {
       return {
         action: 'CONTINUE',
-        output: 'Usage: read <file>\n'
+        output: usesEnglish(activation)
+          ? 'Usage: read <file>\n'
+          : 'Uso: read <arquivo>\n'
       };
     }
 
@@ -309,7 +384,9 @@ function handleInteractiveCommand(input, activation) {
     if (!argument) {
       return {
         action: 'CONTINUE',
-        output: 'Usage: validate <file.js>\n'
+        output: usesEnglish(activation)
+          ? 'Usage: validate <file.js>\n'
+          : 'Uso: validate <arquivo.js>\n'
       };
     }
 
@@ -338,8 +415,9 @@ function handleInteractiveCommand(input, activation) {
     ) {
       return {
         action: 'CONTINUE',
-        output:
-          'Usage: git <root|branch|head|status|tracked>\n'
+        output: usesEnglish(activation)
+          ? 'Usage: git <root|branch|head|status|tracked>\n'
+          : 'Uso: git <root|branch|head|status|tracked>\n'
       };
     }
 
@@ -369,8 +447,9 @@ function handleInteractiveCommand(input, activation) {
     ) {
       return {
         action: 'CONTINUE',
-        output:
-          'Usage: patch <file> --content-base64 <data>\n'
+        output: usesEnglish(activation)
+          ? 'Usage: patch <file> --content-base64 <data>\n'
+          : 'Uso: patch <arquivo> --content-base64 <dados>\n'
       };
     }
 
@@ -393,8 +472,9 @@ function handleInteractiveCommand(input, activation) {
     ) {
       return {
         action: 'CONTINUE',
-        output:
-          'Usage: patch <file> --content-base64 <data>\n'
+        output: usesEnglish(activation)
+          ? 'Usage: patch <file> --content-base64 <data>\n'
+          : 'Uso: patch <arquivo> --content-base64 <dados>\n'
       };
     }
 
@@ -413,7 +493,9 @@ function handleInteractiveCommand(input, activation) {
   if (command === 'exit' || command === 'quit') {
     return {
       action: 'EXIT',
-      output: 'Surgical session closed.\n'
+      output: usesEnglish(activation)
+        ? 'Surgical session closed.\n'
+        : 'Sessão Surgical encerrada.\n'
     };
   }
 
@@ -445,7 +527,9 @@ function handleInteractiveCommand(input, activation) {
 
   return {
     action: 'CONTINUE',
-    output: `Unknown command: ${raw}\n`
+    output: usesEnglish(activation)
+      ? `Unknown command: ${raw}\n`
+      : `Comando desconhecido: ${raw}\n`
   };
 }
 
@@ -555,10 +639,14 @@ function dispatchInteractiveIntent(
 }
 
 function formatCognitiveProgressMessage(
-  input
+  input,
+  preferredLanguage = null
 ) {
   if (
-    detectNaturalResponseLanguage(input) ===
+    normalizeHumanLanguage(
+      preferredLanguage,
+      detectNaturalResponseLanguage(input)
+    ) ===
       'en'
   ) {
     return (
@@ -650,7 +738,9 @@ function createInteractiveSession(
           options.sessionControl ||
           createNaturalSessionControl({
             workspace:
-              activation.workspace
+              activation.workspace,
+            language:
+              activation.language
           })
         )
       : null;
@@ -712,7 +802,11 @@ function createInteractiveSession(
                         'ENGINEER'
                     ) {
                       output.write(
-                        'Consultando evidências governadas e preparando a análise local...\n'
+                        humanText(
+                          activation,
+                          'Consultando evidências governadas e preparando a análise local...\n',
+                          'Consulting governed evidence and preparing the local analysis...\n'
+                        )
                       );
 
                       const engineering =
@@ -738,13 +832,21 @@ function createInteractiveSession(
                         engineering.proposal;
 
                       output.write(
-                        'Proposta de engenharia qualificada; nenhuma alteração foi executada.\n\n' +
+                        humanText(
+                          activation,
+                          'Proposta de engenharia qualificada; nenhuma alteração foi executada.\n\n',
+                          'Qualified engineering proposal; no change was executed.\n\n'
+                        ) +
                         `Target: ${proposal.target}\n` +
                         `BEFORE SHA256: ${proposal.beforeSha256}\n` +
                         `AFTER SHA256: ${proposal.replacementSha256}\n` +
                         `Validation: ${proposal.validationKind}\n` +
                         `Reason: ${proposal.reason}\n\n` +
-                        'Para materializar autoridade R3 separadamente, revise o conteúdo e use o comando exato:\n' +
+                        humanText(
+                          activation,
+                          'Para materializar autoridade R3 separadamente, revise o conteúdo e use o comando exato:\n',
+                          'To materialize R3 authority separately, review the content and use the exact command:\n'
+                        ) +
                         `patch ${proposal.target} --content-base64 ${proposal.replacementBase64}\n`
                       );
 
@@ -753,7 +855,11 @@ function createInteractiveSession(
                     }
 
                     output.write(
-                      'Consultando evidências governadas e processando a resposta local...\n'
+                      humanText(
+                        activation,
+                        'Consultando evidências governadas e processando a resposta local...\n',
+                        'Consulting governed evidence and processing the local response...\n'
+                      )
                     );
 
                     const analysisStartedAt =
@@ -773,13 +879,29 @@ function createInteractiveSession(
                           ) {
                             const evidenceLabel =
                               progress.detail === 'WORKSPACE_FILES'
-                                ? 'estrutura do projeto obtida'
+                                ? humanText(
+                                    activation,
+                                    'estrutura do projeto obtida',
+                                    'project structure obtained'
+                                  )
                                 : progress.detail === 'READ_FILE'
-                                  ? 'conteúdo de arquivo obtido'
-                                  : 'validação obtida';
+                                  ? humanText(
+                                      activation,
+                                      'conteúdo de arquivo obtido',
+                                      'file content obtained'
+                                    )
+                                  : humanText(
+                                      activation,
+                                      'validação obtida',
+                                      'validation obtained'
+                                    );
 
                             output.write(
-                              `Etapa ${progress.step}: ${evidenceLabel}; continuando...\n`
+                              humanText(
+                                activation,
+                                `Etapa ${progress.step}: ${evidenceLabel}; continuando...\n`,
+                                `Step ${progress.step}: ${evidenceLabel}; continuing...\n`
+                              )
                             );
                           }
                         }
@@ -790,8 +912,11 @@ function createInteractiveSession(
                         'HUMAN_AUTHORITY_REQUIRED'
                     ) {
                       output.write(
-                        'A análise encontrou uma necessidade fora da autorização atual. ' +
-                        'Nenhuma operação adicional foi executada. Reformule o pedido ou autorize um novo escopo explicitamente.\n'
+                        humanText(
+                          activation,
+                          'A análise encontrou uma necessidade fora da autorização atual. Nenhuma operação adicional foi executada. Reformule o pedido ou autorize um novo escopo explicitamente.\n',
+                          'The analysis found a need outside the current authorization. No additional operation was executed. Rephrase the request or explicitly authorize a new scope.\n'
+                        )
                       );
                       resumeAndPrompt();
                       return;
@@ -808,8 +933,11 @@ function createInteractiveSession(
                       !recursive.response.trim()
                     ) {
                       output.write(
-                        'Não consegui concluir a análise com as evidências qualificadas disponíveis. ' +
-                        'A governança permanece ativa e nenhum arquivo foi alterado.\n'
+                        humanText(
+                          activation,
+                          'Não consegui concluir a análise com as evidências qualificadas disponíveis. A governança permanece ativa e nenhum arquivo foi alterado.\n',
+                          'I could not complete the analysis with the available qualified evidence. Governance remains active and no file was changed.\n'
+                        )
                       );
                       resumeAndPrompt();
                       return;
@@ -823,8 +951,11 @@ function createInteractiveSession(
 
                     output.write(
                       recursive.response.trim() +
-                      '\n\nA resposta foi fundamentada em evidências governadas do projeto. ' +
-                      `Concluída em ${elapsedSeconds}s. Nenhum arquivo foi alterado.\n`
+                      humanText(
+                        activation,
+                        `\n\nA resposta foi fundamentada em evidências governadas do projeto. Concluída em ${elapsedSeconds}s. Nenhum arquivo foi alterado.\n`,
+                        `\n\nThe response was grounded in governed project evidence. Completed in ${elapsedSeconds}s. No file was changed.\n`
+                      )
                     );
 
                     if (
@@ -865,7 +996,8 @@ function createInteractiveSession(
                   ) {
                     output.write(
                       formatWorkspaceFiles(
-                        governed
+                        governed,
+                        activation.language
                       )
                     );
                   } else {
@@ -881,7 +1013,8 @@ function createInteractiveSession(
                       if (!cognitiveSession) {
                         output.write(
                           formatFileReadEvidence(
-                            evidence
+                            evidence,
+                            activation.language
                           )
                         );
                       } else {
@@ -889,7 +1022,11 @@ function createInteractiveSession(
                           Date.now();
 
                         output.write(
-                          'Arquivo lido. Processando a explicação no modelo local...\n'
+                          humanText(
+                            activation,
+                            'Arquivo lido. Processando a explicação no modelo local...\n',
+                            'File read. Processing the explanation with the local model...\n'
+                          )
                         );
 
                         const cognitiveOutput =
@@ -897,28 +1034,37 @@ function createInteractiveSession(
                             task.objective,
                             activation,
                             (
-                              `Arquivo: ${evidence.target}\n` +
+                              `${usesEnglish(activation) ? 'File' : 'Arquivo'}: ${evidence.target}\n` +
                               `SHA256: ${evidence.sha256}\n` +
-                              `Conteúdo:\n${evidence.content}`
+                              `${usesEnglish(activation) ? 'Content' : 'Conteúdo'}:\n${evidence.content}`
                             )
                           );
 
                         output.write(
                           cognitiveOutput +
-                          `Explicação concluída em ${Math.max(0.1, (Date.now() - explanationStartedAt) / 1000).toFixed(1)}s.\n`
+                          humanText(
+                            activation,
+                            `Explicação concluída em ${Math.max(0.1, (Date.now() - explanationStartedAt) / 1000).toFixed(1)}s.\n`,
+                            `Explanation completed in ${Math.max(0.1, (Date.now() - explanationStartedAt) / 1000).toFixed(1)}s.\n`
+                          )
                         );
                       }
                     } else {
                       output.write(
                         formatFileReadEvidence(
-                          evidence
+                          evidence,
+                          activation.language
                         )
                       );
                     }
                   }
                 } catch {
                   output.write(
-                    'A operação autorizada foi negada pelo Surgical DevOps e falhou de forma segura.\n'
+                    humanText(
+                      activation,
+                      'A operação autorizada foi negada pelo Surgical DevOps e falhou de forma segura.\n',
+                      'The authorized operation was denied by Surgical DevOps and failed closed.\n'
+                    )
                   );
                 }
               } else if (
@@ -936,7 +1082,11 @@ function createInteractiveSession(
               ) {
                 if (!cognitiveSession) {
                   output.write(
-                    'Assistente cognitivo: indisponível.\n'
+                    humanText(
+                      activation,
+                      'Assistente cognitivo: indisponível.\n',
+                      'Cognitive assistant: unavailable.\n'
+                    )
                   );
                 } else {
                   const discovery =
@@ -944,7 +1094,8 @@ function createInteractiveSession(
 
                   output.write(
                     formatProviderStatus(
-                      discovery
+                      discovery,
+                      activation.language
                     )
                   );
                 }
@@ -958,7 +1109,11 @@ function createInteractiveSession(
                     'function'
                 ) {
                   output.write(
-                    'A seleção de modelo local está indisponível. Nenhuma alteração foi realizada.\n'
+                    humanText(
+                      activation,
+                      'A seleção de modelo local está indisponível. Nenhuma alteração foi realizada.\n',
+                      'Local model selection is unavailable. No change was made.\n'
+                    )
                   );
                 } else {
                   const selected =
@@ -968,14 +1123,19 @@ function createInteractiveSession(
 
                   if (selected.available) {
                     output.write(
-                      `Modelo local ativado nesta sessão: ${selected.model}.\n` +
-                      'A memória e o cache cognitivo temporários foram reiniciados.\n' +
-                      'A autoridade operacional da IA permanece inexistente.\n'
+                      humanText(
+                        activation,
+                        `Modelo local ativado nesta sessão: ${selected.model}.\nA memória e o cache cognitivo temporários foram reiniciados.\nA autoridade operacional da IA permanece inexistente.\n`,
+                        `Local model activated for this session: ${selected.model}.\nTemporary cognitive memory and cache were reset.\nThe AI still has no operational authority.\n`
+                      )
                     );
                   } else {
                     output.write(
-                      `Não foi possível ativar ${controlled.model}: ${selected.reason}\n` +
-                      'O modelo anterior e a governança foram preservados.\n'
+                      humanText(
+                        activation,
+                        `Não foi possível ativar ${controlled.model}: ${selected.reason}\nO modelo anterior e a governança foram preservados.\n`,
+                        `Could not activate ${controlled.model}: ${selected.reason}\nThe previous model and governance were preserved.\n`
+                      )
                     );
                   }
                 }
@@ -992,7 +1152,11 @@ function createInteractiveSession(
                 }
 
                 output.write(
-                  'Conversa reiniciada. A memória e o cache temporários desta sessão foram limpos. A governança e o projeto ativo permanecem inalterados.\n'
+                  humanText(
+                    activation,
+                    'Conversa reiniciada. A memória e o cache temporários desta sessão foram limpos. A governança e o projeto ativo permanecem inalterados.\n',
+                    'Conversation reset. Temporary session memory and cache were cleared. Governance and the active project remain unchanged.\n'
+                  )
                 );
               } else if (
                 controlled.action ===
@@ -1007,15 +1171,26 @@ function createInteractiveSession(
 
                 output.write(
                   state
-                    ? (
+                    ? humanText(
+                        activation,
                         'Estado da conversa:\n' +
-                        `  Interações lembradas: ${state.turnCount}\n` +
-                        `  Decisões cognitivas em cache: ${state.decisionCacheEntries}\n` +
-                        `  Reutilizações do cache: ${state.decisionCacheHits}\n` +
-                        '  Persistência: não\n' +
-                        '  Autoridade operacional: nenhuma\n'
+                          `  Interações lembradas: ${state.turnCount}\n` +
+                          `  Decisões cognitivas em cache: ${state.decisionCacheEntries}\n` +
+                          `  Reutilizações do cache: ${state.decisionCacheHits}\n` +
+                          '  Persistência: não\n' +
+                          '  Autoridade operacional: nenhuma\n',
+                        'Conversation state:\n' +
+                          `  Remembered interactions: ${state.turnCount}\n` +
+                          `  Cached cognitive decisions: ${state.decisionCacheEntries}\n` +
+                          `  Cache reuses: ${state.decisionCacheHits}\n` +
+                          '  Persistence: no\n' +
+                          '  Operational authority: none\n'
                       )
-                    : 'Memória conversacional indisponível.\n'
+                    : humanText(
+                        activation,
+                        'Memória conversacional indisponível.\n',
+                        'Conversation memory unavailable.\n'
+                      )
                 );
               } else if (
                 controlled.action ===
@@ -1093,13 +1268,18 @@ function createInteractiveSession(
                 result.presentation
                   ? formatNaturalPresentation(
                       result.presentation,
-                      governedOutput
+                      governedOutput,
+                      activation.language
                     )
                   : governedOutput
               );
             } catch {
               output.write(
-                'Governed request denied: operation failed closed.\n'
+                humanText(
+                  activation,
+                  'Solicitação governada negada: a operação falhou de forma segura.\n',
+                  'Governed request denied: operation failed closed.\n'
+                )
               );
             }
           }
@@ -1107,12 +1287,15 @@ function createInteractiveSession(
           if (result.action === 'COGNITIVE') {
             if (!cognitiveSession) {
               output.write(
-                naturalUnknownMessage()
+                naturalUnknownMessage(
+                  activation.language
+                )
               );
             } else {
               output.write(
                 formatCognitiveProgressMessage(
-                  result.cognitiveInput
+                  result.cognitiveInput,
+                  activation.language
                 )
               );
 
@@ -1140,7 +1323,11 @@ function createInteractiveSession(
         })
         .catch(() => {
           output.write(
-            'Surgical session failed closed while processing the request.\n'
+            humanText(
+              activation,
+              'A sessão Surgical falhou de forma segura ao processar a solicitação.\n',
+              'Surgical session failed closed while processing the request.\n'
+            )
           );
 
           resumeAndPrompt();
@@ -1206,6 +1393,34 @@ async function main(
   let interactionMode =
     null;
 
+  const languageIndexes =
+    argv.reduce((indexes, argument, index) => {
+      if (argument === '--language') indexes.push(index);
+      return indexes;
+    }, []);
+
+  if (languageIndexes.length > 1) {
+    throw new Error('Language selector cannot be repeated.');
+  }
+
+  let language = null;
+
+  if (languageIndexes.length === 1) {
+    const languageIndex = languageIndexes[0];
+    if (
+      languageIndex + 1 >= argv.length ||
+      argv[languageIndex + 1].startsWith('--')
+    ) {
+      throw new Error('Explicit human language is required.');
+    }
+
+    const requestedLanguage = argv[languageIndex + 1];
+    language = normalizeHumanLanguage(requestedLanguage, null);
+    if (language === null) {
+      throw new Error('Human language must be en or pt-BR.');
+    }
+  }
+
   if (interactionIndexes.length === 1) {
     const interactionIndex =
       interactionIndexes[0];
@@ -1246,6 +1461,9 @@ async function main(
     if (savedPreference) {
       interactionMode =
         savedPreference.interactionMode;
+      if (language === null) {
+        language = savedPreference.language;
+      }
     } else if (
       configure ||
       Boolean(input.isTTY && output.isTTY)
@@ -1259,6 +1477,7 @@ async function main(
 
       interactionMode =
         selected.interactionMode;
+      language = selected.language;
     } else {
       interactionMode = 'EXPERT';
     }
@@ -1267,7 +1486,8 @@ async function main(
   const activation =
     createInteractiveActivation(
       process.cwd(),
-      interactionMode
+      interactionMode,
+      language
     );
 
   /*

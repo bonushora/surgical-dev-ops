@@ -87,7 +87,7 @@ function parseWorktreeStatus(payload) {
   });
 }
 
-function formatRepositoryStatus(payload) {
+function formatRepositoryStatus(payload, language = 'pt-BR') {
   const status =
     parseWorktreeStatus(payload);
 
@@ -96,6 +96,13 @@ function formatRepositoryStatus(payload) {
   }
 
   if (status.total === 0) {
+    if (language === 'en') {
+      return (
+        'The project has no pending local changes.\n' +
+        'No change was made.\n'
+      );
+    }
+
     return (
       'O projeto não possui alterações locais pendentes.\n' +
       'Nenhuma alteração foi realizada.\n'
@@ -103,14 +110,15 @@ function formatRepositoryStatus(payload) {
   }
 
   const parts = [];
+  const english = language === 'en';
 
   if (status.modified > 0) {
     parts.push(
       `${status.modified} ` +
       (
         status.modified === 1
-          ? 'arquivo modificado'
-          : 'arquivos modificados'
+          ? (english ? 'modified file' : 'arquivo modificado')
+          : (english ? 'modified files' : 'arquivos modificados')
       )
     );
   }
@@ -120,8 +128,8 @@ function formatRepositoryStatus(payload) {
       `${status.untracked} ` +
       (
         status.untracked === 1
-          ? 'arquivo novo não rastreado'
-          : 'arquivos novos não rastreados'
+          ? (english ? 'new untracked file' : 'arquivo novo não rastreado')
+          : (english ? 'new untracked files' : 'arquivos novos não rastreados')
       )
     );
   }
@@ -131,9 +139,17 @@ function formatRepositoryStatus(payload) {
       `${status.other} ` +
       (
         status.other === 1
-          ? 'outra alteração'
-          : 'outras alterações'
+          ? (english ? 'other change' : 'outra alteração')
+          : (english ? 'other changes' : 'outras alterações')
       )
+    );
+  }
+
+  if (english) {
+    return (
+      'The project has local changes that have not been recorded yet.\n' +
+      `Found ${parts.join(' and ')}.\n` +
+      'No change was made.\n'
     );
   }
 
@@ -146,7 +162,8 @@ function formatRepositoryStatus(payload) {
 
 function formatNaturalPresentation(
   presentation,
-  governedOutput
+  governedOutput,
+  language = 'pt-BR'
 ) {
   const evidence =
     extractGovernedPayload(
@@ -163,7 +180,8 @@ function formatNaturalPresentation(
   ) {
     return (
       formatRepositoryStatus(
-        evidence.payload
+        evidence.payload,
+        language
       ) ||
       governedOutput
     );
@@ -180,10 +198,15 @@ function formatNaturalPresentation(
       return governedOutput;
     }
 
-    return (
+    return language === 'en'
+      ? (
+          `You are working on branch "${branch}".\n` +
+          'No change was made.\n'
+        )
+      : (
       `Você está trabalhando na branch "${branch}".\n` +
       'Nenhuma alteração foi realizada.\n'
-    );
+        );
   }
 
   if (
@@ -200,11 +223,17 @@ function formatNaturalPresentation(
       return governedOutput;
     }
 
-    return (
+    return language === 'en'
+      ? (
+          'The current project commit is:\n' +
+          `${commit}\n` +
+          'No change was made.\n'
+        )
+      : (
       'O commit atual do projeto é:\n' +
       `${commit}\n` +
       'Nenhuma alteração foi realizada.\n'
-    );
+        );
   }
 
   return governedOutput;
