@@ -79,6 +79,11 @@ const {
 );
 
 const {
+  prepareInteractiveNaturalDevelopment,
+  approveInteractiveNaturalDevelopment
+} = require('./natural-development-interactive');
+
+const {
   createInteractionPreferenceStore
 } = require('./interaction-preference-store');
 
@@ -765,12 +770,94 @@ function createInteractiveSession(
   let processing =
     Promise.resolve();
 
+  let pendingDevelopment =
+    null;
+
   rl.on('line', (line) => {
     rl.pause();
 
     processing =
       processing
         .then(async () => {
+          const normalizedLine = String(line || '').trim();
+
+          if (
+            pendingDevelopment &&
+            !/^(?:exit|quit)$/i.test(normalizedLine)
+          ) {
+            const fingerprint =
+              pendingDevelopment.patchProposal.proposalFingerprint;
+            const approval = normalizedLine.match(
+              /^(?:aprovar|approve) patch ([a-f0-9]{64})$/i
+            );
+
+            if (approval && approval[1].toLowerCase() === fingerprint) {
+              const exactPending = pendingDevelopment;
+              pendingDevelopment = null;
+
+              try {
+                const patchOptions = patchOptionsFromEnvironment();
+                const completed = await approveInteractiveNaturalDevelopment({
+                  pending: exactPending,
+                  approvedProposalFingerprint: fingerprint,
+                  ...patchOptions
+                });
+
+                output.write(
+                  humanText(
+                    activation,
+                    'Alteração governada concluída e validada.\n',
+                    'Governed change completed and validated.\n'
+                  ) +
+                  `Target: ${completed.target}\n` +
+                  `BEFORE SHA256: ${completed.beforeSha256}\n` +
+                  `AFTER SHA256: ${completed.afterSha256}\n` +
+                  `Transaction: ${completed.transactionId}\n` +
+                  `Journal: ${completed.journalId}\n` +
+                  humanText(
+                    activation,
+                    'A autorização foi consumida e não pode ser reutilizada.\n',
+                    'The authorization was consumed and cannot be reused.\n'
+                  )
+                );
+              } catch {
+                output.write(
+                  humanText(
+                    activation,
+                    'A execução governada falhou de forma segura. A proposta foi encerrada e nenhuma autorização reutilizável permaneceu.\n',
+                    'Governed execution failed closed. The proposal was closed and no reusable authorization remained.\n'
+                  )
+                );
+              }
+
+              resumeAndPrompt();
+              return;
+            }
+
+            if (/^(?:nao|não|no|cancelar|cancel)$/i.test(normalizedLine)) {
+              pendingDevelopment = null;
+              output.write(
+                humanText(
+                  activation,
+                  'Proposta de desenvolvimento cancelada. Nenhuma autoridade foi materializada.\n',
+                  'Development proposal cancelled. No authority was materialized.\n'
+                )
+              );
+              resumeAndPrompt();
+              return;
+            }
+
+            output.write(
+              humanText(
+                activation,
+                `Uma proposta exata aguarda decisão. Use "aprovar patch ${fingerprint}" ou "cancelar".\n`,
+                `An exact proposal is awaiting a decision. Use "approve patch ${fingerprint}" or "cancel".\n`
+              )
+            );
+            resumeAndPrompt();
+            return;
+          }
+
           if (sessionControl) {
             const controlled =
               sessionControl.handle(
@@ -778,7 +865,51 @@ function createInteractiveSession(
               );
 
             if (controlled.matched) {
-              if (
+              if (controlled.action === 'DEVELOPMENT_REQUEST') {
+                try {
+                  output.write(
+                    humanText(
+                      activation,
+                      'Coletando evidências governadas e preparando uma proposta exata...\n',
+                      'Collecting governed evidence and preparing an exact proposal...\n'
+                    )
+                  );
+                  pendingDevelopment =
+                    await prepareInteractiveNaturalDevelopment({
+                      request: controlled.request,
+                      activation,
+                      cognitiveSession,
+                      dispatchEvidence: options.dispatchEvidence,
+                      workMode: sessionControl.currentWorkMode()
+                    });
+                  const proposal = pendingDevelopment.patchProposal;
+                  output.write(
+                    humanText(
+                      activation,
+                      'Proposta exata pronta para revisão humana. Nenhuma alteração foi executada.\n',
+                      'Exact proposal ready for human review. No change was executed.\n'
+                    ) +
+                    `Target: ${proposal.target}\n` +
+                    `BEFORE SHA256: ${proposal.beforeSha256}\n` +
+                    `AFTER SHA256: ${proposal.replacementSha256}\n` +
+                    `Proposal: ${proposal.proposalFingerprint}\n` +
+                    humanText(
+                      activation,
+                      `Para autorizar somente esta proposta, use: aprovar patch ${proposal.proposalFingerprint}\n`,
+                      `To authorize only this proposal, use: approve patch ${proposal.proposalFingerprint}\n`
+                    )
+                  );
+                } catch {
+                  pendingDevelopment = null;
+                  output.write(
+                    humanText(
+                      activation,
+                      'Não foi possível preparar uma proposta exata com as evidências qualificadas. Nenhuma alteração foi realizada.\n',
+                      'An exact proposal could not be prepared from qualified evidence. No change was made.\n'
+                    )
+                  );
+                }
+              } else if (
                 controlled.action ===
                   'AUTHORIZED_GOVERNED_TASK'
               ) {

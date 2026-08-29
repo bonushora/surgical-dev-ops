@@ -156,6 +156,7 @@ function naturalHelpMessage(language = 'pt-BR') {
       '  "What do you suggest doing next?"\n' +
       '  "Work step by step."\n' +
       '  "Work until the next architectural boundary."\n' +
+      '  "Change example.js to version 2."\n' +
       '  "I want to switch AI providers."\n\n' +
       'You can also say "conversation status" or "clear conversation".\n\n' +
       'When an action requires new authorization, a scope change, or your decision, I will stop and explain before proceeding.\n' +
@@ -173,7 +174,8 @@ function naturalHelpMessage(language = 'pt-BR') {
     '  "Explique este arquivo."\n' +
     '  "O que você sugere fazer agora?"\n' +
     '  "Trabalhe passo a passo."\n' +
-    '  "Trabalhe sozinha até a próxima fronteira arquitetural."\n' +
+      '  "Trabalhe sozinha até a próxima fronteira arquitetural."\n' +
+      '  "Altere o example.js para a versão 2."\n' +
     '  "Quero trocar de IA."\n\n' +
     'Também pode dizer "estado da conversa" ou "limpar conversa".\n\n' +
     'Quando uma ação exigir nova autorização, mudança de escopo ou uma decisão sua, eu paro e explico antes de prosseguir.\n' +
@@ -378,7 +380,13 @@ function createNaturalSessionControl(
       if (mutationRequest) {
         return Object.freeze({
           matched: true,
-          action: 'CONTINUE',
+          action: mutationRequest.target.endsWith('.js')
+            ? 'DEVELOPMENT_REQUEST'
+            : 'CONTINUE',
+          request: Object.freeze({
+            ...mutationRequest,
+            objective: String(input).trim()
+          }),
           output:
             formatBoundedMutationBoundary(
               mutationRequest,

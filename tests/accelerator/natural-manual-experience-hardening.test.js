@@ -197,3 +197,23 @@ test(
     }
   }
 );
+
+test(
+  'bounded JavaScript mutation enters governed development without becoming authorization',
+  () => {
+    for (const input of [
+      'altere o example.js para a versão 2',
+      'change example.js to version 2'
+    ]) {
+      const control = createNaturalSessionControl({ workspace: 'example-project' });
+      const result = control.handle(input);
+
+      assert.equal(result.matched, true);
+      assert.equal(result.action, 'DEVELOPMENT_REQUEST');
+      assert.equal(result.request.target, 'example.js');
+      assert.equal(result.request.objective, input);
+      assert.match(result.output, /HUMAN_AUTHORITY_REQUIRED/);
+      assert.equal(control.hasPendingAuthorization(), false);
+    }
+  }
+);
