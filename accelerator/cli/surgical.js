@@ -796,7 +796,9 @@ function createInteractiveSession(
               pendingDevelopment = null;
 
               try {
-                const patchOptions = patchOptionsFromEnvironment();
+                const patchOptions =
+                  options.patchOptions ||
+                  patchOptionsFromEnvironment();
                 const completed = await approveInteractiveNaturalDevelopment({
                   pending: exactPending,
                   approvedProposalFingerprint: fingerprint,
