@@ -44,6 +44,15 @@ const {
 const ROOT = path.resolve(__dirname, '../..');
 const CLI = path.join(ROOT, 'accelerator', 'cli', 'surgical.js');
 
+const {
+  createHermeticGitRepository
+} = require('./helpers/hermetic-git-repository');
+
+const FIXTURE = createHermeticGitRepository();
+const REPOSITORY = FIXTURE.repository;
+
+test.after(() => FIXTURE.cleanup());
+
 function temporaryDirectory() {
   return fs.realpathSync(fs.mkdtempSync(
     path.join(os.tmpdir(), 'sdo-complete-bilingual-')
@@ -91,7 +100,7 @@ test('persisted human language controls the complete relaunched experience', () 
       process.execPath,
       [CLI],
       {
-        cwd: ROOT,
+        cwd: REPOSITORY,
         env: environment(configurationBase),
         input: scenario.helpInput,
         encoding: 'utf8'
@@ -106,8 +115,8 @@ test('persisted human language controls the complete relaunched experience', () 
 });
 
 test('explicit language selects equivalent EXPERT human surfaces', () => {
-  const portuguese = createInteractiveActivation(ROOT, 'EXPERT', 'pt-BR');
-  const english = createInteractiveActivation(ROOT, 'EXPERT', 'en');
+  const portuguese = createInteractiveActivation(REPOSITORY, 'EXPERT', 'pt-BR');
+  const english = createInteractiveActivation(REPOSITORY, 'EXPERT', 'en');
 
   assert.match(formatInteractiveActivation(portuguese), /ATIVADOS/);
   assert.match(formatInteractiveActivation(english), /ACTIVATED/);
@@ -120,7 +129,7 @@ test('explicit language selects equivalent EXPERT human surfaces', () => {
     process.execPath,
     [CLI, '--interaction', 'NATURAL', '--language', 'en'],
     {
-      cwd: ROOT,
+      cwd: REPOSITORY,
       env: environment(temporaryDirectory()),
       input: 'exit\n',
       encoding: 'utf8'

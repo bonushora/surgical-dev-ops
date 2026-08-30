@@ -27,6 +27,15 @@ const {
   formatCognitiveProgressMessage
 } = require(CLI_FILE);
 
+const {
+  createHermeticGitRepository
+} = require('./helpers/hermetic-git-repository');
+
+const FIXTURE = createHermeticGitRepository();
+const REPOSITORY = FIXTURE.repository;
+
+test.after(() => FIXTURE.cleanup());
+
 test(
   'NATURAL terminal separates completed responses and prompts with a blank line',
   () => {
@@ -39,7 +48,7 @@ test(
           'NATURAL'
         ],
         {
-          cwd: ROOT,
+          cwd: REPOSITORY,
           input:
             'qual é a branch atual?\n' +
             'qual é o commit atual?\n' +
