@@ -35,9 +35,9 @@ test('English and Portuguese entry points expose equivalent qualified baseline f
   const english = read('README.md');
   const portuguese = read('README_PT-BR.md');
   const facts = [
-    '36ef01f53690e644976668248499ab9d5031f52f',
-    '32808535616',
-    '864',
+    '514cdf954fc94faeb91c1820abc3bf693fe0f4ab',
+    '33284298156',
+    '1139',
     'POWER_LOSS_VALIDATED',
     'protocols/BH-SEP.md',
     'protocols/BH-SDP.md'

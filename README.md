@@ -19,11 +19,11 @@ operational system around the model explicit, bounded, auditable, and fail-close
 
 | Evidence | Value |
 | --- | --- |
-| Release line | Surgical DevOps v2.6.0-rc.4 |
-| Canonical commit | [`36ef01f53690e644976668248499ab9d5031f52f`](https://github.com/bonushora/surgical-dev-ops/commit/36ef01f53690e644976668248499ab9d5031f52f) |
-| Canonical CI run | [Accelerator Conformance #32808535616](https://github.com/bonushora/surgical-dev-ops/actions/runs/32808535616) |
+| Release line | Surgical DevOps v2.6.0-rc.5 |
+| Canonical commit | [`514cdf954fc94faeb91c1820abc3bf693fe0f4ab`](https://github.com/bonushora/surgical-dev-ops/commit/514cdf954fc94faeb91c1820abc3bf693fe0f4ab) |
+| Canonical CI run | [Accelerator Conformance #33284298156](https://github.com/bonushora/surgical-dev-ops/actions/runs/33284298156) |
 | Matrix result | Ubuntu, macOS, and Windows: **PASS** |
-| Canonical suite | 864 tests discovered; 859 passed; 0 failures; 5 platform-specific skips |
+| Canonical suite | 1139 tests discovered; 1134 passed; 0 failures; 5 platform-specific skips |
 | Normative protocols | BH-SEP v2.2 + BH-SDP v2.2 |
 
 The complete trail, including failed runs that preceded the green baseline, is

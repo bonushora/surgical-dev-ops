@@ -196,8 +196,22 @@ function runProcess(
       cwd:
         state.repo,
 
-      env:
-        environment(state),
+      env: {
+        ...environment(state),
+
+        /*
+         * Restart qualification must preserve only governed
+         * durable state, never a host user's interface preference.
+         */
+        XDG_CONFIG_HOME:
+          state.root,
+
+        LOCALAPPDATA:
+          state.root,
+
+        APPDATA:
+          state.root
+      },
 
       input:
         [
