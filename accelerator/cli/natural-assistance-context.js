@@ -68,7 +68,7 @@ function createNaturalAssistanceContext(
         'Surgical DevOps',
 
       version:
-        '2.6.0-rc.5',
+        '2.6.0-rc.6',
 
       purpose:
         (

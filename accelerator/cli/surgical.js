@@ -100,7 +100,7 @@ const {
   isEnglish
 } = require('./human-language');
 
-const VERSION = '2.6.0-rc.5';
+const VERSION = '2.6.0-rc.6';
 
 function humanText(activation, portuguese, english) {
   return usesEnglish(activation)

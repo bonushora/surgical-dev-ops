@@ -126,3 +126,20 @@ test(
     );
   }
 );
+
+test(
+  'prerelease publication is isolated from the stable latest channel',
+  () => {
+    const workflow = source();
+
+    assert.match(
+      workflow,
+      /npm publish --access public --provenance --tag next/
+    );
+
+    assert.doesNotMatch(
+      workflow,
+      /npm publish --access public --provenance\s*$/
+    );
+  }
+);
