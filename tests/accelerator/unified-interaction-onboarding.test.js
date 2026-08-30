@@ -21,6 +21,15 @@ const CLI = path.join(
   'surgical.js'
 );
 
+const {
+  createHermeticGitRepository
+} = require('./helpers/hermetic-git-repository');
+
+const FIXTURE = createHermeticGitRepository();
+const REPOSITORY = FIXTURE.repository;
+
+test.after(() => FIXTURE.cleanup());
+
 function temporaryDirectory() {
   return fs.realpathSync(fs.mkdtempSync(
     path.join(os.tmpdir(), 'sdo-onboarding-')
@@ -99,7 +108,7 @@ test('bilingual onboarding persists NATURAL and subsequent launch reuses it', ()
     process.execPath,
     [CLI, '--configure'],
     {
-      cwd: ROOT,
+      cwd: REPOSITORY,
       env: environment,
       input: '1\n1\n',
       encoding: 'utf8'
@@ -114,7 +123,7 @@ test('bilingual onboarding persists NATURAL and subsequent launch reuses it', ()
     process.execPath,
     [CLI],
     {
-      cwd: ROOT,
+      cwd: REPOSITORY,
       env: environment,
       input: '',
       encoding: 'utf8'
@@ -149,7 +158,7 @@ test('explicit interaction override wins without rewriting saved preference', ()
     process.execPath,
     [CLI, '--interaction', 'EXPERT'],
     {
-      cwd: ROOT,
+      cwd: REPOSITORY,
       env: configurationEnvironment(configurationBase),
       input: '',
       encoding: 'utf8'
@@ -170,7 +179,7 @@ test('non-interactive launch without preference preserves EXPERT compatibility',
     process.execPath,
     [CLI],
     {
-      cwd: ROOT,
+      cwd: REPOSITORY,
       env: configurationEnvironment(configurationBase),
       input: '',
       encoding: 'utf8'

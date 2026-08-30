@@ -14,6 +14,10 @@ const NPM_COMMAND =
     ? 'npm.cmd'
     : 'npm';
 
+const {
+  createHermeticGitRepository
+} = require('./helpers/hermetic-git-repository');
+
 function npm(arguments_, options) {
   if (typeof NPM_CLI === 'string' && NPM_CLI.length > 0) {
     return execFileSync(
@@ -33,7 +37,9 @@ function npm(arguments_, options) {
   );
 }
 
-test('one npm installation exposes all three interaction experiences', () => {
+test('one npm installation exposes all three interaction experiences', context => {
+  const fixture = createHermeticGitRepository();
+  context.after(() => fixture.cleanup());
   const temporary = fs.mkdtempSync(
     path.join(os.tmpdir(), 'sdo-unified-install-')
   );
@@ -90,7 +96,7 @@ test('one npm installation exposes all three interaction experiences', () => {
       executable,
       ['--interaction', mode],
       {
-        cwd: ROOT,
+        cwd: fixture.repository,
         input: '',
         encoding: 'utf8',
         shell: process.platform === 'win32',

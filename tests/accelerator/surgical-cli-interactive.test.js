@@ -14,6 +14,15 @@ const CLI_FILE = path.join(
 
 const cli = require(CLI_FILE);
 
+const {
+  createHermeticGitRepository
+} = require('./helpers/hermetic-git-repository');
+
+const FIXTURE = createHermeticGitRepository();
+const REPOSITORY = FIXTURE.repository;
+
+test.after(() => FIXTURE.cleanup());
+
 test('CLI exposes canonical interactive activation surface', () => {
   assert.equal(
     typeof cli.createInteractiveActivation,
@@ -27,7 +36,7 @@ test('interactive activation derives workspace identity from canonical discovery
     'function'
   );
 
-  const activation = cli.createInteractiveActivation(ROOT);
+  const activation = cli.createInteractiveActivation(REPOSITORY);
 
   assert.equal(
     activation.workspace,
@@ -48,7 +57,7 @@ test('interactive activation preserves deterministic governance defaults', () =>
     'function'
   );
 
-  const activation = cli.createInteractiveActivation(ROOT);
+  const activation = cli.createInteractiveActivation(REPOSITORY);
 
   assert.equal(
     activation.mode,
@@ -73,7 +82,7 @@ test('interactive activation preserves deterministic governance defaults', () =>
 
 test('interactive activation defaults interaction mode to EXPERT without changing deterministic governance', () => {
   const activation =
-    cli.createInteractiveActivation(ROOT);
+    cli.createInteractiveActivation(REPOSITORY);
 
   assert.equal(
     activation.mode,
@@ -109,7 +118,7 @@ test('interactive activation accepts bounded NATURAL and ENGINEER selection', ()
   ]) {
     const activation =
       cli.createInteractiveActivation(
-        ROOT,
+        REPOSITORY,
         mode
       );
 
@@ -139,7 +148,7 @@ test('interactive activation rejects unknown interaction modes fail closed', () 
   assert.throws(
     () =>
       cli.createInteractiveActivation(
-        ROOT,
+        REPOSITORY,
         'UNRESTRICTED'
       ),
     /interaction mode/i
@@ -152,7 +161,7 @@ test('interactive activation identifies the canonical protocols', () => {
     'function'
   );
 
-  const activation = cli.createInteractiveActivation(ROOT);
+  const activation = cli.createInteractiveActivation(REPOSITORY);
 
   assert.equal(
     activation.protocols.bhSep,
@@ -176,7 +185,7 @@ test('interactive activation formatter exposes the stable human surface', () => 
     'function'
   );
 
-  const activation = cli.createInteractiveActivation(ROOT);
+  const activation = cli.createInteractiveActivation(REPOSITORY);
   const output = cli.formatInteractiveActivation(activation);
 
   assert.match(
@@ -231,7 +240,7 @@ test('interactive activation does not itself invoke orchestration', () => {
     'function'
   );
 
-  const activation = cli.createInteractiveActivation(ROOT);
+  const activation = cli.createInteractiveActivation(REPOSITORY);
 
   assert.equal(
     Object.prototype.hasOwnProperty.call(
