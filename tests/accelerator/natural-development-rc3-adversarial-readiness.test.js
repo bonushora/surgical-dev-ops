@@ -39,10 +39,10 @@ test('rc3 public manifest binds incremental campaign without stronger claims', (
     read('docs/review/QUALIFICATION_MANIFEST.json')
   );
 
-  assert.equal(manifest.releaseCandidate, 'v2.6.0-rc.3');
+  assert.equal(manifest.releaseCandidate, 'v2.6.0-rc.4');
   assert.equal(
     manifest.releaseCandidateBaseline.commit,
-    '3a938dc42ae449a8280f48cdddff39e7a74c04d8'
+    'ded6eaf'
   );
   assert.equal(
     manifest.incrementalAdversarialCampaign.preservesRc2Baseline,

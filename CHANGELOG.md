@@ -1,5 +1,14 @@
 # Changelog
 
+## [2.6.0-rc.4] - 2026-08-29
+
+- EN: Made NATURAL/EXPERT activation tests independent from the checkout branch
+  while preserving production fail-closed rejection of detached HEAD.
+- PT-BR: Tornou os testes de ativação NATURAL/EXPERT independentes da branch de
+  checkout, preservando a rejeição fail-closed de HEAD destacado em produção.
+- EN/PT-BR: Preserved v2.6.0-rc.3 as an immutable failed tag qualification;
+  no npm package or GitHub Release was published from that tag.
+
 ## [2.6.0-rc.3] - 2026-08-29
 
 - EN: Connected the interactive NATURAL G1-G10 development loop from exact

@@ -9,23 +9,47 @@ const assert =
 const path =
   require('node:path');
 
+const fs =
+  require('node:fs');
+
+const os =
+  require('node:os');
+
+const {
+  execFileSync
+} = require('node:child_process');
+
 const cli =
   require(
     '../../accelerator/cli/surgical'
   );
 
-const ROOT =
-  path.resolve(
-    __dirname,
-    '../..'
+function activationRepository(context) {
+  const parent = fs.mkdtempSync(
+    path.join(os.tmpdir(), 'sdo-activation-')
   );
+  const repository = path.join(parent, 'surgical-dev-ops');
+
+  fs.mkdirSync(repository);
+  fs.writeFileSync(path.join(repository, 'package-lock.json'), '{}\n');
+  fs.writeFileSync(path.join(repository, 'example.js'), "'use strict';\n");
+
+  execFileSync('git', ['init', '-b', 'main'], { cwd: repository });
+  execFileSync('git', ['config', 'user.name', 'Surgical Test'], { cwd: repository });
+  execFileSync('git', ['config', 'user.email', 'test@surgical.invalid'], { cwd: repository });
+  execFileSync('git', ['add', '.'], { cwd: repository });
+  execFileSync('git', ['commit', '-m', 'fixture'], { cwd: repository });
+
+  context.after(() => fs.rmSync(parent, { recursive: true, force: true }));
+  return repository;
+}
 
 test(
   'NATURAL activation announces provider auto-discovery without authority expansion',
-  () => {
+  (context) => {
     const activation =
       cli.createInteractiveActivation(
-        ROOT,
+        activationRepository(context),
         'NATURAL'
       );
 
@@ -82,10 +106,10 @@ test(
 
 test(
   'EXPERT activation remains provider-independent default',
-  () => {
+  (context) => {
     const activation =
       cli.createInteractiveActivation(
-        ROOT,
+        activationRepository(context),
         'EXPERT'
       );
 
@@ -98,10 +122,10 @@ test(
 
 test(
   'NATURAL activation is conversational and hides implementation terminology by default',
-  () => {
+  (context) => {
     const activation =
       cli.createInteractiveActivation(
-        ROOT,
+        activationRepository(context),
         'NATURAL'
       );
 
@@ -154,10 +178,10 @@ test(
 
 test(
   'EXPERT keeps the exact technical activation surface',
-  () => {
+  (context) => {
     const activation =
       cli.createInteractiveActivation(
-        ROOT,
+        activationRepository(context),
         'EXPERT'
       );
 
