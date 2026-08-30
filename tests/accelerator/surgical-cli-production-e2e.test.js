@@ -213,8 +213,22 @@ function runCli(
       cwd:
         state.repo,
 
-      env:
-        environment,
+      env: {
+        ...environment,
+
+        /*
+         * A real user's saved interaction preference must never
+         * influence this process-level production fixture.
+         */
+        XDG_CONFIG_HOME:
+          state.root,
+
+        LOCALAPPDATA:
+          state.root,
+
+        APPDATA:
+          state.root
+      },
 
       input,
 

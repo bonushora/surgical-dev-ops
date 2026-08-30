@@ -1,5 +1,14 @@
 # Changelog
 
+## [2.6.0-rc.5] - 2026-08-30
+
+- EN: Isolated fifteen CLI, onboarding and installation tests from the physical
+  release checkout while preserving production detached-HEAD rejection.
+- PT-BR: Isolou quinze testes de CLI, onboarding e instalação do checkout físico
+  de release, preservando a rejeição de HEAD destacado em produção.
+- EN/PT-BR: Preserved v2.6.0-rc.3 and v2.6.0-rc.4 as immutable failed tag
+  qualifications; neither produced an npm package or GitHub Release.
+
 ## [2.6.0-rc.4] - 2026-08-29
 
 - EN: Made NATURAL/EXPERT activation tests independent from the checkout branch
