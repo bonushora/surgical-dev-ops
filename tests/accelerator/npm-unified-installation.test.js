@@ -53,7 +53,7 @@ test('one npm installation exposes all three interaction experiences', context =
         temporary
       ],
       {
-        cwd: fixture.repository,
+        cwd: ROOT,
         encoding: 'utf8'
       }
     )
@@ -96,7 +96,7 @@ test('one npm installation exposes all three interaction experiences', context =
       executable,
       ['--interaction', mode],
       {
-        cwd: ROOT,
+        cwd: fixture.repository,
         input: '',
         encoding: 'utf8',
         shell: process.platform === 'win32',
