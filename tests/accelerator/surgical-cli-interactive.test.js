@@ -190,7 +190,7 @@ test('interactive activation formatter exposes the stable human surface', () => 
 
   assert.match(
     output,
-    /Surgical DevOps v2\.6\.0-rc\.5/
+    /Surgical DevOps v2\.6\.0-rc\.6/
   );
 
   assert.match(

@@ -19,9 +19,9 @@ sistema operacional ao redor do modelo explícito, limitado, auditável e fail-c
 
 | Evidência | Valor |
 | --- | --- |
-| Linha de release | Surgical DevOps v2.6.0-rc.5 |
-| Commit canônico | [`514cdf954fc94faeb91c1820abc3bf693fe0f4ab`](https://github.com/bonushora/surgical-dev-ops/commit/514cdf954fc94faeb91c1820abc3bf693fe0f4ab) |
-| Run canônico do CI | [Accelerator Conformance #33284298156](https://github.com/bonushora/surgical-dev-ops/actions/runs/33284298156) |
+| Linha de release | Surgical DevOps v2.6.0-rc.6 |
+| Commit canônico | [`56da715284704f227675961d476e19acce6e9fa3`](https://github.com/bonushora/surgical-dev-ops/commit/56da715284704f227675961d476e19acce6e9fa3) |
+| Run canônico do CI | [Accelerator Conformance #33286652480](https://github.com/bonushora/surgical-dev-ops/actions/runs/33286652480) |
 | Resultado da matriz | Ubuntu, macOS e Windows: **PASS** |
 | Suíte canônica | 1139 testes descobertos; 1134 aprovados; 0 falhas; 5 skips específicos de plataforma |
 | Protocolos normativos | BH-SEP v2.2 + BH-SDP v2.2 |

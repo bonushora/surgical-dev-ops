@@ -1,5 +1,13 @@
 # Changelog
 
+## [2.6.0-rc.6] - 2026-08-30
+
+### Fixed
+
+- Added the explicit npm prerelease distribution channel `--tag next`.
+- Added a regression gate preventing prerelease publication into the stable `latest` channel.
+- Preserved the immutable RC.5 tag and its native qualification evidence.
+
 ## [2.6.0-rc.5] - 2026-08-30
 
 - EN: Isolated fifteen CLI, onboarding and installation tests from the physical

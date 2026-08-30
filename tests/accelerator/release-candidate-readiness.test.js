@@ -6,7 +6,7 @@ const path = require('node:path');
 const test = require('node:test');
 
 const ROOT = path.resolve(__dirname, '../..');
-const VERSION = '2.6.0-rc.5';
+const VERSION = '2.6.0-rc.6';
 
 function read(relativePath) {
   return fs.readFileSync(path.join(ROOT, relativePath), 'utf8');
@@ -21,9 +21,9 @@ test('release candidate identity is consistent across public and executable surf
   assert.equal(packageLock.version, VERSION);
   assert.equal(packageLock.packages[''].version, VERSION);
   assert.equal(manifest.releaseCandidate, `v${VERSION}`);
-  assert.match(read('accelerator/cli/surgical.js'), /const VERSION = '2\.6\.0-rc\.5';/);
-  assert.match(read('README.md'), /Surgical DevOps v2\.6\.0-rc\.5/);
-  assert.match(read('README_PT-BR.md'), /Surgical DevOps v2\.6\.0-rc\.5/);
+  assert.match(read('accelerator/cli/surgical.js'), /const VERSION = '2\.6\.0-rc\.6';/);
+  assert.match(read('README.md'), /Surgical DevOps v2\.6\.0-rc\.6/);
+  assert.match(read('README_PT-BR.md'), /Surgical DevOps v2\.6\.0-rc\.6/);
   assert.doesNotMatch(
     read('tests/accelerator/surgical-cli-interactive.test.js'),
     /Surgical DevOps v2\\\.5\\\.1/
@@ -33,24 +33,24 @@ test('release candidate identity is consistent across public and executable surf
 
 test('release candidate publishes equivalent English and Portuguese notes', () => {
   const english = read(
-    'docs/releases/v2.6.0-rc.5.md'
+    'docs/releases/v2.6.0-rc.6.md'
   );
   const portuguese = read(
-    'docs/releases/v2.6.0-rc.5_PT-BR.md'
+    'docs/releases/v2.6.0-rc.6_PT-BR.md'
   );
 
   assert.match(
     english,
-    /\[v2\.6\.0-rc\.5_PT-BR\.md\]\(\.\/v2\.6\.0-rc\.5_PT-BR\.md\)/
+    /\[v2\.6\.0-rc\.6_PT-BR\.md\]\(\.\/v2\.6\.0-rc\.6_PT-BR\.md\)/
   );
   assert.match(
     portuguese,
-    /\[v2\.6\.0-rc\.5\.md\]\(\.\/v2\.6\.0-rc\.5\.md\)/
+    /\[v2\.6\.0-rc\.6\.md\]\(\.\/v2\.6\.0-rc\.6\.md\)/
   );
 
   for (const document of [english, portuguese]) {
-    assert.match(document, /514cdf954fc94faeb91c1820abc3bf693fe0f4ab/);
-    assert.match(document, /33284298156/);
+    assert.match(document, /56da715284704f227675961d476e19acce6e9fa3/);
+    assert.match(document, /33286652480/);
     assert.match(document, /npm ci/);
     assert.match(document, /npm test/);
     assert.match(document, /npm pack --dry-run/);
