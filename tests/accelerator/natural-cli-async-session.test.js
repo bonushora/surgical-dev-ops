@@ -214,6 +214,74 @@ function engineerActivation() {
   });
 }
 
+function frozenDecision(
+  decision
+) {
+  if (
+    decision &&
+    decision.evidenceRequest
+  ) {
+    decision.evidenceRequest =
+      Object.freeze(
+        decision.evidenceRequest
+      );
+  }
+
+  return Object.freeze(
+    decision
+  );
+}
+
+function workspaceFilesEvidence(
+  files
+) {
+  return {
+    orchestration: {
+      status:
+        'COMPLETED'
+    },
+    execution: {
+      schema:
+        'sdo.git_read_result.v1',
+      selector:
+        'WORKSPACE_FILES',
+      result: {
+        files
+      }
+    }
+  };
+}
+
+function fileReadEvidence(
+  target,
+  content
+) {
+  return {
+    orchestration: {
+      status:
+        'COMPLETED'
+    },
+    execution: {
+      schema:
+        'sdo.filesystem_read_result.v1',
+      target: {
+        requested:
+          target
+      },
+      evidence: {
+        bytes:
+          Buffer.byteLength(
+            content,
+            'utf8'
+          ),
+        sha256:
+          'a'.repeat(64),
+        content
+      }
+    }
+  };
+}
+
 test(
   'NATURAL async cognitive response survives input EOF without readline use-after-close',
   async () => {
@@ -296,6 +364,288 @@ test(
     assert.doesNotMatch(
       observed,
       /ERR_USE_AFTER_CLOSE/i
+    );
+  }
+);
+
+test(
+  'NATURAL project analysis stops file reads outside the governed discovery index',
+  async () => {
+    const input =
+      new PassThrough();
+
+    const output =
+      new PassThrough();
+
+    let observed =
+      '';
+
+    output.on(
+      'data',
+      (chunk) => {
+        observed +=
+          chunk.toString();
+      }
+    );
+
+    let gitReads =
+      0;
+    let fileReads =
+      0;
+
+    const cognitiveSession =
+      Object.freeze({
+        async decideEvidence() {
+          return frozenDecision({
+            schema:
+              'sdo.natural_evidence_decision.v1',
+            decision:
+              'REQUEST_EVIDENCE',
+            response:
+              null,
+            evidenceRequest: {
+              kind:
+                'READ_FILE',
+              target:
+                'not-indexed.js',
+              reason:
+                'Try to expand beyond discovery.'
+            }
+          });
+        }
+      });
+
+    cli.createInteractiveSession(
+      naturalActivation(),
+      {
+        input,
+        output,
+        terminal:
+          false,
+        cognitiveSession,
+        dispatchEvidence(intent) {
+          if (intent.capabilityType === 'GIT_READ') {
+            gitReads += 1;
+            return workspaceFilesEvidence([
+              'package.json'
+            ]);
+          }
+
+          fileReads += 1;
+          return fileReadEvidence(
+            intent.target,
+            'const leaked = true;\n'
+          );
+        }
+      }
+    );
+
+    input.write(
+      'Explique este projeto para mim.\n'
+    );
+
+    await new Promise(
+      (resolve) => setTimeout(resolve, 10)
+    );
+
+    input.write('sim\n');
+
+    await new Promise(
+      (resolve) => setTimeout(resolve, 50)
+    );
+
+    input.end();
+
+    assert.equal(
+      gitReads,
+      2
+    );
+    assert.equal(
+      fileReads,
+      0
+    );
+    assert.match(
+      observed,
+      /fora da autorização atual/i
+    );
+  }
+);
+
+test(
+  'NATURAL file explanation redacts sensitive evidence before the provider',
+  async () => {
+    const input =
+      new PassThrough();
+
+    const output =
+      new PassThrough();
+
+    let observed =
+      '';
+    let governedEvidence =
+      null;
+
+    output.on(
+      'data',
+      (chunk) => {
+        observed +=
+          chunk.toString();
+      }
+    );
+
+    const rawSecret =
+      'sk-abcdefghijklmnopqrstuvwxyz123456';
+
+    const cognitiveSession =
+      Object.freeze({
+        async ask(
+          _objective,
+          _activation,
+          evidence
+        ) {
+          governedEvidence =
+            evidence;
+          return 'Explicação produzida sem segredo bruto.\n';
+        }
+      });
+
+    cli.createInteractiveSession(
+      naturalActivation(),
+      {
+        input,
+        output,
+        terminal:
+          false,
+        cognitiveSession,
+        dispatchEvidence(intent) {
+          if (intent.capabilityType === 'GIT_READ') {
+            return workspaceFilesEvidence([
+              'secret.js'
+            ]);
+          }
+
+          return fileReadEvidence(
+            'secret.js',
+            `const token = "${rawSecret}";\n`
+          );
+        }
+      }
+    );
+
+    input.write(
+      'explique o arquivo secret.js\n'
+    );
+
+    await new Promise(
+      (resolve) => setTimeout(resolve, 10)
+    );
+
+    input.write('sim\n');
+
+    await new Promise(
+      (resolve) => setTimeout(resolve, 50)
+    );
+
+    input.end();
+
+    assert.match(
+      observed,
+      /Explicação produzida/
+    );
+    assert.ok(
+      governedEvidence
+    );
+    assert.doesNotMatch(
+      governedEvidence,
+      new RegExp(rawSecret)
+    );
+    assert.match(
+      governedEvidence,
+      /REDACTED_BY_SURGICAL_DEVOPS/
+    );
+  }
+);
+
+test(
+  'NATURAL file explanation blocks private-key evidence before cognition',
+  async () => {
+    const input =
+      new PassThrough();
+
+    const output =
+      new PassThrough();
+
+    let observed =
+      '';
+    let cognitiveCalls =
+      0;
+
+    output.on(
+      'data',
+      (chunk) => {
+        observed +=
+          chunk.toString();
+      }
+    );
+
+    const cognitiveSession =
+      Object.freeze({
+        async ask() {
+          cognitiveCalls += 1;
+          return 'must not be called\n';
+        }
+      });
+
+    cli.createInteractiveSession(
+      naturalActivation(),
+      {
+        input,
+        output,
+        terminal:
+          false,
+        cognitiveSession,
+        dispatchEvidence(intent) {
+          if (intent.capabilityType === 'GIT_READ') {
+            return workspaceFilesEvidence([
+              'secret.js'
+            ]);
+          }
+
+          return fileReadEvidence(
+            'secret.js',
+            '-----BEGIN PRIVATE KEY-----\nsecret\n'
+          );
+        }
+      }
+    );
+
+    input.write(
+      'explique o arquivo secret.js\n'
+    );
+
+    await new Promise(
+      (resolve) => setTimeout(resolve, 10)
+    );
+
+    input.write('sim\n');
+
+    await new Promise(
+      (resolve) => setTimeout(resolve, 50)
+    );
+
+    input.end();
+
+    assert.equal(
+      cognitiveCalls,
+      0
+    );
+    assert.match(
+      observed,
+      /falhou de forma segura/i
+    );
+    assert.doesNotMatch(
+      observed,
+      /PRIVATE KEY/
     );
   }
 );

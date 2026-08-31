@@ -3,7 +3,7 @@
 const crypto = require('node:crypto');
 const { SESSION_SCHEMA, REVALIDATION_SCHEMA } = require('../adapters/deterministic-workspace-session-adapter');
 const { createGovernedWorkspaceDiscoveryIndex, searchGovernedWorkspaceDiscovery } = require('../core/governed-workspace-discovery-index');
-const { createSensitiveContentPolicy } = require('../core/sensitive-content-boundary');
+const { createSensitiveContentPolicy, inspectSensitiveContent } = require('../core/sensitive-content-boundary');
 const { createQualifiedCommandCatalog } = require('../core/qualified-command-catalog');
 const { createGovernedWorkspaceAudit, appendGovernedWorkspaceAuditEvent } = require('../core/governed-workspace-audit');
 const { evaluateNaturalTaskEnvelopeOperation } = require('./natural-task-envelope-authorization');
@@ -20,6 +20,36 @@ function deepFreeze(value) {
 
 function fingerprint(value) {
   return crypto.createHash('sha256').update(JSON.stringify(value)).digest('hex');
+}
+
+function digest(value, label) {
+  if (typeof value !== 'string' || !/^[a-f0-9]{64}$/.test(value)) throw new Error(`${label} must be canonical SHA-256.`);
+  return value;
+}
+
+function canonicalExperienceTarget(value) {
+  if (typeof value !== 'string' || !value.trim()) throw new Error('Canonical workspace evidence target is required.');
+  const target = value.trim().replace(/\\/g, '/');
+  if (target.startsWith('/') || target.split('/').some((part) => !part || part === '.' || part === '..')) {
+    throw new Error('Workspace evidence target must remain canonical and relative.');
+  }
+  return target;
+}
+
+function microreadResult(experience, evaluation, extra = {}) {
+  const base = {
+    schema: MICROREAD_SCHEMA,
+    experienceFingerprint: experience.experienceFingerprint,
+    decision: evaluation.decision,
+    reason: evaluation.reason,
+    governedIntent: evaluation.governedIntent,
+    requiresNewHumanAuthority: evaluation.requiresNewHumanAuthority,
+    dispatchAuthority: false,
+    operationalAuthority: false,
+    mutationAuthority: false,
+    ...extra
+  };
+  return deepFreeze({ ...base, microreadFingerprint: fingerprint(base) });
 }
 
 function openNaturalGovernedWorkspaceExperience({ session, revalidation, governedInventory, observedAt } = {}) {
@@ -70,8 +100,51 @@ function planNaturalGovernedWorkspaceMicroread(experience, taskAuthorization, re
       experience.binding.physicalWorkspaceIdentity
   });
   const evaluation = evaluateNaturalTaskEnvelopeOperation(taskAuthorization, boundedRequest, { now });
-  const base = { schema: MICROREAD_SCHEMA, experienceFingerprint: experience.experienceFingerprint, decision: evaluation.decision, reason: evaluation.reason, governedIntent: evaluation.governedIntent, requiresNewHumanAuthority: evaluation.requiresNewHumanAuthority, dispatchAuthority: false, operationalAuthority: false, mutationAuthority: false };
-  return deepFreeze({ ...base, microreadFingerprint: fingerprint(base) });
+  if (evaluation.decision !== 'CONTAINED') return microreadResult(experience, evaluation);
+
+  const evidenceRequest = boundedRequest.evidenceRequest || {};
+  if (evidenceRequest.kind === 'READ_FILE' || evidenceRequest.kind === 'VALIDATE_JS') {
+    const target = canonicalExperienceTarget(evidenceRequest.target);
+    if (!experience.discoveryIndex.files.includes(target)) {
+      return microreadResult(
+        experience,
+        {
+          ...evaluation,
+          decision: 'STOPPED',
+          reason: 'Evidence target was not admitted by the governed discovery index.',
+          governedIntent: null,
+          requiresNewHumanAuthority: true
+        },
+        { requiresFreshDiscovery: true }
+      );
+    }
+  }
+
+  if (evidenceRequest.kind === 'VALIDATE_JS' && !experience.qualifiedCommandCatalog.commands.NODE_SYNTAX_CHECK) {
+    return microreadResult(
+      experience,
+      {
+        ...evaluation,
+        decision: 'STOPPED',
+        reason: 'Validation command is outside the qualified command catalog.',
+        governedIntent: null,
+        requiresNewHumanAuthority: true
+      },
+      { qualifiedCommandSelector: null }
+    );
+  }
+
+  return microreadResult(
+    experience,
+    evaluation,
+    {
+      requiresFreshDiscovery: false,
+      qualifiedCommandSelector:
+        evidenceRequest.kind === 'VALIDATE_JS'
+          ? 'NODE_SYNTAX_CHECK'
+          : null
+    }
+  );
 }
 
 function projectNaturalWorkspaceMutationReview(experience, patchProposal, { validationSelectors = ['NODE_SYNTAX_CHECK'] } = {}) {
@@ -102,4 +175,47 @@ function projectNaturalWorkspaceMutationReview(experience, patchProposal, { vali
   return deepFreeze({ ...review, reviewFingerprint: fingerprint(review) });
 }
 
-module.exports = Object.freeze({ EXPERIENCE_SCHEMA, MICROREAD_SCHEMA, MUTATION_REVIEW_SCHEMA, openNaturalGovernedWorkspaceExperience, searchNaturalGovernedWorkspace, planNaturalGovernedWorkspaceMicroread, projectNaturalWorkspaceMutationReview });
+function qualifyNaturalWorkspaceFileEvidenceForCognition(experience, evidence) {
+  if (!experience || experience.schema !== EXPERIENCE_SCHEMA || !Object.isFrozen(experience)) throw new Error('Immutable governed workspace experience is required.');
+  if (!evidence || typeof evidence !== 'object' || !Object.isFrozen(evidence)) throw new Error('Immutable governed file evidence is required.');
+  const target = canonicalExperienceTarget(evidence.target);
+  if (!experience.discoveryIndex.files.includes(target)) {
+    throw new Error('Governed file evidence was not admitted by the discovery index.');
+  }
+  const sensitive = inspectSensitiveContent(
+    experience.sensitiveContentPolicy,
+    {
+      target,
+      content: evidence.content
+    }
+  );
+  if (!sensitive.providerSafe) {
+    throw new Error('Governed file evidence is blocked by sensitive-content policy.');
+  }
+  const base = {
+    schema: 'sdo.natural_governed_workspace_provider_file_evidence.v1',
+    experienceFingerprint: experience.experienceFingerprint,
+    target,
+    bytes: evidence.bytes,
+    sha256: digest(evidence.sha256, 'Governed file evidence SHA-256'),
+    content: sensitive.content,
+    originalContentSha256: sensitive.contentSha256,
+    sensitiveDecision: sensitive.decision,
+    sensitiveRules: sensitive.rules,
+    providerSafe: true,
+    operationalAuthority: false,
+    mutationAuthority: false
+  };
+  return deepFreeze({ ...base, evidenceFingerprint: fingerprint(base) });
+}
+
+module.exports = Object.freeze({
+  EXPERIENCE_SCHEMA,
+  MICROREAD_SCHEMA,
+  MUTATION_REVIEW_SCHEMA,
+  openNaturalGovernedWorkspaceExperience,
+  searchNaturalGovernedWorkspace,
+  planNaturalGovernedWorkspaceMicroread,
+  projectNaturalWorkspaceMutationReview,
+  qualifyNaturalWorkspaceFileEvidenceForCognition
+});

@@ -61,6 +61,17 @@ const {
 } = require('./natural-experience-surface');
 
 const {
+  createDeterministicWorkspaceSession,
+  revalidateDeterministicWorkspaceSession
+} = require('../adapters/deterministic-workspace-session-adapter');
+
+const {
+  openNaturalGovernedWorkspaceExperience,
+  planNaturalGovernedWorkspaceMicroread,
+  qualifyNaturalWorkspaceFileEvidenceForCognition
+} = require('./natural-governed-workspace-experience');
+
+const {
   formatWorkspaceFiles,
   extractFilesystemEvidence,
   formatFileReadEvidence
@@ -88,6 +99,11 @@ const {
 } = require('./natural-runner-runtime');
 
 const {
+  createNaturalTaskEnvelopeProposal,
+  authorizeNaturalTaskEnvelope
+} = require('./natural-task-envelope-authorization');
+
+const {
   createInteractionPreferenceStore
 } = require('./interaction-preference-store');
 
@@ -101,6 +117,8 @@ const {
 } = require('./human-language');
 
 const VERSION = '2.6.0-rc.6';
+const NATURAL_WORKSPACE_HUMAN_SUBJECT =
+  'surgical-cli-local-session';
 
 function humanText(activation, portuguese, english) {
   return usesEnglish(activation)
@@ -122,6 +140,204 @@ function usesEnglish(activation) {
     activation && activation.language,
     legacyFallback
   ) === 'en';
+}
+
+function canonicalInstant(
+  value
+) {
+  const timestamp =
+    String(value || '').trim();
+
+  const parsed =
+    Date.parse(timestamp);
+
+  if (
+    !Number.isFinite(parsed) ||
+    new Date(parsed).toISOString() !==
+      timestamp
+  ) {
+    throw new Error(
+      'Canonical NATURAL workspace timestamp is required.'
+    );
+  }
+
+  return timestamp;
+}
+
+function currentCanonicalInstant(
+  options = {}
+) {
+  return canonicalInstant(
+    typeof options.now === 'function'
+      ? options.now()
+      : new Date().toISOString()
+  );
+}
+
+function dispatchNaturalWorkspaceEvidence(
+  intent,
+  activation,
+  options = {},
+  dispatchOptions = {}
+) {
+  if (
+    typeof options.dispatchEvidence ===
+      'function'
+  ) {
+    return options.dispatchEvidence(
+      intent,
+      activation.repositoryPath
+    );
+  }
+
+  return dispatchGovernedReadOnly(
+    intent,
+    activation.repositoryPath,
+    dispatchOptions
+  );
+}
+
+function createAuthorizedNaturalWorkspaceContext(
+  task,
+  activation,
+  options = {}
+) {
+  const observedAt =
+    currentCanonicalInstant(
+      options
+    );
+
+  const session =
+    createDeterministicWorkspaceSession({
+      authorizedRoot:
+        activation.repositoryPath,
+      humanSubject:
+        NATURAL_WORKSPACE_HUMAN_SUBJECT,
+      authorizedAt:
+        observedAt
+    });
+
+  const revalidation =
+    revalidateDeterministicWorkspaceSession(
+      session
+    );
+
+  const governedInventory =
+    dispatchNaturalWorkspaceEvidence(
+      Object.freeze({
+        capabilityType:
+          'GIT_READ',
+        target:
+          'workspace-files'
+      }),
+      activation,
+      options,
+      {
+        now:
+          () => observedAt
+      }
+    );
+
+  const experience =
+    openNaturalGovernedWorkspaceExperience({
+      session,
+      revalidation,
+      governedInventory,
+      observedAt
+    });
+
+  const expiresAt =
+    new Date(
+      Date.parse(observedAt) +
+        10 * 60_000
+    ).toISOString();
+
+  const proposal =
+    createNaturalTaskEnvelopeProposal({
+      task,
+      workspaceRoot:
+        activation.repositoryPath,
+      physicalWorkspaceIdentity:
+        experience.binding
+          .physicalWorkspaceIdentity,
+      riskCeiling:
+        task.kind === 'WORKSPACE_LIST'
+          ? 'R0'
+          : 'R1',
+      validFrom:
+        observedAt,
+      expiresAt
+    });
+
+  const taskAuthorization =
+    authorizeNaturalTaskEnvelope(
+      proposal,
+      Object.freeze({
+        approved:
+          true,
+        proposalFingerprint:
+          proposal.proposalFingerprint,
+        humanSubject:
+          NATURAL_WORKSPACE_HUMAN_SUBJECT,
+        authorizedAt:
+          observedAt
+      })
+    );
+
+  return Object.freeze({
+    experience,
+    taskAuthorization,
+    observedAt
+  });
+}
+
+function evaluateNaturalWorkspaceMicroread(
+  workspaceContext,
+  evidenceRequest,
+  evidenceStep,
+  options = {}
+) {
+  const zeroBasedStep =
+    Math.max(
+      0,
+      Number(evidenceStep) - 1
+    );
+
+  return planNaturalGovernedWorkspaceMicroread(
+    workspaceContext.experience,
+    workspaceContext.taskAuthorization,
+    Object.freeze({
+      evidenceRequest,
+      evidenceStep:
+        zeroBasedStep,
+      risk:
+        evidenceRequest &&
+        evidenceRequest.kind ===
+          'WORKSPACE_FILES'
+          ? 'R0'
+          : 'R1',
+      mutating:
+        false
+    }),
+    {
+      now:
+        currentCanonicalInstant(
+          options
+        )
+    }
+  );
+}
+
+function formatQualifiedFileEvidenceForCognition(
+  evidence,
+  language = 'pt-BR'
+) {
+  return (
+    `${language === 'en' ? 'File' : 'Arquivo'}: ${evidence.target}\n` +
+    `SHA256: ${evidence.sha256}\n` +
+    `${language === 'en' ? 'Sensitive content decision' : 'Decisão de conteúdo sensível'}: ${evidence.sensitiveDecision}\n` +
+    `${language === 'en' ? 'Content' : 'Conteúdo'}:\n${evidence.content}`
+  );
 }
 
 function printVersion() {
@@ -1052,6 +1268,27 @@ function createInteractiveSession(
                       )
                     );
 
+                    let workspaceContext;
+
+                    try {
+                      workspaceContext =
+                        createAuthorizedNaturalWorkspaceContext(
+                          task,
+                          activation,
+                          options
+                        );
+                    } catch {
+                      output.write(
+                        humanText(
+                          activation,
+                          'Não consegui concluir a análise com as evidências qualificadas disponíveis. A governança permanece ativa e nenhum arquivo foi alterado.\n',
+                          'I could not complete the analysis with the available qualified evidence. Governance remains active and no file was changed.\n'
+                        )
+                      );
+                      resumeAndPrompt();
+                      return;
+                    }
+
                     const analysisStartedAt =
                       Date.now();
 
@@ -1062,6 +1299,22 @@ function createInteractiveSession(
                         cognitiveSession,
                         dispatchEvidence:
                           options.dispatchEvidence,
+                        sensitiveContentPolicy:
+                          workspaceContext
+                            .experience
+                            .sensitiveContentPolicy,
+                        evaluateEvidenceIntent(
+                          _intent,
+                          evidenceRequest,
+                          evidenceStep
+                        ) {
+                          return evaluateNaturalWorkspaceMicroread(
+                            workspaceContext,
+                            evidenceRequest,
+                            evidenceStep,
+                            options
+                          );
+                        },
                         onProgress(progress) {
                           if (
                             progress.stage ===
@@ -1174,16 +1427,44 @@ function createInteractiveSession(
                     );
                   }
 
-                  const governed =
-                    dispatchGovernedReadOnly(
-                      task.operations[0],
-                      activation.repositoryPath
-                    );
+                  const workspaceContext =
+                    (
+                      activation.interactionMode.mode ===
+                        'NATURAL'
+                    )
+                      ? createAuthorizedNaturalWorkspaceContext(
+                          task,
+                          activation,
+                          options
+                        )
+                      : null;
 
                   if (
                     task.kind ===
                       'WORKSPACE_LIST'
                   ) {
+                    const governed =
+                      workspaceContext
+                        ? {
+                            execution: {
+                              schema:
+                                'sdo.git_read_result.v1',
+                              selector:
+                                'WORKSPACE_FILES',
+                              result: {
+                                files:
+                                  workspaceContext
+                                    .experience
+                                    .discoveryIndex
+                                    .files
+                              }
+                            }
+                          }
+                        : dispatchGovernedReadOnly(
+                            task.operations[0],
+                            activation.repositoryPath
+                          );
+
                     output.write(
                       formatWorkspaceFiles(
                         governed,
@@ -1191,6 +1472,13 @@ function createInteractiveSession(
                       )
                     );
                   } else {
+                    const governed =
+                      dispatchNaturalWorkspaceEvidence(
+                        task.operations[0],
+                        activation,
+                        options
+                      );
+
                     const evidence =
                       extractFilesystemEvidence(
                         governed
@@ -1211,6 +1499,19 @@ function createInteractiveSession(
                         const explanationStartedAt =
                           Date.now();
 
+                        const providerEvidence =
+                          workspaceContext
+                            ? qualifyNaturalWorkspaceFileEvidenceForCognition(
+                                workspaceContext
+                                  .experience,
+                                evidence
+                              )
+                            : {
+                                ...evidence,
+                                sensitiveDecision:
+                                  'NOT_APPLIED'
+                              };
+
                         output.write(
                           humanText(
                             activation,
@@ -1223,10 +1524,9 @@ function createInteractiveSession(
                           await cognitiveSession.ask(
                             task.objective,
                             activation,
-                            (
-                              `${usesEnglish(activation) ? 'File' : 'Arquivo'}: ${evidence.target}\n` +
-                              `SHA256: ${evidence.sha256}\n` +
-                              `${usesEnglish(activation) ? 'Content' : 'Conteúdo'}:\n${evidence.content}`
+                            formatQualifiedFileEvidenceForCognition(
+                              providerEvidence,
+                              activation.language
                             )
                           );
 

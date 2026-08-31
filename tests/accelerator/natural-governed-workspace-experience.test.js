@@ -3,7 +3,13 @@
 const assert = require('node:assert/strict');
 const crypto = require('node:crypto');
 const test = require('node:test');
-const { openNaturalGovernedWorkspaceExperience, searchNaturalGovernedWorkspace, planNaturalGovernedWorkspaceMicroread, projectNaturalWorkspaceMutationReview } = require('../../accelerator/cli/natural-governed-workspace-experience');
+const {
+  openNaturalGovernedWorkspaceExperience,
+  searchNaturalGovernedWorkspace,
+  planNaturalGovernedWorkspaceMicroread,
+  projectNaturalWorkspaceMutationReview,
+  qualifyNaturalWorkspaceFileEvidenceForCognition
+} = require('../../accelerator/cli/natural-governed-workspace-experience');
 const { createNaturalTaskEnvelopeProposal, authorizeNaturalTaskEnvelope } = require('../../accelerator/cli/natural-task-envelope-authorization');
 
 const sha = (value) => crypto.createHash('sha256').update(value).digest('hex');
@@ -54,6 +60,27 @@ test('one exact human task authorization contains repeated microreads without di
   }
 });
 
+test('microreads outside the governed discovery index stop before dispatch', () => {
+  const current = experience();
+  const proposal = createNaturalTaskEnvelopeProposal({ task: freeze({ schema: 'sdo.natural_governed_task.v1', kind: 'PROJECT_ANALYSIS', objective: 'Analyze project.', mutating: false, operations: [] }), workspaceRoot: '/project', physicalWorkspaceIdentity: current.binding.physicalWorkspaceIdentity, riskCeiling: 'R1', validFrom: '2026-08-30T12:00:00.000Z', expiresAt: '2026-08-30T12:10:00.000Z' });
+  const authorization = authorizeNaturalTaskEnvelope(proposal, freeze({ approved: true, proposalFingerprint: proposal.proposalFingerprint, humanSubject: 'human:test', authorizedAt: '2026-08-30T12:00:00.000Z' }));
+  const plan = planNaturalGovernedWorkspaceMicroread(current, authorization, freeze({ evidenceRequest: { kind: 'READ_FILE', target: 'secrets/runtime.js', reason: 'Analyze.' }, evidenceStep: 1, risk: 'R1', mutating: false }), { now: '2026-08-30T12:01:00.000Z' });
+  assert.equal(plan.decision, 'STOPPED');
+  assert.equal(plan.governedIntent, null);
+  assert.equal(plan.requiresNewHumanAuthority, true);
+  assert.equal(plan.requiresFreshDiscovery, true);
+});
+
+test('validation microreads remain bound to the qualified command catalog', () => {
+  const current = experience();
+  const proposal = createNaturalTaskEnvelopeProposal({ task: freeze({ schema: 'sdo.natural_governed_task.v1', kind: 'PROJECT_ANALYSIS', objective: 'Analyze project.', mutating: false, operations: [] }), workspaceRoot: '/project', physicalWorkspaceIdentity: current.binding.physicalWorkspaceIdentity, riskCeiling: 'R1', validFrom: '2026-08-30T12:00:00.000Z', expiresAt: '2026-08-30T12:10:00.000Z' });
+  const authorization = authorizeNaturalTaskEnvelope(proposal, freeze({ approved: true, proposalFingerprint: proposal.proposalFingerprint, humanSubject: 'human:test', authorizedAt: '2026-08-30T12:00:00.000Z' }));
+  const plan = planNaturalGovernedWorkspaceMicroread(current, authorization, freeze({ evidenceRequest: { kind: 'VALIDATE_JS', target: 'src/app.js', reason: 'Validate.' }, evidenceStep: 1, risk: 'R1', mutating: false }), { now: '2026-08-30T12:01:00.000Z' });
+  assert.equal(plan.decision, 'CONTAINED');
+  assert.equal(plan.qualifiedCommandSelector, 'NODE_SYNTAX_CHECK');
+  assert.equal(plan.dispatchAuthority, false);
+});
+
 test('read-to-write shell network credentials and risk expansion require new authority', () => {
   const current = experience();
   const proposal = createNaturalTaskEnvelopeProposal({ task: freeze({ schema: 'sdo.natural_governed_task.v1', kind: 'PROJECT_ANALYSIS', objective: 'Analyze project.', mutating: false, operations: [] }), workspaceRoot: '/project', physicalWorkspaceIdentity: current.binding.physicalWorkspaceIdentity, riskCeiling: 'R1', validFrom: '2026-08-30T12:00:00.000Z', expiresAt: '2026-08-30T12:10:00.000Z' });
@@ -64,6 +91,38 @@ test('read-to-write shell network credentials and risk expansion require new aut
     assert.equal(plan.decision, 'STOPPED');
     assert.equal(plan.requiresNewHumanAuthority, true);
   }
+});
+
+test('provider file evidence is redacted through the governed sensitive boundary', () => {
+  const qualified = qualifyNaturalWorkspaceFileEvidenceForCognition(
+    experience(),
+    freeze({
+      target: 'src/app.js',
+      bytes: 54,
+      sha256: sha('client_secret=must-never-reach-provider-123456789\n'),
+      content: 'client_secret=must-never-reach-provider-123456789\n'
+    })
+  );
+  assert.equal(qualified.providerSafe, true);
+  assert.equal(qualified.sensitiveDecision, 'REDACTED');
+  assert.doesNotMatch(qualified.content, /must-never-reach-provider/);
+  assert.match(qualified.content, /REDACTED_BY_SURGICAL_DEVOPS/);
+  assert.equal(qualified.operationalAuthority, false);
+});
+
+test('blocked provider file evidence never returns content for cognition', () => {
+  assert.throws(
+    () => qualifyNaturalWorkspaceFileEvidenceForCognition(
+      experience(),
+      freeze({
+        target: 'src/app.js',
+        bytes: 36,
+        sha256: sha('-----BEGIN PRIVATE KEY-----\nsecret\n'),
+        content: '-----BEGIN PRIVATE KEY-----\nsecret\n'
+      })
+    ),
+    /blocked by sensitive-content policy/i
+  );
 });
 
 test('mutation review is comprehensible data and never reusable authority', () => {

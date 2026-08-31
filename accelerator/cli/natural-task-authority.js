@@ -89,12 +89,9 @@ const TASK_PROFILES =
       }),
 
     /*
-     * PROJECT_ANALYSIS is intentionally not exposed by the
-     * NATURAL parser in this patch.
-     *
-     * It is defined here first so the containment semantics
-     * can be qualified before a user-facing recursive task
-     * is enabled.
+     * PROJECT_ANALYSIS is exposed only through an explicit
+     * human-authorized recursive evidence task. The envelope
+     * contains microreads, but never dispatch authority.
      */
     PROJECT_ANALYSIS:
       Object.freeze({

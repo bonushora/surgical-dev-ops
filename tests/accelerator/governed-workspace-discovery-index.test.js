@@ -7,6 +7,7 @@ const { createGovernedWorkspaceDiscoveryIndex, searchGovernedWorkspaceDiscovery,
 
 const sha = (value) => crypto.createHash('sha256').update(value).digest('hex');
 const binding = Object.freeze({ physicalWorkspaceIdentity: sha('workspace'), repositoryHead: sha('head'), worktreeFingerprint: sha('worktree') });
+const gitSha1Binding = Object.freeze({ ...binding, repositoryHead: '1'.repeat(40) });
 
 test('discovery inventory is deterministic sorted deduplicated and excludes sensitive segments', () => {
   const index = createGovernedWorkspaceDiscoveryIndex({ ...binding, files: ['src/z.js', '.git/config', 'src/a.js', 'src/z.js', 'node_modules/x.js'] });
@@ -24,6 +25,14 @@ test('bounded discovery search is reproducible and reports exhaustion', () => {
   assert.deepEqual(first.results, ['src/a.test.js']);
   assert.equal(first.totalMatches, 2);
   assert.equal(first.exhausted, true);
+});
+
+test('discovery binding accepts the physical Git HEAD object id used by current repositories', () => {
+  const index = createGovernedWorkspaceDiscoveryIndex({ ...gitSha1Binding, files: ['README.md'] });
+  const result = searchGovernedWorkspaceDiscovery(index, { query: 'README', currentBinding: gitSha1Binding });
+  assert.equal(index.binding.repositoryHead, '1'.repeat(40));
+  assert.equal(result.status, 'COMPLETED');
+  assert.deepEqual(result.results, ['README.md']);
 });
 
 test('stale repository physical or worktree binding requires fresh discovery', () => {

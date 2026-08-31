@@ -19,6 +19,11 @@ function digest(value, label) {
   return value;
 }
 
+function gitObjectId(value, label) {
+  if (typeof value !== 'string' || !/^(?:[a-f0-9]{40}|[a-f0-9]{64})$/.test(value)) throw new Error(`${label} must be a canonical Git object id.`);
+  return value;
+}
+
 function canonicalTarget(value) {
   if (typeof value !== 'string' || !value.trim()) throw new Error('Discovery target is required.');
   const target = value.trim().replace(/\\/g, '/');
@@ -39,7 +44,7 @@ function createGovernedWorkspaceDiscoveryIndex({ physicalWorkspaceIdentity, repo
     .sort((left, right) => left.localeCompare(right, 'en'));
   const binding = deepFreeze({
     physicalWorkspaceIdentity: digest(physicalWorkspaceIdentity, 'Physical workspace identity'),
-    repositoryHead: digest(repositoryHead, 'Repository HEAD'),
+    repositoryHead: gitObjectId(repositoryHead, 'Repository HEAD'),
     worktreeFingerprint: digest(worktreeFingerprint, 'Worktree fingerprint')
   });
   const indexFingerprint = crypto.createHash('sha256').update(JSON.stringify({ binding, canonical, excluded })).digest('hex');
@@ -48,7 +53,7 @@ function createGovernedWorkspaceDiscoveryIndex({ physicalWorkspaceIdentity, repo
 
 function searchGovernedWorkspaceDiscovery(index, { query, limit = 32, currentBinding } = {}) {
   if (!index || index.schema !== INDEX_SCHEMA || !Object.isFrozen(index)) throw new Error('Immutable governed discovery index is required.');
-  if (!currentBinding || digest(currentBinding.physicalWorkspaceIdentity, 'Physical workspace identity') !== index.binding.physicalWorkspaceIdentity || digest(currentBinding.repositoryHead, 'Repository HEAD') !== index.binding.repositoryHead || digest(currentBinding.worktreeFingerprint, 'Worktree fingerprint') !== index.binding.worktreeFingerprint) {
+  if (!currentBinding || digest(currentBinding.physicalWorkspaceIdentity, 'Physical workspace identity') !== index.binding.physicalWorkspaceIdentity || gitObjectId(currentBinding.repositoryHead, 'Repository HEAD') !== index.binding.repositoryHead || digest(currentBinding.worktreeFingerprint, 'Worktree fingerprint') !== index.binding.worktreeFingerprint) {
     return deepFreeze({ schema: QUERY_SCHEMA, status: 'STALE', results: [], reason: 'Workspace state binding changed.', requiresFreshDiscovery: true, operationalAuthority: false, mutationAuthority: false });
   }
   if (typeof query !== 'string' || query.length > 256 || query.includes('\0') || /[\r\n]/.test(query)) throw new Error('Bounded deterministic discovery query is required.');
