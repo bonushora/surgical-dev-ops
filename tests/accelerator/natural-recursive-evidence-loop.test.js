@@ -339,6 +339,54 @@ test(
   }
 );
 
+test('recursive loop redacts secret-like governed evidence before cognition', async () => {
+  const histories = [];
+  const decisions = [
+    requestDecision('READ_FILE', 'docs/example.txt'),
+    respondDecision('Evidence was inspected safely.')
+  ];
+  const result = await runNaturalRecursiveEvidenceLoop({
+    task: projectTask(),
+    activation: activation(),
+    deterministicProjectGrounding: false,
+    cognitiveSession: {
+      async decideEvidence(_objective, _activation, history) {
+        histories.push([...history]);
+        return decisions.shift();
+      }
+    },
+    dispatchEvidence() {
+      return fileEvidence('docs/example.txt', 'client_secret=must-never-reach-model-123456789\n');
+    }
+  });
+  assert.equal(result.status, 'COMPLETED');
+  assert.equal(result.evidence[0].sensitiveDecision, 'REDACTED');
+  assert.doesNotMatch(JSON.stringify(histories), /must-never-reach-model/);
+  assert.match(JSON.stringify(histories), /REDACTED_BY_SURGICAL_DEVOPS/);
+});
+
+test('recursive loop blocks private key evidence before cognition', async () => {
+  let calls = 0;
+  const result = await runNaturalRecursiveEvidenceLoop({
+    task: projectTask(),
+    activation: activation(),
+    deterministicProjectGrounding: false,
+    cognitiveSession: {
+      async decideEvidence() {
+        calls += 1;
+        return requestDecision('READ_FILE', 'docs/example.txt');
+      }
+    },
+    dispatchEvidence() {
+      return fileEvidence('docs/example.txt', '-----BEGIN PRIVATE KEY-----\nsecret\n');
+    }
+  });
+  assert.equal(result.status, 'FAILED');
+  assert.match(result.reason, /could not be qualified/);
+  assert.equal(calls, 1);
+  assert.deepEqual(result.evidence, []);
+});
+
 test(
   'project analysis deterministically grounds one canonical file before final cognition',
   async () => {

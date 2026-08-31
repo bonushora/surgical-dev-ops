@@ -1,6 +1,6 @@
 # ADR-034 — Deterministic Governed Workspace Experience
 
-- Status: APPROVED / FROZEN
+- Status: IMPLEMENTED / QUALIFIED
 - Date: 2026-08-30
 - Scope: NATURAL governed access to user-authorized local workspaces
 - Sequencing: implementation begins only after closure of the active ADR-020 / ADR-023 latency milestone
@@ -154,4 +154,39 @@ coding agent. The implementation will require composition and extension of
 existing workspace, evidence, authority and mutation components, plus native
 adversarial qualification on all supported operating systems.
 
-No runtime behavior changes as a consequence of this ADR-only commit.
+The original approval commit changed no runtime behavior; the implementation
+closure below records the later qualified runtime work.
+
+## Implementation closure
+
+Implementation began only after commit `43f518e5b9b1011e298713d87cc665620e6c70a6`
+closed the ADR-020 / ADR-023 latency-contract reconciliation. The sequencing
+constraint was therefore preserved.
+
+The qualified implementation is composed from the existing Orchestrator
+boundaries and adds the following bounded projections:
+
+- `deterministic-workspace-session-adapter.js` binds and revalidates the exact
+  physical repository, HEAD and worktree state;
+- `governed-workspace-discovery-index.js` provides deterministic bounded
+  inventory search with exclusions and stale-state invalidation;
+- `sensitive-content-boundary.js` performs content-aware blocking and
+  deterministic redaction before recursive evidence reaches cognition;
+- `qualified-command-catalog.js` formally admits the existing fixed Node
+  syntax validation contract and is consumed by the process adapter;
+- `governed-workspace-audit.js` provides bounded content-free attributable
+  event chaining; and
+- `natural-governed-workspace-experience.js` projects these contracts for
+  NATURAL mode while retaining separate task, mutation and execution authority.
+
+The existing single-use G4 authorization, R3 composition, journal, recovery,
+durability and Manifest CAS remain the only mutation route. Persistent project
+memory remains explicitly non-authoritative.
+
+Qualification covers physical replacement and stale state, traversal and
+alias containment, bounded search exhaustion, content-based secret detection,
+redaction, read-to-write and external-effect escalation, qualified-command
+admission, content-free audit chaining, repeat microreads under one exact task
+envelope and comprehensible authority-free mutation review. Native filesystem
+and sandbox behavior continues to be qualified by the canonical Linux, macOS
+and Windows matrix.

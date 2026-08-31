@@ -52,6 +52,13 @@ const {
   './natural-response-language'
 );
 
+const {
+  createSensitiveContentPolicy,
+  inspectSensitiveContent
+} = require(
+  '../core/sensitive-content-boundary'
+);
+
 const LOOP_SCHEMA =
   'sdo.natural_recursive_evidence_loop.v1';
 
@@ -134,7 +141,8 @@ function evidenceRequestFingerprint(
 
 function extractRecursiveEvidence(
   result,
-  intent
+  intent,
+  sensitiveContentPolicy
 ) {
   if (
     !result ||
@@ -229,6 +237,23 @@ function extractRecursiveEvidence(
       );
     }
 
+    const sensitive =
+      inspectSensitiveContent(
+        sensitiveContentPolicy,
+        {
+          target:
+            execution.target.requested,
+          content:
+            execution.evidence.content
+        }
+      );
+
+    if (!sensitive.providerSafe) {
+      throw new Error(
+        'Governed filesystem evidence is blocked by sensitive-content policy.'
+      );
+    }
+
     return deepFreeze({
       schema:
         'sdo.natural_recursive_evidence.v1',
@@ -245,9 +270,15 @@ function extractRecursiveEvidence(
       bytes:
         execution.evidence.bytes,
 
+      sensitiveDecision:
+        sensitive.decision,
+
+      sensitiveRules:
+        sensitive.rules,
+
       summary:
         boundedText(
-          execution.evidence.content,
+          sensitive.content,
           MAX_HISTORY_ITEM_CHARS
         )
     });
@@ -498,7 +529,9 @@ async function runNaturalRecursiveEvidenceLoop(
       dispatchGovernedMachineEvidence,
     onProgress = null,
     evaluateEvidenceIntent = null,
-    deterministicProjectGrounding = true
+    deterministicProjectGrounding = true,
+    sensitiveContentPolicy =
+      createSensitiveContentPolicy()
   } = {}
 ) {
   if (
@@ -881,7 +914,8 @@ async function runNaturalRecursiveEvidenceLoop(
       observed =
         extractRecursiveEvidence(
           governed,
-          containment.governedIntent
+          containment.governedIntent,
+          sensitiveContentPolicy
         );
     } catch {
       return finalResult({

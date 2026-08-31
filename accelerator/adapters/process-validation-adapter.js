@@ -10,6 +10,10 @@ const {
   canonicalizeAuthorizedRoot,
   resolveInspectedFile
 } = require('../core/workspace-boundary');
+const {
+  createQualifiedCommandCatalog,
+  admitQualifiedCommand
+} = require('../core/qualified-command-catalog');
 
 const TIMEOUT_MS = 2000;
 const MAX_OUTPUT_BYTES = 32 * 1024;
@@ -146,7 +150,17 @@ function authorizeJavaScriptValidation(request, allowedKeys = REQUEST_KEYS) {
     throw new Error('Validation target is outside the authorized capability scope.');
   }
 
-  return { operationId, workspace, observedAt, selector, target, resolved };
+  const commandAdmission = admitQualifiedCommand(
+    createQualifiedCommandCatalog(),
+    {
+      selector,
+      workspace,
+      target,
+      environmentKeys: Object.keys(sanitizedEnvironment())
+    }
+  );
+
+  return { operationId, workspace, observedAt, selector, target, resolved, commandAdmission };
 }
 
 function executeNodeSyntaxCheck(source, workspace) {
@@ -206,6 +220,8 @@ function validationResult(binding, source, projection = null) {
       arguments: [...args],
       shell: false,
       cwd: binding.workspace,
+      qualifiedCommandAdmissionFingerprint:
+        binding.commandAdmission.admissionFingerprint,
       timeoutMs: TIMEOUT_MS,
       maxInputBytes: MAX_INPUT_BYTES,
       maxOutputBytes: MAX_OUTPUT_BYTES,

@@ -1,5 +1,11 @@
 # Changelog
 
+## Unreleased
+
+- Implement and qualify ADR-034 deterministic governed workspace sessions,
+  bounded discovery, sensitive evidence filtering, qualified validation
+  catalog, audit chaining and the NATURAL workspace experience projection.
+
 ## [2.6.0-rc.6] - 2026-08-30
 
 ### Fixed
