@@ -673,6 +673,310 @@ principal.
 
 The Orchestrator and human authority remain sovereign.
 
+<!-- CHATGPT-LIKE-PERCEIVED-LATENCY-CONTRACT-BEGIN -->
+
+## ChatGPT-like perceived responsiveness contract
+
+The integrated NATURAL experience SHALL pursue perceived responsiveness
+comparable to a modern ChatGPT conversational interaction while preserving
+Surgical deterministic governance.
+
+This is a product-experience objective.
+
+It is not a guarantee of identical absolute wall-clock latency because total
+latency can depend on:
+
+- cognitive provider;
+- selected model;
+- CPU, GPU or NPU availability;
+- provider load;
+- network conditions;
+- repository size;
+- filesystem performance;
+- command duration;
+- test-suite duration;
+- operating-system characteristics.
+
+The architecture SHALL optimize all latency components under Surgical DevOps
+control.
+
+### Time to first useful response
+
+For non-trivial missions, the conversational surface SHOULD acknowledge the
+mission or expose a meaningful deterministic state transition as early as
+practicable.
+
+The user SHOULD rapidly receive useful information such as:
+
+- mission accepted;
+- workspace validation started;
+- current mission state;
+- initial plan;
+- evidence acquisition started;
+- authority required.
+
+Long-running execution MUST NOT create avoidable conversational silence.
+
+### Streaming-first interaction
+
+Mission progress SHOULD be emitted incrementally as deterministic evidence
+becomes available.
+
+The interface SHOULD NOT wait for an entire multi-step operation to complete
+before projecting already-established progress.
+
+Representative experience:
+
+    Human:
+    Finalize this until green.
+
+    Surgical:
+    Mission accepted.
+    Verifying governed workspace...
+
+    ✓ workspace verified
+    ✓ repository state verified
+
+    Running targeted qualification...
+
+    One material failure was found.
+    Repairing forward without weakening the expectation.
+
+    ✓ targeted qualification
+
+    Running canonical regression...
+
+Streaming is a presentation mechanism.
+
+Streaming MUST NOT create or expand authority.
+
+### Mission event stream
+
+The Integrated Governed Agent Gateway SHOULD expose structured incremental
+mission events.
+
+Representative event classes include:
+
+- MISSION_STARTED
+- PLAN_UPDATED
+- WORKSPACE_VALIDATED
+- EVIDENCE_DISCOVERED
+- AUTHORITY_REQUIRED
+- AUTHORITY_GRANTED
+- OPERATION_STARTED
+- OPERATION_COMPLETED
+- TEST_STARTED
+- TEST_PASSED
+- TEST_FAILED
+- REPAIR_STARTED
+- QUALIFICATION_STARTED
+- CHECKPOINT_CREATED
+- STATE_INVALIDATED
+- MISSION_BLOCKED
+- MISSION_GREEN
+- MISSION_CANCELLED
+
+Equivalent names MAY be used provided their semantics remain deterministic and
+auditable.
+
+### Non-blocking conversational projection
+
+Where safe, the conversational projection SHOULD remain responsive while
+long-running governed operations continue.
+
+A long-running:
+
+- canonical test suite;
+- repository scan;
+- package qualification;
+- compilation;
+- platform qualification;
+
+SHOULD NOT prevent the interface from presenting already-known mission state.
+
+This does not authorize ungoverned background mutation.
+
+Physical operations remain subject to the same mission, authority, state,
+sandbox and CAS contracts.
+
+### Progressive governed evidence retrieval
+
+Evidence acquisition SHOULD use the smallest sufficient governed read before
+expanding scope.
+
+Progressive microreads are preferred where appropriate because they can reduce:
+
+- filesystem work;
+- serialization volume;
+- provider context size;
+- inference latency;
+- sensitive-content exposure;
+- unnecessary token consumption.
+
+Performance optimization MUST NOT omit evidence required for deterministic
+qualification.
+
+### Structured result normalization
+
+Large raw process outputs SHOULD be normalized into compact structured evidence
+before being projected to cognition when the complete raw transcript is not
+necessary.
+
+A normalized test result MAY contain:
+
+- operation identity;
+- exit classification;
+- discovered test count;
+- pass count;
+- fail count;
+- skip count;
+- failure identifiers;
+- relevant excerpts;
+- evidence digest;
+- raw-evidence reference.
+
+The full raw evidence MAY remain available through governed retrieval.
+
+The cognitive provider SHOULD NOT need to ingest a large terminal transcript
+when deterministic structured evidence is sufficient.
+
+### Deterministic local fast path
+
+Operations that do not require cognitive inference SHOULD remain local and
+deterministic whenever possible.
+
+Examples include:
+
+- workspace status projection;
+- repository HEAD inspection;
+- mission-state projection;
+- authority-state projection;
+- qualified metadata reads;
+- cached deterministic discovery data;
+- test-result normalization;
+- journal metadata inspection.
+
+The system SHOULD NOT invoke a cognitive provider merely to compute a result
+already available deterministically.
+
+### Provider latency visibility
+
+Qualified provider adapters MAY expose measurable characteristics such as:
+
+- time to first token;
+- tokens per second;
+- connection overhead;
+- local versus remote execution;
+- context size;
+- expected cost;
+- provider availability.
+
+These characteristics MAY inform provider selection or recommendations.
+
+Provider latency characteristics MUST NOT alter physical authority.
+
+### Latency budgets and observability
+
+The implementation SHOULD measure latency separately for controllable stages.
+
+Candidate metrics include:
+
+- mission acknowledgement latency;
+- first progress event latency;
+- governed tool dispatch overhead;
+- first governed evidence latency;
+- approval-prompt latency;
+- structured result normalization latency;
+- provider time to first token;
+- provider throughput;
+- mission resume latency.
+
+Long-running physical operations such as canonical test suites SHALL be
+measured separately from conversational responsiveness.
+
+### Adaptive progress reporting
+
+When an operation exceeds the normal interactive window, NATURAL SHOULD emit a
+meaningful progress update based on real state.
+
+Examples include:
+
+- canonical suite still executing;
+- discovery scope expanded;
+- provider inference pending;
+- authority boundary reached;
+- deterministic retry executing;
+- qualification phase changed.
+
+The system MUST NOT fabricate activity, percentages, completion estimates or
+success states.
+
+### Safe concurrency
+
+Independent work MAY overlap when deterministic semantics allow it.
+
+For example:
+
+- mission status may be rendered while a test process runs;
+- completed test groups may be projected while later groups continue;
+- deterministic metadata may be collected while a non-conflicting cognitive
+  response is prepared.
+
+Concurrency MUST NOT violate:
+
+- physical identity;
+- CAS;
+- mutation ordering;
+- transaction boundaries;
+- journal ordering;
+- authority;
+- recovery;
+- sensitive-content boundaries.
+
+### Mutation serialization remains authoritative
+
+Latency optimization MUST NOT create unsafe parallel mutation.
+
+Physically consequential operations SHALL continue to obey the serialization,
+conditional mutation, CAS and transaction contracts established by existing
+Surgical DevOps architecture.
+
+Fast interaction does not mean relaxed consistency.
+
+### No latency optimization through weakened governance
+
+Surgical DevOps SHALL NOT improve perceived latency by:
+
+- skipping workspace revalidation;
+- skipping physical identity checks;
+- skipping CAS;
+- retaining stale authority;
+- bypassing sensitive-content inspection;
+- bypassing qualified command mediation;
+- weakening tests;
+- skipping required canonical qualification;
+- exposing unrestricted shell primitives;
+- assuming remembered state is physically true;
+- declaring GREEN without evidence.
+
+When speed and deterministic truth conflict, deterministic truth is sovereign.
+
+### Product experience target
+
+The intended interaction is:
+
+> The human speaks naturally to Surgical DevOps. Surgical acknowledges the
+> mission quickly, streams real progress, invokes governed tools directly,
+> reports failures as soon as they are established, repairs within granted
+> authority, and continues until GREEN or a genuine authority boundary without
+> requiring the human to shuttle commands and outputs between chat and terminal.
+
+The responsiveness target is ChatGPT-like.
+
+The execution authority remains Surgical.
+
+<!-- CHATGPT-LIKE-PERCEIVED-LATENCY-CONTRACT-END -->
+
 ## Frozen invariants
 
 The following are ACCEPTED / FROZEN:
