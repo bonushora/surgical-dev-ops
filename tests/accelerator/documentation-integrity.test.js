@@ -35,9 +35,13 @@ test('English and Portuguese entry points expose equivalent qualified baseline f
   const english = read('README.md');
   const portuguese = read('README_PT-BR.md');
   const facts = [
+    'f56750eba3aa07b0426f56021c072a280468ea98',
+    '2f8d9e1aa40d0d7a127e966a28e475e0f89c4bb0',
+    '9ed86a443da18f923b60692d7446f1fd57d0a2da',
     '56da715284704f227675961d476e19acce6e9fa3',
     '33286652480',
-    '1139',
+    '1202',
+    '1197',
     'POWER_LOSS_VALIDATED',
     'protocols/BH-SEP.md',
     'protocols/BH-SDP.md'
@@ -48,6 +52,8 @@ test('English and Portuguese entry points expose equivalent qualified baseline f
   }
   assert.doesNotMatch(english, /508 tests|595 tests|v2\.4\.1 Installation/);
   assert.doesNotMatch(portuguese, /508 testes|595 testes|Instalação da CLI v2\.4\.1/);
+  assert.doesNotMatch(english, /1139 tests discovered; 1134 passed/);
+  assert.doesNotMatch(portuguese, /1139 testes descobertos; 1134 aprovados/);
 });
 
 test('international documentation has no unresolved local Markdown targets', () => {
@@ -77,6 +83,22 @@ test('international documentation has no unresolved local Markdown targets', () 
     }
   }
   assert.deepEqual(unresolved, []);
+
+  const map = read('docs/DOCUMENTATION.md');
+  for (const adr of [
+    'ADR-028',
+    'ADR-029',
+    'ADR-030',
+    'ADR-031',
+    'ADR-032',
+    'ADR-033',
+    'ADR-034',
+    'ADR-035',
+    'ADR-036',
+    'ADR-037'
+  ]) {
+    assert.match(map, new RegExp(adr));
+  }
 });
 
 test('public AI provider recommendation is bilingual bounded and honest', () => {

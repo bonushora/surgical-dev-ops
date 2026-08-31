@@ -6,6 +6,65 @@ This document records reproducible evidence for the current Surgical DevOps
 multiplatform baseline. It distinguishes observed results from broader security
 claims that remain unqualified.
 
+## ADR-036 and ADR-037 integrated NATURAL gateway qualification
+
+| Field | Evidence |
+| --- | --- |
+| Local implementation state | `release/v2.6.0-rc.6` worktree after ADR-036/ADR-037 runtime integration |
+| NATURAL default checkpoint | `9ed86a443da18f923b60692d7446f1fd57d0a2da` |
+| ADR freeze checkpoint | `dee764f7ac39ba0de16be6056cc2706ad629e99f` |
+| Local canonical suite | 1202 tests discovered; 1197 passed; zero failures; 5 explicit platform skips |
+| Package dry run | `npm pack --dry-run --json` completed for `surgical-dev-ops@2.6.0-rc.6` |
+| Scope | Persistent NATURAL mission state, integrated governed agent gateway, conversational projections and no-copy/paste governed tool slices |
+
+The local implementation adds a persistent governed NATURAL mission model with
+explicit state, live plan, hash-chained event stream, mission projections,
+governed resume and final GREEN qualification semantics. It also adds the
+Integrated Governed Agent Gateway vertical slices for workspace status,
+governed search, governed read, governed diff, governed test invocation,
+authority inspection, contextual approval request creation, mission resume and
+conditional mutation routing through the existing Surgical Orchestrator.
+
+The gateway remains a structured mediation layer, not a shell. Tool
+availability is separated from tool authority; unknown, malformed, stale,
+unbound and CAS-mismatched requests fail closed. Sensitive evidence is inspected
+and redacted or blocked before provider exposure. Provider substitution changes
+cognition only and cannot expand filesystem, mutation, Git, network, release or
+publish authority.
+
+Perceived responsiveness is qualified through deterministic architecture rather
+than arbitrary wall-clock promises: the gateway emits an early operation event,
+streams real progress before long operations complete, normalizes large evidence
+before cognition, exposes local deterministic fast paths for mission/status
+views, and records latency trace boundaries without fabricating percentages or
+success.
+
+## ADR-034 governed workspace closure checkpoint
+
+| Field | Evidence |
+| --- | --- |
+| Local checkpoint | `f56750eba3aa07b0426f56021c072a280468ea98` |
+| Initial implementation checkpoint | `2f8d9e1aa40d0d7a127e966a28e475e0f89c4bb0` |
+| Local canonical suite | 1179 tests discovered; 1174 passed; zero failures; 5 explicit platform skips |
+| Scope | Deterministic governed workspace experience for NATURAL mode |
+| Native CI predecessor | `56da715284704f227675961d476e19acce6e9fa3`, run `33286652480` |
+
+The local checkpoint integrates ADR-034 into the actual NATURAL project
+experience: a revalidated deterministic physical workspace session is opened
+after human task authorization, the governed workspace inventory is projected
+through the discovery index, contained microreads are evaluated against the task
+envelope, sensitive content is blocked or redacted before provider exposure, the
+qualified command catalog remains the validation boundary, and content-free
+audit events are carried by the workspace projection.
+
+The same checkpoint preserves the separate ENGINEER and EXPERT experiences.
+ENGINEER still stops at `HUMAN_AUTHORITY_REQUIRED` with an evidence-bound
+proposal, while EXPERT remains command-oriented and provider-independent.
+
+This local evidence is not a pushed tag, GitHub Release or npm publication. A
+new publication still requires the exact pushed commit and tag to pass the full
+Ubuntu, macOS and Windows native matrix.
+
 ## Governed frontier qualification baseline
 
 | Field | Evidence |

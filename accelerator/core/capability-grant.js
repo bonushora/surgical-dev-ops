@@ -15,7 +15,7 @@ const ALLOWED_TYPES = new Set([
   'FILESYSTEM_READ', 'FILESYSTEM_PATCH', 'GIT_READ', 'PROCESS_VALIDATION'
 ]);
 const GIT_READ_OPERATIONS = new Set(['status', 'diff', 'show', 'rev-parse', 'ls-files']);
-const VALIDATION_SELECTORS = new Set(['NODE_SYNTAX_CHECK']);
+const VALIDATION_SELECTORS = new Set(['NODE_SYNTAX_CHECK', 'NODE_TEST_FILE']);
 const RISKS = new Set(['R0', 'R1', 'R2', 'R3']);
 
 function deepFreeze(value) {

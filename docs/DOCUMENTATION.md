@@ -41,6 +41,16 @@ Start with:
 - [ADR-025 — External Adversarial Review](./adr/ADR-025-external-adversarial-review-reproducible-release.md)
 - [ADR-026 — NATURAL Terminal Boundary and Input Clarity](./adr/ADR-026-natural-terminal-boundary-input-clarity.md)
 - [ADR-027 — Pre-Adversarial Local Cognition Acceptance](./adr/ADR-027-pre-adversarial-local-cognition-acceptance.md)
+- [ADR-028 — NATURAL Governed Development Execution Loop](./adr/ADR-028-natural-governed-development-execution-loop.md)
+- [ADR-029 — Bilingual Product Contract](./adr/ADR-29-bilingual-product-contract.md)
+- [ADR-030 — Unified Bilingual Interaction Onboarding](./adr/ADR-030-unified-bilingual-interaction-onboarding.md)
+- [ADR-031 — Complete Bilingual Human Experience](./adr/ADR-031-complete-bilingual-human-experience.md)
+- [ADR-032 — NATURAL Interactive Development Closure](./adr/ADR-032-natural-interactive-development-closure.md)
+- [ADR-033 — Governed Autonomous Runner Mode](./adr/ADR-033-governed-autonomous-runner-mode.md)
+- [ADR-034 — Deterministic Governed Workspace Experience](./adr/ADR-034-deterministic-governed-workspace-experience.md)
+- [ADR-035 — Qualified Local Inference Latency Contract Reconciliation](./adr/ADR-035-qualified-local-inference-latency-contract-reconciliation.md)
+- [ADR-036 — NATURAL Agentic Governed Experience](./adr/ADR-036-natural-agentic-governed-experience.md)
+- [ADR-037 — Integrated Governed Agent Gateway and Conversational Control Surface](./adr/ADR-037-integrated-governed-agent-gateway-and-conversational-control-surface.md)
 
 ## Manual acceptance
 

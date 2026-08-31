@@ -207,7 +207,9 @@ function runCli(
   return spawnSync(
     process.execPath,
     [
-      CLI
+      CLI,
+      '--interaction',
+      'EXPERT'
     ],
     {
       cwd:
@@ -245,7 +247,7 @@ function runCli(
 }
 
 test(
-  'real surgical process activates a deterministic human session',
+  'real EXPERT surgical process activates a deterministic human session',
   () => {
     const state =
       fixture();
@@ -293,7 +295,7 @@ test(
 );
 
 test(
-  'real surgical process executes governed Level 1 read before R3 mutation',
+  'real EXPERT surgical process executes governed Level 1 read before R3 mutation',
   () => {
     const state =
       fixture();
@@ -342,7 +344,7 @@ test(
 );
 
 test(
-  'real surgical process traverses human CLI to qualified R3 production mutation boundary',
+  'real EXPERT surgical process traverses human CLI to qualified R3 production mutation boundary',
   () => {
     const state =
       fixture();
@@ -450,7 +452,7 @@ test(
 );
 
 test(
-  'real surgical process can perform read then governed patch in one persistent human session',
+  'real EXPERT surgical process can perform read then governed patch in one persistent human session',
   () => {
     const state =
       fixture();

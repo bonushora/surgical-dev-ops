@@ -24,6 +24,28 @@
       "windows-latest"
     ]
   },
+  "localGovernedWorkspaceBaseline": {
+    "commit": "f56750eba3aa07b0426f56021c072a280468ea98",
+    "initialImplementationCommit": "2f8d9e1aa40d0d7a127e966a28e475e0f89c4bb0",
+    "workflow": "local npm test",
+    "testsDiscovered": 1179,
+    "testsPassed": 1174,
+    "testsFailed": 0,
+    "testsSkipped": 5,
+    "scope": "ADR-034 deterministic governed workspace experience"
+  },
+  "localAgenticGatewayBaseline": {
+    "worktree": "release/v2.6.0-rc.6",
+    "naturalDefaultCheckpoint": "9ed86a443da18f923b60692d7446f1fd57d0a2da",
+    "adrFreezeCheckpoint": "dee764f7ac39ba0de16be6056cc2706ad629e99f",
+    "workflow": "local npm test",
+    "testsDiscovered": 1202,
+    "testsPassed": 1197,
+    "testsFailed": 0,
+    "testsSkipped": 5,
+    "packageDryRun": "npm pack --dry-run --json",
+    "scope": "ADR-036 NATURAL agentic governed experience and ADR-037 integrated governed agent gateway"
+  },
   "protocols": {
     "BH-SEP-v2.2-sha256": "f4e8639163b0321fff86133a69ec59c2822ccdebcd24d2ccb459b5bc1c3b35cb",
     "BH-SDP-v2.2-sha256": "04ea782ada1abf7fb959329054c57f87a0e86fca99a31d2e37751d3bdf7d47bc"

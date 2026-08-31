@@ -172,6 +172,56 @@ test(
   }
 );
 
+test(
+  'NATURAL CLI projects governed mission state without granting authority',
+  async () => {
+    const input = new PassThrough();
+    const output = new PassThrough();
+    let observed = '';
+
+    output.on('data', (chunk) => {
+      observed += chunk.toString();
+    });
+
+    cli.createInteractiveSession(
+      naturalActivation(),
+      {
+        input,
+        output,
+        terminal: false,
+        cognitiveSession: Object.freeze({})
+      }
+    );
+
+    input.end(
+      '/status\n' +
+      '/plan\n' +
+      '/authority\n' +
+      '/resume\n' +
+      'exit\n'
+    );
+
+    await new Promise((resolve) => setTimeout(resolve, 50));
+
+    assert.match(observed, /Mission: cli-natural-/);
+    assert.match(observed, /State: PLANNING/);
+    assert.match(observed, /Projection authority: none/);
+    assert.match(
+      observed,
+      /ACTIVE: Maintain governed conversational session state\./
+    );
+    assert.match(observed, /Authority projection:/);
+    assert.match(
+      observed,
+      /Local commit does not grant push\./
+    );
+    assert.doesNotMatch(
+      observed,
+      /No active governed mission/
+    );
+  }
+);
+
 function naturalActivation() {
   return Object.freeze({
     repositoryPath:

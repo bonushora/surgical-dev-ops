@@ -4,6 +4,11 @@
 
 | Item | Evidence |
 | --- | --- |
+| Local integrated NATURAL gateway qualification | ADR-036 + ADR-037 on `release/v2.6.0-rc.6` |
+| NATURAL default checkpoint | `9ed86a443da18f923b60692d7446f1fd57d0a2da` |
+| Local suite | 1202 discovered; 1197 PASS; 0 FAIL; 5 platform SKIP |
+| Local governed workspace checkpoint | `f56750eba3aa07b0426f56021c072a280468ea98` |
+| ADR-034 implementation start | `2f8d9e1aa40d0d7a127e966a28e475e0f89c4bb0` |
 | Source baseline | `a3a4e2941914f14457ed1932ea4024fc495bfff1` |
 | Canonical workflow run | `33110168939` |
 | Matrix | Ubuntu, macOS and Windows: PASS |
@@ -11,9 +16,14 @@
 | Review challenge | [`review/TRY_TO_BREAK_IT.md`](review/TRY_TO_BREAK_IT.md) |
 | Machine-readable manifest | [`review/QUALIFICATION_MANIFEST.json`](review/QUALIFICATION_MANIFEST.json) |
 
-This is an invitation to independent review, not a claim that an independent
-audit has already occurred. The historical v2.5.1 baseline remains below so its
-earlier evidence is not rewritten.
+The current local implementation adds the ADR-036 persistent NATURAL governed
+mission and the ADR-037 Integrated Governed Agent Gateway to the existing
+ADR-034 deterministic workspace experience. The model still does not receive
+direct filesystem, shell, Git, mutation, network, release or publish authority;
+structured requests cross Surgical mediation and known tools can still be
+denied. This is an invitation to independent review, not a claim that an
+independent audit has already occurred. The historical v2.5.1 baseline remains
+below so its earlier evidence is not rewritten.
 
 ## Historical v2.5.1 package
 
@@ -105,11 +115,16 @@ Review these modules in order:
 1. `accelerator/core/ai-provider.js`
 2. `accelerator/core/governed-ai-runtime.js`
 3. `accelerator/cli/natural-recursive-evidence-loop.js`
-4. `accelerator/core/governed-engineering-proposal.js`
-5. `accelerator/cli/governed-engineering-agent-loop.js`
-6. `accelerator/core/surgical-orchestrator.js`
-7. `accelerator/cli/governed-patch-dispatch.js`
-8. `accelerator/core/production-mutation-runtime.js`
+4. `accelerator/cli/natural-governed-workspace-experience.js`
+5. `accelerator/adapters/deterministic-workspace-session-adapter.js`
+6. `accelerator/core/governed-workspace-discovery-index.js`
+7. `accelerator/core/sensitive-content-boundary.js`
+8. `accelerator/core/qualified-command-catalog.js`
+9. `accelerator/core/governed-engineering-proposal.js`
+10. `accelerator/cli/governed-engineering-agent-loop.js`
+11. `accelerator/core/surgical-orchestrator.js`
+12. `accelerator/cli/governed-patch-dispatch.js`
+13. `accelerator/core/production-mutation-runtime.js`
 
 ## Claims supported by the current baseline
 
@@ -117,6 +132,9 @@ Review these modules in order:
 - AI output cannot directly create operational authority.
 - Project claims in the governed NATURAL analysis path require workspace
   evidence.
+- NATURAL project evidence crosses a deterministic physical workspace session,
+  governed discovery index, task-envelope microread policy and sensitive-content
+  boundary before provider exposure.
 - An ENGINEER patch proposal must bind to one observed file and BEFORE hash.
 - The proposal flow stops before R3 authority and physical mutation.
 - The production mutation path preserves explicit identity, risk, exact scope,

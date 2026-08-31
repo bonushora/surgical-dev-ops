@@ -19,6 +19,34 @@ test('ADR-025 manifest binds the public green baseline and immutable protocol by
   assert.deepEqual(manifest.sourceBaseline.platforms, [
     'ubuntu-latest', 'macos-latest', 'windows-latest'
   ]);
+  assert.equal(
+    manifest.localGovernedWorkspaceBaseline.commit,
+    'f56750eba3aa07b0426f56021c072a280468ea98'
+  );
+  assert.equal(
+    manifest.localGovernedWorkspaceBaseline.initialImplementationCommit,
+    '2f8d9e1aa40d0d7a127e966a28e475e0f89c4bb0'
+  );
+  assert.equal(manifest.localGovernedWorkspaceBaseline.testsDiscovered, 1179);
+  assert.equal(manifest.localGovernedWorkspaceBaseline.testsPassed, 1174);
+  assert.equal(manifest.localGovernedWorkspaceBaseline.testsFailed, 0);
+  assert.equal(manifest.localGovernedWorkspaceBaseline.testsSkipped, 5);
+  assert.equal(
+    manifest.localAgenticGatewayBaseline.naturalDefaultCheckpoint,
+    '9ed86a443da18f923b60692d7446f1fd57d0a2da'
+  );
+  assert.equal(
+    manifest.localAgenticGatewayBaseline.adrFreezeCheckpoint,
+    'dee764f7ac39ba0de16be6056cc2706ad629e99f'
+  );
+  assert.equal(manifest.localAgenticGatewayBaseline.testsDiscovered, 1202);
+  assert.equal(manifest.localAgenticGatewayBaseline.testsPassed, 1197);
+  assert.equal(manifest.localAgenticGatewayBaseline.testsFailed, 0);
+  assert.equal(manifest.localAgenticGatewayBaseline.testsSkipped, 5);
+  assert.match(
+    manifest.localAgenticGatewayBaseline.scope,
+    /ADR-036[\s\S]+ADR-037/
+  );
   assert.equal(manifest.protocols['BH-SEP-v2.2-sha256'], sha('protocols/BH-SEP.md'));
   assert.equal(manifest.protocols['BH-SDP-v2.2-sha256'], sha('protocols/BH-SDP.md'));
 });

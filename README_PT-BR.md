@@ -20,10 +20,12 @@ sistema operacional ao redor do modelo explícito, limitado, auditável e fail-c
 | Evidência | Valor |
 | --- | --- |
 | Linha de release | Surgical DevOps v2.6.0-rc.6 |
-| Commit canônico | [`56da715284704f227675961d476e19acce6e9fa3`](https://github.com/bonushora/surgical-dev-ops/commit/56da715284704f227675961d476e19acce6e9fa3) |
-| Run canônico do CI | [Accelerator Conformance #33286652480](https://github.com/bonushora/surgical-dev-ops/actions/runs/33286652480) |
-| Resultado da matriz | Ubuntu, macOS e Windows: **PASS** |
-| Suíte canônica | 1139 testes descobertos; 1134 aprovados; 0 falhas; 5 skips específicos de plataforma |
+| Checkpoint local da experiência governada | `f56750eba3aa07b0426f56021c072a280468ea98` |
+| Checkpoint inicial da implementação ADR-034 | `2f8d9e1aa40d0d7a127e966a28e475e0f89c4bb0` |
+| Qualificação local do gateway NATURAL integrado | ADR-036 + ADR-037 em `release/v2.6.0-rc.6`, construída sobre `9ed86a443da18f923b60692d7446f1fd57d0a2da` |
+| Predecessor publicado com CI nativo | [`56da715284704f227675961d476e19acce6e9fa3`](https://github.com/bonushora/surgical-dev-ops/commit/56da715284704f227675961d476e19acce6e9fa3), [Accelerator Conformance #33286652480](https://github.com/bonushora/surgical-dev-ops/actions/runs/33286652480) |
+| Matriz publicada do predecessor | Ubuntu, macOS e Windows: **PASS** |
+| Suíte canônica local | 1202 testes descobertos; 1197 aprovados; 0 falhas; 5 skips específicos de plataforma |
 | Protocolos normativos | BH-SEP v2.2 + BH-SDP v2.2 |
 
 A trilha completa, incluindo os runs que falharam antes do baseline verde, está em
@@ -90,7 +92,10 @@ nativas diferentes avaliadas contra contratos limitados em comum. Consulte
 
 O provider local de referência é o Ollama quando disponível. Providers são
 substituíveis e permanecem fora da autoridade operacional. Análises amplas no modo
-NATURAL atravessam autorização humana e um loop recursivo governado de evidências.
+NATURAL atravessam autorização humana, vinculam uma sessão física determinística
+do workspace, abrem um índice de descoberta governado, aplicam inspeção de
+conteúdo sensível antes de exposição ao provider, avaliam microleituras contra um
+envelope de tarefa limitado e registram auditoria sem conteúdo.
 
 Para engenharia avançada de repositório, OpenAI Codex é o agente de referência
 recomendado e o alvo mais próximo do ciclo conversacional completo de
@@ -178,6 +183,9 @@ e a [ADR-018](./docs/adr/ADR-018-immutable-protocol-raw-and-international-docume
 - [Modos de Interação — ADR-011](./docs/adr/ADR-011-intent-driven-orchestration-user-modes.md)
 - [Comportamento Governado da IA — ADR-014](./docs/adr/ADR-014-governed-ai-behavior-contract.md)
 - [Experiência Humana Bilíngue Completa — ADR-031](./docs/adr/ADR-031-complete-bilingual-human-experience_PT-BR.md)
+- [Experiência Governada Determinística de Workspace — ADR-034](./docs/adr/ADR-034-deterministic-governed-workspace-experience.md)
+- [Experiência NATURAL Agentic Governada — ADR-036](./docs/adr/ADR-036-natural-agentic-governed-experience.md)
+- [Gateway Governado Integrado de Agente — ADR-037](./docs/adr/ADR-037-integrated-governed-agent-gateway-and-conversational-control-surface.md)
 
 ## O que o CI verde não afirma
 

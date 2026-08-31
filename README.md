@@ -20,10 +20,12 @@ operational system around the model explicit, bounded, auditable, and fail-close
 | Evidence | Value |
 | --- | --- |
 | Release line | Surgical DevOps v2.6.0-rc.6 |
-| Canonical commit | [`56da715284704f227675961d476e19acce6e9fa3`](https://github.com/bonushora/surgical-dev-ops/commit/56da715284704f227675961d476e19acce6e9fa3) |
-| Canonical CI run | [Accelerator Conformance #33286652480](https://github.com/bonushora/surgical-dev-ops/actions/runs/33286652480) |
-| Matrix result | Ubuntu, macOS, and Windows: **PASS** |
-| Canonical suite | 1139 tests discovered; 1134 passed; 0 failures; 5 platform-specific skips |
+| Local governed workspace checkpoint | `f56750eba3aa07b0426f56021c072a280468ea98` |
+| Initial ADR-034 implementation checkpoint | `2f8d9e1aa40d0d7a127e966a28e475e0f89c4bb0` |
+| Local integrated NATURAL gateway qualification | ADR-036 + ADR-037 on `release/v2.6.0-rc.6`, building on `9ed86a443da18f923b60692d7446f1fd57d0a2da` |
+| Published native CI predecessor | [`56da715284704f227675961d476e19acce6e9fa3`](https://github.com/bonushora/surgical-dev-ops/commit/56da715284704f227675961d476e19acce6e9fa3), [Accelerator Conformance #33286652480](https://github.com/bonushora/surgical-dev-ops/actions/runs/33286652480) |
+| Published predecessor matrix | Ubuntu, macOS, and Windows: **PASS** |
+| Local canonical suite | 1202 tests discovered; 1197 passed; 0 failures; 5 platform-specific skips |
 | Normative protocols | BH-SEP v2.2 + BH-SDP v2.2 |
 
 The complete trail, including failed runs that preceded the green baseline, is
@@ -89,7 +91,7 @@ contracts. The exact claims and limitations are in
 
 ## Governed AI and interaction modes
 
-Surgical DevOps v2.5 provides three interaction profiles without changing the
+Surgical DevOps v2.6 provides three interaction profiles without changing the
 underlying authority model:
 
 - **NATURAL:** outcome-oriented language and progressive disclosure.
@@ -106,9 +108,12 @@ This recommendation does not grant privileged authority and does not claim
 universal comparative superiority. See the bilingual
 [AI provider selection guide](./docs/AI_PROVIDER_SELECTION.md).
 
-Broad project analysis in NATURAL mode crosses explicit human authorization and a
-governed recursive evidence loop. Workspace facts must come from
-Orchestrator-qualified evidence, not model memory or inference.
+Broad project analysis in NATURAL mode crosses explicit human authorization,
+binds a deterministic physical workspace session, opens a governed discovery
+index, applies sensitive-content inspection before provider exposure, evaluates
+microreads against a bounded task envelope, and records content-free audit
+events. Workspace facts must come from Orchestrator-qualified evidence, not
+model memory or inference.
 
 ENGINEER mode extends this path with one immutable proposal bound to the exact
 governed READ_FILE target and BEFORE SHA-256. It stops at
@@ -194,6 +199,9 @@ repurpose the original v2.2 RAW URLs. See
 - [Interaction Modes — ADR-011](./docs/adr/ADR-011-intent-driven-orchestration-user-modes.md)
 - [Governed AI Behavior — ADR-014](./docs/adr/ADR-014-governed-ai-behavior-contract.md)
 - [Complete Bilingual Human Experience — ADR-031](./docs/adr/ADR-031-complete-bilingual-human-experience.md)
+- [Deterministic Governed Workspace Experience — ADR-034](./docs/adr/ADR-034-deterministic-governed-workspace-experience.md)
+- [NATURAL Agentic Governed Experience — ADR-036](./docs/adr/ADR-036-natural-agentic-governed-experience.md)
+- [Integrated Governed Agent Gateway — ADR-037](./docs/adr/ADR-037-integrated-governed-agent-gateway-and-conversational-control-surface.md)
 
 ## What the green CI does not claim
 

@@ -99,6 +99,13 @@ const {
 } = require('./natural-runner-runtime');
 
 const {
+  createNaturalAgenticMission,
+  projectMissionView,
+  formatMissionProjection,
+  resumeNaturalAgenticMission
+} = require('../core/natural-agentic-mission');
+
+const {
   createNaturalTaskEnvelopeProposal,
   authorizeNaturalTaskEnvelope
 } = require('./natural-task-envelope-authorization');
@@ -993,10 +1000,54 @@ function createInteractiveSession(
   let pendingDevelopment =
     null;
 
+  let agenticMission =
+    null;
+
   const runnerRuntime =
     cognitiveMode
       ? createNaturalRunnerRuntime()
       : null;
+
+  if (cognitiveMode) {
+    try {
+      const missionObservedAt =
+        currentCanonicalInstant(options);
+      const missionSession =
+        createDeterministicWorkspaceSession({
+          authorizedRoot:
+            activation.repositoryPath,
+          humanSubject:
+            NATURAL_WORKSPACE_HUMAN_SUBJECT,
+          authorizedAt:
+            missionObservedAt
+        });
+
+      agenticMission =
+        createNaturalAgenticMission({
+          missionId:
+            `cli-natural-${missionSession.sessionFingerprint.slice(0, 32)}`,
+          objective:
+            'Interactive NATURAL governed engineering session.',
+          session:
+            missionSession,
+          createdAt:
+            missionObservedAt,
+          plan: [
+            {
+              stepId:
+                'session-ready',
+              summary:
+                'Maintain governed conversational session state.',
+              status:
+                'ACTIVE'
+            }
+          ]
+        });
+    } catch {
+      agenticMission =
+        null;
+    }
+  }
 
   rl.on('line', (line) => {
     rl.pause();
@@ -1110,7 +1161,57 @@ function createInteractiveSession(
               );
 
             if (controlled.matched) {
-              if (controlled.action === 'RUNNER_START') {
+              if (controlled.action === 'MISSION_PROJECTION') {
+                if (!agenticMission) {
+                  output.write(
+                    humanText(
+                      activation,
+                      'Nenhuma missão governada ativa pôde ser projetada. A governança permanece fail-closed.\n',
+                      'No active governed mission could be projected. Governance remains fail-closed.\n'
+                    )
+                  );
+                } else {
+                  output.write(
+                    formatMissionProjection(
+                      projectMissionView(
+                        agenticMission,
+                        controlled.projection
+                      )
+                    )
+                  );
+                }
+              } else if (controlled.action === 'MISSION_RESUME') {
+                if (!agenticMission) {
+                  output.write(
+                    humanText(
+                      activation,
+                      'Não há missão governada ativa para retomar.\n',
+                      'There is no active governed mission to resume.\n'
+                    )
+                  );
+                } else {
+                  const revalidation =
+                    revalidateDeterministicWorkspaceSession(
+                      agenticMission.session
+                    );
+                  agenticMission =
+                    resumeNaturalAgenticMission({
+                      mission:
+                        agenticMission,
+                      revalidation,
+                      resumedAt:
+                        currentCanonicalInstant(options)
+                    });
+                  output.write(
+                    formatMissionProjection(
+                      projectMissionView(
+                        agenticMission,
+                        'status'
+                      )
+                    )
+                  );
+                }
+              } else if (controlled.action === 'RUNNER_START') {
                 const runner = runnerRuntime.start();
                 output.write(
                   controlled.output + '\n' +

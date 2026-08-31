@@ -36,13 +36,19 @@ const CONTRACTS = Object.freeze({
 
   PROCESS_VALIDATION: Object.freeze({
     adapter: 'PROCESS_VALIDATION',
-    action: 'NODE_SYNTAX_CHECK',
-    objective(target) {
-      return `Governed Node.js syntax validation: ${target}`;
+    defaultAction: 'NODE_SYNTAX_CHECK',
+    actions: Object.freeze({
+      syntax: 'NODE_SYNTAX_CHECK',
+      test: 'NODE_TEST_FILE'
+    }),
+    objective(target, selector = 'NODE_SYNTAX_CHECK') {
+      return selector === 'NODE_TEST_FILE'
+        ? `Governed Node.js test execution: ${target}`
+        : `Governed Node.js syntax validation: ${target}`;
     },
-    scope(target) {
+    scope(target, selector = 'NODE_SYNTAX_CHECK') {
       return {
-        selectors: ['NODE_SYNTAX_CHECK'],
+        selectors: [selector],
         paths: [target]
       };
     }
@@ -55,6 +61,7 @@ const CONTRACTS = Object.freeze({
       branch: 'CURRENT_BRANCH',
       head: 'HEAD_COMMIT',
       status: 'WORKTREE_STATUS',
+      diff: 'WORKTREE_DIFF',
       tracked: 'TRACKED_FILES',
       'workspace-files': 'WORKSPACE_FILES'
     }),
@@ -67,6 +74,7 @@ const CONTRACTS = Object.freeze({
         CURRENT_BRANCH: 'rev-parse',
         HEAD_COMMIT: 'rev-parse',
         WORKTREE_STATUS: 'status',
+        WORKTREE_DIFF: 'diff',
         TRACKED_FILES: 'ls-files',
         WORKSPACE_FILES: 'ls-files'
       }[selector];
@@ -147,7 +155,8 @@ function createGovernedReadOnlyRequest(
   {
     repositoryPath,
     capabilityType,
-    target
+    target,
+    selector = null
   },
   options = {}
 ) {
@@ -169,9 +178,21 @@ function createGovernedReadOnlyRequest(
           contract.actions &&
           contract.actions[requestedTarget.toLowerCase()]
         )
-      : contract.action;
+      : capabilityType === 'PROCESS_VALIDATION'
+        ? (
+            selector
+              ? requireText(selector, 'Validation selector').toUpperCase()
+              : contract.defaultAction
+          )
+        : contract.action;
 
-  if (!requestedAction) {
+  if (
+    !requestedAction ||
+    (
+      capabilityType === 'PROCESS_VALIDATION' &&
+      !Object.values(contract.actions).includes(requestedAction)
+    )
+  ) {
     throw new Error(
       'Unknown governed read-only action.'
     );
@@ -209,11 +230,13 @@ function createGovernedReadOnlyRequest(
     });
 
   const scope =
-    contract.scope(
-      capabilityType === 'GIT_READ'
-        ? requestedAction
-        : requestedTarget
-    );
+    capabilityType === 'PROCESS_VALIDATION'
+      ? contract.scope(requestedTarget, requestedAction)
+      : contract.scope(
+          capabilityType === 'GIT_READ'
+            ? requestedAction
+            : requestedTarget
+        );
 
   const authorityRiskLevel =
     capabilityType === 'GIT_READ'
@@ -255,11 +278,13 @@ function createGovernedReadOnlyRequest(
   }
 
   const objective =
-    contract.objective(
-      capabilityType === 'GIT_READ'
-        ? requestedAction
-        : requestedTarget
-    );
+    capabilityType === 'PROCESS_VALIDATION'
+      ? contract.objective(requestedTarget, requestedAction)
+      : contract.objective(
+          capabilityType === 'GIT_READ'
+            ? requestedAction
+            : requestedTarget
+        );
 
   const operationRecordEvaluation =
     createOperationRecord({

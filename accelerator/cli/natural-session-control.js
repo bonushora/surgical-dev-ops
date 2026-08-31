@@ -375,6 +375,47 @@ function createNaturalSessionControl(
       });
     }
 
+    const missionProjection =
+      {
+        '/status': 'status',
+        '/plan': 'plan',
+        '/changes': 'changes',
+        '/tests': 'tests',
+        '/authority': 'authority',
+        '/journal': 'journal',
+        'mission status': 'status',
+        'mission plan': 'plan',
+        'mission changes': 'changes',
+        'mission tests': 'tests',
+        'mission authority': 'authority',
+        'mission journal': 'journal'
+      }[text];
+
+    if (missionProjection) {
+      return Object.freeze({
+        matched: true,
+        action: 'MISSION_PROJECTION',
+        projection: missionProjection,
+        readOnly: true,
+        authorityExpansion: false,
+        publicationAuthority: false
+      });
+    }
+
+    if (
+      text === '/resume' ||
+      text === 'mission resume' ||
+      text === 'resume mission'
+    ) {
+      return Object.freeze({
+        matched: true,
+        action: 'MISSION_RESUME',
+        readOnly: true,
+        authorityExpansion: false,
+        publicationAuthority: false
+      });
+    }
+
     if (!pendingTask) {
       const mutationRequest =
         detectBoundedMutationRequest(text);

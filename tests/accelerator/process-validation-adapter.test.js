@@ -19,6 +19,13 @@ fs.mkdirSync(sibling);
 fs.writeFileSync(path.join(workspace, 'valid.js'), 'const value = 1;\n');
 fs.writeFileSync(path.join(workspace, 'invalid.js'), 'const = ;\n');
 fs.writeFileSync(path.join(workspace, 'other.js'), 'const other = true;\n');
+fs.writeFileSync(
+  path.join(workspace, 'sample.test.js'),
+  "'use strict';\n" +
+    "const test = require('node:test');\n" +
+    "const assert = require('node:assert/strict');\n" +
+    "test('adapter fixture passes', () => assert.equal(1, 1));\n"
+);
 fs.writeFileSync(path.join(sibling, 'secret.js'), 'const secret = true;\n');
 test.after(() => fs.rmSync(root, { recursive: true, force: true }));
 
@@ -71,6 +78,23 @@ test('syntax error returns FAILED evidence', () => {
   assert.equal(result.validation.status, 'FAILED');
   assert.equal(result.validation.successfulCompletionEligible, false);
   assert.notEqual(result.validation.exitCode, 0);
+});
+
+test('fixed Node test-file selector returns normalized PASSED evidence', () => {
+  const result = validate({
+    selector: 'NODE_TEST_FILE',
+    target: 'sample.test.js',
+    grantEvaluation: issue(['sample.test.js'], {
+      request: { scope: { selectors: ['NODE_TEST_FILE'], paths: ['sample.test.js'] } },
+      authority: { scope: { selectors: ['NODE_TEST_FILE'], paths: ['sample.test.js'] } }
+    })
+  });
+  assert.equal(result.validation.status, 'PASSED');
+  assert.equal(result.validation.successfulCompletionEligible, true);
+  assert.equal(result.execution.shell, false);
+  assert.equal(result.execution.timeoutMs, 30000);
+  assert.equal(result.validation.testSummary.tests, 1);
+  assert.equal(result.validation.testSummary.failed, 0);
 });
 
 test('missing grant fails closed', () => {

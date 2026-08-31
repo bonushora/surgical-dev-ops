@@ -190,7 +190,9 @@ function runProcess(
   return spawnSync(
     process.execPath,
     [
-      CLI
+      CLI,
+      '--interaction',
+      'EXPERT'
     ],
     {
       cwd:

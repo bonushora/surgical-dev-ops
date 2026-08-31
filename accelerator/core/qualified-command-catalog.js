@@ -5,7 +5,8 @@ const crypto = require('node:crypto');
 const CATALOG_SCHEMA = 'sdo.qualified_command_catalog.v1';
 const ADMISSION_SCHEMA = 'sdo.qualified_command_admission.v1';
 const COMMANDS = Object.freeze({
-  NODE_SYNTAX_CHECK: Object.freeze({ executable: 'NODE_RUNTIME', arguments: Object.freeze(['--check', '-']), targetExtensions: Object.freeze(['.js']), timeoutMs: 2000, maxInputBytes: 1024 * 1024, maxOutputBytes: 32 * 1024, environmentKeys: Object.freeze(['LANG', 'LC_ALL', 'NO_PROXY', 'NODE_NO_WARNINGS', 'no_proxy']) })
+  NODE_SYNTAX_CHECK: Object.freeze({ executable: 'NODE_RUNTIME', arguments: Object.freeze(['--check', '-']), targetExtensions: Object.freeze(['.js']), timeoutMs: 2000, maxInputBytes: 1024 * 1024, maxOutputBytes: 32 * 1024, environmentKeys: Object.freeze(['LANG', 'LC_ALL', 'NO_PROXY', 'NODE_NO_WARNINGS', 'no_proxy']) }),
+  NODE_TEST_FILE: Object.freeze({ executable: 'NODE_RUNTIME', arguments: Object.freeze(['--test', '<target>']), targetExtensions: Object.freeze(['.js']), timeoutMs: 30000, maxInputBytes: 1024 * 1024, maxOutputBytes: 256 * 1024, environmentKeys: Object.freeze(['LANG', 'LC_ALL', 'NO_PROXY', 'NODE_NO_WARNINGS', 'no_proxy']) })
 });
 
 function deepFreeze(value) {
