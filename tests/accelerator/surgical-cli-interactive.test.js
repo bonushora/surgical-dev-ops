@@ -266,3 +266,23 @@ test('interactive activation does not itself invoke orchestration', () => {
     false
   );
 });
+
+test(
+  'CLI default interaction contract identifies NATURAL as the non-explicit fallback',
+  () => {
+    const source = require('node:fs').readFileSync(
+      require.resolve('../../accelerator/cli/surgical'),
+      'utf8'
+    );
+
+    assert.match(
+      source,
+      /interactionMode = 'NATURAL';/
+    );
+
+    assert.doesNotMatch(
+      source,
+      /else\s*\{\s*interactionMode = 'EXPERT';\s*\}/
+    );
+  }
+);

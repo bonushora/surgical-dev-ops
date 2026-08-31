@@ -1969,7 +1969,14 @@ async function main(
         selected.interactionMode;
       language = selected.language;
     } else {
-      interactionMode = 'EXPERT';
+      /*
+       * NATURAL is the default non-explicit experience.
+       *
+       * This selection carries no operational authority.
+       * Explicit --interaction and safely persisted human
+       * preferences remain sovereign.
+       */
+      interactionMode = 'NATURAL';
     }
   }
 
