@@ -36,6 +36,40 @@ UNRESOLVED: OpenAI activation is not yet connected to the NATURAL session; P2 sc
 
 TIMESTAMP: 2026-09-01
 
+## P4 — NATURAL Provider UX
+
+MISSION: NATURAL Qualified Provider Activation Coordinator
+
+BASE_SHA: `2bb3b0d53acd50928893719ca760a83f71e0281c`
+
+CURRENT_SHA: `c326decb90c02f2b0297209e6b3fea65d6e092e5`
+
+MILESTONE: P4
+
+MILESTONE_STATUS: GREEN
+
+FILES_CHANGED:
+
+- `accelerator/cli/natural-cognitive-session.js`
+- `accelerator/cli/natural-session-control.js`
+- `accelerator/cli/surgical.js`
+- `tests/accelerator/natural-provider-activation.test.js`
+
+TESTS_EXECUTED:
+
+- `node --test tests/accelerator/natural-provider-activation.test.js tests/accelerator/natural-session-control.test.js tests/accelerator/natural-experience-surface.test.js tests/accelerator/complete-bilingual-human-surfaces.test.js tests/accelerator/natural-cli-async-session.test.js`
+- `git diff --check`
+
+TEST_RESULTS: NATURAL UX/bilingual/async/experience 52/52 passed; diff check passed.
+
+NEXT_MILESTONE: P5 — Adjacent and canonical qualification
+
+AUTHORITY_REMAINING: local mutation/test/checkpoint only; NO PUSH; NO MERGE; NO TAG; NO RELEASE; NO PUBLISH; NO DEPLOY.
+
+UNRESOLVED: full repository qualification remains.
+
+TIMESTAMP: 2026-09-01
+
 ## P3 — Sensitive Boundary and Mission Continuity
 
 MISSION: NATURAL Qualified Provider Activation Coordinator
