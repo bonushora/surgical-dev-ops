@@ -36,6 +36,38 @@ UNRESOLVED: OpenAI activation is not yet connected to the NATURAL session; P2 sc
 
 TIMESTAMP: 2026-09-01
 
+## P3 — Sensitive Boundary and Mission Continuity
+
+MISSION: NATURAL Qualified Provider Activation Coordinator
+
+BASE_SHA: `2bb3b0d53acd50928893719ca760a83f71e0281c`
+
+CURRENT_SHA: `12e5991367d074b8979c5207c6c25647ca6f72a1`
+
+MILESTONE: P3
+
+MILESTONE_STATUS: GREEN
+
+FILES_CHANGED:
+
+- `accelerator/cli/natural-cognitive-session.js`
+- `tests/accelerator/natural-provider-activation.test.js`
+
+TESTS_EXECUTED:
+
+- `node --test tests/accelerator/natural-provider-activation.test.js tests/accelerator/natural-agentic-mission.test.js tests/accelerator/sensitive-content-boundary.test.js tests/accelerator/integrated-governed-agent-gateway.test.js`
+- `git diff --check`
+
+TEST_RESULTS: P3 integration/boundary/mission/gateway 33/33 passed; diff check passed.
+
+NEXT_MILESTONE: P4 — NATURAL provider UX, intents and status
+
+AUTHORITY_REMAINING: local mutation/test/checkpoint only; NO PUSH; NO MERGE; NO TAG; NO RELEASE; NO PUBLISH; NO DEPLOY.
+
+UNRESOLVED: provider switching is not yet exposed through the full bilingual NATURAL intent/status surface; P4 scope.
+
+TIMESTAMP: 2026-09-01
+
 ## P2 — OpenAI Remote Activation
 
 MISSION: NATURAL Qualified Provider Activation Coordinator
