@@ -51,6 +51,19 @@ function includesAny(
   );
 }
 
+function isNaturalMissionCancellationRequest(value) {
+  const text =
+    normalize(value)
+      .replace(/[.,!?;:]+/g, ' ')
+      .replace(/\s+/g, ' ')
+      .trim();
+
+  return (
+    /^(?:por favor )?(?:cancele|cancelar|pare|parar|encerre|encerrar) (?:(?:a|esta|minha) )?missao(?: atual)?$/.test(text) ||
+    /^(?:please )?(?:cancel|stop|end) (?:(?:the current|the|this|my|current) )?mission(?: now)?$/.test(text)
+  );
+}
+
 function isBlanketFutureApproval(text) {
   return includesAny(
     text,
@@ -372,6 +385,23 @@ function createNaturalSessionControl(
         matched: true,
         action: 'CONTINUE',
         output: formatBlanketApprovalRejection(text, preferredLanguage)
+      });
+    }
+
+    if (
+      isNaturalMissionCancellationRequest(
+        input
+      )
+    ) {
+      pendingTask = null;
+
+      return Object.freeze({
+        matched: true,
+        action: 'MISSION_CANCEL',
+        authorityExpansion: false,
+        operationalAuthority: false,
+        mutationAuthority: false,
+        publicationAuthority: false
       });
     }
 
@@ -909,5 +939,6 @@ module.exports =
     providerSetupOverview,
     codexSetupGuide,
     formatProviderStatus,
+    isNaturalMissionCancellationRequest,
     createNaturalSessionControl
   });

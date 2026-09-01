@@ -25,7 +25,7 @@ sistema operacional ao redor do modelo explícito, limitado, auditável e fail-c
 | Qualificação local do gateway NATURAL integrado | ADR-036 + ADR-037 em `release/v2.6.0-rc.6`, construída sobre `9ed86a443da18f923b60692d7446f1fd57d0a2da` |
 | Predecessor publicado com CI nativo | [`56da715284704f227675961d476e19acce6e9fa3`](https://github.com/bonushora/surgical-dev-ops/commit/56da715284704f227675961d476e19acce6e9fa3), [Accelerator Conformance #33286652480](https://github.com/bonushora/surgical-dev-ops/actions/runs/33286652480) |
 | Matriz publicada do predecessor | Ubuntu, macOS e Windows: **PASS** |
-| Suíte canônica local | 1210 testes descobertos; 1205 aprovados; 0 falhas; 5 skips específicos de plataforma |
+| Suíte canônica local | 1212 testes descobertos; 1207 aprovados; 0 falhas; 5 skips específicos de plataforma |
 | Protocolos normativos | BH-SEP v2.2 + BH-SDP v2.2 |
 
 A trilha completa, incluindo os runs que falharam antes do baseline verde, está em

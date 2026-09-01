@@ -2,6 +2,11 @@
 
 ## Unreleased
 
+- Repair NATURAL mission cancellation so ordinary Portuguese and English
+  requests cross the existing deterministic `MISSION_CANCELLED` lifecycle
+  boundary before generic provider cognition. `/status` now proves `CANCELLED`,
+  cancelled missions reject resume, pending authority is cleared, and no model
+  can present an ungrounded cancellation-success claim.
 - Repair the qualified default local CPU inference deadline after a real
   governed four-evidence NATURAL workload proved that the 60-second limit could
   cancel Qwen before prompt processing completed. Restore the profile's bounded

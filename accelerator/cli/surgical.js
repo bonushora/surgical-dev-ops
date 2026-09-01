@@ -58,7 +58,8 @@ const {
 
 const {
   createNaturalSessionControl,
-  formatProviderStatus
+  formatProviderStatus,
+  isNaturalMissionCancellationRequest
 } = require('./natural-session-control');
 
 const {
@@ -108,6 +109,7 @@ const {
   createNaturalAgenticMission,
   projectMissionView,
   formatMissionProjection,
+  cancelNaturalAgenticMission,
   resumeNaturalAgenticMission
 } = require('../core/natural-agentic-mission');
 
@@ -1070,7 +1072,10 @@ function createInteractiveSession(
 
           if (
             pendingDevelopment &&
-            !/^(?:exit|quit)$/i.test(normalizedLine)
+            !/^(?:exit|quit)$/i.test(normalizedLine) &&
+            !isNaturalMissionCancellationRequest(
+              normalizedLine
+            )
           ) {
             const fingerprint =
               pendingDevelopment.patchProposal.proposalFingerprint;
@@ -1191,6 +1196,54 @@ function createInteractiveSession(
                     )
                   );
                 }
+              } else if (controlled.action === 'MISSION_CANCEL') {
+                pendingDevelopment = null;
+
+                if (runnerRuntime) {
+                  runnerRuntime.cancelPending();
+                }
+
+                if (!agenticMission) {
+                  output.write(
+                    humanText(
+                      activation,
+                      'A missão não foi cancelada porque nenhum estado governado ativo está disponível.\n',
+                      'The mission was not cancelled because no active governed state is available.\n'
+                    )
+                  );
+                } else {
+                  if (
+                    agenticMission.state !==
+                      'CANCELLED'
+                  ) {
+                    agenticMission =
+                      cancelNaturalAgenticMission(
+                        agenticMission,
+                        {
+                          reason:
+                            'Human cancelled mission through the NATURAL control boundary.',
+                          at:
+                            currentCanonicalInstant(
+                              options
+                            )
+                        }
+                      );
+                  }
+
+                  output.write(
+                    humanText(
+                      activation,
+                      'Missão governada cancelada por solicitação humana. O estado determinístico abaixo comprova a transição.\n',
+                      'Governed mission cancelled by human request. The deterministic state below proves the transition.\n'
+                    ) +
+                    formatMissionProjection(
+                      projectMissionView(
+                        agenticMission,
+                        'status'
+                      )
+                    )
+                  );
+                }
               } else if (controlled.action === 'MISSION_RESUME') {
                 if (!agenticMission) {
                   output.write(
@@ -1198,6 +1251,23 @@ function createInteractiveSession(
                       activation,
                       'Não há missão governada ativa para retomar.\n',
                       'There is no active governed mission to resume.\n'
+                    )
+                  );
+                } else if (
+                  agenticMission.state ===
+                    'CANCELLED'
+                ) {
+                  output.write(
+                    humanText(
+                      activation,
+                      'A missão cancelada é terminal e não foi retomada. O estado determinístico permanece CANCELLED.\n',
+                      'The cancelled mission is terminal and was not resumed. Its deterministic state remains CANCELLED.\n'
+                    ) +
+                    formatMissionProjection(
+                      projectMissionView(
+                        agenticMission,
+                        'status'
+                      )
                     )
                   );
                 } else {

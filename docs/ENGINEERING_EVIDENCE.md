@@ -17,10 +17,15 @@ claims that remain unqualified.
 | Historical suite at first repair start | 1206 tests discovered; 1201 passed; zero failures; 5 explicit platform skips |
 | Second manual-counterexample repair start | `38904d79b61436a23b44eb2432a049415bb30795` |
 | Historical suite at second repair start | 1209 tests discovered; 1204 passed; zero failures; 5 explicit platform skips |
-| Current local canonical suite | 1210 tests discovered; 1205 passed; zero failures; 5 explicit platform skips |
+| Third manual-counterexample repair start | `13093b76a51d0fbf2886cdf00bef68e3547d75c4` |
+| Historical suite at third repair start | 1210 tests discovered; 1205 passed; zero failures; 5 explicit platform skips |
+| Current local canonical suite | 1212 tests discovered; 1207 passed; zero failures; 5 explicit platform skips |
 | Counterexample #2 focused deadline/evidence/provider suite | 47 tests passed; zero failures; zero skips |
 | Counterexample #2 adjacent NATURAL/provider/evidence suite | 129 tests passed; zero failures; zero skips |
 | Counterexample #2 adversarial/UX suite | 124 tests passed; zero failures; zero skips |
+| Counterexample #3 focused mission/control/CLI suite | 54 tests passed; zero failures; zero skips |
+| Counterexample #3 adjacent authority/state/provider suite | 184 tests passed; zero failures; zero skips |
+| Counterexample #3 adversarial/UX suite | 142 tests passed; zero failures; zero skips |
 | Package dry run | `npm pack --dry-run --json` completed for `surgical-dev-ops@2.6.0-rc.6` |
 | Manual acceptance | The failed scenario requires human re-test on the new qualified local checkpoint; no push, tag, release, or publication authorized |
 | Scope | Persistent NATURAL mission state, integrated governed agent gateway, conversational projections, no-copy/paste governed tool slices, and NATURAL semantic objective repair |
@@ -85,6 +90,20 @@ inspection, authority boundary and fail-closed cancellation are unchanged. The
 payload was already serialized once through `qualifiedGovernedEvidence`; no
 payload size or evidence-normalization change was needed. Human acceptance must
 repeat the exact real-CLI scenario on the new checkpoint.
+
+At checkpoint `13093b76a51d0fbf2886cdf00bef68e3547d75c4`, the next manual
+session exposed a separate intent-routing defect. The Portuguese request
+`cancele esta missão` was not recognized by the deterministic NATURAL session
+control and fell through to generic provider cognition. The provider claimed
+cancellation while the sovereign mission projection remained `PLANNING`.
+The existing lifecycle already defined the terminal `CANCELLED` state,
+`MISSION_CANCELLED` event and `cancelNaturalAgenticMission` transition; no new
+lifecycle or authority class was required. The repair routes bounded Portuguese
+and English cancellation phrases to that transition before provider fallback,
+clears pending authorization, projects the resulting state, and rejects resume
+of a cancelled mission. Provider invocation, filesystem mutation, Git, CAS,
+network, release and publication authority remain absent. Human acceptance must
+re-test cancellation, `/status` and `/resume` through the real CLI.
 
 ## ADR-034 governed workspace closure checkpoint
 

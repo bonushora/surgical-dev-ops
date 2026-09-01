@@ -692,6 +692,9 @@ function consumeMissionAuthorityGrant(mission, authorityRef, { at } = {}) {
 
 function resumeNaturalAgenticMission({ mission, revalidation, resumedAt, authority = null } = {}) {
   const current = validateNaturalAgenticMission(mission);
+  if (current.state === 'CANCELLED') {
+    throw new Error('Cancelled mission cannot resume.');
+  }
   if (!revalidation || revalidation.schema !== REVALIDATION_SCHEMA || !Object.isFrozen(revalidation)) {
     throw new Error('Immutable workspace revalidation evidence is required.');
   }

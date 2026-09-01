@@ -60,6 +60,8 @@ test('release candidate publishes equivalent English and Portuguese notes', () =
     assert.match(document, /1204/);
     assert.match(document, /1210/);
     assert.match(document, /1205/);
+    assert.match(document, /1212/);
+    assert.match(document, /1207/);
     assert.match(document, /npm ci/);
     assert.match(document, /npm test/);
     assert.match(document, /npm pack --dry-run/);

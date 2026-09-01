@@ -6,7 +6,8 @@
 | --- | --- |
 | Local integrated NATURAL gateway qualification | ADR-036 + ADR-037 on `release/v2.6.0-rc.6` |
 | NATURAL default checkpoint | `9ed86a443da18f923b60692d7446f1fd57d0a2da` |
-| Local suite | 1210 discovered; 1205 PASS; 0 FAIL; 5 platform SKIP |
+| Local suite | 1212 discovered; 1207 PASS; 0 FAIL; 5 platform SKIP |
+| Historical second-counterexample checkpoint | `13093b76a51d0fbf2886cdf00bef68e3547d75c4`: 1210 discovered; 1205 PASS; 0 FAIL; 5 platform SKIP |
 | Historical first-counterexample checkpoint | `38904d79b61436a23b44eb2432a049415bb30795`: 1209 discovered; 1204 PASS; 0 FAIL; 5 platform SKIP |
 | Historical semantic-routing checkpoint | `4a901069accf4c57f3bbb2f4a46dae26cdee2561`: 1206 discovered; 1201 PASS; 0 FAIL; 5 platform SKIP |
 | Local governed workspace checkpoint | `f56750eba3aa07b0426f56021c072a280468ea98` |
@@ -43,6 +44,15 @@ therefore restores its previously qualified bounded 180-second deadline. The
 provider, payload, context ceiling, no-thinking behavior, authority and
 fail-closed timeout semantics remain unchanged; human acceptance again requires
 re-test.
+
+The third manual counterexample showed that a natural mission-cancellation
+request bypassed deterministic session control, reached provider cognition and
+produced an operational success claim while `/status` remained `PLANNING`. The
+repair reuses the existing terminal `CANCELLED` state and `MISSION_CANCELLED`
+event before provider fallback. The regression proves zero provider calls,
+state-backed status, cleared pending authority and terminal resume refusal. No
+new lifecycle, tool, provider or authority class was added; human acceptance
+must re-test the real CLI.
 
 ## Historical v2.5.1 package
 

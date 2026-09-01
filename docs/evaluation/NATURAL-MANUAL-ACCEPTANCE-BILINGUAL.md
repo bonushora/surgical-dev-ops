@@ -3,6 +3,32 @@
 This record accompanies ADR-027. It reports observed behavior and does not
 change the frozen architectural decision or qualify an unobserved result.
 
+## Manual counterexample #3 repair — AUTOMATED GREEN / HUMAN RE-TEST REQUIRED
+
+Starting checkpoint: `13093b76a51d0fbf2886cdf00bef68e3547d75c4`.
+
+The real NATURAL request `cancele esta missão` bypassed deterministic session
+control and reached generic provider cognition. The provider claimed that the
+mission would be cancelled, but the sovereign `/status` projection remained
+`PLANNING`. Physical tracing proved that ADR-036 already supplied the terminal
+`CANCELLED` state, `MISSION_CANCELLED` event and canonical cancellation
+transition; only the conversational routing boundary was missing.
+
+The repair recognizes bounded Portuguese and English cancellation phrases
+before provider fallback, clears pending authorization, applies the existing
+human cancellation transition and immediately projects its deterministic state.
+A cancelled mission refuses `/resume` and remains `CANCELLED`. The provider is
+not invoked, and filesystem, mutation, Git, CAS, network, release and publication
+authority remain unchanged.
+
+Automated results: focused 54/54; adjacent 184/184; adversarial/UX 142/142;
+canonical 1212 discovered, 1207 passed, zero failed and five platform skips.
+Package dry-run completed for `surgical-dev-ops@2.6.0-rc.6`.
+
+`MANUAL COUNTEREXAMPLE #3 REPAIR: GREEN`
+
+`FINAL MANUAL ACCEPTANCE: REQUIRES RE-TEST`
+
 ## Manual counterexample #2 repair — AUTOMATED GREEN / HUMAN RE-TEST REQUIRED
 
 Starting checkpoint: `38904d79b61436a23b44eb2432a049415bb30795`.

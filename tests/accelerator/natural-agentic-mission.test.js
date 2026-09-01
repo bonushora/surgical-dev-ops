@@ -229,6 +229,21 @@ test('interruption is terminal and sensitive event summaries fail closed', () =>
   });
   assert.equal(cancelled.state, 'CANCELLED');
   assert.throws(
+    () => resumeNaturalAgenticMission({
+      mission: cancelled,
+      revalidation: freeze({
+        schema: 'sdo.deterministic_workspace_session_revalidation.v1',
+        decision: 'VALID',
+        sessionFingerprint:
+          cancelled.binding.sessionFingerprint,
+        operationalAuthority: false,
+        mutationAuthority: false
+      }),
+      resumedAt: '2026-08-31T12:02:00.000Z'
+    }),
+    /Cancelled mission cannot resume/
+  );
+  assert.throws(
     () => transitionNaturalAgenticMission(cancelled, {
       type: EVENT_TYPES.TEST_STARTED,
       state: 'TESTING',

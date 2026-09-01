@@ -39,8 +39,8 @@ test('ADR-025 manifest binds the public green baseline and immutable protocol by
     manifest.localAgenticGatewayBaseline.adrFreezeCheckpoint,
     'dee764f7ac39ba0de16be6056cc2706ad629e99f'
   );
-  assert.equal(manifest.localAgenticGatewayBaseline.testsDiscovered, 1210);
-  assert.equal(manifest.localAgenticGatewayBaseline.testsPassed, 1205);
+  assert.equal(manifest.localAgenticGatewayBaseline.testsDiscovered, 1212);
+  assert.equal(manifest.localAgenticGatewayBaseline.testsPassed, 1207);
   assert.equal(manifest.localAgenticGatewayBaseline.testsFailed, 0);
   assert.equal(manifest.localAgenticGatewayBaseline.testsSkipped, 5);
   assert.deepEqual(manifest.historicalSemanticRoutingCheckpoint, {
@@ -66,6 +66,25 @@ test('ADR-025 manifest binds the public green baseline and immutable protocol by
     adversarialUxTestsPassed: 124,
     canonicalTestsDiscovered: 1210,
     canonicalTestsPassed: 1205,
+    canonicalTestsFailed: 0,
+    canonicalTestsSkipped: 5,
+    packageDryRun: 'surgical-dev-ops@2.6.0-rc.6',
+    manualAcceptance: 'REQUIRES_RETEST'
+  });
+  assert.deepEqual(manifest.manualCounterexample3Repair, {
+    classification: 'intent-routing and false operational claim defect repair',
+    startingCommit: '13093b76a51d0fbf2886cdf00bef68e3547d75c4',
+    providerCallsBeforeRepair: 1,
+    providerCallsAfterRepair: 0,
+    previousMissionState: 'PLANNING',
+    finalMissionState: 'CANCELLED',
+    existingLifecycleReused: true,
+    newAuthorityClassAdded: false,
+    focusedTestsPassed: 54,
+    adjacentTestsPassed: 184,
+    adversarialUxTestsPassed: 142,
+    canonicalTestsDiscovered: 1212,
+    canonicalTestsPassed: 1207,
     canonicalTestsFailed: 0,
     canonicalTestsSkipped: 5,
     packageDryRun: 'surgical-dev-ops@2.6.0-rc.6',
