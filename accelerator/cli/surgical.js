@@ -907,6 +907,26 @@ function formatCognitiveProgressMessage(
   );
 }
 
+function formatInteractiveBackpressureMessage(
+  activation
+) {
+  return humanText(
+    activation,
+    (
+      '\nEntrada adicional rejeitada enquanto a solicitação anterior ainda está em processamento.\n' +
+      'Nenhuma das linhas adicionais recebidas antes do próximo prompt será executada.\n' +
+      'Aguarde o próximo prompt "surgical>" e envie exatamente uma solicitação por vez.\n' +
+      'Ctrl+C continua encerrando a sessão CLI inteira com segurança.\n'
+    ),
+    (
+      '\nAdditional input was rejected while the previous request is still processing.\n' +
+      'None of the additional lines received before the next prompt will be executed.\n' +
+      'Wait for the next "surgical>" prompt and send exactly one request at a time.\n' +
+      'Ctrl+C continues to terminate the entire CLI session safely.\n'
+    )
+  );
+}
+
 function createInteractiveSession(
   activation,
   options = {}
@@ -943,7 +963,19 @@ function createInteractiveSession(
   let interfaceClosed =
     false;
 
+  let interactiveRequestInFlight =
+    false;
+
+  let interactiveBackpressureReported =
+    false;
+
   function resumeAndPrompt() {
+    interactiveRequestInFlight =
+      false;
+
+    interactiveBackpressureReported =
+      false;
+
     if (interfaceClosed) {
       return;
     }
@@ -1064,7 +1096,30 @@ function createInteractiveSession(
   }
 
   rl.on('line', (line) => {
-    rl.pause();
+    if (
+      terminal &&
+      interactiveRequestInFlight
+    ) {
+      if (!interactiveBackpressureReported) {
+        interactiveBackpressureReported =
+          true;
+
+        output.write(
+          formatInteractiveBackpressureMessage(
+            activation
+          )
+        );
+      }
+
+      return;
+    }
+
+    if (terminal) {
+      interactiveRequestInFlight =
+        true;
+    } else {
+      rl.pause();
+    }
 
     processing =
       processing
@@ -2074,6 +2129,9 @@ function createInteractiveSession(
   rl.on('close', () => {
     interfaceClosed =
       true;
+
+    interactiveRequestInFlight =
+      false;
 
     if (terminal) {
       output.write('\n');

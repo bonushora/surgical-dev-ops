@@ -477,6 +477,75 @@ test(
 );
 
 test(
+  'interactive NATURAL rejects pasted lines instead of queuing cognitive calls',
+  async () => {
+    const input = new PassThrough();
+    const output = new PassThrough();
+    let observed = '';
+    const requests = [];
+    let completeFirst;
+
+    output.on('data', (chunk) => {
+      observed += chunk.toString();
+    });
+
+    const firstCompletion =
+      new Promise((resolve) => {
+        completeFirst = resolve;
+      });
+
+    const rl =
+      cli.createInteractiveSession(
+        naturalActivation(),
+        {
+          input,
+          output,
+          terminal: true,
+          cognitiveSession: Object.freeze({
+            async ask(request) {
+              requests.push(request);
+              await firstCompletion;
+              return 'Resposta cognitiva delimitada.\n';
+            }
+          })
+        }
+      );
+
+    const closed =
+      new Promise((resolve) => {
+        rl.once('close', resolve);
+      });
+
+    input.write(
+      'Converse comigo sobre arquitetura.\n' +
+      'Converse comigo sobre testes.\n' +
+      'Converse comigo sobre segurança.\n'
+    );
+
+    await new Promise((resolve) => setTimeout(resolve, 25));
+
+    assert.deepEqual(
+      requests,
+      ['Converse comigo sobre arquitetura.']
+    );
+    assert.match(
+      observed,
+      /Entrada adicional rejeitada.*Nenhuma das linhas adicionais.*será executada/is
+    );
+
+    completeFirst();
+    await new Promise((resolve) => setTimeout(resolve, 25));
+
+    input.end('exit\n');
+    await closed;
+
+    assert.equal(requests.length, 1);
+    assert.match(observed, /Resposta cognitiva delimitada/);
+    assert.match(observed, /Ctrl\+C.*encerrando a sessão CLI inteira/i);
+  }
+);
+
+test(
   'NATURAL project analysis stops file reads outside the governed discovery index',
   async () => {
     const input =
