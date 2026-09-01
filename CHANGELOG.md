@@ -2,6 +2,12 @@
 
 ## Unreleased
 
+- Repair the qualified default local CPU inference deadline after a real
+  governed four-evidence NATURAL workload proved that the 60-second limit could
+  cancel Qwen before prompt processing completed. Restore the profile's bounded
+  180-second budget and derive truthful CLI disclosure from that profile while
+  preserving the default provider, explicit evidence context, fail-closed
+  timeout, sensitive-content inspection and zero operational authority.
 - Repair the qualified governed-evidence handoff from NATURAL recursive
   acquisition into the cognitive provider context. Provider failure after
   evidence acquisition is now distinguished from absence of qualified evidence,

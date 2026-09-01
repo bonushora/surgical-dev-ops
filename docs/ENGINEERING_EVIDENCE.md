@@ -13,11 +13,14 @@ claims that remain unqualified.
 | Local implementation state | `release/v2.6.0-rc.6` worktree after ADR-036/ADR-037 runtime integration |
 | NATURAL default checkpoint | `9ed86a443da18f923b60692d7446f1fd57d0a2da` |
 | ADR freeze checkpoint | `dee764f7ac39ba0de16be6056cc2706ad629e99f` |
-| Manual-counterexample repair start | `4a901069accf4c57f3bbb2f4a46dae26cdee2561` |
-| Historical suite at repair start | 1206 tests discovered; 1201 passed; zero failures; 5 explicit platform skips |
-| Current local canonical suite | 1209 tests discovered; 1204 passed; zero failures; 5 explicit platform skips |
-| Focused handoff/CLI/provider suite | 18 tests passed; zero failures; zero skips |
-| Adversarial/UX adjacent suite | 111 tests passed; zero failures; zero skips |
+| First manual-counterexample repair start | `4a901069accf4c57f3bbb2f4a46dae26cdee2561` |
+| Historical suite at first repair start | 1206 tests discovered; 1201 passed; zero failures; 5 explicit platform skips |
+| Second manual-counterexample repair start | `38904d79b61436a23b44eb2432a049415bb30795` |
+| Historical suite at second repair start | 1209 tests discovered; 1204 passed; zero failures; 5 explicit platform skips |
+| Current local canonical suite | 1210 tests discovered; 1205 passed; zero failures; 5 explicit platform skips |
+| Counterexample #2 focused deadline/evidence/provider suite | 47 tests passed; zero failures; zero skips |
+| Counterexample #2 adjacent NATURAL/provider/evidence suite | 129 tests passed; zero failures; zero skips |
+| Counterexample #2 adversarial/UX suite | 124 tests passed; zero failures; zero skips |
 | Package dry run | `npm pack --dry-run --json` completed for `surgical-dev-ops@2.6.0-rc.6` |
 | Manual acceptance | The failed scenario requires human re-test on the new qualified local checkpoint; no push, tag, release, or publication authorized |
 | Scope | Persistent NATURAL mission state, integrated governed agent gateway, conversational projections, no-copy/paste governed tool slices, and NATURAL semantic objective repair |
@@ -67,6 +70,21 @@ serializes into the cognitive request. It does not grant the provider physical
 authority. Separate regressions inspect that real serialized envelope and prove
 the fail-closed distinction after acquisition. Final manual acceptance remains
 unqualified until the human repeats the affected real-CLI scenario.
+
+The repeated manual scenario at checkpoint
+`38904d79b61436a23b44eb2432a049415bb30795` proved that this explicit handoff
+was working: four governed items reached the real Qwen request. The remaining
+failure was the local CPU profile's 60-second transport deadline. The 2,358-token
+input had processed only 2,048 tokens when Ollama cancelled it at 59.997 seconds,
+without context truncation. The deterministic regression derives an optimistic
+84,078-millisecond lower bound for that input plus the existing 512-token PLAN
+budget. The repair restores the profile's historically qualified bounded
+180-second deadline and derives the CLI disclosure from it. The provider,
+4,096-token context, no-thinking options, bounded evidence payload, sensitive
+inspection, authority boundary and fail-closed cancellation are unchanged. The
+payload was already serialized once through `qualifiedGovernedEvidence`; no
+payload size or evidence-normalization change was needed. Human acceptance must
+repeat the exact real-CLI scenario on the new checkpoint.
 
 ## ADR-034 governed workspace closure checkpoint
 

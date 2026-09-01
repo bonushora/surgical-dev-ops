@@ -266,7 +266,7 @@ test(
 
     assert.equal(
       NATURAL_LOCAL_INFERENCE_PROFILE.timeoutMs,
-      60000
+      180000
     );
 
     assert.match(

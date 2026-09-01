@@ -122,6 +122,9 @@ test('acquired governed evidence remains explicit in the real cognitive provider
 
   assert.equal(handoff.status, 'AVAILABLE');
   assert.equal(handoff.evidenceCount, 4);
+  assert.ok(
+    handoff.normalizedContext.length <= 3200
+  );
   assert.match(handoff.normalizedContext, /TYPE: WORKSPACE_FILES/);
   assert.match(handoff.normalizedContext, /TARGET: README\.md/);
   assert.match(
@@ -131,7 +134,34 @@ test('acquired governed evidence remains explicit in the real cognitive provider
   assert.match(handoff.normalizedContext, /TARGET: ROADMAP\.md/);
   assert.doesNotMatch(
     providerEnvelope.objective,
+    /TYPE: WORKSPACE_FILES|TYPE: READ_FILE/
+  );
+  assert.doesNotMatch(
+    providerEnvelope.objective,
     /Nenhuma evidência governada foi obtida/i
+  );
+
+  const serializedProviderEnvelope =
+    JSON.stringify(
+      providerEnvelope
+    );
+
+  assert.equal(
+    (
+      serializedProviderEnvelope.match(
+        /TYPE: WORKSPACE_FILES/g
+      ) || []
+    ).length,
+    1
+  );
+
+  assert.equal(
+    (
+      serializedProviderEnvelope.match(
+        /TYPE: READ_FILE/g
+      ) || []
+    ).length,
+    3
   );
 });
 

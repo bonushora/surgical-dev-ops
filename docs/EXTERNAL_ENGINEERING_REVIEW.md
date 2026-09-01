@@ -6,7 +6,8 @@
 | --- | --- |
 | Local integrated NATURAL gateway qualification | ADR-036 + ADR-037 on `release/v2.6.0-rc.6` |
 | NATURAL default checkpoint | `9ed86a443da18f923b60692d7446f1fd57d0a2da` |
-| Local suite | 1209 discovered; 1204 PASS; 0 FAIL; 5 platform SKIP |
+| Local suite | 1210 discovered; 1205 PASS; 0 FAIL; 5 platform SKIP |
+| Historical first-counterexample checkpoint | `38904d79b61436a23b44eb2432a049415bb30795`: 1209 discovered; 1204 PASS; 0 FAIL; 5 platform SKIP |
 | Historical semantic-routing checkpoint | `4a901069accf4c57f3bbb2f4a46dae26cdee2561`: 1206 discovered; 1201 PASS; 0 FAIL; 5 platform SKIP |
 | Local governed workspace checkpoint | `f56750eba3aa07b0426f56021c072a280468ea98` |
 | ADR-034 implementation start | `2f8d9e1aa40d0d7a127e966a28e475e0f89c4bb0` |
@@ -32,6 +33,16 @@ serialized cognitive context. The regression inspects the real provider
 envelope, verifies the nonzero evidence count and normalized content, and keeps
 provider failure after acquisition distinct from zero acquired evidence. Human
 manual acceptance still requires re-test.
+
+The second manual counterexample preserved that handoff but exposed an
+incompatible local execution budget: the qualified 2,358-token project-analysis
+input had processed only 2,048 tokens at the 59.997-second cancellation point.
+The deterministic workload regression establishes an optimistic 84,078 ms
+lower bound including the existing PLAN output budget. The default CPU profile
+therefore restores its previously qualified bounded 180-second deadline. The
+provider, payload, context ceiling, no-thinking behavior, authority and
+fail-closed timeout semantics remain unchanged; human acceptance again requires
+re-test.
 
 ## Historical v2.5.1 package
 

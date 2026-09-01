@@ -51,6 +51,12 @@ const {
 } = require('./natural-response-language');
 
 const {
+  NATURAL_LOCAL_INFERENCE_PROFILE
+} = require(
+  './natural-local-inference-profile'
+);
+
+const {
   createNaturalSessionControl,
   formatProviderStatus
 } = require('./natural-session-control');
@@ -874,6 +880,11 @@ function formatCognitiveProgressMessage(
   input,
   preferredLanguage = null
 ) {
+  const timeoutSeconds =
+    NATURAL_LOCAL_INFERENCE_PROFILE
+      .timeoutMs /
+    1000;
+
   if (
     normalizeHumanLanguage(
       preferredLanguage,
@@ -883,13 +894,13 @@ function formatCognitiveProgressMessage(
   ) {
     return (
       'Processing with the local cognitive provider. ' +
-      'This attempt is limited to 60 seconds; on failure, deterministic governance remains active.\n'
+      `This attempt is limited to ${timeoutSeconds} seconds; on failure, deterministic governance remains active.\n`
     );
   }
 
   return (
     'Processando com o provider cognitivo local. ' +
-    'Esta tentativa está limitada a 60 segundos; em caso de falha, a governança determinística permanece ativa.\n'
+    `Esta tentativa está limitada a ${timeoutSeconds} segundos; em caso de falha, a governança determinística permanece ativa.\n`
   );
 }
 
@@ -1465,8 +1476,8 @@ function createInteractiveSession(
                             output.write(
                               humanText(
                                 activation,
-                                'Evidências governadas disponíveis; aguardando a análise cognitiva do provider...\n',
-                                'Governed evidence is available; awaiting provider cognition...\n'
+                                `Evidências governadas disponíveis; aguardando a análise cognitiva do provider. A tentativa local permanece limitada a ${NATURAL_LOCAL_INFERENCE_PROFILE.timeoutMs / 1000} segundos e nenhuma conclusão será afirmada antes da resposta validada.\n`,
+                                `Governed evidence is available; awaiting provider cognition. The local attempt remains limited to ${NATURAL_LOCAL_INFERENCE_PROFILE.timeoutMs / 1000} seconds, and no conclusion will be claimed before a validated response.\n`
                               )
                             );
                           } else if (

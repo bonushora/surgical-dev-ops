@@ -101,7 +101,7 @@ test(
     );
     assert.match(
       portuguese,
-      /limitada a 60 segundos/i
+      /limitada a 180 segundos/i
     );
     assert.match(
       portuguese,
@@ -114,7 +114,7 @@ test(
     );
     assert.match(
       english,
-      /limited to 60 seconds/i
+      /limited to 180 seconds/i
     );
     assert.match(
       english,

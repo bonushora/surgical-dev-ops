@@ -3,6 +3,33 @@
 This record accompanies ADR-027. It reports observed behavior and does not
 change the frozen architectural decision or qualify an unobserved result.
 
+## Manual counterexample #2 repair — AUTOMATED GREEN / HUMAN RE-TEST REQUIRED
+
+Starting checkpoint: `38904d79b61436a23b44eb2432a049415bb30795`.
+
+The repeated real-CLI project-analysis request proved that the first repair was
+working: four governed evidence items reached Qwen explicitly. The local CPU
+request instead reached the profile's fixed 60-second deadline after processing
+only 2,048 of 2,358 input tokens in 59.997 seconds, before prompt processing
+completed and without context truncation. The measured deterministic contract
+has an optimistic 84,078-millisecond lower bound after including the existing
+512-token PLAN ceiling.
+
+The smallest repair restores the same qualified CPU profile's historical
+bounded 180-second deadline and derives truthful CLI disclosure from that
+profile. The default provider, 4,096-token context, disabled thinking, bounded
+evidence serialization, sensitive-content inspection, zero operational
+authority and fail-closed timeout behavior remain unchanged. Evidence was not
+duplicated and payload size did not change.
+
+Automated results: focused 47/47; adjacent 129/129; adversarial/UX 124/124;
+canonical 1210 discovered, 1205 passed, zero failed and five platform skips.
+Package dry-run completed for `surgical-dev-ops@2.6.0-rc.6`.
+
+`MANUAL COUNTEREXAMPLE #2 REPAIR: GREEN`
+
+`FINAL MANUAL ACCEPTANCE: REQUIRES RE-TEST`
+
 ## Manual counterexample repair — AUTOMATED GREEN / HUMAN RE-TEST REQUIRED
 
 Starting checkpoint: `4a901069accf4c57f3bbb2f4a46dae26cdee2561`.

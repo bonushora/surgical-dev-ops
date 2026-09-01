@@ -868,6 +868,11 @@ test(
 
     assert.match(
       observed,
+      /tentativa local permanece limitada a 180 segundos/i
+    );
+
+    assert.match(
+      observed,
       /síntese cognitiva concluída.*resposta delimitada/i
     );
 

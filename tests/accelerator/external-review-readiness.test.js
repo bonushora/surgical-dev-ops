@@ -39,8 +39,8 @@ test('ADR-025 manifest binds the public green baseline and immutable protocol by
     manifest.localAgenticGatewayBaseline.adrFreezeCheckpoint,
     'dee764f7ac39ba0de16be6056cc2706ad629e99f'
   );
-  assert.equal(manifest.localAgenticGatewayBaseline.testsDiscovered, 1209);
-  assert.equal(manifest.localAgenticGatewayBaseline.testsPassed, 1204);
+  assert.equal(manifest.localAgenticGatewayBaseline.testsDiscovered, 1210);
+  assert.equal(manifest.localAgenticGatewayBaseline.testsPassed, 1205);
   assert.equal(manifest.localAgenticGatewayBaseline.testsFailed, 0);
   assert.equal(manifest.localAgenticGatewayBaseline.testsSkipped, 5);
   assert.deepEqual(manifest.historicalSemanticRoutingCheckpoint, {
@@ -49,6 +49,27 @@ test('ADR-025 manifest binds the public green baseline and immutable protocol by
     testsPassed: 1201,
     testsFailed: 0,
     testsSkipped: 5
+  });
+  assert.deepEqual(manifest.manualCounterexample2Repair, {
+    classification: 'latency/observability defect repair',
+    startingCommit: '38904d79b61436a23b44eb2432a049415bb30795',
+    measuredInputTokens: 2358,
+    processedInputTokens: 2048,
+    processingDurationMs: 59997,
+    derivedQualifiedWorkloadLowerBoundMs: 84078,
+    previousTimeoutMs: 60000,
+    finalTimeoutMs: 180000,
+    payloadEvidenceDuplicated: false,
+    payloadSizeChanged: false,
+    focusedTestsPassed: 47,
+    adjacentTestsPassed: 129,
+    adversarialUxTestsPassed: 124,
+    canonicalTestsDiscovered: 1210,
+    canonicalTestsPassed: 1205,
+    canonicalTestsFailed: 0,
+    canonicalTestsSkipped: 5,
+    packageDryRun: 'surgical-dev-ops@2.6.0-rc.6',
+    manualAcceptance: 'REQUIRES_RETEST'
   });
   assert.match(
     manifest.localAgenticGatewayBaseline.scope,

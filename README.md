@@ -25,7 +25,7 @@ operational system around the model explicit, bounded, auditable, and fail-close
 | Local integrated NATURAL gateway qualification | ADR-036 + ADR-037 on `release/v2.6.0-rc.6`, building on `9ed86a443da18f923b60692d7446f1fd57d0a2da` |
 | Published native CI predecessor | [`56da715284704f227675961d476e19acce6e9fa3`](https://github.com/bonushora/surgical-dev-ops/commit/56da715284704f227675961d476e19acce6e9fa3), [Accelerator Conformance #33286652480](https://github.com/bonushora/surgical-dev-ops/actions/runs/33286652480) |
 | Published predecessor matrix | Ubuntu, macOS, and Windows: **PASS** |
-| Local canonical suite | 1209 tests discovered; 1204 passed; 0 failures; 5 platform-specific skips |
+| Local canonical suite | 1210 tests discovered; 1205 passed; 0 failures; 5 platform-specific skips |
 | Normative protocols | BH-SEP v2.2 + BH-SDP v2.2 |
 
 The complete trail, including failed runs that preceded the green baseline, is
