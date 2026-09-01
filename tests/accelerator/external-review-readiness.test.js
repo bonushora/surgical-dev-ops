@@ -19,6 +19,89 @@ test('ADR-025 manifest binds the public green baseline and immutable protocol by
   assert.deepEqual(manifest.sourceBaseline.platforms, [
     'ubuntu-latest', 'macos-latest', 'windows-latest'
   ]);
+  assert.equal(
+    manifest.localGovernedWorkspaceBaseline.commit,
+    'f56750eba3aa07b0426f56021c072a280468ea98'
+  );
+  assert.equal(
+    manifest.localGovernedWorkspaceBaseline.initialImplementationCommit,
+    '2f8d9e1aa40d0d7a127e966a28e475e0f89c4bb0'
+  );
+  assert.equal(manifest.localGovernedWorkspaceBaseline.testsDiscovered, 1179);
+  assert.equal(manifest.localGovernedWorkspaceBaseline.testsPassed, 1174);
+  assert.equal(manifest.localGovernedWorkspaceBaseline.testsFailed, 0);
+  assert.equal(manifest.localGovernedWorkspaceBaseline.testsSkipped, 5);
+  assert.equal(
+    manifest.localAgenticGatewayBaseline.naturalDefaultCheckpoint,
+    '9ed86a443da18f923b60692d7446f1fd57d0a2da'
+  );
+  assert.equal(
+    manifest.localAgenticGatewayBaseline.adrFreezeCheckpoint,
+    'dee764f7ac39ba0de16be6056cc2706ad629e99f'
+  );
+  assert.equal(manifest.localAgenticGatewayBaseline.testsDiscovered, 1212);
+  assert.equal(manifest.localAgenticGatewayBaseline.testsPassed, 1207);
+  assert.equal(manifest.localAgenticGatewayBaseline.testsFailed, 0);
+  assert.equal(manifest.localAgenticGatewayBaseline.testsSkipped, 5);
+  assert.deepEqual(manifest.historicalSemanticRoutingCheckpoint, {
+    commit: '4a901069accf4c57f3bbb2f4a46dae26cdee2561',
+    testsDiscovered: 1206,
+    testsPassed: 1201,
+    testsFailed: 0,
+    testsSkipped: 5
+  });
+  assert.deepEqual(manifest.manualCounterexample2Repair, {
+    classification: 'latency/observability defect repair',
+    startingCommit: '38904d79b61436a23b44eb2432a049415bb30795',
+    measuredInputTokens: 2358,
+    processedInputTokens: 2048,
+    processingDurationMs: 59997,
+    derivedQualifiedWorkloadLowerBoundMs: 84078,
+    previousTimeoutMs: 60000,
+    finalTimeoutMs: 180000,
+    payloadEvidenceDuplicated: false,
+    payloadSizeChanged: false,
+    focusedTestsPassed: 47,
+    adjacentTestsPassed: 129,
+    adversarialUxTestsPassed: 124,
+    canonicalTestsDiscovered: 1210,
+    canonicalTestsPassed: 1205,
+    canonicalTestsFailed: 0,
+    canonicalTestsSkipped: 5,
+    packageDryRun: 'surgical-dev-ops@2.6.0-rc.6',
+    manualAcceptance: 'REQUIRES_RETEST'
+  });
+  assert.deepEqual(manifest.manualCounterexample3Repair, {
+    classification: 'intent-routing and false operational claim defect repair',
+    startingCommit: '13093b76a51d0fbf2886cdf00bef68e3547d75c4',
+    providerCallsBeforeRepair: 1,
+    providerCallsAfterRepair: 0,
+    previousMissionState: 'PLANNING',
+    finalMissionState: 'CANCELLED',
+    existingLifecycleReused: true,
+    newAuthorityClassAdded: false,
+    focusedTestsPassed: 54,
+    adjacentTestsPassed: 184,
+    adversarialUxTestsPassed: 142,
+    canonicalTestsDiscovered: 1212,
+    canonicalTestsPassed: 1207,
+    canonicalTestsFailed: 0,
+    canonicalTestsSkipped: 5,
+    packageDryRun: 'surgical-dev-ops@2.6.0-rc.6',
+    checkpointTested: 'c151aee95d4639209942b6ed27fb25a1d76df8ff',
+    cancellationRequest: 'cancele esta missão',
+    cancellationRouting: 'DETERMINISTIC',
+    statusProjectionState: 'CANCELLED',
+    resumeOutcome: 'REFUSED_TERMINAL_CANCELLED_MISSION',
+    projectionAuthority: 'none',
+    providerOperationalSuccessClaimInvolved: false,
+    runtimeMutationDuringFinalEvidenceRecording: false,
+    manualAcceptance: 'GREEN'
+  });
+  assert.match(
+    manifest.localAgenticGatewayBaseline.scope,
+    /ADR-036[\s\S]+ADR-037/
+  );
   assert.equal(manifest.protocols['BH-SEP-v2.2-sha256'], sha('protocols/BH-SEP.md'));
   assert.equal(manifest.protocols['BH-SDP-v2.2-sha256'], sha('protocols/BH-SDP.md'));
 });

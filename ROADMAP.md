@@ -183,6 +183,48 @@ single-agent Orchestrator boundary.
 
 ---
 
+# Version 2.6 — Governed NATURAL Workspace Experience ✅
+
+Completed implementation scope
+
+- Unified bilingual onboarding and complete human-facing language surfaces
+- NATURAL interactive development closure through exact proposal, signed
+  authorization, R3 dispatch, validation and single-use anti-replay consumption
+- Governed autonomous runner continuity up to a deterministic authority boundary
+- Deterministic physical workspace session binding and revalidation
+- Governed workspace discovery index with bounded deterministic search and
+  stale-state invalidation
+- Sensitive-content inspection before provider exposure, including deterministic
+  redaction and blocking
+- NATURAL recursive microreads evaluated against an exact human-authorized task
+  envelope
+- Qualified validation command catalog consumed by the process-validation adapter
+- Content-free governed workspace audit projection
+- Persistent NATURAL governed mission state with live plan, explicit states,
+  progress events, projections and governed resume
+- Integrated Governed Agent Gateway for structured workspace status, search,
+  read, diff, test invocation, authority inspection and contextual approval
+  request creation without manual copy/paste
+- Deterministic perceived-responsiveness path: early acknowledgement,
+  streaming-first progress, normalized evidence, local fast-path projections and
+  latency boundary tracing without fabricated progress
+- Distinct NATURAL, ENGINEER and EXPERT experience preservation
+
+Optional or separately qualified extensions
+
+- New pushed release/tag qualification on the exact final commit
+- Local Web UI or Desktop UI projection over the same governed backend session
+- Independent external adversarial audit completion
+- Physical power-loss qualification
+- Strict Physical Identity-Conditional CAS for ordinary pathnames
+- Multi-agent cognitive coordination
+- Commercial activation and payment infrastructure
+
+These extensions do not weaken the completed v2.6 deterministic authority
+boundary and must not be implied by NATURAL convenience.
+
+---
+
 # Guiding Principle
 
 The objective of Surgical DevOps is not merely to improve prompts.

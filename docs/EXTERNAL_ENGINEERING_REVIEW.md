@@ -4,6 +4,15 @@
 
 | Item | Evidence |
 | --- | --- |
+| Local integrated NATURAL gateway qualification | ADR-036 + ADR-037 on `release/v2.6.0-rc.6` |
+| NATURAL default checkpoint | `9ed86a443da18f923b60692d7446f1fd57d0a2da` |
+| Local suite | 1212 discovered; 1207 PASS; 0 FAIL; 5 platform SKIP |
+| Final manual acceptance | **GREEN** at tested checkpoint `c151aee95d4639209942b6ed27fb25a1d76df8ff` |
+| Historical second-counterexample checkpoint | `13093b76a51d0fbf2886cdf00bef68e3547d75c4`: 1210 discovered; 1205 PASS; 0 FAIL; 5 platform SKIP |
+| Historical first-counterexample checkpoint | `38904d79b61436a23b44eb2432a049415bb30795`: 1209 discovered; 1204 PASS; 0 FAIL; 5 platform SKIP |
+| Historical semantic-routing checkpoint | `4a901069accf4c57f3bbb2f4a46dae26cdee2561`: 1206 discovered; 1201 PASS; 0 FAIL; 5 platform SKIP |
+| Local governed workspace checkpoint | `f56750eba3aa07b0426f56021c072a280468ea98` |
+| ADR-034 implementation start | `2f8d9e1aa40d0d7a127e966a28e475e0f89c4bb0` |
 | Source baseline | `a3a4e2941914f14457ed1932ea4024fc495bfff1` |
 | Canonical workflow run | `33110168939` |
 | Matrix | Ubuntu, macOS and Windows: PASS |
@@ -11,9 +20,47 @@
 | Review challenge | [`review/TRY_TO_BREAK_IT.md`](review/TRY_TO_BREAK_IT.md) |
 | Machine-readable manifest | [`review/QUALIFICATION_MANIFEST.json`](review/QUALIFICATION_MANIFEST.json) |
 
-This is an invitation to independent review, not a claim that an independent
-audit has already occurred. The historical v2.5.1 baseline remains below so its
-earlier evidence is not rewritten.
+The current local implementation adds the ADR-036 persistent NATURAL governed
+mission and the ADR-037 Integrated Governed Agent Gateway to the existing
+ADR-034 deterministic workspace experience. The model still does not receive
+direct filesystem, shell, Git, mutation, network, release or publish authority;
+structured requests cross Surgical mediation and known tools can still be
+denied. This is an invitation to independent review, not a claim that an
+independent audit has already occurred. The historical v2.5.1 baseline remains
+below so its earlier evidence is not rewritten.
+
+The current local suite also covers the manual counterexample in which governed
+project evidence was acquired but lacked an explicit relationship in the
+serialized cognitive context. The regression inspects the real provider
+envelope, verifies the nonzero evidence count and normalized content, and keeps
+provider failure after acquisition distinct from zero acquired evidence. Human
+manual acceptance still requires re-test.
+
+The second manual counterexample preserved that handoff but exposed an
+incompatible local execution budget: the qualified 2,358-token project-analysis
+input had processed only 2,048 tokens at the 59.997-second cancellation point.
+The deterministic workload regression establishes an optimistic 84,078 ms
+lower bound including the existing PLAN output budget. The default CPU profile
+therefore restores its previously qualified bounded 180-second deadline. The
+provider, payload, context ceiling, no-thinking behavior, authority and
+fail-closed timeout semantics remain unchanged; human acceptance again requires
+re-test.
+
+The third manual counterexample showed that a natural mission-cancellation
+request bypassed deterministic session control, reached provider cognition and
+produced an operational success claim while `/status` remained `PLANNING`. The
+repair reuses the existing terminal `CANCELLED` state and `MISSION_CANCELLED`
+event before provider fallback. The regression proves zero provider calls,
+state-backed status, cleared pending authority and terminal resume refusal. No
+new lifecycle, tool, provider or authority class was added; human acceptance
+must re-test the real CLI.
+
+The required physical re-test was completed at repair checkpoint
+`c151aee95d4639209942b6ed27fb25a1d76df8ff`. Natural cancellation routed
+deterministically with no provider operational-success claim; `/status` showed
+`CANCELLED`; `/resume` refused the terminal cancelled mission; and projection
+authority remained `none`. This final evidence record changes no runtime,
+provider configuration, or authority class. **FINAL MANUAL ACCEPTANCE: GREEN.**
 
 ## Historical v2.5.1 package
 
@@ -92,6 +139,8 @@ engineering loop all carry zero approval and mutation authority.
 | Stale or substituted BEFORE hash | Reject evidence binding | `governed-engineering-agent-loop.test.js` |
 | Evidence planner fails | No proposal call and no continuation | `governed-engineering-agent-loop.test.js` |
 | Model responds without evidence | Fail closed | `natural-cli-async-session.test.js` |
+| Acquired evidence is omitted from cognitive context | Fail closed regression at the serialized provider envelope | `natural-evidence-handoff-regression.test.js` |
+| Broad project analysis returns only worktree cleanliness | Reject semantic completion and continue through governed project evidence | `natural-ux-acceptance-invariants.test.js` |
 | Conversational approval | Authorizes bounded evidence only | `natural-session-control.test.js` |
 | Provider unavailable | Deterministic fallback; no mutation | `natural-cognitive-session.test.js` |
 | R1/R2 mutation attempt | Zero physical dispatch | Orchestrator and capability tests |
@@ -105,11 +154,16 @@ Review these modules in order:
 1. `accelerator/core/ai-provider.js`
 2. `accelerator/core/governed-ai-runtime.js`
 3. `accelerator/cli/natural-recursive-evidence-loop.js`
-4. `accelerator/core/governed-engineering-proposal.js`
-5. `accelerator/cli/governed-engineering-agent-loop.js`
-6. `accelerator/core/surgical-orchestrator.js`
-7. `accelerator/cli/governed-patch-dispatch.js`
-8. `accelerator/core/production-mutation-runtime.js`
+4. `accelerator/cli/natural-governed-workspace-experience.js`
+5. `accelerator/adapters/deterministic-workspace-session-adapter.js`
+6. `accelerator/core/governed-workspace-discovery-index.js`
+7. `accelerator/core/sensitive-content-boundary.js`
+8. `accelerator/core/qualified-command-catalog.js`
+9. `accelerator/core/governed-engineering-proposal.js`
+10. `accelerator/cli/governed-engineering-agent-loop.js`
+11. `accelerator/core/surgical-orchestrator.js`
+12. `accelerator/cli/governed-patch-dispatch.js`
+13. `accelerator/core/production-mutation-runtime.js`
 
 ## Claims supported by the current baseline
 
@@ -117,6 +171,9 @@ Review these modules in order:
 - AI output cannot directly create operational authority.
 - Project claims in the governed NATURAL analysis path require workspace
   evidence.
+- NATURAL project evidence crosses a deterministic physical workspace session,
+  governed discovery index, task-envelope microread policy and sensitive-content
+  boundary before provider exposure.
 - An ENGINEER patch proposal must bind to one observed file and BEFORE hash.
 - The proposal flow stops before R3 authority and physical mutation.
 - The production mutation path preserves explicit identity, risk, exact scope,

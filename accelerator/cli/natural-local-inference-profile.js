@@ -42,7 +42,7 @@ const NATURAL_LOCAL_INFERENCE_PROFILE =
       OUTPUT_TOKENS,
 
     timeoutMs:
-      60000,
+      180000,
 
     contentTelemetry:
       false,

@@ -52,6 +52,19 @@ const {
   './natural-response-language'
 );
 
+const {
+  classifyProjectAnalysisObjective
+} = require(
+  './natural-governed-task'
+);
+
+const {
+  createSensitiveContentPolicy,
+  inspectSensitiveContent
+} = require(
+  '../core/sensitive-content-boundary'
+);
+
 const LOOP_SCHEMA =
   'sdo.natural_recursive_evidence_loop.v1';
 
@@ -71,6 +84,29 @@ const PROJECT_GROUNDING_TARGETS =
       'README_PT-BR.md'
     ])
   });
+
+const PROJECT_STATE_GROUNDING_TARGETS =
+  Object.freeze([
+    'docs/ENGINEERING_EVIDENCE.md',
+    'ENGINEERING_EVIDENCE.md',
+    'STATUS.md',
+    'CHANGELOG.md'
+  ]);
+
+const NEXT_WORK_GROUNDING_TARGETS =
+  Object.freeze([
+    'ROADMAP.md',
+    'TODO.md',
+    'TODO',
+    'BACKLOG.md'
+  ]);
+
+const PROJECT_ARCHITECTURE_GROUNDING_TARGETS =
+  Object.freeze([
+    'ARCHITECTURE.md',
+    'docs/ARCHITECTURE.md',
+    'docs/architecture.md'
+  ]);
 
 function deepFreeze(value) {
   if (
@@ -134,7 +170,8 @@ function evidenceRequestFingerprint(
 
 function extractRecursiveEvidence(
   result,
-  intent
+  intent,
+  sensitiveContentPolicy
 ) {
   if (
     !result ||
@@ -229,6 +266,23 @@ function extractRecursiveEvidence(
       );
     }
 
+    const sensitive =
+      inspectSensitiveContent(
+        sensitiveContentPolicy,
+        {
+          target:
+            execution.target.requested,
+          content:
+            execution.evidence.content
+        }
+      );
+
+    if (!sensitive.providerSafe) {
+      throw new Error(
+        'Governed filesystem evidence is blocked by sensitive-content policy.'
+      );
+    }
+
     return deepFreeze({
       schema:
         'sdo.natural_recursive_evidence.v1',
@@ -245,9 +299,15 @@ function extractRecursiveEvidence(
       bytes:
         execution.evidence.bytes,
 
+      sensitiveDecision:
+        sensitive.decision,
+
+      sensitiveRules:
+        sensitive.rules,
+
       summary:
         boundedText(
-          execution.evidence.content,
+          sensitive.content,
           MAX_HISTORY_ITEM_CHARS
         )
     });
@@ -440,32 +500,90 @@ function deterministicProjectGroundingDecision(
     });
   }
 
-  if (
-    evidence.length !== 1 ||
-    evidence[0].kind !==
-      'WORKSPACE_FILES' ||
-    !Array.isArray(
-      evidence[0].files
-    )
-  ) {
+  const inventory =
+    evidence.find(
+      (item) =>
+        item.kind === 'WORKSPACE_FILES' &&
+        Array.isArray(item.files)
+    );
+
+  if (!inventory) {
     return null;
   }
 
-  const target =
+  const observedTargets =
+    new Set(
+      evidence
+        .filter((item) => item.kind === 'READ_FILE')
+        .map((item) => item.target)
+    );
+
+  const descriptionTarget =
     PROJECT_GROUNDING_TARGETS[
       detectNaturalResponseLanguage(
         task.objective
       )
     ].find(
       (candidate) =>
-        evidence[0].files.includes(
-          candidate
-        )
+        inventory.files.includes(candidate)
     );
 
-  if (!target) {
-    return null;
+  const requirements =
+    classifyProjectAnalysisObjective(
+      task.objective
+    );
+
+  const requiredTargets = [];
+
+  if (descriptionTarget) {
+    requiredTargets.push(descriptionTarget);
   }
+
+  if (requirements.projectState) {
+    const stateTarget =
+      PROJECT_STATE_GROUNDING_TARGETS.find(
+        (candidate) => inventory.files.includes(candidate)
+      );
+
+    if (stateTarget) {
+      requiredTargets.push(stateTarget);
+    }
+  }
+
+  if (requirements.nextEngineeringWork) {
+    const nextWorkTarget =
+      NEXT_WORK_GROUNDING_TARGETS.find(
+        (candidate) => inventory.files.includes(candidate)
+      );
+
+    if (nextWorkTarget) {
+      requiredTargets.push(nextWorkTarget);
+    }
+  }
+
+  if (requirements.architecture) {
+    const namedArchitectureTarget =
+      PROJECT_ARCHITECTURE_GROUNDING_TARGETS.find(
+        (candidate) => inventory.files.includes(candidate)
+      );
+    const adrTarget =
+      inventory.files
+        .filter((candidate) => /^docs\/adr\/ADR-[^/]+\.md$/.test(candidate))
+        .at(-1);
+    const architectureTarget =
+      namedArchitectureTarget || adrTarget;
+
+    if (architectureTarget) {
+      requiredTargets.push(architectureTarget);
+    }
+  }
+
+  const target =
+    [...new Set(requiredTargets)].find(
+      (candidate) => !observedTargets.has(candidate)
+    );
+
+  if (!target) return null;
 
   return deepFreeze({
     schema:
@@ -484,7 +602,9 @@ function deterministicProjectGroundingDecision(
       target,
 
       reason:
-        'Canonical project grounding requires one real project description file.'
+        target === descriptionTarget
+          ? 'Canonical project grounding requires one real project description file.'
+          : 'The requested project-state objective requires relevant governed engineering evidence before synthesis.'
     }
   });
 }
@@ -498,7 +618,9 @@ async function runNaturalRecursiveEvidenceLoop(
       dispatchGovernedMachineEvidence,
     onProgress = null,
     evaluateEvidenceIntent = null,
-    deterministicProjectGrounding = true
+    deterministicProjectGrounding = true,
+    sensitiveContentPolicy =
+      createSensitiveContentPolicy()
   } = {}
 ) {
   if (
@@ -615,6 +737,14 @@ async function runNaturalRecursiveEvidenceLoop(
         : null;
 
     if (!decision) {
+      report(
+        'PROVIDER_COGNITION_STARTED',
+        step,
+        evidence.length === 0
+          ? 'EVIDENCE_PLANNING'
+          : 'EVIDENCE_PLANNING_OR_SYNTHESIS'
+      );
+
       try {
         decision =
           await cognitiveSession
@@ -636,7 +766,9 @@ async function runNaturalRecursiveEvidenceLoop(
           evidence,
 
           reason:
-            'Cognitive evidence planning failed safely.'
+            evidence.length > 0
+              ? 'Cognitive processing failed after qualified governed evidence was acquired.'
+              : 'Cognitive evidence planning failed before qualified governed evidence was acquired.'
         });
       }
     }
@@ -669,6 +801,12 @@ async function runNaturalRecursiveEvidenceLoop(
             'Project analysis cannot respond without governed file evidence.'
         });
       }
+
+      report(
+        'SYNTHESIS_COMPLETED',
+        step,
+        'GROUNDED_RESPONSE'
+      );
 
       report('COMPLETED', step);
 
@@ -850,6 +988,12 @@ async function runNaturalRecursiveEvidenceLoop(
       }
     }
 
+    report(
+      'GOVERNED_EVIDENCE_STARTED',
+      step + 1,
+      decision.evidenceRequest.kind
+    );
+
     let governed;
 
     try {
@@ -881,7 +1025,8 @@ async function runNaturalRecursiveEvidenceLoop(
       observed =
         extractRecursiveEvidence(
           governed,
-          containment.governedIntent
+          containment.governedIntent,
+          sensitiveContentPolicy
         );
     } catch {
       return finalResult({

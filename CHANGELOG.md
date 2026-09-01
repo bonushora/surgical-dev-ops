@@ -1,5 +1,35 @@
 # Changelog
 
+## Unreleased
+
+- Repair NATURAL mission cancellation so ordinary Portuguese and English
+  requests cross the existing deterministic `MISSION_CANCELLED` lifecycle
+  boundary before generic provider cognition. `/status` now proves `CANCELLED`,
+  cancelled missions reject resume, pending authority is cleared, and no model
+  can present an ungrounded cancellation-success claim.
+- Repair the qualified default local CPU inference deadline after a real
+  governed four-evidence NATURAL workload proved that the 60-second limit could
+  cancel Qwen before prompt processing completed. Restore the profile's bounded
+  180-second budget and derive truthful CLI disclosure from that profile while
+  preserving the default provider, explicit evidence context, fail-closed
+  timeout, sensitive-content inspection and zero operational authority.
+- Repair the qualified governed-evidence handoff from NATURAL recursive
+  acquisition into the cognitive provider context. Provider failure after
+  evidence acquisition is now distinguished from absence of qualified evidence,
+  while mutation, authority, sensitive-content and fail-closed boundaries remain
+  unchanged.
+- Repair NATURAL semantic routing so project state, health, architecture,
+  readiness, and next-engineering-work objectives use bounded governed project
+  evidence instead of terminating on Git cleanliness. Preserve the status fast
+  path for questions that specifically ask about local changes.
+- Add evidence-grounding and progressive-usefulness regressions for compound
+  project analysis: real Orchestrator evidence, provider cognition, and final
+  synthesis are visibly distinct; partial truthful facts do not qualify as
+  semantic completion.
+- Implement and qualify ADR-034 deterministic governed workspace sessions,
+  bounded discovery, sensitive evidence filtering, qualified validation
+  catalog, audit chaining and the NATURAL workspace experience projection.
+
 ## [2.6.0-rc.6] - 2026-08-30
 
 ### Fixed

@@ -69,12 +69,13 @@ const CONTROLLED_ACTIONS = Object.freeze({
   GIT_READ: Object.freeze({
     actions: new Set([
       'REPOSITORY_ROOT', 'CURRENT_BRANCH', 'HEAD_COMMIT',
-      'WORKTREE_STATUS', 'TRACKED_FILES', 'WORKSPACE_FILES'
+      'WORKTREE_STATUS', 'WORKTREE_DIFF', 'TRACKED_FILES',
+      'WORKSPACE_FILES'
     ]),
     capabilityType: 'GIT_READ'
   }),
   PROCESS_VALIDATION: Object.freeze({
-    actions: new Set(['NODE_SYNTAX_CHECK']), capabilityType: 'PROCESS_VALIDATION'
+    actions: new Set(['NODE_SYNTAX_CHECK', 'NODE_TEST_FILE']), capabilityType: 'PROCESS_VALIDATION'
   }),
   FILESYSTEM_PATCH: Object.freeze({
     actions: new Set(['PATCH_FILE']), capabilityType: 'FILESYSTEM_PATCH'
@@ -220,6 +221,7 @@ function validateControlledRequest(request, repositoryPath, expectedRisk, runtim
       REPOSITORY_ROOT: 'rev-parse', CURRENT_BRANCH: 'rev-parse',
       HEAD_COMMIT: 'rev-parse',
       WORKTREE_STATUS: 'status',
+      WORKTREE_DIFF: 'diff',
       TRACKED_FILES: 'ls-files',
       WORKSPACE_FILES: 'ls-files'
     }[request.action];

@@ -51,14 +51,32 @@ const {
 } = require('./natural-response-language');
 
 const {
+  NATURAL_LOCAL_INFERENCE_PROFILE
+} = require(
+  './natural-local-inference-profile'
+);
+
+const {
   createNaturalSessionControl,
-  formatProviderStatus
+  formatProviderStatus,
+  isNaturalMissionCancellationRequest
 } = require('./natural-session-control');
 
 const {
   createNaturalExperienceSnapshot,
   formatNaturalTerminalExperience
 } = require('./natural-experience-surface');
+
+const {
+  createDeterministicWorkspaceSession,
+  revalidateDeterministicWorkspaceSession
+} = require('../adapters/deterministic-workspace-session-adapter');
+
+const {
+  openNaturalGovernedWorkspaceExperience,
+  planNaturalGovernedWorkspaceMicroread,
+  qualifyNaturalWorkspaceFileEvidenceForCognition
+} = require('./natural-governed-workspace-experience');
 
 const {
   formatWorkspaceFiles,
@@ -88,6 +106,19 @@ const {
 } = require('./natural-runner-runtime');
 
 const {
+  createNaturalAgenticMission,
+  projectMissionView,
+  formatMissionProjection,
+  cancelNaturalAgenticMission,
+  resumeNaturalAgenticMission
+} = require('../core/natural-agentic-mission');
+
+const {
+  createNaturalTaskEnvelopeProposal,
+  authorizeNaturalTaskEnvelope
+} = require('./natural-task-envelope-authorization');
+
+const {
   createInteractionPreferenceStore
 } = require('./interaction-preference-store');
 
@@ -101,6 +132,8 @@ const {
 } = require('./human-language');
 
 const VERSION = '2.6.0-rc.6';
+const NATURAL_WORKSPACE_HUMAN_SUBJECT =
+  'surgical-cli-local-session';
 
 function humanText(activation, portuguese, english) {
   return usesEnglish(activation)
@@ -122,6 +155,204 @@ function usesEnglish(activation) {
     activation && activation.language,
     legacyFallback
   ) === 'en';
+}
+
+function canonicalInstant(
+  value
+) {
+  const timestamp =
+    String(value || '').trim();
+
+  const parsed =
+    Date.parse(timestamp);
+
+  if (
+    !Number.isFinite(parsed) ||
+    new Date(parsed).toISOString() !==
+      timestamp
+  ) {
+    throw new Error(
+      'Canonical NATURAL workspace timestamp is required.'
+    );
+  }
+
+  return timestamp;
+}
+
+function currentCanonicalInstant(
+  options = {}
+) {
+  return canonicalInstant(
+    typeof options.now === 'function'
+      ? options.now()
+      : new Date().toISOString()
+  );
+}
+
+function dispatchNaturalWorkspaceEvidence(
+  intent,
+  activation,
+  options = {},
+  dispatchOptions = {}
+) {
+  if (
+    typeof options.dispatchEvidence ===
+      'function'
+  ) {
+    return options.dispatchEvidence(
+      intent,
+      activation.repositoryPath
+    );
+  }
+
+  return dispatchGovernedReadOnly(
+    intent,
+    activation.repositoryPath,
+    dispatchOptions
+  );
+}
+
+function createAuthorizedNaturalWorkspaceContext(
+  task,
+  activation,
+  options = {}
+) {
+  const observedAt =
+    currentCanonicalInstant(
+      options
+    );
+
+  const session =
+    createDeterministicWorkspaceSession({
+      authorizedRoot:
+        activation.repositoryPath,
+      humanSubject:
+        NATURAL_WORKSPACE_HUMAN_SUBJECT,
+      authorizedAt:
+        observedAt
+    });
+
+  const revalidation =
+    revalidateDeterministicWorkspaceSession(
+      session
+    );
+
+  const governedInventory =
+    dispatchNaturalWorkspaceEvidence(
+      Object.freeze({
+        capabilityType:
+          'GIT_READ',
+        target:
+          'workspace-files'
+      }),
+      activation,
+      options,
+      {
+        now:
+          () => observedAt
+      }
+    );
+
+  const experience =
+    openNaturalGovernedWorkspaceExperience({
+      session,
+      revalidation,
+      governedInventory,
+      observedAt
+    });
+
+  const expiresAt =
+    new Date(
+      Date.parse(observedAt) +
+        10 * 60_000
+    ).toISOString();
+
+  const proposal =
+    createNaturalTaskEnvelopeProposal({
+      task,
+      workspaceRoot:
+        activation.repositoryPath,
+      physicalWorkspaceIdentity:
+        experience.binding
+          .physicalWorkspaceIdentity,
+      riskCeiling:
+        task.kind === 'WORKSPACE_LIST'
+          ? 'R0'
+          : 'R1',
+      validFrom:
+        observedAt,
+      expiresAt
+    });
+
+  const taskAuthorization =
+    authorizeNaturalTaskEnvelope(
+      proposal,
+      Object.freeze({
+        approved:
+          true,
+        proposalFingerprint:
+          proposal.proposalFingerprint,
+        humanSubject:
+          NATURAL_WORKSPACE_HUMAN_SUBJECT,
+        authorizedAt:
+          observedAt
+      })
+    );
+
+  return Object.freeze({
+    experience,
+    taskAuthorization,
+    observedAt
+  });
+}
+
+function evaluateNaturalWorkspaceMicroread(
+  workspaceContext,
+  evidenceRequest,
+  evidenceStep,
+  options = {}
+) {
+  const zeroBasedStep =
+    Math.max(
+      0,
+      Number(evidenceStep) - 1
+    );
+
+  return planNaturalGovernedWorkspaceMicroread(
+    workspaceContext.experience,
+    workspaceContext.taskAuthorization,
+    Object.freeze({
+      evidenceRequest,
+      evidenceStep:
+        zeroBasedStep,
+      risk:
+        evidenceRequest &&
+        evidenceRequest.kind ===
+          'WORKSPACE_FILES'
+          ? 'R0'
+          : 'R1',
+      mutating:
+        false
+    }),
+    {
+      now:
+        currentCanonicalInstant(
+          options
+        )
+    }
+  );
+}
+
+function formatQualifiedFileEvidenceForCognition(
+  evidence,
+  language = 'pt-BR'
+) {
+  return (
+    `${language === 'en' ? 'File' : 'Arquivo'}: ${evidence.target}\n` +
+    `SHA256: ${evidence.sha256}\n` +
+    `${language === 'en' ? 'Sensitive content decision' : 'Decisão de conteúdo sensível'}: ${evidence.sensitiveDecision}\n` +
+    `${language === 'en' ? 'Content' : 'Conteúdo'}:\n${evidence.content}`
+  );
 }
 
 function printVersion() {
@@ -651,6 +882,11 @@ function formatCognitiveProgressMessage(
   input,
   preferredLanguage = null
 ) {
+  const timeoutSeconds =
+    NATURAL_LOCAL_INFERENCE_PROFILE
+      .timeoutMs /
+    1000;
+
   if (
     normalizeHumanLanguage(
       preferredLanguage,
@@ -660,13 +896,13 @@ function formatCognitiveProgressMessage(
   ) {
     return (
       'Processing with the local cognitive provider. ' +
-      'This attempt is limited to 60 seconds; on failure, deterministic governance remains active.\n'
+      `This attempt is limited to ${timeoutSeconds} seconds; on failure, deterministic governance remains active.\n`
     );
   }
 
   return (
     'Processando com o provider cognitivo local. ' +
-    'Esta tentativa está limitada a 60 segundos; em caso de falha, a governança determinística permanece ativa.\n'
+    `Esta tentativa está limitada a ${timeoutSeconds} segundos; em caso de falha, a governança determinística permanece ativa.\n`
   );
 }
 
@@ -777,10 +1013,54 @@ function createInteractiveSession(
   let pendingDevelopment =
     null;
 
+  let agenticMission =
+    null;
+
   const runnerRuntime =
     cognitiveMode
       ? createNaturalRunnerRuntime()
       : null;
+
+  if (cognitiveMode) {
+    try {
+      const missionObservedAt =
+        currentCanonicalInstant(options);
+      const missionSession =
+        createDeterministicWorkspaceSession({
+          authorizedRoot:
+            activation.repositoryPath,
+          humanSubject:
+            NATURAL_WORKSPACE_HUMAN_SUBJECT,
+          authorizedAt:
+            missionObservedAt
+        });
+
+      agenticMission =
+        createNaturalAgenticMission({
+          missionId:
+            `cli-natural-${missionSession.sessionFingerprint.slice(0, 32)}`,
+          objective:
+            'Interactive NATURAL governed engineering session.',
+          session:
+            missionSession,
+          createdAt:
+            missionObservedAt,
+          plan: [
+            {
+              stepId:
+                'session-ready',
+              summary:
+                'Maintain governed conversational session state.',
+              status:
+                'ACTIVE'
+            }
+          ]
+        });
+    } catch {
+      agenticMission =
+        null;
+    }
+  }
 
   rl.on('line', (line) => {
     rl.pause();
@@ -792,7 +1072,10 @@ function createInteractiveSession(
 
           if (
             pendingDevelopment &&
-            !/^(?:exit|quit)$/i.test(normalizedLine)
+            !/^(?:exit|quit)$/i.test(normalizedLine) &&
+            !isNaturalMissionCancellationRequest(
+              normalizedLine
+            )
           ) {
             const fingerprint =
               pendingDevelopment.patchProposal.proposalFingerprint;
@@ -894,7 +1177,122 @@ function createInteractiveSession(
               );
 
             if (controlled.matched) {
-              if (controlled.action === 'RUNNER_START') {
+              if (controlled.action === 'MISSION_PROJECTION') {
+                if (!agenticMission) {
+                  output.write(
+                    humanText(
+                      activation,
+                      'Nenhuma missão governada ativa pôde ser projetada. A governança permanece fail-closed.\n',
+                      'No active governed mission could be projected. Governance remains fail-closed.\n'
+                    )
+                  );
+                } else {
+                  output.write(
+                    formatMissionProjection(
+                      projectMissionView(
+                        agenticMission,
+                        controlled.projection
+                      )
+                    )
+                  );
+                }
+              } else if (controlled.action === 'MISSION_CANCEL') {
+                pendingDevelopment = null;
+
+                if (runnerRuntime) {
+                  runnerRuntime.cancelPending();
+                }
+
+                if (!agenticMission) {
+                  output.write(
+                    humanText(
+                      activation,
+                      'A missão não foi cancelada porque nenhum estado governado ativo está disponível.\n',
+                      'The mission was not cancelled because no active governed state is available.\n'
+                    )
+                  );
+                } else {
+                  if (
+                    agenticMission.state !==
+                      'CANCELLED'
+                  ) {
+                    agenticMission =
+                      cancelNaturalAgenticMission(
+                        agenticMission,
+                        {
+                          reason:
+                            'Human cancelled mission through the NATURAL control boundary.',
+                          at:
+                            currentCanonicalInstant(
+                              options
+                            )
+                        }
+                      );
+                  }
+
+                  output.write(
+                    humanText(
+                      activation,
+                      'Missão governada cancelada por solicitação humana. O estado determinístico abaixo comprova a transição.\n',
+                      'Governed mission cancelled by human request. The deterministic state below proves the transition.\n'
+                    ) +
+                    formatMissionProjection(
+                      projectMissionView(
+                        agenticMission,
+                        'status'
+                      )
+                    )
+                  );
+                }
+              } else if (controlled.action === 'MISSION_RESUME') {
+                if (!agenticMission) {
+                  output.write(
+                    humanText(
+                      activation,
+                      'Não há missão governada ativa para retomar.\n',
+                      'There is no active governed mission to resume.\n'
+                    )
+                  );
+                } else if (
+                  agenticMission.state ===
+                    'CANCELLED'
+                ) {
+                  output.write(
+                    humanText(
+                      activation,
+                      'A missão cancelada é terminal e não foi retomada. O estado determinístico permanece CANCELLED.\n',
+                      'The cancelled mission is terminal and was not resumed. Its deterministic state remains CANCELLED.\n'
+                    ) +
+                    formatMissionProjection(
+                      projectMissionView(
+                        agenticMission,
+                        'status'
+                      )
+                    )
+                  );
+                } else {
+                  const revalidation =
+                    revalidateDeterministicWorkspaceSession(
+                      agenticMission.session
+                    );
+                  agenticMission =
+                    resumeNaturalAgenticMission({
+                      mission:
+                        agenticMission,
+                      revalidation,
+                      resumedAt:
+                        currentCanonicalInstant(options)
+                    });
+                  output.write(
+                    formatMissionProjection(
+                      projectMissionView(
+                        agenticMission,
+                        'status'
+                      )
+                    )
+                  );
+                }
+              } else if (controlled.action === 'RUNNER_START') {
                 const runner = runnerRuntime.start();
                 output.write(
                   controlled.output + '\n' +
@@ -1052,6 +1450,27 @@ function createInteractiveSession(
                       )
                     );
 
+                    let workspaceContext;
+
+                    try {
+                      workspaceContext =
+                        createAuthorizedNaturalWorkspaceContext(
+                          task,
+                          activation,
+                          options
+                        );
+                    } catch {
+                      output.write(
+                        humanText(
+                          activation,
+                          'Não consegui concluir a análise com as evidências qualificadas disponíveis. A governança permanece ativa e nenhum arquivo foi alterado.\n',
+                          'I could not complete the analysis with the available qualified evidence. Governance remains active and no file was changed.\n'
+                        )
+                      );
+                      resumeAndPrompt();
+                      return;
+                    }
+
                     const analysisStartedAt =
                       Date.now();
 
@@ -1062,8 +1481,35 @@ function createInteractiveSession(
                         cognitiveSession,
                         dispatchEvidence:
                           options.dispatchEvidence,
+                        sensitiveContentPolicy:
+                          workspaceContext
+                            .experience
+                            .sensitiveContentPolicy,
+                        evaluateEvidenceIntent(
+                          _intent,
+                          evidenceRequest,
+                          evidenceStep
+                        ) {
+                          return evaluateNaturalWorkspaceMicroread(
+                            workspaceContext,
+                            evidenceRequest,
+                            evidenceStep,
+                            options
+                          );
+                        },
                         onProgress(progress) {
                           if (
+                            progress.stage ===
+                              'GOVERNED_EVIDENCE_STARTED'
+                          ) {
+                            output.write(
+                              humanText(
+                                activation,
+                                `Etapa ${progress.step}: obtendo evidência governada pelo Orchestrator (${progress.detail}); aguardando resultado determinístico...\n`,
+                                `Step ${progress.step}: obtaining governed evidence through the Orchestrator (${progress.detail}); awaiting deterministic result...\n`
+                              )
+                            );
+                          } else if (
                             progress.stage ===
                               'EVIDENCE_OBTAINED'
                           ) {
@@ -1091,6 +1537,28 @@ function createInteractiveSession(
                                 activation,
                                 `Etapa ${progress.step}: ${evidenceLabel}; continuando...\n`,
                                 `Step ${progress.step}: ${evidenceLabel}; continuing...\n`
+                              )
+                            );
+                          } else if (
+                            progress.stage ===
+                              'PROVIDER_COGNITION_STARTED'
+                          ) {
+                            output.write(
+                              humanText(
+                                activation,
+                                `Evidências governadas disponíveis; aguardando a análise cognitiva do provider. A tentativa local permanece limitada a ${NATURAL_LOCAL_INFERENCE_PROFILE.timeoutMs / 1000} segundos e nenhuma conclusão será afirmada antes da resposta validada.\n`,
+                                `Governed evidence is available; awaiting provider cognition. The local attempt remains limited to ${NATURAL_LOCAL_INFERENCE_PROFILE.timeoutMs / 1000} seconds, and no conclusion will be claimed before a validated response.\n`
+                              )
+                            );
+                          } else if (
+                            progress.stage ===
+                              'SYNTHESIS_COMPLETED'
+                          ) {
+                            output.write(
+                              humanText(
+                                activation,
+                                'Síntese cognitiva concluída; preparando a resposta delimitada...\n',
+                                'Cognitive synthesis completed; preparing the bounded response...\n'
                               )
                             );
                           }
@@ -1122,11 +1590,22 @@ function createInteractiveSession(
                         'string' ||
                       !recursive.response.trim()
                     ) {
+                      const acquiredEvidenceCount =
+                        Array.isArray(
+                          recursive.evidence
+                        )
+                          ? recursive.evidence.length
+                          : 0;
+
                       output.write(
                         humanText(
                           activation,
-                          'Não consegui concluir a análise com as evidências qualificadas disponíveis. A governança permanece ativa e nenhum arquivo foi alterado.\n',
-                          'I could not complete the analysis with the available qualified evidence. Governance remains active and no file was changed.\n'
+                          acquiredEvidenceCount > 0
+                            ? `Foram obtidas ${acquiredEvidenceCount} evidências governadas, mas o provider não concluiu o processamento cognitivo. A governança permanece ativa e nenhum arquivo foi alterado.\n`
+                            : 'Não foi obtida evidência qualificada suficiente para concluir a análise. A governança permanece ativa e nenhum arquivo foi alterado.\n',
+                          acquiredEvidenceCount > 0
+                            ? `${acquiredEvidenceCount} governed evidence observations were acquired, but the provider did not complete cognitive processing. Governance remains active and no file was changed.\n`
+                            : 'Insufficient qualified evidence was acquired to complete the analysis. Governance remains active and no file was changed.\n'
                         )
                       );
                       resumeAndPrompt();
@@ -1143,8 +1622,8 @@ function createInteractiveSession(
                       recursive.response.trim() +
                       humanText(
                         activation,
-                        `\n\nA resposta foi fundamentada em evidências governadas do projeto. Concluída em ${elapsedSeconds}s. Nenhum arquivo foi alterado.\n`,
-                        `\n\nThe response was grounded in governed project evidence. Completed in ${elapsedSeconds}s. No file was changed.\n`
+                        `\n\nForam fornecidas à síntese ${recursive.evidence.length} evidências governadas do projeto. Inferências e recomendações permanecem cognitivas. Concluída em ${elapsedSeconds}s. Nenhum arquivo foi alterado.\n`,
+                        `\n\nThe synthesis received ${recursive.evidence.length} governed project evidence observations. Inferences and recommendations remain cognitive. Completed in ${elapsedSeconds}s. No file was changed.\n`
                       )
                     );
 
@@ -1174,16 +1653,44 @@ function createInteractiveSession(
                     );
                   }
 
-                  const governed =
-                    dispatchGovernedReadOnly(
-                      task.operations[0],
-                      activation.repositoryPath
-                    );
+                  const workspaceContext =
+                    (
+                      activation.interactionMode.mode ===
+                        'NATURAL'
+                    )
+                      ? createAuthorizedNaturalWorkspaceContext(
+                          task,
+                          activation,
+                          options
+                        )
+                      : null;
 
                   if (
                     task.kind ===
                       'WORKSPACE_LIST'
                   ) {
+                    const governed =
+                      workspaceContext
+                        ? {
+                            execution: {
+                              schema:
+                                'sdo.git_read_result.v1',
+                              selector:
+                                'WORKSPACE_FILES',
+                              result: {
+                                files:
+                                  workspaceContext
+                                    .experience
+                                    .discoveryIndex
+                                    .files
+                              }
+                            }
+                          }
+                        : dispatchGovernedReadOnly(
+                            task.operations[0],
+                            activation.repositoryPath
+                          );
+
                     output.write(
                       formatWorkspaceFiles(
                         governed,
@@ -1191,6 +1698,13 @@ function createInteractiveSession(
                       )
                     );
                   } else {
+                    const governed =
+                      dispatchNaturalWorkspaceEvidence(
+                        task.operations[0],
+                        activation,
+                        options
+                      );
+
                     const evidence =
                       extractFilesystemEvidence(
                         governed
@@ -1211,6 +1725,19 @@ function createInteractiveSession(
                         const explanationStartedAt =
                           Date.now();
 
+                        const providerEvidence =
+                          workspaceContext
+                            ? qualifyNaturalWorkspaceFileEvidenceForCognition(
+                                workspaceContext
+                                  .experience,
+                                evidence
+                              )
+                            : {
+                                ...evidence,
+                                sensitiveDecision:
+                                  'NOT_APPLIED'
+                              };
+
                         output.write(
                           humanText(
                             activation,
@@ -1223,10 +1750,9 @@ function createInteractiveSession(
                           await cognitiveSession.ask(
                             task.objective,
                             activation,
-                            (
-                              `${usesEnglish(activation) ? 'File' : 'Arquivo'}: ${evidence.target}\n` +
-                              `SHA256: ${evidence.sha256}\n` +
-                              `${usesEnglish(activation) ? 'Content' : 'Conteúdo'}:\n${evidence.content}`
+                            formatQualifiedFileEvidenceForCognition(
+                              providerEvidence,
+                              activation.language
                             )
                           );
 
@@ -1669,7 +2195,14 @@ async function main(
         selected.interactionMode;
       language = selected.language;
     } else {
-      interactionMode = 'EXPERT';
+      /*
+       * NATURAL is the default non-explicit experience.
+       *
+       * This selection carries no operational authority.
+       * Explicit --interaction and safely persisted human
+       * preferences remain sovereign.
+       */
+      interactionMode = 'NATURAL';
     }
   }
 

@@ -63,6 +63,12 @@ function deepFreeze(value) {
   return Object.freeze(value);
 }
 
+function includesAny(text, patterns) {
+  return patterns.some(
+    (pattern) => text.includes(pattern)
+  );
+}
+
 function normalizePathText(value) {
   let normalized =
     String(value || '')
@@ -244,24 +250,95 @@ function detectProjectAnalysis(text) {
   const normalized =
     normalizeNaturalText(text);
 
-  const analysis =
-    [
-      'explique este projeto',
-      'analise este projeto',
-      'examine este projeto',
-      'em que ponto estamos',
-      'o que voce sugere fazer agora',
-      'avalie este projeto',
-      'explain this project',
-      'analyze this project',
-      'analyse this project',
-      'examine this project',
-      'evaluate this project',
-      'what do you suggest doing next'
-    ].some(
-      (pattern) =>
-        normalized.includes(pattern)
+  const explanationOrAnalysis =
+    includesAny(
+      normalized,
+      [
+        'explique este projeto',
+        'analise este projeto',
+        'examine este projeto',
+        'em que ponto estamos',
+        'o que voce sugere fazer agora',
+        'avalie este projeto',
+        'explain this project',
+        'analyze this project',
+        'analyse this project',
+        'examine this project',
+        'evaluate this project',
+        'what do you suggest doing next'
+      ]
     );
+
+  const projectState =
+    includesAny(
+      normalized,
+      [
+        'estado atual deste projeto',
+        'estado atual do projeto',
+        'estado deste projeto',
+        'estado do projeto',
+        'situacao atual deste projeto',
+        'situacao atual do projeto',
+        'estado atual deste repositorio',
+        'estado atual do repositorio',
+        'estado deste repositorio',
+        'estado do repositorio',
+        'como esta este projeto',
+        'como esta o projeto',
+        'como esta este repositorio',
+        'como esta o repositorio',
+        'saude deste projeto',
+        'saude do projeto',
+        'prontidao deste projeto',
+        'prontidao do projeto',
+        'current state of this project',
+        'current project state',
+        'state of this project',
+        'state of the project',
+        'current state of this repository',
+        'how is this project',
+        'how is the project doing',
+        'project health',
+        'project readiness'
+      ]
+    );
+
+  const nextEngineeringWork =
+    includesAny(
+      normalized,
+      [
+        'proximo trabalho de engenharia',
+        'proxima prioridade de engenharia',
+        'proximo passo de engenharia',
+        'trabalho de engenharia mais importante',
+        'o que fazer a seguir neste projeto',
+        'most important engineering work',
+        'next engineering work',
+        'next engineering priority',
+        'next engineering step',
+        'what to do next in this project'
+      ]
+    );
+
+  const architecture =
+    includesAny(
+      normalized,
+      [
+        'arquitetura deste projeto',
+        'arquitetura do projeto',
+        'problemas arquiteturais',
+        'questoes arquiteturais',
+        'architecture of this project',
+        'project architecture',
+        'architectural issues'
+      ]
+    );
+
+  const analysis =
+    explanationOrAnalysis ||
+    projectState ||
+    nextEngineeringWork ||
+    architecture;
 
   if (!analysis) {
     return null;
@@ -282,6 +359,49 @@ function detectProjectAnalysis(text) {
 
     operations:
       []
+  });
+}
+
+function classifyProjectAnalysisObjective(text) {
+  const normalized = normalizeNaturalText(text);
+
+  return deepFreeze({
+    projectState:
+      includesAny(normalized, [
+        'estado',
+        'situacao',
+        'em que ponto',
+        'como esta',
+        'saude',
+        'prontidao',
+        'current state',
+        'project state',
+        'where are we',
+        'how is',
+        'health',
+        'readiness'
+      ]),
+    nextEngineeringWork:
+      includesAny(normalized, [
+        'proximo trabalho',
+        'proxima prioridade',
+        'proximo passo',
+        'fazer agora',
+        'fazer a seguir',
+        'doing next',
+        'work to do next',
+        'next engineering',
+        'next priority',
+        'next step',
+        'suggest doing next'
+      ]),
+    architecture:
+      includesAny(normalized, [
+        'arquitetura',
+        'arquitetural',
+        'architecture',
+        'architectural'
+      ])
   });
 }
 
@@ -529,6 +649,7 @@ function formatFileReadEvidence(
 module.exports =
   Object.freeze({
     detectNaturalGovernedTask,
+    classifyProjectAnalysisObjective,
     formatTaskProposal,
     isAffirmative,
     isNegative,

@@ -172,6 +172,56 @@ test(
   }
 );
 
+test(
+  'NATURAL CLI projects governed mission state without granting authority',
+  async () => {
+    const input = new PassThrough();
+    const output = new PassThrough();
+    let observed = '';
+
+    output.on('data', (chunk) => {
+      observed += chunk.toString();
+    });
+
+    cli.createInteractiveSession(
+      naturalActivation(),
+      {
+        input,
+        output,
+        terminal: false,
+        cognitiveSession: Object.freeze({})
+      }
+    );
+
+    input.end(
+      '/status\n' +
+      '/plan\n' +
+      '/authority\n' +
+      '/resume\n' +
+      'exit\n'
+    );
+
+    await new Promise((resolve) => setTimeout(resolve, 50));
+
+    assert.match(observed, /Mission: cli-natural-/);
+    assert.match(observed, /State: PLANNING/);
+    assert.match(observed, /Projection authority: none/);
+    assert.match(
+      observed,
+      /ACTIVE: Maintain governed conversational session state\./
+    );
+    assert.match(observed, /Authority projection:/);
+    assert.match(
+      observed,
+      /Local commit does not grant push\./
+    );
+    assert.doesNotMatch(
+      observed,
+      /No active governed mission/
+    );
+  }
+);
+
 function naturalActivation() {
   return Object.freeze({
     repositoryPath:
@@ -212,6 +262,74 @@ function engineerActivation() {
           'ENGINEER'
       })
   });
+}
+
+function frozenDecision(
+  decision
+) {
+  if (
+    decision &&
+    decision.evidenceRequest
+  ) {
+    decision.evidenceRequest =
+      Object.freeze(
+        decision.evidenceRequest
+      );
+  }
+
+  return Object.freeze(
+    decision
+  );
+}
+
+function workspaceFilesEvidence(
+  files
+) {
+  return {
+    orchestration: {
+      status:
+        'COMPLETED'
+    },
+    execution: {
+      schema:
+        'sdo.git_read_result.v1',
+      selector:
+        'WORKSPACE_FILES',
+      result: {
+        files
+      }
+    }
+  };
+}
+
+function fileReadEvidence(
+  target,
+  content
+) {
+  return {
+    orchestration: {
+      status:
+        'COMPLETED'
+    },
+    execution: {
+      schema:
+        'sdo.filesystem_read_result.v1',
+      target: {
+        requested:
+          target
+      },
+      evidence: {
+        bytes:
+          Buffer.byteLength(
+            content,
+            'utf8'
+          ),
+        sha256:
+          'a'.repeat(64),
+        content
+      }
+    }
+  };
 }
 
 test(
@@ -296,6 +414,288 @@ test(
     assert.doesNotMatch(
       observed,
       /ERR_USE_AFTER_CLOSE/i
+    );
+  }
+);
+
+test(
+  'NATURAL project analysis stops file reads outside the governed discovery index',
+  async () => {
+    const input =
+      new PassThrough();
+
+    const output =
+      new PassThrough();
+
+    let observed =
+      '';
+
+    output.on(
+      'data',
+      (chunk) => {
+        observed +=
+          chunk.toString();
+      }
+    );
+
+    let gitReads =
+      0;
+    let fileReads =
+      0;
+
+    const cognitiveSession =
+      Object.freeze({
+        async decideEvidence() {
+          return frozenDecision({
+            schema:
+              'sdo.natural_evidence_decision.v1',
+            decision:
+              'REQUEST_EVIDENCE',
+            response:
+              null,
+            evidenceRequest: {
+              kind:
+                'READ_FILE',
+              target:
+                'not-indexed.js',
+              reason:
+                'Try to expand beyond discovery.'
+            }
+          });
+        }
+      });
+
+    cli.createInteractiveSession(
+      naturalActivation(),
+      {
+        input,
+        output,
+        terminal:
+          false,
+        cognitiveSession,
+        dispatchEvidence(intent) {
+          if (intent.capabilityType === 'GIT_READ') {
+            gitReads += 1;
+            return workspaceFilesEvidence([
+              'package.json'
+            ]);
+          }
+
+          fileReads += 1;
+          return fileReadEvidence(
+            intent.target,
+            'const leaked = true;\n'
+          );
+        }
+      }
+    );
+
+    input.write(
+      'Explique este projeto para mim.\n'
+    );
+
+    await new Promise(
+      (resolve) => setTimeout(resolve, 10)
+    );
+
+    input.write('sim\n');
+
+    await new Promise(
+      (resolve) => setTimeout(resolve, 50)
+    );
+
+    input.end();
+
+    assert.equal(
+      gitReads,
+      2
+    );
+    assert.equal(
+      fileReads,
+      0
+    );
+    assert.match(
+      observed,
+      /fora da autorização atual/i
+    );
+  }
+);
+
+test(
+  'NATURAL file explanation redacts sensitive evidence before the provider',
+  async () => {
+    const input =
+      new PassThrough();
+
+    const output =
+      new PassThrough();
+
+    let observed =
+      '';
+    let governedEvidence =
+      null;
+
+    output.on(
+      'data',
+      (chunk) => {
+        observed +=
+          chunk.toString();
+      }
+    );
+
+    const rawSecret =
+      'sk-abcdefghijklmnopqrstuvwxyz123456';
+
+    const cognitiveSession =
+      Object.freeze({
+        async ask(
+          _objective,
+          _activation,
+          evidence
+        ) {
+          governedEvidence =
+            evidence;
+          return 'Explicação produzida sem segredo bruto.\n';
+        }
+      });
+
+    cli.createInteractiveSession(
+      naturalActivation(),
+      {
+        input,
+        output,
+        terminal:
+          false,
+        cognitiveSession,
+        dispatchEvidence(intent) {
+          if (intent.capabilityType === 'GIT_READ') {
+            return workspaceFilesEvidence([
+              'secret.js'
+            ]);
+          }
+
+          return fileReadEvidence(
+            'secret.js',
+            `const token = "${rawSecret}";\n`
+          );
+        }
+      }
+    );
+
+    input.write(
+      'explique o arquivo secret.js\n'
+    );
+
+    await new Promise(
+      (resolve) => setTimeout(resolve, 10)
+    );
+
+    input.write('sim\n');
+
+    await new Promise(
+      (resolve) => setTimeout(resolve, 50)
+    );
+
+    input.end();
+
+    assert.match(
+      observed,
+      /Explicação produzida/
+    );
+    assert.ok(
+      governedEvidence
+    );
+    assert.doesNotMatch(
+      governedEvidence,
+      new RegExp(rawSecret)
+    );
+    assert.match(
+      governedEvidence,
+      /REDACTED_BY_SURGICAL_DEVOPS/
+    );
+  }
+);
+
+test(
+  'NATURAL file explanation blocks private-key evidence before cognition',
+  async () => {
+    const input =
+      new PassThrough();
+
+    const output =
+      new PassThrough();
+
+    let observed =
+      '';
+    let cognitiveCalls =
+      0;
+
+    output.on(
+      'data',
+      (chunk) => {
+        observed +=
+          chunk.toString();
+      }
+    );
+
+    const cognitiveSession =
+      Object.freeze({
+        async ask() {
+          cognitiveCalls += 1;
+          return 'must not be called\n';
+        }
+      });
+
+    cli.createInteractiveSession(
+      naturalActivation(),
+      {
+        input,
+        output,
+        terminal:
+          false,
+        cognitiveSession,
+        dispatchEvidence(intent) {
+          if (intent.capabilityType === 'GIT_READ') {
+            return workspaceFilesEvidence([
+              'secret.js'
+            ]);
+          }
+
+          return fileReadEvidence(
+            'secret.js',
+            '-----BEGIN PRIVATE KEY-----\nsecret\n'
+          );
+        }
+      }
+    );
+
+    input.write(
+      'explique o arquivo secret.js\n'
+    );
+
+    await new Promise(
+      (resolve) => setTimeout(resolve, 10)
+    );
+
+    input.write('sim\n');
+
+    await new Promise(
+      (resolve) => setTimeout(resolve, 50)
+    );
+
+    input.end();
+
+    assert.equal(
+      cognitiveCalls,
+      0
+    );
+    assert.match(
+      observed,
+      /falhou de forma segura/i
+    );
+    assert.doesNotMatch(
+      observed,
+      /PRIVATE KEY/
     );
   }
 );
@@ -441,6 +841,41 @@ test(
       /evidências governadas do projeto/i
     );
 
+    assert.match(
+      observed,
+      /foram fornecidas à síntese 2 evidências governadas/i
+    );
+
+    assert.match(
+      observed,
+      /inferências e recomendações permanecem cognitivas/i
+    );
+
+    assert.doesNotMatch(
+      observed,
+      /a resposta foi fundamentada/i
+    );
+
+    assert.match(
+      observed,
+      /obtendo evidência governada pelo Orchestrator/i
+    );
+
+    assert.match(
+      observed,
+      /aguardando a análise cognitiva do provider/i
+    );
+
+    assert.match(
+      observed,
+      /tentativa local permanece limitada a 180 segundos/i
+    );
+
+    assert.match(
+      observed,
+      /síntese cognitiva concluída.*resposta delimitada/i
+    );
+
     assert.equal(
       histories.length,
       1
@@ -554,6 +989,100 @@ test(
     assert.match(
       observed,
       /não consegui concluir a análise.*governança permanece ativa/i
+    );
+  }
+);
+
+test(
+  'NATURAL CLI reports provider failure separately after governed evidence acquisition',
+  async () => {
+    const input = new PassThrough();
+    const output = new PassThrough();
+    let observed = '';
+
+    output.on('data', (chunk) => {
+      observed += chunk.toString();
+    });
+
+    cli.createInteractiveSession(
+      naturalActivation(),
+      {
+        input,
+        output,
+        terminal: false,
+        cognitiveSession: Object.freeze({
+          async decideEvidence() {
+            throw new Error(
+              'provider failed after acquisition'
+            );
+          }
+        }),
+        dispatchEvidence(intent) {
+          if (intent.capabilityType === 'GIT_READ') {
+            return {
+              orchestration: { status: 'COMPLETED' },
+              execution: {
+                schema: 'sdo.git_read_result.v1',
+                selector: 'WORKSPACE_FILES',
+                result: {
+                  files: [
+                    'README.md',
+                    'docs/ENGINEERING_EVIDENCE.md',
+                    'ROADMAP.md'
+                  ]
+                }
+              }
+            };
+          }
+
+          return {
+            orchestration: { status: 'COMPLETED' },
+            execution: {
+              schema: 'sdo.filesystem_read_result.v1',
+              target: { requested: intent.target },
+              evidence: {
+                bytes: 64,
+                sha256: 'a'.repeat(64),
+                content:
+                  `Qualified content from ${intent.target}.`
+              }
+            }
+          };
+        }
+      }
+    );
+
+    input.write(
+      'Avalie a saúde do projeto e recomende a próxima prioridade de engenharia.\n'
+    );
+
+    await new Promise(
+      (resolve) => setTimeout(resolve, 10)
+    );
+
+    input.write('sim\n');
+
+    await new Promise(
+      (resolve) => setTimeout(resolve, 50)
+    );
+
+    input.end();
+
+    assert.match(
+      observed,
+      /foram obtidas 4 evidências governadas.*provider não concluiu o processamento cognitivo/i
+    );
+    assert.doesNotMatch(
+      observed,
+      /não foi obtida evidência qualificada suficiente/i
+    );
+    assert.match(
+      observed,
+      /aguardando a análise cognitiva do provider/i
+    );
+    assert.match(
+      observed,
+      /nenhum arquivo foi alterado/i
     );
   }
 );

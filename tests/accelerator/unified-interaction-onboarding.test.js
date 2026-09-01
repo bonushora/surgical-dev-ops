@@ -173,7 +173,7 @@ test('explicit interaction override wins without rewriting saved preference', ()
   );
 });
 
-test('non-interactive launch without preference preserves EXPERT compatibility', () => {
+test('non-interactive launch without preference defaults to NATURAL without persisting preference', () => {
   const configurationBase = temporaryDirectory();
   const result = spawnSync(
     process.execPath,
@@ -187,7 +187,18 @@ test('non-interactive launch without preference preserves EXPERT compatibility',
   );
 
   assert.equal(result.status, 0, result.stderr);
-  assert.match(result.stdout, /Interaction: EXPERT/);
+  assert.match(
+    result.stdout,
+    /Você pode conversar comigo normalmente sobre este projeto\./
+  );
+  assert.match(
+    result.stdout,
+    /modo inicial de trabalho é microtarefas supervisionadas/i
+  );
+  assert.doesNotMatch(
+    result.stdout,
+    /Interaction: EXPERT/
+  );
   assert.equal(
     fs.existsSync(
       path.join(

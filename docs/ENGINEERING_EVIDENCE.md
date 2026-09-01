@@ -6,6 +6,142 @@ This document records reproducible evidence for the current Surgical DevOps
 multiplatform baseline. It distinguishes observed results from broader security
 claims that remain unqualified.
 
+## ADR-036 and ADR-037 integrated NATURAL gateway qualification
+
+| Field | Evidence |
+| --- | --- |
+| Local implementation state | `release/v2.6.0-rc.6` worktree after ADR-036/ADR-037 runtime integration |
+| NATURAL default checkpoint | `9ed86a443da18f923b60692d7446f1fd57d0a2da` |
+| ADR freeze checkpoint | `dee764f7ac39ba0de16be6056cc2706ad629e99f` |
+| First manual-counterexample repair start | `4a901069accf4c57f3bbb2f4a46dae26cdee2561` |
+| Historical suite at first repair start | 1206 tests discovered; 1201 passed; zero failures; 5 explicit platform skips |
+| Second manual-counterexample repair start | `38904d79b61436a23b44eb2432a049415bb30795` |
+| Historical suite at second repair start | 1209 tests discovered; 1204 passed; zero failures; 5 explicit platform skips |
+| Third manual-counterexample repair start | `13093b76a51d0fbf2886cdf00bef68e3547d75c4` |
+| Historical suite at third repair start | 1210 tests discovered; 1205 passed; zero failures; 5 explicit platform skips |
+| Current local canonical suite | 1212 tests discovered; 1207 passed; zero failures; 5 explicit platform skips |
+| Counterexample #2 focused deadline/evidence/provider suite | 47 tests passed; zero failures; zero skips |
+| Counterexample #2 adjacent NATURAL/provider/evidence suite | 129 tests passed; zero failures; zero skips |
+| Counterexample #2 adversarial/UX suite | 124 tests passed; zero failures; zero skips |
+| Counterexample #3 focused mission/control/CLI suite | 54 tests passed; zero failures; zero skips |
+| Counterexample #3 adjacent authority/state/provider suite | 184 tests passed; zero failures; zero skips |
+| Counterexample #3 adversarial/UX suite | 142 tests passed; zero failures; zero skips |
+| Package dry run | `npm pack --dry-run --json` completed for `surgical-dev-ops@2.6.0-rc.6` |
+| Final manual acceptance | **GREEN** at tested checkpoint `c151aee95d4639209942b6ed27fb25a1d76df8ff`; no push, tag, release, or publication authorized |
+| Scope | Persistent NATURAL mission state, integrated governed agent gateway, conversational projections, no-copy/paste governed tool slices, and NATURAL semantic objective repair |
+
+The local implementation adds a persistent governed NATURAL mission model with
+explicit state, live plan, hash-chained event stream, mission projections,
+governed resume and final GREEN qualification semantics. It also adds the
+Integrated Governed Agent Gateway vertical slices for workspace status,
+governed search, governed read, governed diff, governed test invocation,
+authority inspection, contextual approval request creation, mission resume and
+conditional mutation routing through the existing Surgical Orchestrator.
+
+The gateway remains a structured mediation layer, not a shell. Tool
+availability is separated from tool authority; unknown, malformed, stale,
+unbound and CAS-mismatched requests fail closed. Sensitive evidence is inspected
+and redacted or blocked before provider exposure. Provider substitution changes
+cognition only and cannot expand filesystem, mutation, Git, network, release or
+publish authority.
+
+Perceived responsiveness is qualified through deterministic architecture rather
+than arbitrary wall-clock promises: the gateway emits an early operation event,
+streams real progress before long operations complete, normalizes large evidence
+before cognition, exposes local deterministic fast paths for mission/status
+views, and records latency trace boundaries without fabricating percentages or
+success.
+
+The NATURAL semantic acceptance repair distinguishes project state, engineering
+health, architecture, readiness, and next-work objectives from repository
+cleanliness. Compound analysis now reaches the existing bounded project-evidence
+path and deterministically prefers available project-description,
+engineering-state, and roadmap evidence before synthesis. The provider contract
+must cover every requested semantic objective, ground project-specific claims,
+and preserve uncertainty. Progress exposes real Orchestrator evidence,
+provider-cognition, and synthesis transitions. The dedicated regression rejects
+a clean-worktree-only answer as incomplete for a project-state-and-next-work
+objective.
+
+The mandatory manual session then exposed an evidence-handoff defect after four
+governed observations had been acquired. The recursive loop retained the
+qualified items, but the cognitive request represented them only as flattened
+text inside the broad `objective`; the serialized provider `context` carried no
+explicit acquired-evidence relationship. A provider failure was also collapsed
+into the same user-facing class as zero acquired evidence. The repair attaches
+the bounded normalized evidence, status, and exact count to
+`context.qualifiedGovernedEvidence`, which the existing provider adapter
+serializes into the cognitive request. It does not grant the provider physical
+authority. Separate regressions inspect that real serialized envelope and prove
+the fail-closed distinction after acquisition. Final manual acceptance remains
+unqualified until the human repeats the affected real-CLI scenario.
+
+The repeated manual scenario at checkpoint
+`38904d79b61436a23b44eb2432a049415bb30795` proved that this explicit handoff
+was working: four governed items reached the real Qwen request. The remaining
+failure was the local CPU profile's 60-second transport deadline. The 2,358-token
+input had processed only 2,048 tokens when Ollama cancelled it at 59.997 seconds,
+without context truncation. The deterministic regression derives an optimistic
+84,078-millisecond lower bound for that input plus the existing 512-token PLAN
+budget. The repair restores the profile's historically qualified bounded
+180-second deadline and derives the CLI disclosure from it. The provider,
+4,096-token context, no-thinking options, bounded evidence payload, sensitive
+inspection, authority boundary and fail-closed cancellation are unchanged. The
+payload was already serialized once through `qualifiedGovernedEvidence`; no
+payload size or evidence-normalization change was needed. Human acceptance must
+repeat the exact real-CLI scenario on the new checkpoint.
+
+At checkpoint `13093b76a51d0fbf2886cdf00bef68e3547d75c4`, the next manual
+session exposed a separate intent-routing defect. The Portuguese request
+`cancele esta missão` was not recognized by the deterministic NATURAL session
+control and fell through to generic provider cognition. The provider claimed
+cancellation while the sovereign mission projection remained `PLANNING`.
+The existing lifecycle already defined the terminal `CANCELLED` state,
+`MISSION_CANCELLED` event and `cancelNaturalAgenticMission` transition; no new
+lifecycle or authority class was required. The repair routes bounded Portuguese
+and English cancellation phrases to that transition before provider fallback,
+clears pending authorization, projects the resulting state, and rejects resume
+of a cancelled mission. Provider invocation, filesystem mutation, Git, CAS,
+network, release and publication authority remain absent. Human acceptance must
+re-test cancellation, `/status` and `/resume` through the real CLI.
+
+That required real-CLI re-test was completed at checkpoint
+`c151aee95d4639209942b6ed27fb25a1d76df8ff`. The request
+`cancele esta missão` crossed deterministic session control without a model or
+provider operational-success claim and immediately projected `CANCELLED`.
+`/status` physically preserved `CANCELLED`; `/resume` refused the terminal
+cancelled mission and left it `CANCELLED`; every projection reported
+`Projection authority: none`. The physical acceptance session made no runtime
+or governed workspace mutation. This evidence-only record changes no runtime
+code, provider configuration, or authority class. **FINAL MANUAL ACCEPTANCE:
+GREEN.**
+
+## ADR-034 governed workspace closure checkpoint
+
+| Field | Evidence |
+| --- | --- |
+| Local checkpoint | `f56750eba3aa07b0426f56021c072a280468ea98` |
+| Initial implementation checkpoint | `2f8d9e1aa40d0d7a127e966a28e475e0f89c4bb0` |
+| Local canonical suite | 1179 tests discovered; 1174 passed; zero failures; 5 explicit platform skips |
+| Scope | Deterministic governed workspace experience for NATURAL mode |
+| Native CI predecessor | `56da715284704f227675961d476e19acce6e9fa3`, run `33286652480` |
+
+The local checkpoint integrates ADR-034 into the actual NATURAL project
+experience: a revalidated deterministic physical workspace session is opened
+after human task authorization, the governed workspace inventory is projected
+through the discovery index, contained microreads are evaluated against the task
+envelope, sensitive content is blocked or redacted before provider exposure, the
+qualified command catalog remains the validation boundary, and content-free
+audit events are carried by the workspace projection.
+
+The same checkpoint preserves the separate ENGINEER and EXPERT experiences.
+ENGINEER still stops at `HUMAN_AUTHORITY_REQUIRED` with an evidence-bound
+proposal, while EXPERT remains command-oriented and provider-independent.
+
+This local evidence is not a pushed tag, GitHub Release or npm publication. A
+new publication still requires the exact pushed commit and tag to pass the full
+Ubuntu, macOS and Windows native matrix.
+
 ## Governed frontier qualification baseline
 
 | Field | Evidence |

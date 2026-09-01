@@ -10,9 +10,11 @@ const {
   canonicalizeAuthorizedRoot,
   resolveInspectedFile
 } = require('../core/workspace-boundary');
+const {
+  createQualifiedCommandCatalog,
+  admitQualifiedCommand
+} = require('../core/qualified-command-catalog');
 
-const TIMEOUT_MS = 2000;
-const MAX_OUTPUT_BYTES = 32 * 1024;
 const MAX_INPUT_BYTES = 1024 * 1024;
 const REQUEST_KEYS = new Set([
   'operationId', 'workspace', 'selector', 'target', 'grantEvaluation', 'observedAt'
@@ -21,6 +23,30 @@ const PROJECTION_REQUEST_KEYS = new Set([
   ...REQUEST_KEYS,
   'projectionEvidence'
 ]);
+const SELECTOR_PROFILES = Object.freeze({
+  NODE_SYNTAX_CHECK: Object.freeze({
+    targetExtensions: Object.freeze(['.js']),
+    timeoutMs: 2000,
+    maxOutputBytes: 32 * 1024,
+    arguments(target) {
+      return ['--check', '-'];
+    },
+    stdin(source) {
+      return source;
+    }
+  }),
+  NODE_TEST_FILE: Object.freeze({
+    targetExtensions: Object.freeze(['.js']),
+    timeoutMs: 30000,
+    maxOutputBytes: 256 * 1024,
+    arguments(target) {
+      return ['--test', target];
+    },
+    stdin() {
+      return Buffer.alloc(0);
+    }
+  })
+});
 
 function deepFreeze(value) {
   if (!value || typeof value !== 'object' || Object.isFrozen(value)) return value;
@@ -107,6 +133,12 @@ function sanitizedEnvironment() {
   };
 }
 
+function selectorProfile(selector) {
+  const profile = SELECTOR_PROFILES[selector];
+  if (!profile) throw new Error(`Unknown or unauthorized validation selector: ${selector}`);
+  return profile;
+}
+
 function authorizeJavaScriptValidation(request, allowedKeys = REQUEST_KEYS) {
   validateRequest(request, allowedKeys);
   const grant = validateGrant(request.grantEvaluation);
@@ -133,12 +165,17 @@ function authorizeJavaScriptValidation(request, allowedKeys = REQUEST_KEYS) {
   }
 
   const selector = requireText(request.selector, 'selector').toUpperCase();
-  if (selector !== 'NODE_SYNTAX_CHECK' || !grant.scope.selectors.includes(selector)) {
+  const profile = selectorProfile(selector);
+  if (!grant.scope.selectors.includes(selector)) {
     throw new Error(`Unknown or unauthorized validation selector: ${selector}`);
   }
   const target = requireText(request.target, 'target');
-  if (path.extname(target).toLowerCase() !== '.js') {
-    throw new Error('NODE_SYNTAX_CHECK requires a .js target.');
+  if (!profile.targetExtensions.includes(path.extname(target).toLowerCase())) {
+    throw new Error(
+      selector === 'NODE_SYNTAX_CHECK'
+        ? 'NODE_SYNTAX_CHECK requires a .js target.'
+        : `${selector} requires a qualified target extension.`
+    );
   }
   const resolved = resolveInspectedFile(workspace, target);
   const authorized = grant.scope.paths.find((entry) => entry.path === target);
@@ -146,18 +183,50 @@ function authorizeJavaScriptValidation(request, allowedKeys = REQUEST_KEYS) {
     throw new Error('Validation target is outside the authorized capability scope.');
   }
 
-  return { operationId, workspace, observedAt, selector, target, resolved };
+  const commandAdmission = admitQualifiedCommand(
+    createQualifiedCommandCatalog(),
+    {
+      selector,
+      workspace,
+      target,
+      environmentKeys: Object.keys(sanitizedEnvironment())
+    }
+  );
+
+  return { operationId, workspace, observedAt, selector, target, resolved, commandAdmission };
 }
 
-function executeNodeSyntaxCheck(source, workspace) {
-  const args = ['--check', '-'];
+function parseNodeTestSummary(output) {
+  const summary = {};
+  for (const [key, field] of [
+    ['tests', 'tests'],
+    ['suites', 'suites'],
+    ['pass', 'passed'],
+    ['fail', 'failed'],
+    ['cancelled', 'cancelled'],
+    ['skipped', 'skipped'],
+    ['todo', 'todo']
+  ]) {
+    const match = output.match(new RegExp(`(?:^|\\n)(?:#|\\u2139)\\s+${key}\\s+(\\d+)`));
+    if (match) summary[field] = Number(match[1]);
+  }
+  const duration = output.match(/(?:^|\n)(?:#|\u2139)\s+duration_ms\s+([0-9]+(?:\.[0-9]+)?)/);
+  if (duration) summary.durationMs = Number(duration[1]);
+  return Object.keys(summary).length === 0
+    ? null
+    : deepFreeze(summary);
+}
+
+function executeNodeProcess(binding, source) {
+  const profile = selectorProfile(binding.selector);
+  const args = profile.arguments(binding.target);
   const result = childProcess.spawnSync(process.execPath, args, {
-    cwd: workspace,
+    cwd: binding.workspace,
     shell: false,
-    input: source,
+    input: profile.stdin(source),
     encoding: 'utf8',
-    timeout: TIMEOUT_MS,
-    maxBuffer: MAX_OUTPUT_BYTES,
+    timeout: profile.timeoutMs,
+    maxBuffer: profile.maxOutputBytes,
     windowsHide: true,
     env: sanitizedEnvironment()
   });
@@ -171,17 +240,21 @@ function executeNodeSyntaxCheck(source, workspace) {
   if (!Number.isInteger(result.status)) throw new Error('Validation process returned malformed status.');
   const stdout = typeof result.stdout === 'string' ? result.stdout : '';
   const stderr = typeof result.stderr === 'string' ? result.stderr : '';
-  if (Buffer.byteLength(stdout) > MAX_OUTPUT_BYTES || Buffer.byteLength(stderr) > MAX_OUTPUT_BYTES) {
+  if (Buffer.byteLength(stdout) > profile.maxOutputBytes || Buffer.byteLength(stderr) > profile.maxOutputBytes) {
     throw new Error('Validation output exceeded limit.');
   }
 
-  return { args, result, stdout, stderr };
+  return { args, result, stdout, stderr, profile };
 }
 
 function validationResult(binding, source, projection = null) {
-  const { args, result, stdout, stderr } =
-    executeNodeSyntaxCheck(source, binding.workspace);
+  const { args, result, stdout, stderr, profile } =
+    executeNodeProcess(binding, source);
   const passed = result.status === 0;
+  const combinedOutput = `${stdout}\n${stderr}`;
+  const testSummary = binding.selector === 'NODE_TEST_FILE'
+    ? parseNodeTestSummary(combinedOutput)
+    : null;
 
   return deepFreeze({
     schema: 'sdo.process_validation_result.v1',
@@ -199,16 +272,19 @@ function validationResult(binding, source, projection = null) {
       successfulCompletionEligible: passed,
       exitCode: result.status,
       stdout,
-      stderr
+      stderr,
+      testSummary
     },
     execution: {
       executable: process.execPath,
       arguments: [...args],
       shell: false,
       cwd: binding.workspace,
-      timeoutMs: TIMEOUT_MS,
+      qualifiedCommandAdmissionFingerprint:
+        binding.commandAdmission.admissionFingerprint,
+      timeoutMs: profile.timeoutMs,
       maxInputBytes: MAX_INPUT_BYTES,
-      maxOutputBytes: MAX_OUTPUT_BYTES,
+      maxOutputBytes: profile.maxOutputBytes,
       environmentKeys: Object.keys(sanitizedEnvironment()).sort()
     }
   });
@@ -228,6 +304,9 @@ function validateJavaScriptProjectionWithGrant(request) {
     request,
     PROJECTION_REQUEST_KEYS
   );
+  if (binding.selector !== 'NODE_SYNTAX_CHECK') {
+    throw new Error('Projection validation is limited to NODE_SYNTAX_CHECK.');
+  }
   const evidence = request.projectionEvidence;
 
   if (

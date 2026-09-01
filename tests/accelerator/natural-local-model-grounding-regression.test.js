@@ -79,6 +79,9 @@ test(
     let observedObjective =
       null;
 
+    let observedEvidenceContext =
+      null;
+
     const session =
       createNaturalCognitiveSession({
         assistanceContext:
@@ -130,6 +133,10 @@ test(
 
             observedObjective =
               envelope.objective;
+
+            observedEvidenceContext =
+              envelope.context
+                .qualifiedGovernedEvidence;
 
             return response({
               message: {
@@ -191,19 +198,51 @@ test(
       /WORKSPACE_FILES sozinho não basta/i
     );
 
+    assert.match(
+      observedObjective,
+      /fato parcial verdadeiro.*limpeza do worktree.*não conclui/i
+    );
+
+    assert.match(
+      observedObjective,
+      /afirmação específica.*suportável pela evidência governada/i
+    );
+
+    assert.match(
+      observedObjective,
+      /fatos observados, inferências e recomendações/i
+    );
+
     assert.ok(
       observedObjective.length <
         11000
     );
 
     assert.match(
-      observedObjective,
+      observedEvidenceContext
+        .normalizedContext,
       /EVIDENCE_1/
     );
 
     assert.match(
-      observedObjective,
+      observedEvidenceContext
+        .normalizedContext,
       /EVIDENCE_2/
+    );
+
+    assert.equal(
+      observedEvidenceContext.status,
+      'AVAILABLE'
+    );
+
+    assert.equal(
+      observedEvidenceContext.evidenceCount,
+      2
+    );
+
+    assert.doesNotMatch(
+      observedObjective,
+      /Nenhuma evidência governada foi obtida/i
     );
   }
 );
@@ -227,7 +266,7 @@ test(
 
     assert.equal(
       NATURAL_LOCAL_INFERENCE_PROFILE.timeoutMs,
-      60000
+      180000
     );
 
     assert.match(
