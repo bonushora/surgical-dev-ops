@@ -73,6 +73,43 @@ UNRESOLVED: active-provider detail and provider-list projections still require o
 
 TIMESTAMP: 2026-09-01
 
+## P4.2 — Provider State Semantics Repair
+
+MISSION: NATURAL Qualified Provider Activation Manual-Acceptance Repair
+
+BASE_SHA: `ade44d1da16a024f383f39806bd68b5cc31eacba`
+
+CURRENT_SHA: `7790206cb31c6ee59d2a891f68a50ffe4757c6db`
+
+MILESTONE: P4.2
+
+MILESTONE_STATUS: GREEN
+
+FILES_CHANGED:
+
+- `accelerator/cli/natural-cognitive-session.js`
+- `accelerator/cli/natural-session-control.js`
+- `tests/accelerator/natural-provider-activation.test.js`
+- `tests/accelerator/natural-session-control.test.js`
+
+TESTS_EXECUTED:
+
+- `node tests/accelerator/natural-provider-activation.test.js`
+- `node tests/accelerator/natural-cognitive-session.test.js`
+- `node tests/accelerator/natural-provider-discovery.test.js`
+- `node tests/accelerator/natural-session-control.test.js`
+- `git diff --check`
+
+TEST_RESULTS: focused provider/cognitive/discovery/session state 50/50 passed; diff check passed.
+
+NEXT_MILESTONE: P4.3 — fail-closed known-provider handling
+
+AUTHORITY_REMAINING: bounded local repair, testing and checkpoint commits; remote delivery remains conditional on complete P5R GREEN and exact remote preconditions; NO MERGE; NO TAG; NO RELEASE; NO PUBLISH; NO DEPLOY.
+
+UNRESOLVED: complete end-to-end evidence is still required for absent Gemma, unqualified Claude/Gemini and configuration-required OpenAI wording variants.
+
+TIMESTAMP: 2026-09-01
+
 ## P4 — NATURAL Provider UX
 
 MISSION: NATURAL Qualified Provider Activation Coordinator
