@@ -280,17 +280,16 @@ function formatProviderStatus(
   language = 'pt-BR'
 ) {
   const english = isEnglish(language);
-  if (
-    discovery &&
-    discovery.available === true
-  ) {
+  if (discovery && discovery.available === true) {
+    const execution = discovery.local === false ? 'remote' : 'local';
+    const state = discovery.state || 'AVAILABLE';
     if (english) {
       return (
         'Current cognitive assistant:\n' +
         `  Provider: ${discovery.provider}\n` +
         `  Model: ${discovery.model}\n` +
-        '  Execution: local\n' +
-        '  State: verified and available\n' +
+        `  Execution: ${execution}\n` +
+        `  State: ${state}\n` +
         '  Operational authority of the AI: none\n\n' +
         'Compatible providers may replace this model without changing governance.\n'
       );
@@ -300,11 +299,13 @@ function formatProviderStatus(
       'Assistente cognitivo atual:\n' +
       `  Provider: ${discovery.provider}\n` +
       `  Modelo: ${discovery.model}\n` +
-      '  Execução: local\n' +
-      '  Aceleração: automática pelo Ollama (CPU/GPU)\n' +
-      '  Perfil: balanceado, contexto 4096, modelo aquecido por 10 minutos\n' +
-      '  Estado: verificado e disponível\n' +
-      '  Cobrança por chamada de API do Ollama local: não\n' +
+      `  Execução: ${execution}\n` +
+      (discovery.local === false ? '' : '  Aceleração: automática pelo Ollama (CPU/GPU)\n') +
+      (discovery.local === false ? '' : '  Perfil: balanceado, contexto 4096, modelo aquecido por 10 minutos\n') +
+      `  Estado: ${state}\n` +
+      (discovery.local === false
+        ? '  Custos: dependem dos termos atuais do provider externo\n'
+        : '  Cobrança por chamada de API do Ollama local: não\n') +
       '  Autoridade operacional da IA: nenhuma\n\n' +
       'Outros providers compatíveis podem substituir este modelo.\n' +
       'Providers externos podem cobrar diretamente conforme seus próprios planos e termos.\n' +
@@ -323,6 +324,25 @@ function formatProviderStatus(
     'O modo determinístico continua disponível.\n' +
     'Nenhum provider externo será selecionado automaticamente.\n'
       );
+}
+
+function formatProviderCatalog(states, language = 'pt-BR') {
+  if (!Array.isArray(states)) throw new Error('Provider states are required.');
+  const english = isEnglish(language);
+  const lines = states.map((item) =>
+    `  ${item.provider}/${item.model} — ${item.kind} — ${item.state}`
+  );
+  return (english ? 'Available cognitive providers:\n' : 'Providers cognitivos conhecidos:\n') +
+    lines.join('\n') + '\n' +
+    (english
+      ? 'No provider is activated from this list without physical validation.\n'
+      : 'Nenhum provider é ativado a partir desta lista sem validação física.\n');
+}
+
+function unsupportedProviderMessage(provider, language = 'pt-BR') {
+  return isEnglish(language)
+    ? `${provider} is recognized, but its adapter is not qualified. State: UNAVAILABLE. No provider was activated.\n`
+    : `${provider} é reconhecido, mas seu adapter ainda não é qualificado. Estado: UNAVAILABLE. Nenhum provider foi ativado.\n`;
 }
 
 function createNaturalSessionControl(
@@ -723,6 +743,19 @@ function createNaturalSessionControl(
       });
     }
 
+    if (includesAny(text, [
+      'quais ias estao disponiveis',
+      'quais providers estao disponiveis',
+      'which ai providers are available',
+      'which ais are available',
+      'which providers are available'
+    ])) {
+      return Object.freeze({
+        matched: true,
+        action: 'PROVIDER_LIST'
+      });
+    }
+
     const localModelSelection =
       text.match(
         /^(?:usar|use|ativar|ative|selecionar|selecione) (qwen3(?::8b)?|qwen|gemma3(?::4b)?|gemma)$/
@@ -741,6 +774,19 @@ function createNaturalSessionControl(
           'LOCAL_MODEL_SELECTION',
         model:
           requested
+      });
+    }
+
+    if (includesAny(text, [
+      'volte para a ia local',
+      'voltar para a ia local',
+      'switch back to local ai',
+      'switch back to local'
+    ])) {
+      return Object.freeze({
+        matched: true,
+        action: 'LOCAL_MODEL_SELECTION',
+        model: 'qwen3:8b'
       });
     }
 
@@ -784,6 +830,9 @@ function createNaturalSessionControl(
           'conectar codex',
           'usar openai',
           'quero usar openai',
+          'usar gpt',
+          'quero usar gpt',
+          'use gpt',
           'i want to use codex',
           'use codex',
           'connect codex',
@@ -798,6 +847,14 @@ function createNaturalSessionControl(
         providerId: 'openai:gpt-5.6',
         output: codexSetupGuide(language)
       });
+    }
+
+    if (includesAny(text, ['usar claude', 'use claude', 'quero usar claude', 'usar anthropic', 'use anthropic'])) {
+      return Object.freeze({ matched: true, action: 'UNAVAILABLE_PROVIDER', providerId: 'anthropic:claude', output: unsupportedProviderMessage('Claude', language) });
+    }
+
+    if (includesAny(text, ['usar gemini', 'use gemini', 'quero usar gemini', 'usar google', 'use google'])) {
+      return Object.freeze({ matched: true, action: 'UNAVAILABLE_PROVIDER', providerId: 'google:gemini', output: unsupportedProviderMessage('Gemini', language) });
     }
 
     if (
@@ -939,6 +996,7 @@ module.exports =
     providerSetupOverview,
     codexSetupGuide,
     formatProviderStatus,
+    formatProviderCatalog,
     isNaturalMissionCancellationRequest,
     createNaturalSessionControl
   });

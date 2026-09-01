@@ -59,6 +59,7 @@ const {
 const {
   createNaturalSessionControl,
   formatProviderStatus,
+  formatProviderCatalog,
   isNaturalMissionCancellationRequest
 } = require('./natural-session-control');
 
@@ -1811,6 +1812,26 @@ function createInteractiveSession(
                   output.write(
                     formatProviderStatus(
                       discovery,
+                      activation.language
+                    )
+                  );
+                }
+              } else if (
+                controlled.action ===
+                  'PROVIDER_LIST'
+              ) {
+                if (!cognitiveSession || typeof cognitiveSession.describeProviders !== 'function') {
+                  output.write(
+                    humanText(
+                      activation,
+                      'A lista de providers está indisponível. Nenhuma alteração foi realizada.\n',
+                      'The provider list is unavailable. No change was made.\n'
+                    )
+                  );
+                } else {
+                  output.write(
+                    formatProviderCatalog(
+                      await cognitiveSession.describeProviders(),
                       activation.language
                     )
                   );

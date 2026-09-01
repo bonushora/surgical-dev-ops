@@ -4,6 +4,7 @@ const assert = require('node:assert/strict');
 const crypto = require('node:crypto');
 const test = require('node:test');
 const { createNaturalCognitiveSession } = require('../../accelerator/cli/natural-cognitive-session');
+const { createNaturalSessionControl, formatProviderStatus } = require('../../accelerator/cli/natural-session-control');
 const {
   createNaturalAgenticMission,
   projectMissionAuthority
@@ -144,4 +145,30 @@ test('remote-to-local substitution preserves the governed mission authority enve
   assert.equal(after.operationalAuthority, false);
   assert.equal(after.mutationAuthority, false);
   assert.deepEqual(local.mission.binding, mission.binding);
+});
+
+test('NATURAL provider intents are bilingual and truthful for qualified and unqualified providers', () => {
+  const pt = createNaturalSessionControl({ language: 'pt-BR' });
+  const en = createNaturalSessionControl({ language: 'en' });
+  assert.equal(pt.handle('Quais IAs estão disponíveis?').action, 'PROVIDER_LIST');
+  assert.equal(en.handle('Which AI providers are available?').action, 'PROVIDER_LIST');
+  assert.equal(pt.handle('Use GPT.').action, 'FRONTIER_PROVIDER_SETUP');
+  assert.equal(en.handle('Use OpenAI.').action, 'FRONTIER_PROVIDER_SETUP');
+  const claude = pt.handle('Use Claude.');
+  const gemini = en.handle('Use Gemini.');
+  assert.equal(claude.action, 'UNAVAILABLE_PROVIDER');
+  assert.equal(gemini.action, 'UNAVAILABLE_PROVIDER');
+  assert.match(claude.output, /UNAVAILABLE|não.*qualificado/i);
+  assert.match(gemini.output, /UNAVAILABLE|not qualified/i);
+  assert.equal(pt.handle('Volte para a IA local.').model, 'qwen3:8b');
+});
+
+test('provider status presents remote ACTIVE without falsely calling it local', () => {
+  const output = formatProviderStatus(Object.freeze({
+    provider: 'OpenAI', model: 'gpt-5.6', local: false, available: true,
+    active: true, state: 'ACTIVE', operationalAuthority: false
+  }), 'en');
+  assert.match(output, /Execution: remote/);
+  assert.match(output, /State: ACTIVE/);
+  assert.doesNotMatch(output, /Execution: local/);
 });

@@ -58,6 +58,11 @@ const {
 } = require('../core/natural-agentic-mission');
 
 const {
+  PROVIDER_CATALOG,
+  deriveProviderState
+} = require('./natural-provider-activation-coordinator');
+
+const {
   OPENAI_FRONTIER_PROFILE
 } = require('./natural-frontier-provider-registry');
 
@@ -802,6 +807,17 @@ function createNaturalCognitiveSession(
     return current.discovery;
   }
 
+  async function describeProviders() {
+    const current = await state();
+    return Object.freeze(Object.keys(PROVIDER_CATALOG).map((providerId) => {
+      const active = current.discovery.providerId === providerId;
+      const evidence = current.discovery.local === false && active
+        ? { configured: true, validated: current.discovery.available === true, active: current.discovery.active === true }
+        : { available: active && current.discovery.available === true, active };
+      return deriveProviderState(providerId, evidence);
+    }));
+  }
+
   async function selectLocalModel(model) {
     const options = arguments.length > 1 && arguments[1] && typeof arguments[1] === 'object'
       ? arguments[1]
@@ -944,6 +960,7 @@ function createNaturalCognitiveSession(
     decideEvidence,
     proposePatch,
     describe,
+    describeProviders,
     selectLocalModel,
     activateOpenAIProvider,
     rememberExchange,
