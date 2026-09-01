@@ -88,7 +88,15 @@ test('ADR-025 manifest binds the public green baseline and immutable protocol by
     canonicalTestsFailed: 0,
     canonicalTestsSkipped: 5,
     packageDryRun: 'surgical-dev-ops@2.6.0-rc.6',
-    manualAcceptance: 'REQUIRES_RETEST'
+    checkpointTested: 'c151aee95d4639209942b6ed27fb25a1d76df8ff',
+    cancellationRequest: 'cancele esta missão',
+    cancellationRouting: 'DETERMINISTIC',
+    statusProjectionState: 'CANCELLED',
+    resumeOutcome: 'REFUSED_TERMINAL_CANCELLED_MISSION',
+    projectionAuthority: 'none',
+    providerOperationalSuccessClaimInvolved: false,
+    runtimeMutationDuringFinalEvidenceRecording: false,
+    manualAcceptance: 'GREEN'
   });
   assert.match(
     manifest.localAgenticGatewayBaseline.scope,

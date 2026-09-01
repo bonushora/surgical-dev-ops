@@ -27,7 +27,7 @@ claims that remain unqualified.
 | Counterexample #3 adjacent authority/state/provider suite | 184 tests passed; zero failures; zero skips |
 | Counterexample #3 adversarial/UX suite | 142 tests passed; zero failures; zero skips |
 | Package dry run | `npm pack --dry-run --json` completed for `surgical-dev-ops@2.6.0-rc.6` |
-| Manual acceptance | The failed scenario requires human re-test on the new qualified local checkpoint; no push, tag, release, or publication authorized |
+| Final manual acceptance | **GREEN** at tested checkpoint `c151aee95d4639209942b6ed27fb25a1d76df8ff`; no push, tag, release, or publication authorized |
 | Scope | Persistent NATURAL mission state, integrated governed agent gateway, conversational projections, no-copy/paste governed tool slices, and NATURAL semantic objective repair |
 
 The local implementation adds a persistent governed NATURAL mission model with
@@ -104,6 +104,17 @@ clears pending authorization, projects the resulting state, and rejects resume
 of a cancelled mission. Provider invocation, filesystem mutation, Git, CAS,
 network, release and publication authority remain absent. Human acceptance must
 re-test cancellation, `/status` and `/resume` through the real CLI.
+
+That required real-CLI re-test was completed at checkpoint
+`c151aee95d4639209942b6ed27fb25a1d76df8ff`. The request
+`cancele esta missão` crossed deterministic session control without a model or
+provider operational-success claim and immediately projected `CANCELLED`.
+`/status` physically preserved `CANCELLED`; `/resume` refused the terminal
+cancelled mission and left it `CANCELLED`; every projection reported
+`Projection authority: none`. The physical acceptance session made no runtime
+or governed workspace mutation. This evidence-only record changes no runtime
+code, provider configuration, or authority class. **FINAL MANUAL ACCEPTANCE:
+GREEN.**
 
 ## ADR-034 governed workspace closure checkpoint
 

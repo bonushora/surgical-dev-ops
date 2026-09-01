@@ -77,12 +77,34 @@ completed for `surgical-dev-ops@2.6.0-rc.6`.
 
 `FINAL MANUAL ACCEPTANCE: REQUIRES RE-TEST`
 
-## Final v2.6 engineering-closure gate — PENDING HUMAN ACCEPTANCE
+## Final v2.6 engineering-closure gate — GREEN
 
-Automated adversarial and canonical GREEN do not complete this gate. After the
-qualified local checkpoint, a human operator must run the real `surgical`
-interface from that exact checkpoint. Do not push, tag, release, or publish
-before this session is recorded as GREEN.
+The human operator completed the required real `surgical` session from tested
+checkpoint `c151aee95d4639209942b6ed27fb25a1d76df8ff`.
+
+- `cancele esta missão` routed through deterministic session control and
+  immediately projected `State: CANCELLED`.
+- `/status` physically showed the same mission and HEAD with `State: CANCELLED`.
+- `/resume` refused the terminal cancelled mission and preserved
+  `State: CANCELLED`.
+- Every observed projection reported `Projection authority: none`.
+- No model or provider operational-success claim participated in cancellation.
+- The physical acceptance session made no runtime or governed workspace
+  mutation; this evidence-only record changes no runtime code, provider
+  configuration, or authority class.
+
+The previously recorded manual evidence also remains GREEN for semantic
+project-state routing, governed evidence acquisition and explicit handoff, the
+qualified 180-second local provider deadline, grounded project analysis and
+ROADMAP-backed next-work recommendation, mission projections, bounded
+`package.json` reading, unauthorized-push refusal without authority leakage, and
+the visible distinction between deterministic and provider work.
+
+`FINAL MANUAL ACCEPTANCE: GREEN`
+
+The acceptance procedure used to reach this gate is retained below as
+historical, reproducible evidence. No push, tag, release, npm publication, or
+deployment is authorized by this record.
 
 Use ordinary requests; do not mention internal evidence-routing phrases merely
 to activate project grounding.

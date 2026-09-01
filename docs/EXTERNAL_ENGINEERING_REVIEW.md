@@ -7,6 +7,7 @@
 | Local integrated NATURAL gateway qualification | ADR-036 + ADR-037 on `release/v2.6.0-rc.6` |
 | NATURAL default checkpoint | `9ed86a443da18f923b60692d7446f1fd57d0a2da` |
 | Local suite | 1212 discovered; 1207 PASS; 0 FAIL; 5 platform SKIP |
+| Final manual acceptance | **GREEN** at tested checkpoint `c151aee95d4639209942b6ed27fb25a1d76df8ff` |
 | Historical second-counterexample checkpoint | `13093b76a51d0fbf2886cdf00bef68e3547d75c4`: 1210 discovered; 1205 PASS; 0 FAIL; 5 platform SKIP |
 | Historical first-counterexample checkpoint | `38904d79b61436a23b44eb2432a049415bb30795`: 1209 discovered; 1204 PASS; 0 FAIL; 5 platform SKIP |
 | Historical semantic-routing checkpoint | `4a901069accf4c57f3bbb2f4a46dae26cdee2561`: 1206 discovered; 1201 PASS; 0 FAIL; 5 platform SKIP |
@@ -53,6 +54,13 @@ event before provider fallback. The regression proves zero provider calls,
 state-backed status, cleared pending authority and terminal resume refusal. No
 new lifecycle, tool, provider or authority class was added; human acceptance
 must re-test the real CLI.
+
+The required physical re-test was completed at repair checkpoint
+`c151aee95d4639209942b6ed27fb25a1d76df8ff`. Natural cancellation routed
+deterministically with no provider operational-success claim; `/status` showed
+`CANCELLED`; `/resume` refused the terminal cancelled mission; and projection
+authority remained `none`. This final evidence record changes no runtime,
+provider configuration, or authority class. **FINAL MANUAL ACCEPTANCE: GREEN.**
 
 ## Historical v2.5.1 package
 
