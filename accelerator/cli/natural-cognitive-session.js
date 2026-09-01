@@ -11,6 +11,7 @@ const {
 
 const {
   createNaturalLocalAIComposition,
+  createNaturalOpenAIComposition,
   invokeNaturalCognitive
 } = require(
   './natural-ai-runtime'
@@ -46,6 +47,10 @@ const {
 } = require(
   './natural-response-language'
 );
+
+const {
+  OPENAI_FRONTIER_PROFILE
+} = require('./natural-frontier-provider-registry');
 
 const MAX_PRESENTED_TEXT =
   6000;
@@ -254,6 +259,22 @@ function fallbackMessage(discovery) {
     'O modo determinístico continua ativo.\n' +
     'Nenhuma alteração foi realizada.\n'
   );
+}
+
+function remoteDiscovery(state, reason, available = false) {
+  return Object.freeze({
+    schema: 'sdo.natural_provider_discovery.v1',
+    providerId: OPENAI_FRONTIER_PROFILE.providerId,
+    provider: OPENAI_FRONTIER_PROFILE.provider,
+    model: OPENAI_FRONTIER_PROFILE.model,
+    local: false,
+    available,
+    active: state === 'ACTIVE',
+    cognitiveAuthority: true,
+    operationalAuthority: false,
+    state,
+    reason
+  });
 }
 
 function createNaturalCognitiveSession(
@@ -783,6 +804,63 @@ function createNaturalCognitiveSession(
     return discovery;
   }
 
+  async function activateOpenAIProvider(input = {}) {
+    if (
+      typeof input.transport !== 'function' &&
+      (typeof input.fetchImplementation !== 'function' ||
+       typeof input.credentialProvider !== 'function')
+    ) {
+      return remoteDiscovery(
+        'CONFIGURATION_REQUIRED',
+        'OpenAI provider configuration is required.'
+      );
+    }
+
+    let composition;
+    try {
+      composition = createNaturalOpenAIComposition(input);
+    } catch {
+      return remoteDiscovery(
+        'CONFIGURATION_REQUIRED',
+        'OpenAI provider configuration is unavailable.'
+      );
+    }
+
+    let validation;
+    try {
+      validation = await composition.runtime.invoke({
+        providerId: composition.providerId,
+        requestId: 'natural-openai-validation-' + crypto.randomUUID(),
+        capability: 'EXPLAIN',
+        objective: 'Return only JSON with response equal to VALIDATION_OK.',
+        context: { validation: 'CONNECTION_AND_COMPATIBILITY_ONLY' }
+      });
+    } catch {
+      return remoteDiscovery(
+        'UNAVAILABLE',
+        'OpenAI provider validation failed safely.'
+      );
+    }
+
+    if (!validation || validation.status !== 'COMPLETED') {
+      return remoteDiscovery(
+        'UNAVAILABLE',
+        'OpenAI provider validation did not complete.'
+      );
+    }
+
+    statePromise = Promise.resolve(Object.freeze({
+      discovery: remoteDiscovery(
+        'ACTIVE',
+        'OpenAI provider connection and compatibility were verified.',
+        true
+      ),
+      composition
+    }));
+    conversationalRuntime.reset();
+    return (await state()).discovery;
+  }
+
   function rememberExchange(user, assistant) {
     conversationalRuntime.rememberExchange(
       user,
@@ -807,6 +885,7 @@ function createNaturalCognitiveSession(
     proposePatch,
     describe,
     selectLocalModel,
+    activateOpenAIProvider,
     rememberExchange,
     conversationState,
     resetConversation
