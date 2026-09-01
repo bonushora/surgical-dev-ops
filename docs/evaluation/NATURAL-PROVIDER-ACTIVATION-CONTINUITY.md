@@ -135,3 +135,34 @@ AUTHORITY_REMAINING: local mutation/test/checkpoint only; NO PUSH; NO MERGE; NO 
 UNRESOLVED: remote activation currently accepts only already-governed invocation context; P3 must prove sensitive-content mediation and mission substitution end to end.
 
 TIMESTAMP: 2026-09-01
+
+## P5 — Qualification
+
+MISSION: NATURAL Qualified Provider Activation Coordinator
+
+BASE_SHA: `2bb3b0d53acd50928893719ca760a83f71e0281c`
+
+CURRENT_SHA: `96d2e015f2aee5ce1da34dc93e6ef38c8298d171`
+
+MILESTONE: P5
+
+MILESTONE_STATUS: GREEN
+
+FILES_CHANGED: all changes from BASE_SHA are limited to the coordinator runtime, NATURAL session/control/CLI integration, two provider activation test files, and this continuity record.
+
+TESTS_EXECUTED:
+
+- `node --test tests/accelerator/natural-provider-activation-coordinator.test.js tests/accelerator/natural-provider-activation.test.js`
+- `node --test tests/accelerator/natural-*.test.js` (unchanged; bounded permission used for temporary Git fixtures)
+- `npm test` (`node --test tests/accelerator/*.test.js`)
+- `git diff --check`
+
+TEST_RESULTS: new coordinator 15/15 passed; NATURAL subsystem 338/338 passed; canonical 1227 total, 1222 passed, 0 failed, 5 permitted Windows-only skips; diff check passed.
+
+NEXT_MILESTONE: REMOTE_QUALIFICATION_BOUNDARY
+
+AUTHORITY_REMAINING: local mutation/test/checkpoint only; NO PUSH; NO MERGE; NO TAG; NO RELEASE; NO PUBLISH; NO DEPLOY.
+
+UNRESOLVED: no local unresolved qualification failure; remote qualification requires separate explicit push authority.
+
+TIMESTAMP: 2026-09-01
