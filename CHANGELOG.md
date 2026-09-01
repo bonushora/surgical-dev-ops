@@ -2,6 +2,14 @@
 
 ## Unreleased
 
+- Repair NATURAL semantic routing so project state, health, architecture,
+  readiness, and next-engineering-work objectives use bounded governed project
+  evidence instead of terminating on Git cleanliness. Preserve the status fast
+  path for questions that specifically ask about local changes.
+- Add evidence-grounding and progressive-usefulness regressions for compound
+  project analysis: real Orchestrator evidence, provider cognition, and final
+  synthesis are visibly distinct; partial truthful facts do not qualify as
+  semantic completion.
 - Implement and qualify ADR-034 deterministic governed workspace sessions,
   bounded discovery, sensitive evidence filtering, qualified validation
   catalog, audit chaining and the NATURAL workspace experience projection.

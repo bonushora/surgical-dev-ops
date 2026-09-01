@@ -138,10 +138,23 @@ function createEvaluationScenario({
     requiredConcepts.length < 2 ||
     requiredConcepts.length > 8 ||
     requiredConcepts.some(
-      (entry) =>
-        typeof entry !== 'string' ||
-        !entry.trim() ||
-        entry.length > 80
+      (entry) => {
+        const alternatives =
+          Array.isArray(entry)
+            ? entry
+            : [entry];
+
+        return (
+          alternatives.length < 1 ||
+          alternatives.length > 8 ||
+          alternatives.some(
+            (alternative) =>
+              typeof alternative !== 'string' ||
+              !alternative.trim() ||
+              alternative.length > 80
+          )
+        );
+      }
     )
   ) {
     throw new Error(
@@ -164,7 +177,10 @@ function createEvaluationScenario({
       ),
     requiredConcepts:
       requiredConcepts.map(
-        (entry) => entry.trim()
+        (entry) =>
+          Array.isArray(entry)
+            ? [...new Set(entry.map((alternative) => alternative.trim()))]
+            : entry.trim()
       ),
     minimumResponseCharacters:
       requireBoundedInteger(
@@ -295,10 +311,19 @@ function scoreObservation(
 
   const conceptMatches =
     scenario.requiredConcepts.filter(
-      (concept) =>
-        normalizedResponse.includes(
-          concept.toLocaleLowerCase('en')
-        )
+      (concept) => {
+        const alternatives =
+          Array.isArray(concept)
+            ? concept
+            : [concept];
+
+        return alternatives.some(
+          (alternative) =>
+            normalizedResponse.includes(
+              alternative.toLocaleLowerCase('en')
+            )
+        );
+      }
     ).length;
 
   const groundingPassed =

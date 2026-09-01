@@ -27,8 +27,15 @@ The report measures:
 - language equivalence;
 - canonical evidence target grounding;
 - response completeness;
-- required project concepts;
+- required project concepts, with bounded semantic alternatives rather than
+  exact response prose;
 - absence of operational and mutation authority.
+
+The NATURAL UX acceptance regression additionally scores the compound objective
+“project state + next engineering work.” A clean-worktree statement remains a
+truthful partial fact, but it fails that compound objective because it does not
+cover either required semantic dimension. The regression also requires the
+governed roadmap target before the response can satisfy grounding.
 
 A failed latency or quality target remains an explicit failed result. The harness
 does not alter a provider, retry a task, execute an operation, or manufacture a

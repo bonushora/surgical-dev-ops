@@ -6,7 +6,7 @@
 | --- | --- |
 | Local integrated NATURAL gateway qualification | ADR-036 + ADR-037 on `release/v2.6.0-rc.6` |
 | NATURAL default checkpoint | `9ed86a443da18f923b60692d7446f1fd57d0a2da` |
-| Local suite | 1202 discovered; 1197 PASS; 0 FAIL; 5 platform SKIP |
+| Local suite | 1206 discovered; 1201 PASS; 0 FAIL; 5 platform SKIP |
 | Local governed workspace checkpoint | `f56750eba3aa07b0426f56021c072a280468ea98` |
 | ADR-034 implementation start | `2f8d9e1aa40d0d7a127e966a28e475e0f89c4bb0` |
 | Source baseline | `a3a4e2941914f14457ed1932ea4024fc495bfff1` |
@@ -102,6 +102,7 @@ engineering loop all carry zero approval and mutation authority.
 | Stale or substituted BEFORE hash | Reject evidence binding | `governed-engineering-agent-loop.test.js` |
 | Evidence planner fails | No proposal call and no continuation | `governed-engineering-agent-loop.test.js` |
 | Model responds without evidence | Fail closed | `natural-cli-async-session.test.js` |
+| Broad project analysis returns only worktree cleanliness | Reject semantic completion and continue through governed project evidence | `natural-ux-acceptance-invariants.test.js` |
 | Conversational approval | Authorizes bounded evidence only | `natural-session-control.test.js` |
 | Provider unavailable | Deterministic fallback; no mutation | `natural-cognitive-session.test.js` |
 | R1/R2 mutation attempt | Zero physical dispatch | Orchestrator and capability tests |

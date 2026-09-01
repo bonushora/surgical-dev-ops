@@ -13,9 +13,10 @@ claims that remain unqualified.
 | Local implementation state | `release/v2.6.0-rc.6` worktree after ADR-036/ADR-037 runtime integration |
 | NATURAL default checkpoint | `9ed86a443da18f923b60692d7446f1fd57d0a2da` |
 | ADR freeze checkpoint | `dee764f7ac39ba0de16be6056cc2706ad629e99f` |
-| Local canonical suite | 1202 tests discovered; 1197 passed; zero failures; 5 explicit platform skips |
+| Local canonical suite | 1206 tests discovered; 1201 passed; zero failures; 5 explicit platform skips |
 | Package dry run | `npm pack --dry-run --json` completed for `surgical-dev-ops@2.6.0-rc.6` |
-| Scope | Persistent NATURAL mission state, integrated governed agent gateway, conversational projections and no-copy/paste governed tool slices |
+| Manual acceptance | Pending on the qualified local checkpoint; no push, tag, release, or publication authorized |
+| Scope | Persistent NATURAL mission state, integrated governed agent gateway, conversational projections, no-copy/paste governed tool slices, and NATURAL semantic objective repair |
 
 The local implementation adds a persistent governed NATURAL mission model with
 explicit state, live plan, hash-chained event stream, mission projections,
@@ -38,6 +39,17 @@ streams real progress before long operations complete, normalizes large evidence
 before cognition, exposes local deterministic fast paths for mission/status
 views, and records latency trace boundaries without fabricating percentages or
 success.
+
+The NATURAL semantic acceptance repair distinguishes project state, engineering
+health, architecture, readiness, and next-work objectives from repository
+cleanliness. Compound analysis now reaches the existing bounded project-evidence
+path and deterministically prefers available project-description,
+engineering-state, and roadmap evidence before synthesis. The provider contract
+must cover every requested semantic objective, ground project-specific claims,
+and preserve uncertainty. Progress exposes real Orchestrator evidence,
+provider-cognition, and synthesis transitions. The dedicated regression rejects
+a clean-worktree-only answer as incomplete for a project-state-and-next-work
+objective.
 
 ## ADR-034 governed workspace closure checkpoint
 

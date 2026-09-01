@@ -1419,6 +1419,17 @@ function createInteractiveSession(
                         onProgress(progress) {
                           if (
                             progress.stage ===
+                              'GOVERNED_EVIDENCE_STARTED'
+                          ) {
+                            output.write(
+                              humanText(
+                                activation,
+                                `Etapa ${progress.step}: obtendo evidência governada pelo Orchestrator (${progress.detail}); aguardando resultado determinístico...\n`,
+                                `Step ${progress.step}: obtaining governed evidence through the Orchestrator (${progress.detail}); awaiting deterministic result...\n`
+                              )
+                            );
+                          } else if (
+                            progress.stage ===
                               'EVIDENCE_OBTAINED'
                           ) {
                             const evidenceLabel =
@@ -1445,6 +1456,28 @@ function createInteractiveSession(
                                 activation,
                                 `Etapa ${progress.step}: ${evidenceLabel}; continuando...\n`,
                                 `Step ${progress.step}: ${evidenceLabel}; continuing...\n`
+                              )
+                            );
+                          } else if (
+                            progress.stage ===
+                              'PROVIDER_COGNITION_STARTED'
+                          ) {
+                            output.write(
+                              humanText(
+                                activation,
+                                'Evidências governadas disponíveis; aguardando a análise cognitiva do provider...\n',
+                                'Governed evidence is available; awaiting provider cognition...\n'
+                              )
+                            );
+                          } else if (
+                            progress.stage ===
+                              'SYNTHESIS_COMPLETED'
+                          ) {
+                            output.write(
+                              humanText(
+                                activation,
+                                'Síntese cognitiva concluída; preparando a resposta delimitada...\n',
+                                'Cognitive synthesis completed; preparing the bounded response...\n'
                               )
                             );
                           }
@@ -1497,8 +1530,8 @@ function createInteractiveSession(
                       recursive.response.trim() +
                       humanText(
                         activation,
-                        `\n\nA resposta foi fundamentada em evidências governadas do projeto. Concluída em ${elapsedSeconds}s. Nenhum arquivo foi alterado.\n`,
-                        `\n\nThe response was grounded in governed project evidence. Completed in ${elapsedSeconds}s. No file was changed.\n`
+                        `\n\nForam fornecidas à síntese ${recursive.evidence.length} evidências governadas do projeto. Inferências e recomendações permanecem cognitivas. Concluída em ${elapsedSeconds}s. Nenhum arquivo foi alterado.\n`,
+                        `\n\nThe synthesis received ${recursive.evidence.length} governed project evidence observations. Inferences and recommendations remain cognitive. Completed in ${elapsedSeconds}s. No file was changed.\n`
                       )
                     );
 

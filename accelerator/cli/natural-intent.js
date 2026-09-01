@@ -41,38 +41,41 @@ function interpretNaturalIntent(input) {
   }
 
   /*
-   * Repository-state questions intentionally resolve to
-   * WORKTREE_STATUS at this frontier.
-   *
-   * Broader repository summaries may later compose multiple
-   * governed R0 reads, but must not silently broaden authority.
+   * Only questions whose semantic objective is repository
+   * cleanliness resolve to WORKTREE_STATUS here. Project state,
+   * health, readiness, architecture, and next-work analysis need
+   * broader governed evidence and must continue through the
+   * governed-task path instead of terminating on a clean worktree.
    */
   if (
     includesAny(
       text,
       [
-        'estado atual deste repositorio',
-        'estado atual do repositorio',
-        'estado deste repositorio',
-        'estado do repositorio',
-        'estado atual deste projeto',
-        'estado atual do projeto',
-        'estado deste projeto',
-        'estado do projeto',
-        'qual e o estado atual deste projeto',
-        'qual o estado atual deste projeto',
-        'current state of this project',
-        'current project state',
-        'what is the current state of this project',
         'status deste repositorio',
         'status do repositorio',
-        'como esta este repositorio',
-        'como esta o repositorio',
         'ha alteracoes no repositorio',
         'tem alteracoes no repositorio',
         'existem alteracoes no repositorio',
+        'ha alteracoes locais',
+        'tem alteracoes locais',
+        'existem alteracoes locais',
         'arquivos alterados',
-        'mudancas pendentes'
+        'alteracoes pendentes',
+        'mudancas pendentes',
+        'alteracoes nao commitadas',
+        'mudancas nao commitadas',
+        'worktree limpo',
+        'repositorio limpo',
+        'repository status',
+        'are there changes in the repository',
+        'are there local changes',
+        'are there uncommitted local changes',
+        'any local changes',
+        'any uncommitted changes',
+        'modified files',
+        'pending changes',
+        'is the worktree clean',
+        'is the repository clean'
       ]
     )
   ) {

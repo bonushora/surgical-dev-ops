@@ -373,7 +373,7 @@ test('session help exposes governed patch without exposing generic execution', (
   );
 });
 
-test('NATURAL maps bounded repository-state question to governed Git status intent', () => {
+test('NATURAL does not terminate a broad repository-state question on Git status', () => {
   const state =
     activation('NATURAL');
 
@@ -385,21 +385,11 @@ test('NATURAL maps bounded repository-state question to governed Git status inte
 
   assert.equal(
     result.action,
-    'DISPATCH'
+    'COGNITIVE'
   );
 
-  assert.deepEqual(
-    result.intent,
-    {
-      capabilityType: 'GIT_READ',
-      target: 'status'
-    }
-  );
-
-  assert.equal(
-    result.presentation,
-    'REPOSITORY_STATUS'
-  );
+  assert.equal(result.cognitiveInput, 'Qual é o estado atual deste repositório?');
+  assert.equal('intent' in result, false);
 });
 
 test('NATURAL maps bounded branch question without changing governance authority', () => {

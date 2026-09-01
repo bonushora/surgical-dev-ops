@@ -25,27 +25,20 @@ const {
 );
 
 test(
-  'PT and English project-state questions route to governed Git evidence',
+  'PT and English project-state questions continue to governed project analysis',
   () => {
     for (const input of [
       'Qual é o estado atual deste projeto?',
       'What is the current state of this project?'
     ]) {
-      const result =
+      const fastPath =
         interpretNaturalIntent(input);
 
-      assert.equal(result.matched, true);
-      assert.deepEqual(
-        result.intent,
-        {
-          capabilityType: 'GIT_READ',
-          target: 'status'
-        }
-      );
-      assert.equal(
-        result.presentation,
-        'REPOSITORY_STATUS'
-      );
+      assert.equal(fastPath.matched, false);
+
+      const task = detectNaturalGovernedTask(input);
+      assert.equal(task.kind, 'PROJECT_ANALYSIS');
+      assert.equal(task.mutating, false);
     }
   }
 );

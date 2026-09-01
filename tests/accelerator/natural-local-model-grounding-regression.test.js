@@ -191,6 +191,21 @@ test(
       /WORKSPACE_FILES sozinho não basta/i
     );
 
+    assert.match(
+      observedObjective,
+      /fato parcial verdadeiro.*limpeza do worktree.*não conclui/i
+    );
+
+    assert.match(
+      observedObjective,
+      /afirmação específica.*suportável pela evidência governada/i
+    );
+
+    assert.match(
+      observedObjective,
+      /fatos observados, inferências e recomendações/i
+    );
+
     assert.ok(
       observedObjective.length <
         11000

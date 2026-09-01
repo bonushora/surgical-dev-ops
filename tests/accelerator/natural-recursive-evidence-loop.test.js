@@ -1112,10 +1112,14 @@ test(
       progress.map((item) => item.stage),
       [
         'PLANNING_EVIDENCE',
+        'GOVERNED_EVIDENCE_STARTED',
         'EVIDENCE_OBTAINED',
         'PLANNING_EVIDENCE',
+        'GOVERNED_EVIDENCE_STARTED',
         'EVIDENCE_OBTAINED',
         'PLANNING_EVIDENCE',
+        'PROVIDER_COGNITION_STARTED',
+        'SYNTHESIS_COMPLETED',
         'COMPLETED'
       ]
     );

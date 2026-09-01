@@ -841,6 +841,36 @@ test(
       /evidências governadas do projeto/i
     );
 
+    assert.match(
+      observed,
+      /foram fornecidas à síntese 2 evidências governadas/i
+    );
+
+    assert.match(
+      observed,
+      /inferências e recomendações permanecem cognitivas/i
+    );
+
+    assert.doesNotMatch(
+      observed,
+      /a resposta foi fundamentada/i
+    );
+
+    assert.match(
+      observed,
+      /obtendo evidência governada pelo Orchestrator/i
+    );
+
+    assert.match(
+      observed,
+      /aguardando a análise cognitiva do provider/i
+    );
+
+    assert.match(
+      observed,
+      /síntese cognitiva concluída.*resposta delimitada/i
+    );
+
     assert.equal(
       histories.length,
       1

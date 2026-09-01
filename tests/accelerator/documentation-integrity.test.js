@@ -40,8 +40,8 @@ test('English and Portuguese entry points expose equivalent qualified baseline f
     '9ed86a443da18f923b60692d7446f1fd57d0a2da',
     '56da715284704f227675961d476e19acce6e9fa3',
     '33286652480',
-    '1202',
-    '1197',
+    '1206',
+    '1201',
     'POWER_LOSS_VALIDATED',
     'protocols/BH-SEP.md',
     'protocols/BH-SDP.md'
