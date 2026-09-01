@@ -51,6 +51,7 @@ Start with:
 - [ADR-035 — Qualified Local Inference Latency Contract Reconciliation](./adr/ADR-035-qualified-local-inference-latency-contract-reconciliation.md)
 - [ADR-036 — NATURAL Agentic Governed Experience](./adr/ADR-036-natural-agentic-governed-experience.md)
 - [ADR-037 — Integrated Governed Agent Gateway and Conversational Control Surface](./adr/ADR-037-integrated-governed-agent-gateway-and-conversational-control-surface.md)
+- [ADR-038 — NATURAL Supervised Autonomous Engineering](./adr/ADR-038-natural-supervised-autonomous-engineering.md)
 
 ## Manual acceptance
 
