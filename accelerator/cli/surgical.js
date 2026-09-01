@@ -1870,8 +1870,8 @@ function createInteractiveSession(
                     output.write(
                       humanText(
                         activation,
-                        `Não foi possível ativar ${controlled.model}: ${selected.reason}\nO modelo anterior e a governança foram preservados.\n`,
-                        `Could not activate ${controlled.model}: ${selected.reason}\nThe previous model and governance were preserved.\n`
+                        `Não foi possível ativar ${controlled.model}.\nEstado: ${selected.state || 'UNAVAILABLE'}.\nMotivo: ${selected.reason}\nO modelo anterior e a governança foram preservados.\n`,
+                        `Could not activate ${controlled.model}.\nState: ${selected.state || 'UNAVAILABLE'}.\nReason: ${selected.reason}\nThe previous model and governance were preserved.\n`
                       )
                     );
                   }

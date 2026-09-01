@@ -188,6 +188,7 @@ test(
 
     assert.equal(result.action, 'FRONTIER_PROVIDER_SETUP');
     assert.equal(result.providerId, 'openai:gpt-5.6');
+    assert.match(result.output, /CONFIGURATION_REQUIRED/);
 
     assert.match(
       result.output,

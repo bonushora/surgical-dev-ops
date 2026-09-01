@@ -253,6 +253,7 @@ function codexSetupGuide(language = 'pt-BR') {
     return (
       'Guided setup: OpenAI via API\n\n' +
       'The OpenAI Responses adapter is qualified, but it is never activated automatically.\n' +
+      'State: CONFIGURATION_REQUIRED.\n' +
       'A ChatGPT subscription and API usage are separate commercial relationships.\n\n' +
       'Before activation, Surgical DevOps must confirm current official terms, explain data exposure and costs, obtain explicit authorization, receive credentials only through the provider boundary, and verify compatibility.\n' +
       'Prices are not hardcoded. External charges are made by the provider, and Surgical DevOps receives no commission.\n\n' +
@@ -264,6 +265,7 @@ function codexSetupGuide(language = 'pt-BR') {
   return (
     'Configuração guiada: OpenAI via API\n\n' +
     'O adapter OpenAI Responses está qualificado, mas nunca é ativado automaticamente.\n' +
+    'Estado: CONFIGURATION_REQUIRED.\n' +
     'A assinatura do ChatGPT e o uso da API são relações comerciais distintas.\n\n' +
     'Para ativá-lo, seguirei estas etapas:\n' +
     '  1. confirmar explicitamente que você quer OpenAI via API;\n' +

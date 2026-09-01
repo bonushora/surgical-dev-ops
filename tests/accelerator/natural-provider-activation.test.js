@@ -54,6 +54,21 @@ test('non-selected local model state is physically discovered as AVAILABLE or UN
   );
 });
 
+test('absent Gemma fails closed and preserves the active Qwen session', async () => {
+  const session = createNaturalCognitiveSession({
+    fetchImplementation: async () => localInventory()
+  });
+  assert.equal((await session.describe()).model, 'qwen3:8b');
+
+  const result = await session.selectLocalModel('gemma3:4b');
+
+  assert.equal(result.state, 'UNAVAILABLE');
+  assert.equal(result.available, false);
+  assert.match(result.reason, /not installed/i);
+  assert.equal((await session.describe()).model, 'qwen3:8b');
+  assert.equal((await session.describe()).state, 'ACTIVE');
+});
+
 test('successful local substitution moves ACTIVE while preserving physical availability', async () => {
   const session = createNaturalCognitiveSession({
     fetchImplementation: async () => localInventory([

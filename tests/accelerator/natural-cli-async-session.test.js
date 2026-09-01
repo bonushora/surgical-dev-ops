@@ -130,6 +130,64 @@ test(
 );
 
 test(
+  'known unavailable or unconfigured provider requests never reach cognition',
+  async () => {
+    const input = new PassThrough();
+    const output = new PassThrough();
+    let observed = '';
+    let providerCalls = 0;
+    const selectedModels = [];
+
+    output.on('data', (chunk) => {
+      observed += chunk.toString();
+    });
+
+    cli.createInteractiveSession(
+      naturalActivation(),
+      {
+        input,
+        output,
+        terminal: false,
+        cognitiveSession: Object.freeze({
+          async ask() {
+            providerCalls += 1;
+            return 'UNEXPECTED_COGNITION\n';
+          },
+          async selectLocalModel(model) {
+            selectedModels.push(model);
+            return Object.freeze({
+              model,
+              available: false,
+              active: false,
+              state: 'UNAVAILABLE',
+              reason: 'Physical local inventory did not contain the model.'
+            });
+          }
+        })
+      }
+    );
+
+    input.end(
+      'Quero configurar a OpenAI via API.\n' +
+      'Ativar Claude.\n' +
+      'Quero configurar Gemini.\n' +
+      'Use Gemma.\n' +
+      'exit\n'
+    );
+
+    await new Promise((resolve) => setTimeout(resolve, 100));
+
+    assert.equal(providerCalls, 0);
+    assert.deepEqual(selectedModels, ['gemma3:4b']);
+    assert.match(observed, /CONFIGURATION_REQUIRED/);
+    assert.match(observed, /Claude.*UNAVAILABLE/is);
+    assert.match(observed, /Gemini.*UNAVAILABLE/is);
+    assert.match(observed, /Estado: UNAVAILABLE/);
+    assert.doesNotMatch(observed, /UNEXPECTED_COGNITION/);
+  }
+);
+
+test(
   'NATURAL terminal renders the shared bilingual experience projection',
   async () => {
     const input = new PassThrough();
