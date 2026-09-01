@@ -36,6 +36,43 @@ UNRESOLVED: OpenAI activation is not yet connected to the NATURAL session; P2 sc
 
 TIMESTAMP: 2026-09-01
 
+## P4.1 — Deterministic NATURAL Provider Intent Resolver Repair
+
+MISSION: NATURAL Qualified Provider Activation Manual-Acceptance Repair
+
+BASE_SHA: `bbd93ca86656bfdab0aa3ad38df6e9e484c7b9d3`
+
+CURRENT_SHA: `dea965a5a1d41c269800a15b502d237a5e43cfa3`
+
+MILESTONE: P4.1
+
+MILESTONE_STATUS: GREEN
+
+FILES_CHANGED:
+
+- `accelerator/cli/natural-provider-activation-coordinator.js`
+- `accelerator/cli/natural-session-control.js`
+- `tests/accelerator/natural-provider-activation-coordinator.test.js`
+- `tests/accelerator/natural-provider-activation.test.js`
+
+TESTS_EXECUTED:
+
+- `node tests/accelerator/natural-provider-activation-coordinator.test.js`
+- `node tests/accelerator/natural-provider-activation.test.js`
+- `node tests/accelerator/natural-session-control.test.js`
+- `node tests/accelerator/natural-local-model-grounding-regression.test.js`
+- `git diff --check`
+
+TEST_RESULTS: focused resolver/session/provider/grounding 42/42 passed; diff check passed.
+
+NEXT_MILESTONE: P4.2 — coherent provider state semantics
+
+AUTHORITY_REMAINING: bounded local repair, testing and checkpoint commits; remote delivery remains conditional on complete P5R GREEN and exact remote preconditions; NO MERGE; NO TAG; NO RELEASE; NO PUBLISH; NO DEPLOY.
+
+UNRESOLVED: active-provider detail and provider-list projections still require one physically grounded ACTIVE/AVAILABLE contract.
+
+TIMESTAMP: 2026-09-01
+
 ## P4 — NATURAL Provider UX
 
 MISSION: NATURAL Qualified Provider Activation Coordinator
