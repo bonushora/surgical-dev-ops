@@ -39,12 +39,30 @@
     "naturalDefaultCheckpoint": "9ed86a443da18f923b60692d7446f1fd57d0a2da",
     "adrFreezeCheckpoint": "dee764f7ac39ba0de16be6056cc2706ad629e99f",
     "workflow": "local npm test",
-    "testsDiscovered": 1206,
-    "testsPassed": 1201,
+    "testsDiscovered": 1209,
+    "testsPassed": 1204,
     "testsFailed": 0,
     "testsSkipped": 5,
     "packageDryRun": "npm pack --dry-run --json",
     "scope": "ADR-036 NATURAL agentic governed experience, ADR-037 integrated governed agent gateway, and feature-frozen NATURAL semantic objective repair"
+  },
+  "historicalSemanticRoutingCheckpoint": {
+    "commit": "4a901069accf4c57f3bbb2f4a46dae26cdee2561",
+    "testsDiscovered": 1206,
+    "testsPassed": 1201,
+    "testsFailed": 0,
+    "testsSkipped": 5
+  },
+  "manualCounterexampleRepair": {
+    "classification": "defect repair",
+    "focusedTestsPassed": 18,
+    "adversarialUxTestsPassed": 111,
+    "canonicalTestsDiscovered": 1209,
+    "canonicalTestsPassed": 1204,
+    "canonicalTestsFailed": 0,
+    "canonicalTestsSkipped": 5,
+    "packageDryRun": "surgical-dev-ops@2.6.0-rc.6",
+    "manualAcceptance": "REQUIRES_RETEST"
   },
   "protocols": {
     "BH-SEP-v2.2-sha256": "f4e8639163b0321fff86133a69ec59c2822ccdebcd24d2ccb459b5bc1c3b35cb",

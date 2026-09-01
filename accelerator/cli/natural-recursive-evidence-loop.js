@@ -766,7 +766,9 @@ async function runNaturalRecursiveEvidenceLoop(
           evidence,
 
           reason:
-            'Cognitive evidence planning failed safely.'
+            evidence.length > 0
+              ? 'Cognitive processing failed after qualified governed evidence was acquired.'
+              : 'Cognitive evidence planning failed before qualified governed evidence was acquired.'
         });
       }
     }

@@ -989,6 +989,100 @@ test(
 );
 
 test(
+  'NATURAL CLI reports provider failure separately after governed evidence acquisition',
+  async () => {
+    const input = new PassThrough();
+    const output = new PassThrough();
+    let observed = '';
+
+    output.on('data', (chunk) => {
+      observed += chunk.toString();
+    });
+
+    cli.createInteractiveSession(
+      naturalActivation(),
+      {
+        input,
+        output,
+        terminal: false,
+        cognitiveSession: Object.freeze({
+          async decideEvidence() {
+            throw new Error(
+              'provider failed after acquisition'
+            );
+          }
+        }),
+        dispatchEvidence(intent) {
+          if (intent.capabilityType === 'GIT_READ') {
+            return {
+              orchestration: { status: 'COMPLETED' },
+              execution: {
+                schema: 'sdo.git_read_result.v1',
+                selector: 'WORKSPACE_FILES',
+                result: {
+                  files: [
+                    'README.md',
+                    'docs/ENGINEERING_EVIDENCE.md',
+                    'ROADMAP.md'
+                  ]
+                }
+              }
+            };
+          }
+
+          return {
+            orchestration: { status: 'COMPLETED' },
+            execution: {
+              schema: 'sdo.filesystem_read_result.v1',
+              target: { requested: intent.target },
+              evidence: {
+                bytes: 64,
+                sha256: 'a'.repeat(64),
+                content:
+                  `Qualified content from ${intent.target}.`
+              }
+            }
+          };
+        }
+      }
+    );
+
+    input.write(
+      'Avalie a saúde do projeto e recomende a próxima prioridade de engenharia.\n'
+    );
+
+    await new Promise(
+      (resolve) => setTimeout(resolve, 10)
+    );
+
+    input.write('sim\n');
+
+    await new Promise(
+      (resolve) => setTimeout(resolve, 50)
+    );
+
+    input.end();
+
+    assert.match(
+      observed,
+      /foram obtidas 4 evidências governadas.*provider não concluiu o processamento cognitivo/i
+    );
+    assert.doesNotMatch(
+      observed,
+      /não foi obtida evidência qualificada suficiente/i
+    );
+    assert.match(
+      observed,
+      /aguardando a análise cognitiva do provider/i
+    );
+    assert.match(
+      observed,
+      /nenhum arquivo foi alterado/i
+    );
+  }
+);
+
+test(
   'ENGINEER produces an evidence-bound proposal and stops before R3 mutation',
   async () => {
     const input = new PassThrough();

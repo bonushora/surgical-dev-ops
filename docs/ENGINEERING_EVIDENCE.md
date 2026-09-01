@@ -13,9 +13,13 @@ claims that remain unqualified.
 | Local implementation state | `release/v2.6.0-rc.6` worktree after ADR-036/ADR-037 runtime integration |
 | NATURAL default checkpoint | `9ed86a443da18f923b60692d7446f1fd57d0a2da` |
 | ADR freeze checkpoint | `dee764f7ac39ba0de16be6056cc2706ad629e99f` |
-| Local canonical suite | 1206 tests discovered; 1201 passed; zero failures; 5 explicit platform skips |
+| Manual-counterexample repair start | `4a901069accf4c57f3bbb2f4a46dae26cdee2561` |
+| Historical suite at repair start | 1206 tests discovered; 1201 passed; zero failures; 5 explicit platform skips |
+| Current local canonical suite | 1209 tests discovered; 1204 passed; zero failures; 5 explicit platform skips |
+| Focused handoff/CLI/provider suite | 18 tests passed; zero failures; zero skips |
+| Adversarial/UX adjacent suite | 111 tests passed; zero failures; zero skips |
 | Package dry run | `npm pack --dry-run --json` completed for `surgical-dev-ops@2.6.0-rc.6` |
-| Manual acceptance | Pending on the qualified local checkpoint; no push, tag, release, or publication authorized |
+| Manual acceptance | The failed scenario requires human re-test on the new qualified local checkpoint; no push, tag, release, or publication authorized |
 | Scope | Persistent NATURAL mission state, integrated governed agent gateway, conversational projections, no-copy/paste governed tool slices, and NATURAL semantic objective repair |
 
 The local implementation adds a persistent governed NATURAL mission model with
@@ -50,6 +54,19 @@ and preserve uncertainty. Progress exposes real Orchestrator evidence,
 provider-cognition, and synthesis transitions. The dedicated regression rejects
 a clean-worktree-only answer as incomplete for a project-state-and-next-work
 objective.
+
+The mandatory manual session then exposed an evidence-handoff defect after four
+governed observations had been acquired. The recursive loop retained the
+qualified items, but the cognitive request represented them only as flattened
+text inside the broad `objective`; the serialized provider `context` carried no
+explicit acquired-evidence relationship. A provider failure was also collapsed
+into the same user-facing class as zero acquired evidence. The repair attaches
+the bounded normalized evidence, status, and exact count to
+`context.qualifiedGovernedEvidence`, which the existing provider adapter
+serializes into the cognitive request. It does not grant the provider physical
+authority. Separate regressions inspect that real serialized envelope and prove
+the fail-closed distinction after acquisition. Final manual acceptance remains
+unqualified until the human repeats the affected real-CLI scenario.
 
 ## ADR-034 governed workspace closure checkpoint
 

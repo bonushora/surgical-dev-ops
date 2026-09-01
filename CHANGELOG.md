@@ -2,6 +2,11 @@
 
 ## Unreleased
 
+- Repair the qualified governed-evidence handoff from NATURAL recursive
+  acquisition into the cognitive provider context. Provider failure after
+  evidence acquisition is now distinguished from absence of qualified evidence,
+  while mutation, authority, sensitive-content and fail-closed boundaries remain
+  unchanged.
 - Repair NATURAL semantic routing so project state, health, architecture,
   readiness, and next-engineering-work objectives use bounded governed project
   evidence instead of terminating on Git cleanliness. Preserve the status fast

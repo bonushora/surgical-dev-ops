@@ -79,6 +79,9 @@ test(
     let observedObjective =
       null;
 
+    let observedEvidenceContext =
+      null;
+
     const session =
       createNaturalCognitiveSession({
         assistanceContext:
@@ -130,6 +133,10 @@ test(
 
             observedObjective =
               envelope.objective;
+
+            observedEvidenceContext =
+              envelope.context
+                .qualifiedGovernedEvidence;
 
             return response({
               message: {
@@ -212,13 +219,30 @@ test(
     );
 
     assert.match(
-      observedObjective,
+      observedEvidenceContext
+        .normalizedContext,
       /EVIDENCE_1/
     );
 
     assert.match(
-      observedObjective,
+      observedEvidenceContext
+        .normalizedContext,
       /EVIDENCE_2/
+    );
+
+    assert.equal(
+      observedEvidenceContext.status,
+      'AVAILABLE'
+    );
+
+    assert.equal(
+      observedEvidenceContext.evidenceCount,
+      2
+    );
+
+    assert.doesNotMatch(
+      observedObjective,
+      /Nenhuma evidência governada foi obtida/i
     );
   }
 );

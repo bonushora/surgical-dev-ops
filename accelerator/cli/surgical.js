@@ -1509,11 +1509,22 @@ function createInteractiveSession(
                         'string' ||
                       !recursive.response.trim()
                     ) {
+                      const acquiredEvidenceCount =
+                        Array.isArray(
+                          recursive.evidence
+                        )
+                          ? recursive.evidence.length
+                          : 0;
+
                       output.write(
                         humanText(
                           activation,
-                          'Não consegui concluir a análise com as evidências qualificadas disponíveis. A governança permanece ativa e nenhum arquivo foi alterado.\n',
-                          'I could not complete the analysis with the available qualified evidence. Governance remains active and no file was changed.\n'
+                          acquiredEvidenceCount > 0
+                            ? `Foram obtidas ${acquiredEvidenceCount} evidências governadas, mas o provider não concluiu o processamento cognitivo. A governança permanece ativa e nenhum arquivo foi alterado.\n`
+                            : 'Não foi obtida evidência qualificada suficiente para concluir a análise. A governança permanece ativa e nenhum arquivo foi alterado.\n',
+                          acquiredEvidenceCount > 0
+                            ? `${acquiredEvidenceCount} governed evidence observations were acquired, but the provider did not complete cognitive processing. Governance remains active and no file was changed.\n`
+                            : 'Insufficient qualified evidence was acquired to complete the analysis. Governance remains active and no file was changed.\n'
                         )
                       );
                       resumeAndPrompt();

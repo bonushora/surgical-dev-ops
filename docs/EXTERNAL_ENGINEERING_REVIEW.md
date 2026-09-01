@@ -6,7 +6,8 @@
 | --- | --- |
 | Local integrated NATURAL gateway qualification | ADR-036 + ADR-037 on `release/v2.6.0-rc.6` |
 | NATURAL default checkpoint | `9ed86a443da18f923b60692d7446f1fd57d0a2da` |
-| Local suite | 1206 discovered; 1201 PASS; 0 FAIL; 5 platform SKIP |
+| Local suite | 1209 discovered; 1204 PASS; 0 FAIL; 5 platform SKIP |
+| Historical semantic-routing checkpoint | `4a901069accf4c57f3bbb2f4a46dae26cdee2561`: 1206 discovered; 1201 PASS; 0 FAIL; 5 platform SKIP |
 | Local governed workspace checkpoint | `f56750eba3aa07b0426f56021c072a280468ea98` |
 | ADR-034 implementation start | `2f8d9e1aa40d0d7a127e966a28e475e0f89c4bb0` |
 | Source baseline | `a3a4e2941914f14457ed1932ea4024fc495bfff1` |
@@ -24,6 +25,13 @@ structured requests cross Surgical mediation and known tools can still be
 denied. This is an invitation to independent review, not a claim that an
 independent audit has already occurred. The historical v2.5.1 baseline remains
 below so its earlier evidence is not rewritten.
+
+The current local suite also covers the manual counterexample in which governed
+project evidence was acquired but lacked an explicit relationship in the
+serialized cognitive context. The regression inspects the real provider
+envelope, verifies the nonzero evidence count and normalized content, and keeps
+provider failure after acquisition distinct from zero acquired evidence. Human
+manual acceptance still requires re-test.
 
 ## Historical v2.5.1 package
 
@@ -102,6 +110,7 @@ engineering loop all carry zero approval and mutation authority.
 | Stale or substituted BEFORE hash | Reject evidence binding | `governed-engineering-agent-loop.test.js` |
 | Evidence planner fails | No proposal call and no continuation | `governed-engineering-agent-loop.test.js` |
 | Model responds without evidence | Fail closed | `natural-cli-async-session.test.js` |
+| Acquired evidence is omitted from cognitive context | Fail closed regression at the serialized provider envelope | `natural-evidence-handoff-regression.test.js` |
 | Broad project analysis returns only worktree cleanliness | Reject semantic completion and continue through governed project evidence | `natural-ux-acceptance-invariants.test.js` |
 | Conversational approval | Authorizes bounded evidence only | `natural-session-control.test.js` |
 | Provider unavailable | Deterministic fallback; no mutation | `natural-cognitive-session.test.js` |

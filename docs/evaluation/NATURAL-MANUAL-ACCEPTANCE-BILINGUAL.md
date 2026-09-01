@@ -3,6 +3,27 @@
 This record accompanies ADR-027. It reports observed behavior and does not
 change the frozen architectural decision or qualify an unobserved result.
 
+## Manual counterexample repair — AUTOMATED GREEN / HUMAN RE-TEST REQUIRED
+
+Starting checkpoint: `4a901069accf4c57f3bbb2f4a46dae26cdee2561`.
+
+The first final manual session acquired four governed project observations and
+then returned a generic failure instead of a grounded answer. Physical tracing
+proved that acquisition and normalization survived the recursive loop, but the
+serialized cognitive `context` did not carry the qualified-evidence
+relationship; provider failure after acquisition was also presented like zero
+acquired evidence. The smallest repair adds that bounded relationship to the
+existing cognitive request and keeps all authority, sensitive-content,
+workspace and fail-closed boundaries unchanged.
+
+Automated results: focused 18/18; adversarial/UX 111/111; canonical 1209
+discovered, 1204 passed, zero failed and five platform skips. Package dry-run
+completed for `surgical-dev-ops@2.6.0-rc.6`.
+
+`MANUAL COUNTEREXAMPLE REPAIR: GREEN`
+
+`FINAL MANUAL ACCEPTANCE: REQUIRES RE-TEST`
+
 ## Final v2.6 engineering-closure gate — PENDING HUMAN ACCEPTANCE
 
 Automated adversarial and canonical GREEN do not complete this gate. After the

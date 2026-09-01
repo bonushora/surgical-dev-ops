@@ -39,10 +39,17 @@ test('ADR-025 manifest binds the public green baseline and immutable protocol by
     manifest.localAgenticGatewayBaseline.adrFreezeCheckpoint,
     'dee764f7ac39ba0de16be6056cc2706ad629e99f'
   );
-  assert.equal(manifest.localAgenticGatewayBaseline.testsDiscovered, 1206);
-  assert.equal(manifest.localAgenticGatewayBaseline.testsPassed, 1201);
+  assert.equal(manifest.localAgenticGatewayBaseline.testsDiscovered, 1209);
+  assert.equal(manifest.localAgenticGatewayBaseline.testsPassed, 1204);
   assert.equal(manifest.localAgenticGatewayBaseline.testsFailed, 0);
   assert.equal(manifest.localAgenticGatewayBaseline.testsSkipped, 5);
+  assert.deepEqual(manifest.historicalSemanticRoutingCheckpoint, {
+    commit: '4a901069accf4c57f3bbb2f4a46dae26cdee2561',
+    testsDiscovered: 1206,
+    testsPassed: 1201,
+    testsFailed: 0,
+    testsSkipped: 5
+  });
   assert.match(
     manifest.localAgenticGatewayBaseline.scope,
     /ADR-036[\s\S]+ADR-037/
