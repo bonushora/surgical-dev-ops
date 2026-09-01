@@ -291,6 +291,30 @@ function remoteDiscovery(state, reason, available = false) {
   });
 }
 
+function projectLocalDiscovery(discovery, selected = false) {
+  const providerState =
+    deriveProviderState(
+      discovery.providerId,
+      {
+        available:
+          discovery.available === true,
+        active:
+          selected &&
+          discovery.available === true,
+        reason:
+          discovery.reason
+      }
+    );
+
+  return Object.freeze({
+    ...discovery,
+    state:
+      providerState.state,
+    active:
+      providerState.active
+  });
+}
+
 function createNaturalCognitiveSession(
   input = {}
 ) {
@@ -333,12 +357,18 @@ function createNaturalCognitiveSession(
   let statePromise = null;
 
   async function initialize() {
-    const discovery =
+    const discovered =
       await discoverNaturalDefaultProvider({
         fetchImplementation,
         model:
           selectedModel
       });
+
+    const discovery =
+      projectLocalDiscovery(
+        discovered,
+        discovered.available === true
+      );
 
     if (!discovery.available) {
       return Object.freeze({
@@ -809,27 +839,110 @@ function createNaturalCognitiveSession(
 
   async function describeProviders() {
     const current = await state();
-    return Object.freeze(Object.keys(PROVIDER_CATALOG).map((providerId) => {
-      const active = current.discovery.providerId === providerId;
-      const evidence = current.discovery.local === false && active
-        ? { configured: true, validated: current.discovery.available === true, active: current.discovery.active === true }
-        : { available: active && current.discovery.available === true, active };
-      return deriveProviderState(providerId, evidence);
-    }));
+    const states =
+      await Promise.all(
+        Object.keys(PROVIDER_CATALOG).map(
+          async (providerId) => {
+            const profile =
+              PROVIDER_CATALOG[providerId];
+            const active =
+              current.discovery.providerId ===
+                providerId &&
+              current.discovery.active === true;
+
+            if (profile.kind === 'REMOTE') {
+              const evidence =
+                active
+                  ? {
+                      configured: true,
+                      validated:
+                        current.discovery.available ===
+                          true,
+                      active: true
+                    }
+                  : {};
+
+              return deriveProviderState(
+                providerId,
+                evidence
+              );
+            }
+
+            if (active) {
+              return deriveProviderState(
+                providerId,
+                {
+                  available:
+                    current.discovery.available ===
+                      true,
+                  active: true,
+                  reason:
+                    current.discovery.reason
+                }
+              );
+            }
+
+            const physical =
+              await discoverNaturalDefaultProvider({
+                fetchImplementation,
+                model:
+                  profile.model
+              });
+
+            return deriveProviderState(
+              providerId,
+              {
+                available:
+                  physical.available === true,
+                active: false,
+                reason:
+                  physical.reason
+              }
+            );
+          }
+        )
+      );
+
+    return Object.freeze(states);
   }
 
   async function selectLocalModel(model) {
     const options = arguments.length > 1 && arguments[1] && typeof arguments[1] === 'object'
       ? arguments[1]
       : {};
-    const discovery =
+    const discovered =
       await discoverNaturalDefaultProvider({
         fetchImplementation,
         model
       });
 
+    const discovery =
+      projectLocalDiscovery(
+        discovered,
+        discovered.available === true
+      );
+
     if (!discovery.available) {
       return discovery;
+    }
+
+    let mission = null;
+    if (options.mission) {
+      try {
+        mission = substituteMissionProvider(options.mission, {
+          providerId: discovery.providerId,
+          providerKind: 'LOCAL'
+        }, { at: options.at });
+      } catch {
+        return Object.freeze({
+          ...discovery,
+          available: false,
+          active: false,
+          state: 'UNAVAILABLE',
+          reason:
+            'Mission provider projection failed safely.'
+        });
+      }
     }
 
     selectedModel =
@@ -846,18 +959,6 @@ function createNaturalCognitiveSession(
             })
         })
       );
-
-    let mission = null;
-    if (options.mission) {
-      try {
-        mission = substituteMissionProvider(options.mission, {
-          providerId: discovery.providerId,
-          providerKind: 'LOCAL'
-        }, { at: options.at });
-      } catch {
-        return Object.freeze({ ...discovery, available: false, reason: 'Mission provider projection failed safely.' });
-      }
-    }
 
     conversationalRuntime.reset();
 

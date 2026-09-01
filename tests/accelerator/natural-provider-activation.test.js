@@ -10,10 +10,72 @@ const {
   projectMissionAuthority
 } = require('../../accelerator/core/natural-agentic-mission');
 
-function localInventory() {
-  const body = new TextEncoder().encode(JSON.stringify({ models: [{ name: 'qwen3:8b' }] }));
+function localInventory(models = ['qwen3:8b']) {
+  const body = new TextEncoder().encode(JSON.stringify({
+    models: models.map((name) => ({ name }))
+  }));
   return { status: 200, body: new ReadableStream({ start(controller) { controller.enqueue(body); controller.close(); } }) };
 }
+
+test('active-provider detail and catalog use the same ACTIVE state', async () => {
+  const session = createNaturalCognitiveSession({
+    fetchImplementation: async () => localInventory()
+  });
+  const detail = await session.describe();
+  const states = await session.describeProviders();
+  const qwen = states.find((item) => item.providerId === 'ollama:qwen3:8b');
+
+  assert.equal(detail.state, 'ACTIVE');
+  assert.equal(detail.active, true);
+  assert.equal(qwen.state, 'ACTIVE');
+  assert.equal(qwen.active, true);
+});
+
+test('non-selected local model state is physically discovered as AVAILABLE or UNAVAILABLE', async () => {
+  const availableSession = createNaturalCognitiveSession({
+    fetchImplementation: async () => localInventory([
+      'qwen3:8b',
+      'gemma3:4b'
+    ])
+  });
+  const availableStates = await availableSession.describeProviders();
+  assert.equal(
+    availableStates.find((item) => item.providerId === 'ollama:gemma3:4b').state,
+    'AVAILABLE'
+  );
+
+  const unavailableSession = createNaturalCognitiveSession({
+    fetchImplementation: async () => localInventory()
+  });
+  const unavailableStates = await unavailableSession.describeProviders();
+  assert.equal(
+    unavailableStates.find((item) => item.providerId === 'ollama:gemma3:4b').state,
+    'UNAVAILABLE'
+  );
+});
+
+test('successful local substitution moves ACTIVE while preserving physical availability', async () => {
+  const session = createNaturalCognitiveSession({
+    fetchImplementation: async () => localInventory([
+      'qwen3:8b',
+      'gemma3:4b'
+    ])
+  });
+  await session.describe();
+  const selected = await session.selectLocalModel('gemma3:4b');
+  const states = await session.describeProviders();
+
+  assert.equal(selected.state, 'ACTIVE');
+  assert.equal((await session.describe()).state, 'ACTIVE');
+  assert.equal(
+    states.find((item) => item.providerId === 'ollama:gemma3:4b').state,
+    'ACTIVE'
+  );
+  assert.equal(
+    states.find((item) => item.providerId === 'ollama:qwen3:8b').state,
+    'AVAILABLE'
+  );
+});
 
 test('missing OpenAI configuration derives CONFIGURATION_REQUIRED without changing local state', async () => {
   const session = createNaturalCognitiveSession({ fetchImplementation: async () => localInventory() });

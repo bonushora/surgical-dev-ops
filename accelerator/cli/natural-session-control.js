@@ -288,9 +288,14 @@ function formatProviderStatus(
   language = 'pt-BR'
 ) {
   const english = isEnglish(language);
-  if (discovery && discovery.available === true) {
+  if (
+    discovery &&
+    discovery.available === true &&
+    discovery.active === true &&
+    discovery.state === 'ACTIVE'
+  ) {
     const execution = discovery.local === false ? 'remote' : 'local';
-    const state = discovery.state || 'AVAILABLE';
+    const state = discovery.state;
     if (english) {
       return (
         'Current cognitive assistant:\n' +

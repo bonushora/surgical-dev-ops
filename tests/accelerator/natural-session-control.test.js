@@ -215,6 +215,12 @@ test(
           available:
             true,
 
+          active:
+            true,
+
+          state:
+            'ACTIVE',
+
           provider:
             'Ollama',
 
