@@ -110,6 +110,44 @@ UNRESOLVED: complete end-to-end evidence is still required for absent Gemma, unq
 
 TIMESTAMP: 2026-09-01
 
+## P4.3 — Fail-Closed Known-Provider Repair
+
+MISSION: NATURAL Qualified Provider Activation Manual-Acceptance Repair
+
+BASE_SHA: `563e030c616ad128dad08c0f68bbdebe6fd21462`
+
+CURRENT_SHA: `69ac02564abf80c9593467e7e5037f64af43729d`
+
+MILESTONE: P4.3
+
+MILESTONE_STATUS: GREEN
+
+FILES_CHANGED:
+
+- `accelerator/cli/natural-session-control.js`
+- `accelerator/cli/surgical.js`
+- `tests/accelerator/natural-cli-async-session.test.js`
+- `tests/accelerator/natural-provider-activation.test.js`
+- `tests/accelerator/natural-session-control.test.js`
+
+TESTS_EXECUTED:
+
+- `node tests/accelerator/natural-provider-activation.test.js`
+- `node tests/accelerator/natural-session-control.test.js`
+- `node --test --test-name-pattern="known unavailable or unconfigured provider requests" tests/accelerator/natural-cli-async-session.test.js`
+- `node --test --test-isolation=none tests/accelerator/natural-cli-async-session.test.js`
+- `git diff --check`
+
+TEST_RESULTS: focused provider/session/async 47/47 passed in the bounded qualified test-runner context; diff check passed. A diagnostic direct sandbox invocation produced 5 expected fail-closed trusted-Git-read denials before the qualified in-process rerun passed 13/13.
+
+NEXT_MILESTONE: P4.4 — NATURAL input, cancellation and backpressure
+
+AUTHORITY_REMAINING: bounded local repair, testing and checkpoint commits; remote delivery remains conditional on complete P5R GREEN and exact remote preconditions; NO MERGE; NO TAG; NO RELEASE; NO PUBLISH; NO DEPLOY.
+
+UNRESOLVED: interactive pasted multiline input can still enqueue opaque sequential cognitive work; cancellation behavior must remain safe while that backlog is bounded.
+
+TIMESTAMP: 2026-09-01
+
 ## P4 — NATURAL Provider UX
 
 MISSION: NATURAL Qualified Provider Activation Coordinator
