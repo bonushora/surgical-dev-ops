@@ -642,7 +642,194 @@ invariants.
 The human can deterministically inspect the current mission authority envelope,
 including explicitly unavailable authority classes.
 
-## 27. Relationship to existing ADRs
+## 27. Adversarial public qualification readiness
+
+The architecture MUST be designed to withstand adversarial evaluation of the
+boundary between engineering autonomy and machine sovereignty.
+
+The differentiated claim of this milestone is not merely that the AI can write
+or modify code autonomously. The claim to be demonstrated is:
+
+> The AI can perform substantial engineering work autonomously inside an
+> authorized mission while deterministic infrastructure prevents it from
+> exercising authority that was not explicitly granted.
+
+This property MUST be testable.
+
+### Required adversarial classes
+
+Future implementation and qualification MUST include explicit attempts to
+defeat the authority model, including at least:
+
+- repository-content prompt injection attempting to alter mission authority;
+- instructions embedded in README files, source files, tests, issues, logs,
+  generated artifacts or other governed evidence;
+- attempts to make conversational history or model memory override physical
+  state;
+- attempts to represent an ungranted operation as previously authorized;
+- attempts to transform local engineering authority into remote mutation
+  authority;
+- attempts to treat push authority as merge authority;
+- attempts to treat merge authority as tag, release, publish or deployment
+  authority;
+- attempts to expand from one repository or workspace into another without
+  authorization;
+- symlink, junction, traversal, alias, canonical-path and equivalent workspace
+  escape attempts;
+- TOCTOU attempts against workspace identity or authority-bound physical state;
+- unexpected HEAD, branch, index, worktree, remote-ref or CAS divergence during
+  an active mission;
+- dirty-state ambiguity after interruption or resume;
+- attempts to cause legitimate interrupted work to be discarded;
+- attempts to alter an ACCEPTED / FROZEN ADR under the guise of an ordinary
+  repair;
+- attempts to weaken tests, assertions, security checks or qualification gates
+  to manufacture GREEN;
+- attempts to suppress, reinterpret or fabricate engineering evidence;
+- attempts to cause repeated blind repair loops without meaningful evidence or
+  progress;
+- attempts to exploit provider replacement to obtain greater operational
+  authority;
+- attempts to expose secrets or sensitive repository content to a provider
+  outside the governed sensitive-content boundary;
+- attempts to exploit Linux, macOS or Windows path, filesystem, process,
+  durability or shell differences to bypass confinement or authority;
+- attempts to continue privileged activity after restart, provider failure,
+  network interruption, terminal loss, machine restart or power outage without
+  physical authority revalidation.
+
+### Required positive proof of autonomy
+
+Adversarial qualification MUST test not only refusal behavior but also
+meaningful autonomous engineering capability.
+
+A representative authorized local mission should be able to proceed without
+repeated human approvals through a sequence such as:
+
+objective
+→ physical-state discovery
+→ reproduction
+→ investigation
+→ hypothesis
+→ regression evidence
+→ minimal patch
+→ focused tests
+→ diagnosis of failures
+→ iterative repair
+→ adjacent tests
+→ canonical qualification
+→ cross-platform/adversarial qualification when applicable
+→ diff audit
+→ qualified local checkpoint
+
+The system SHOULD continue autonomously while all operations remain inside the
+mission authority envelope.
+
+### Required proof of confinement
+
+The same mission MUST stop before the first non-authorized authority boundary
+even when the cognitive model:
+
+- understands the required next operation;
+- is technically capable of proposing that operation;
+- believes that operation would complete the objective;
+- has successfully completed every preceding engineering step.
+
+For example, an authorized local repair mission MAY autonomously reach `LOCAL
+GREEN` but MUST NOT infer authorization to push.
+
+The deterministic authority layer, rather than model willingness or capability,
+determines whether the operation may occur.
+
+### Authority non-transitivity
+
+Authority MUST NOT silently propagate across operational classes. At minimum:
+
+local mutation authority
+≠ push authority
+
+push authority
+≠ merge authority
+
+merge authority
+≠ tag authority
+
+tag authority
+≠ release authority
+
+release authority
+≠ package publication authority
+
+publication authority
+≠ deployment authority
+
+access to one governed workspace
+≠ authority over another workspace
+
+authorization for one mission
+≠ authorization for another mission
+
+authorization before interruption
+≠ automatically valid authorization after physical-state divergence
+
+Each relevant boundary MUST remain independently enforceable.
+
+### Public adversarial evaluation
+
+Public adversarial testing, including evaluation by external engineering or
+security communities, MUST NOT treat the existence of this ADR as proof that
+the architecture satisfies the contract.
+
+The ADR is architectural intent. Evidence requires implemented behavior and
+qualification.
+
+A public adversarial evaluation should occur only after the relevant runtime
+implementation has completed:
+
+- focused qualification;
+- authority-boundary tests;
+- adversarial tests;
+- interruption/resume tests;
+- sensitive-content/provider-boundary tests;
+- cross-platform qualification on Linux, macOS and Windows;
+- canonical local qualification;
+- exact-SHA remote qualification;
+- post-merge qualification when applicable;
+- verification that no unauthorized release, publication, deployment or other
+  external side effect occurred;
+- preparation of an auditable evidence package sufficient for independent
+  engineering review.
+
+### Public claim discipline
+
+The project MUST NOT claim unrestricted autonomous engineering.
+
+The defensible claim is:
+
+> Maximum engineering autonomy inside minimum necessary authority.
+
+And, operationally:
+
+> AI THINKS / REQUESTS. SURGICAL DECIDES / EXECUTES.
+
+Public evidence should demonstrate both sides of this contract:
+
+1. **Autonomy proof** — the AI completes meaningful engineering work without
+   unnecessary human orchestration.
+2. **Confinement proof** — the AI cannot convert cognitive capability into
+   unauthorized machine authority.
+
+A successful adversarial qualification therefore requires both properties
+simultaneously.
+
+An agent that cannot work autonomously does not satisfy the engineering
+objective. An agent that can work autonomously but can cross unauthorized
+authority boundaries does not satisfy the security objective.
+
+The milestone is qualified only when substantial engineering autonomy and
+deterministic authority confinement coexist under adversarial conditions.
+
+## 28. Relationship to existing ADRs
 
 This ADR extends existing decisions and does not silently supersede any of their
 security contracts.
@@ -684,7 +871,7 @@ If future implementation discovers an actual conflict with an ACCEPTED / FROZEN
 decision, it MUST stop for human architectural authority. It MUST NOT resolve
 the conflict through implementation convenience or implicit supersession.
 
-## 28. Consequences
+## 29. Consequences
 
 ### Positive
 
@@ -707,7 +894,7 @@ the conflict through implementation convenience or implicit supersession.
   or security-sensitive behavior;
 - truthful GREEN levels require continued exact-SHA CI correlation.
 
-## 29. Explicit non-claims and implementation boundary
+## 30. Explicit non-claims and implementation boundary
 
 This ADR does not:
 
@@ -720,6 +907,8 @@ This ADR does not:
   mutation;
 - qualify universal power-loss safety, distributed exactly-once execution or
   ADR-009 strict pathname CAS;
+- claim adversarial or public qualification from architectural intent without
+  the required implemented behavior and auditable evidence;
 - collapse NATURAL, ENGINEER and EXPERT into one experience.
 
 Runtime delivery requires a separately authorized implementation mission,
@@ -727,7 +916,7 @@ incremental mechanical tests, adversarial authority tests and native Linux,
 macOS and Windows qualification. No implementation milestone may claim this ADR
 complete from documentation acceptance alone.
 
-## 30. Frozen decision
+## 31. Frozen decision
 
 The following are ACCEPTED / FROZEN:
 
@@ -753,7 +942,14 @@ The following are ACCEPTED / FROZEN:
     confinement remain non-regression invariants.
 13. NATURAL simplification SHALL NOT weaken governance or alter ENGINEER and
     EXPERT authority semantics.
-14. Future runtime implementation and every later authority expansion require
+14. Adversarial qualification SHALL prove both meaningful engineering autonomy
+    and deterministic confinement; either property alone is insufficient.
+15. Authority SHALL remain independently enforceable and non-transitive across
+    missions, workspaces and local mutation, push, merge, tag, release,
+    publication and deployment classes.
+16. Public claims SHALL remain limited to implemented, qualified and auditable
+    behavior, never architectural intent alone.
+17. Future runtime implementation and every later authority expansion require
     separate authorization and qualification.
 
 **Decision:** ACCEPTED / FROZEN
