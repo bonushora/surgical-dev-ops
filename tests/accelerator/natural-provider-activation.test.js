@@ -1,8 +1,13 @@
 'use strict';
 
 const assert = require('node:assert/strict');
+const crypto = require('node:crypto');
 const test = require('node:test');
 const { createNaturalCognitiveSession } = require('../../accelerator/cli/natural-cognitive-session');
+const {
+  createNaturalAgenticMission,
+  projectMissionAuthority
+} = require('../../accelerator/core/natural-agentic-mission');
 
 function localInventory() {
   const body = new TextEncoder().encode(JSON.stringify({ models: [{ name: 'qwen3:8b' }] }));
@@ -62,4 +67,81 @@ test('OpenAI activation never exposes credential material or operational authori
   assert.equal(result.operationalAuthority, false);
   assert.doesNotMatch(JSON.stringify(result), /secret-test-key/);
   assert.doesNotMatch(JSON.stringify(result), /credential/i);
+});
+
+test('remote cognition receives only sensitive-boundary-mediated evidence', async () => {
+  const requests = [];
+  const session = createNaturalCognitiveSession();
+  await session.activateOpenAIProvider({
+    transport: async (request) => {
+      requests.push(JSON.stringify(request));
+      return { outputText: '{"response":"ok"}' };
+    }
+  });
+  const activation = { interactionMode: { mode: 'NATURAL' }, workspace: 'example' };
+  const response = await session.ask('Explique.', activation, 'api_key=secret-test-key');
+  assert.match(response, /ok/);
+  assert.equal(requests.length, 2);
+  assert.doesNotMatch(requests[1], /secret-test-key/);
+  assert.match(requests[1], /REDACTED_BY_SURGICAL_DEVOPS:ASSIGNMENT_SECRET/);
+});
+
+test('blocked remote evidence is not dispatched and cannot alter the session', async () => {
+  let calls = 0;
+  const session = createNaturalCognitiveSession();
+  await session.activateOpenAIProvider({
+    transport: async () => {
+      calls += 1;
+      return { outputText: '{"response":"ok"}' };
+    }
+  });
+  const activation = { interactionMode: { mode: 'NATURAL' }, workspace: 'example' };
+  const response = await session.ask(
+    'Explique.',
+    activation,
+    '-----BEGIN PRIVATE KEY-----\nsecret\n-----END PRIVATE KEY-----'
+  );
+  assert.match(response, /bloqueada|blocked/i);
+  assert.equal(calls, 1);
+});
+
+test('remote-to-local substitution preserves the governed mission authority envelope', async () => {
+  const sha = (value) => crypto.createHash('sha256').update(value).digest('hex');
+  const sessionBinding = Object.freeze({
+    schema: 'sdo.deterministic_workspace_session.v1',
+    physical: { root: '/project' },
+    physicalWorkspaceIdentity: sha('workspace'),
+    repositoryHead: sha('head'),
+    worktreeFingerprint: sha('worktree'),
+    sessionFingerprint: sha('session'),
+    operationalAuthority: false,
+    mutationAuthority: false
+  });
+  const mission = createNaturalAgenticMission({
+    missionId: 'provider-switch-mission',
+    objective: 'Preserve governed continuity.',
+    session: sessionBinding,
+    createdAt: '2026-09-01T12:00:00.000Z',
+    plan: [{ stepId: 'inspect', summary: 'Inspect.', status: 'ACTIVE' }]
+  });
+  const session = createNaturalCognitiveSession({ fetchImplementation: async () => localInventory() });
+  const remote = await session.activateOpenAIProvider({
+    transport: async () => ({ outputText: '{"response":"VALIDATION_OK"}' }),
+    mission,
+    at: '2026-09-01T12:01:00.000Z'
+  });
+  const local = await session.selectLocalModel('qwen3:8b', {
+    mission: remote.mission,
+    at: '2026-09-01T12:02:00.000Z'
+  });
+  assert.equal(remote.mission.provider.providerKind, 'REMOTE');
+  assert.equal(local.mission.provider.providerKind, 'LOCAL');
+  const before = projectMissionAuthority(mission);
+  const after = projectMissionAuthority(local.mission);
+  assert.equal(after.missionId, before.missionId);
+  assert.deepEqual(after.allowedCapabilities, before.allowedCapabilities);
+  assert.deepEqual(after.deniedCapabilities, before.deniedCapabilities);
+  assert.equal(after.operationalAuthority, false);
+  assert.equal(after.mutationAuthority, false);
+  assert.deepEqual(local.mission.binding, mission.binding);
 });
