@@ -163,6 +163,53 @@ test('NATURAL provider intents are bilingual and truthful for qualified and unqu
   assert.equal(pt.handle('Volte para a IA local.').model, 'qwen3:8b');
 });
 
+test('manual-acceptance provider phrases never escape deterministic session routing', () => {
+  const control = createNaturalSessionControl({ language: 'pt-BR' });
+  const expectedActions = new Map([
+    ['Qual provider estou usando?', 'PROVIDER_STATUS'],
+    ['Qual modelo está ativo?', 'PROVIDER_STATUS'],
+    ['Que IA estou usando?', 'PROVIDER_STATUS'],
+    ['Mostre o provider ativo.', 'PROVIDER_STATUS'],
+    ['Mostre os providers.', 'PROVIDER_LIST'],
+    ['Liste as IAs disponíveis.', 'PROVIDER_LIST'],
+    ['Quero configurar a OpenAI.', 'FRONTIER_PROVIDER_SETUP'],
+    ['Quero configurar a OpenAI via API.', 'FRONTIER_PROVIDER_SETUP'],
+    ['Configure OpenAI.', 'FRONTIER_PROVIDER_SETUP'],
+    ['Configure OpenAI API.', 'FRONTIER_PROVIDER_SETUP'],
+    ['Mude para GPT.', 'FRONTIER_PROVIDER_SETUP'],
+    ['Troque para OpenAI.', 'FRONTIER_PROVIDER_SETUP'],
+    ['Quero configurar GPT.', 'FRONTIER_PROVIDER_SETUP'],
+    ['Configurar GPT.', 'FRONTIER_PROVIDER_SETUP'],
+    ['Ativar OpenAI.', 'FRONTIER_PROVIDER_SETUP'],
+    ['Ative GPT.', 'FRONTIER_PROVIDER_SETUP'],
+    ['I want to configure OpenAI.', 'FRONTIER_PROVIDER_SETUP'],
+    ['Activate OpenAI.', 'FRONTIER_PROVIDER_SETUP'],
+    ['Volte para Qwen.', 'LOCAL_MODEL_SELECTION'],
+    ['Mude para Qwen.', 'LOCAL_MODEL_SELECTION'],
+    ['Troque para Qwen.', 'LOCAL_MODEL_SELECTION'],
+    ['Quero usar Qwen.', 'LOCAL_MODEL_SELECTION'],
+    ['Use qwen3:8b.', 'LOCAL_MODEL_SELECTION'],
+    ['Troque para Gemma.', 'LOCAL_MODEL_SELECTION'],
+    ['Use Gemma.', 'LOCAL_MODEL_SELECTION'],
+    ['Mude para Gemma.', 'LOCAL_MODEL_SELECTION'],
+    ['Troque para gemma3:4b.', 'LOCAL_MODEL_SELECTION'],
+    ['Quero usar Gemma.', 'LOCAL_MODEL_SELECTION'],
+    ['Use gemma3:4b.', 'LOCAL_MODEL_SELECTION'],
+    ['Switch to Qwen.', 'LOCAL_MODEL_SELECTION'],
+    ['Switch to Gemma.', 'LOCAL_MODEL_SELECTION'],
+    ['Ativar Claude.', 'UNAVAILABLE_PROVIDER'],
+    ['Quero configurar Claude.', 'UNAVAILABLE_PROVIDER'],
+    ['Ativar Gemini.', 'UNAVAILABLE_PROVIDER'],
+    ['Quero configurar Gemini.', 'UNAVAILABLE_PROVIDER']
+  ]);
+
+  for (const [input, expectedAction] of expectedActions) {
+    const result = control.handle(input);
+    assert.equal(result.matched, true, input);
+    assert.equal(result.action, expectedAction, input);
+  }
+});
+
 test('provider status presents remote ACTIVE without falsely calling it local', () => {
   const output = formatProviderStatus(Object.freeze({
     provider: 'OpenAI', model: 'gpt-5.6', local: false, available: true,

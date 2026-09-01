@@ -29,6 +29,14 @@ const {
   isEnglish
 } = require('./human-language');
 
+const {
+  PROVIDER_INTENTS,
+  PROVIDER_CATALOG,
+  resolveNaturalProviderIntent
+} = require(
+  './natural-provider-activation-coordinator'
+);
+
 function normalize(value) {
   return String(value || '')
     .normalize('NFD')
@@ -343,6 +351,36 @@ function unsupportedProviderMessage(provider, language = 'pt-BR') {
   return isEnglish(language)
     ? `${provider} is recognized, but its adapter is not qualified. State: UNAVAILABLE. No provider was activated.\n`
     : `${provider} é reconhecido, mas seu adapter ainda não é qualificado. Estado: UNAVAILABLE. Nenhum provider foi ativado.\n`;
+}
+
+function formatProviderAuthorityDenial(language = 'pt-BR') {
+  return isEnglish(language)
+    ? (
+        'Provider credential request denied.\n' +
+        'Surgical DevOps will not search the machine for credentials, reuse unrelated credentials, or expose credential material.\n' +
+        'Credentials may be received only through the explicit qualified provider boundary after the required authorization and configuration gates.\n' +
+        'No provider was activated and no authority was expanded.\n'
+      )
+    : (
+        'Solicitação de credencial de provider negada.\n' +
+        'O Surgical DevOps não procura credenciais na máquina, não reutiliza credenciais alheias e não expõe material de credencial.\n' +
+        'Credenciais só podem ser recebidas pelo boundary qualificado do provider após a autorização explícita e os gates de configuração obrigatórios.\n' +
+        'Nenhum provider foi ativado e nenhuma autoridade foi ampliada.\n'
+      );
+}
+
+function formatAmbiguousProviderRequest(language = 'pt-BR') {
+  return isEnglish(language)
+    ? (
+        'The provider request is ambiguous and failed closed.\n' +
+        'Specify one known provider and one action, such as "use qwen3:8b", "configure OpenAI", or "list providers".\n' +
+        'No provider was activated and no authority was expanded.\n'
+      )
+    : (
+        'A solicitação de provider é ambígua e falhou de forma segura.\n' +
+        'Informe um único provider conhecido e uma ação, por exemplo "usar qwen3:8b", "configurar OpenAI" ou "listar providers".\n' +
+        'Nenhum provider foi ativado e nenhuma autoridade foi ampliada.\n'
+      );
 }
 
 function createNaturalSessionControl(
@@ -702,159 +740,118 @@ function createNaturalSessionControl(
       });
     }
 
-    if (
-      text === 'listar modelos' ||
-      text === 'modelos' ||
-      text === 'listar ias' ||
-      text === 'list models' ||
-      text === 'models' ||
-      text === 'list ais'
-    ) {
+    const providerIntent =
+      resolveNaturalProviderIntent(input);
+
+    if (providerIntent.matched) {
+      if (
+        providerIntent.intent ===
+          PROVIDER_INTENTS.QUERY_ACTIVE_PROVIDER
+      ) {
+        return Object.freeze({
+          matched: true,
+          action: 'PROVIDER_STATUS'
+        });
+      }
+
+      if (
+        providerIntent.intent ===
+          PROVIDER_INTENTS.LIST_PROVIDERS
+      ) {
+        return Object.freeze({
+          matched: true,
+          action: 'PROVIDER_LIST'
+        });
+      }
+
+      if (
+        providerIntent.intent ===
+          PROVIDER_INTENTS.PROVIDER_HELP
+      ) {
+        return Object.freeze({
+          matched: true,
+          action: 'CONTINUE',
+          output: providerSetupOverview(language)
+        });
+      }
+
+      if (
+        providerIntent.intent ===
+          PROVIDER_INTENTS.RETURN_TO_LOCAL ||
+        providerIntent.intent ===
+          PROVIDER_INTENTS.SELECT_LOCAL_PROVIDER
+      ) {
+        const profile =
+          PROVIDER_CATALOG[providerIntent.providerId];
+
+        return Object.freeze({
+          matched: true,
+          action: 'LOCAL_MODEL_SELECTION',
+          model: profile.model
+        });
+      }
+
+      if (
+        providerIntent.intent ===
+          PROVIDER_INTENTS.PROVIDER_AUTHORITY_DENIED
+      ) {
+        return Object.freeze({
+          matched: true,
+          action: 'CONTINUE',
+          output: formatProviderAuthorityDenial(language)
+        });
+      }
+
+      if (
+        providerIntent.intent ===
+          PROVIDER_INTENTS.AMBIGUOUS_PROVIDER_REQUEST
+      ) {
+        return Object.freeze({
+          matched: true,
+          action: 'CONTINUE',
+          output: formatAmbiguousProviderRequest(language)
+        });
+      }
+
+      if (
+        providerIntent.providerId ===
+          'openai:gpt-5.6'
+      ) {
+        return Object.freeze({
+          matched: true,
+          action: 'FRONTIER_PROVIDER_SETUP',
+          providerId: providerIntent.providerId,
+          output: codexSetupGuide(language)
+        });
+      }
+
+      if (
+        providerIntent.providerId ===
+          'anthropic:claude' ||
+        providerIntent.providerId ===
+          'google:gemini'
+      ) {
+        const profile =
+          PROVIDER_CATALOG[providerIntent.providerId];
+
+        return Object.freeze({
+          matched: true,
+          action: 'UNAVAILABLE_PROVIDER',
+          providerId: providerIntent.providerId,
+          output: unsupportedProviderMessage(
+            profile.model === 'claude'
+              ? 'Claude'
+              : 'Gemini',
+            language
+          )
+        });
+      }
+
       return Object.freeze({
         matched: true,
-        action:
-          'CONTINUE',
-        output:
-          providerSetupOverview(language)
+        action: 'CONTINUE',
+        output: formatAmbiguousProviderRequest(language)
       });
-    }
-
-    if (
-      text === 'providers' ||
-      text === 'provedores' ||
-      includesAny(
-        text,
-        [
-          'qual ia esta ativa',
-          'qual ia esta sendo usada',
-          'qual provider esta ativo',
-          'qual provider esta sendo usado',
-          'qual e a ia atual',
-          'which ai is active',
-          'which provider is active',
-          'current ai provider'
-        ]
-      )
-    ) {
-      return Object.freeze({
-        matched: true,
-        action:
-          'PROVIDER_STATUS'
-      });
-    }
-
-    if (includesAny(text, [
-      'quais ias estao disponiveis',
-      'quais providers estao disponiveis',
-      'which ai providers are available',
-      'which ais are available',
-      'which providers are available'
-    ])) {
-      return Object.freeze({
-        matched: true,
-        action: 'PROVIDER_LIST'
-      });
-    }
-
-    const localModelSelection =
-      text.match(
-        /^(?:usar|use|ativar|ative|selecionar|selecione) (qwen3(?::8b)?|qwen|gemma3(?::4b)?|gemma)$/
-      );
-
-    if (localModelSelection) {
-      const requested =
-        localModelSelection[1]
-          .startsWith('qwen')
-          ? 'qwen3:8b'
-          : 'gemma3:4b';
-
-      return Object.freeze({
-        matched: true,
-        action:
-          'LOCAL_MODEL_SELECTION',
-        model:
-          requested
-      });
-    }
-
-    if (includesAny(text, [
-      'volte para a ia local',
-      'voltar para a ia local',
-      'switch back to local ai',
-      'switch back to local'
-    ])) {
-      return Object.freeze({
-        matched: true,
-        action: 'LOCAL_MODEL_SELECTION',
-        model: 'qwen3:8b'
-      });
-    }
-
-    if (
-      includesAny(
-        text,
-        [
-          'quero trocar de ia',
-          'quero trocar a ia',
-          'trocar de ia',
-          'trocar a ia',
-          'quero outra ia',
-          'conectar outra ia',
-          'usar outra ia',
-          'quais ias posso usar',
-          'quais providers posso usar',
-          'i want to switch ai providers',
-          'switch ai provider',
-          'use another ai',
-          'which providers can i use'
-        ]
-      )
-    ) {
-      return Object.freeze({
-        matched: true,
-        action:
-          'CONTINUE',
-        output:
-          providerSetupOverview(language)
-      });
-    }
-
-    if (
-      includesAny(
-        text,
-        [
-          'quero usar o codex',
-          'quero usar codex',
-          'usar o codex',
-          'usar codex',
-          'conectar codex',
-          'usar openai',
-          'quero usar openai',
-          'usar gpt',
-          'quero usar gpt',
-          'use gpt',
-          'i want to use codex',
-          'use codex',
-          'connect codex',
-          'use openai',
-          'i want to use openai'
-        ]
-      )
-    ) {
-      return Object.freeze({
-        matched: true,
-        action: 'FRONTIER_PROVIDER_SETUP',
-        providerId: 'openai:gpt-5.6',
-        output: codexSetupGuide(language)
-      });
-    }
-
-    if (includesAny(text, ['usar claude', 'use claude', 'quero usar claude', 'usar anthropic', 'use anthropic'])) {
-      return Object.freeze({ matched: true, action: 'UNAVAILABLE_PROVIDER', providerId: 'anthropic:claude', output: unsupportedProviderMessage('Claude', language) });
-    }
-
-    if (includesAny(text, ['usar gemini', 'use gemini', 'quero usar gemini', 'usar google', 'use google'])) {
-      return Object.freeze({ matched: true, action: 'UNAVAILABLE_PROVIDER', providerId: 'google:gemini', output: unsupportedProviderMessage('Gemini', language) });
     }
 
     if (
