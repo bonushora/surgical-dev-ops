@@ -2,6 +2,8 @@
 
 const assert = require('node:assert/strict');
 const crypto = require('node:crypto');
+const fs = require('node:fs');
+const path = require('node:path');
 const test = require('node:test');
 const {
   openNaturalGovernedWorkspaceExperience,
@@ -13,10 +15,11 @@ const {
 const { createNaturalTaskEnvelopeProposal, authorizeNaturalTaskEnvelope } = require('../../accelerator/cli/natural-task-envelope-authorization');
 
 const sha = (value) => crypto.createHash('sha256').update(value).digest('hex');
+const WORKSPACE_ROOT = fs.realpathSync(path.resolve(__dirname, '../..'));
 function freeze(value) { if (value && typeof value === 'object' && !Object.isFrozen(value)) { for (const child of Object.values(value)) freeze(child); Object.freeze(value); } return value; }
 
 function fixtures() {
-  const session = freeze({ schema: 'sdo.deterministic_workspace_session.v1', physical: { root: '/project' }, physicalWorkspaceIdentity: sha('workspace'), repositoryHead: sha('head'), worktreeFingerprint: sha('tree'), sessionFingerprint: sha('session'), operationalAuthority: false, mutationAuthority: false });
+  const session = freeze({ schema: 'sdo.deterministic_workspace_session.v1', physical: { root: WORKSPACE_ROOT }, physicalWorkspaceIdentity: sha('workspace'), repositoryHead: sha('head'), worktreeFingerprint: sha('tree'), sessionFingerprint: sha('session'), operationalAuthority: false, mutationAuthority: false });
   const revalidation = freeze({ schema: 'sdo.deterministic_workspace_session_revalidation.v1', decision: 'VALID', sessionFingerprint: session.sessionFingerprint, operationalAuthority: false, mutationAuthority: false });
   const governedInventory = freeze({ orchestration: { status: 'COMPLETED' }, execution: { schema: 'sdo.git_read_result.v1', selector: 'WORKSPACE_FILES', result: { files: ['README.md', 'src/app.js', '.git/config'] } } });
   return { session, revalidation, governedInventory };
@@ -50,7 +53,7 @@ test('experience search remains commit and physical-state bound', () => {
 
 test('one exact human task authorization contains repeated microreads without dispatch authority', () => {
   const current = experience();
-  const proposal = createNaturalTaskEnvelopeProposal({ task: freeze({ schema: 'sdo.natural_governed_task.v1', kind: 'PROJECT_ANALYSIS', objective: 'Analyze project.', mutating: false, operations: [] }), workspaceRoot: '/project', physicalWorkspaceIdentity: current.binding.physicalWorkspaceIdentity, riskCeiling: 'R1', validFrom: '2026-08-30T12:00:00.000Z', expiresAt: '2026-08-30T12:10:00.000Z' });
+  const proposal = createNaturalTaskEnvelopeProposal({ task: freeze({ schema: 'sdo.natural_governed_task.v1', kind: 'PROJECT_ANALYSIS', objective: 'Analyze project.', mutating: false, operations: [] }), workspaceRoot: WORKSPACE_ROOT, physicalWorkspaceIdentity: current.binding.physicalWorkspaceIdentity, riskCeiling: 'R1', validFrom: '2026-08-30T12:00:00.000Z', expiresAt: '2026-08-30T12:10:00.000Z' });
   const authorization = authorizeNaturalTaskEnvelope(proposal, freeze({ approved: true, proposalFingerprint: proposal.proposalFingerprint, humanSubject: 'human:test', authorizedAt: '2026-08-30T12:00:00.000Z' }));
   for (let step = 1; step <= 2; step += 1) {
     const plan = planNaturalGovernedWorkspaceMicroread(current, authorization, freeze({ evidenceRequest: { kind: 'READ_FILE', target: step === 1 ? 'README.md' : 'src/app.js', reason: 'Analyze.' }, evidenceStep: step, risk: 'R1', mutating: false }), { now: '2026-08-30T12:01:00.000Z' });
@@ -62,7 +65,7 @@ test('one exact human task authorization contains repeated microreads without di
 
 test('microreads outside the governed discovery index stop before dispatch', () => {
   const current = experience();
-  const proposal = createNaturalTaskEnvelopeProposal({ task: freeze({ schema: 'sdo.natural_governed_task.v1', kind: 'PROJECT_ANALYSIS', objective: 'Analyze project.', mutating: false, operations: [] }), workspaceRoot: '/project', physicalWorkspaceIdentity: current.binding.physicalWorkspaceIdentity, riskCeiling: 'R1', validFrom: '2026-08-30T12:00:00.000Z', expiresAt: '2026-08-30T12:10:00.000Z' });
+  const proposal = createNaturalTaskEnvelopeProposal({ task: freeze({ schema: 'sdo.natural_governed_task.v1', kind: 'PROJECT_ANALYSIS', objective: 'Analyze project.', mutating: false, operations: [] }), workspaceRoot: WORKSPACE_ROOT, physicalWorkspaceIdentity: current.binding.physicalWorkspaceIdentity, riskCeiling: 'R1', validFrom: '2026-08-30T12:00:00.000Z', expiresAt: '2026-08-30T12:10:00.000Z' });
   const authorization = authorizeNaturalTaskEnvelope(proposal, freeze({ approved: true, proposalFingerprint: proposal.proposalFingerprint, humanSubject: 'human:test', authorizedAt: '2026-08-30T12:00:00.000Z' }));
   const plan = planNaturalGovernedWorkspaceMicroread(current, authorization, freeze({ evidenceRequest: { kind: 'READ_FILE', target: 'secrets/runtime.js', reason: 'Analyze.' }, evidenceStep: 1, risk: 'R1', mutating: false }), { now: '2026-08-30T12:01:00.000Z' });
   assert.equal(plan.decision, 'STOPPED');
@@ -73,7 +76,7 @@ test('microreads outside the governed discovery index stop before dispatch', () 
 
 test('validation microreads remain bound to the qualified command catalog', () => {
   const current = experience();
-  const proposal = createNaturalTaskEnvelopeProposal({ task: freeze({ schema: 'sdo.natural_governed_task.v1', kind: 'PROJECT_ANALYSIS', objective: 'Analyze project.', mutating: false, operations: [] }), workspaceRoot: '/project', physicalWorkspaceIdentity: current.binding.physicalWorkspaceIdentity, riskCeiling: 'R1', validFrom: '2026-08-30T12:00:00.000Z', expiresAt: '2026-08-30T12:10:00.000Z' });
+  const proposal = createNaturalTaskEnvelopeProposal({ task: freeze({ schema: 'sdo.natural_governed_task.v1', kind: 'PROJECT_ANALYSIS', objective: 'Analyze project.', mutating: false, operations: [] }), workspaceRoot: WORKSPACE_ROOT, physicalWorkspaceIdentity: current.binding.physicalWorkspaceIdentity, riskCeiling: 'R1', validFrom: '2026-08-30T12:00:00.000Z', expiresAt: '2026-08-30T12:10:00.000Z' });
   const authorization = authorizeNaturalTaskEnvelope(proposal, freeze({ approved: true, proposalFingerprint: proposal.proposalFingerprint, humanSubject: 'human:test', authorizedAt: '2026-08-30T12:00:00.000Z' }));
   const plan = planNaturalGovernedWorkspaceMicroread(current, authorization, freeze({ evidenceRequest: { kind: 'VALIDATE_JS', target: 'src/app.js', reason: 'Validate.' }, evidenceStep: 1, risk: 'R1', mutating: false }), { now: '2026-08-30T12:01:00.000Z' });
   assert.equal(plan.decision, 'CONTAINED');
@@ -83,7 +86,7 @@ test('validation microreads remain bound to the qualified command catalog', () =
 
 test('read-to-write shell network credentials and risk expansion require new authority', () => {
   const current = experience();
-  const proposal = createNaturalTaskEnvelopeProposal({ task: freeze({ schema: 'sdo.natural_governed_task.v1', kind: 'PROJECT_ANALYSIS', objective: 'Analyze project.', mutating: false, operations: [] }), workspaceRoot: '/project', physicalWorkspaceIdentity: current.binding.physicalWorkspaceIdentity, riskCeiling: 'R1', validFrom: '2026-08-30T12:00:00.000Z', expiresAt: '2026-08-30T12:10:00.000Z' });
+  const proposal = createNaturalTaskEnvelopeProposal({ task: freeze({ schema: 'sdo.natural_governed_task.v1', kind: 'PROJECT_ANALYSIS', objective: 'Analyze project.', mutating: false, operations: [] }), workspaceRoot: WORKSPACE_ROOT, physicalWorkspaceIdentity: current.binding.physicalWorkspaceIdentity, riskCeiling: 'R1', validFrom: '2026-08-30T12:00:00.000Z', expiresAt: '2026-08-30T12:10:00.000Z' });
   const authorization = authorizeNaturalTaskEnvelope(proposal, freeze({ approved: true, proposalFingerprint: proposal.proposalFingerprint, humanSubject: 'human:test', authorizedAt: '2026-08-30T12:00:00.000Z' }));
   const base = { evidenceRequest: { kind: 'READ_FILE', target: 'README.md', reason: 'Analyze.' }, evidenceStep: 1, risk: 'R1', mutating: false };
   for (const expansion of [{ mutating: true }, { credentialUse: true }, { externalSideEffect: true }, { risk: 'R3' }]) {

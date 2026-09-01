@@ -2,6 +2,8 @@
 
 const test = require('node:test');
 const assert = require('node:assert/strict');
+const fs = require('node:fs');
+const path = require('node:path');
 
 const {
   createNaturalCognitiveSession
@@ -15,11 +17,13 @@ const {
 
 const OBJECTIVE =
   'Avalie a saúde e a prontidão do projeto e recomende a próxima prioridade de engenharia.';
+const WORKSPACE_ROOT =
+  fs.realpathSync(path.resolve(__dirname, '../..'));
 
 function activation() {
   return Object.freeze({
     workspace: 'surgical-dev-ops',
-    repositoryPath: '/qualified/project',
+    repositoryPath: WORKSPACE_ROOT,
     interactionMode: Object.freeze({ mode: 'NATURAL' })
   });
 }

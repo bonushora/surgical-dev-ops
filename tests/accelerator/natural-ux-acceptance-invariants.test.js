@@ -2,6 +2,8 @@
 
 const test = require('node:test');
 const assert = require('node:assert/strict');
+const fs = require('node:fs');
+const path = require('node:path');
 
 const {
   interpretNaturalIntent
@@ -26,11 +28,13 @@ const OBJECTIVE_PT =
   'Explique o estado atual deste projeto e identifique o próximo trabalho de engenharia mais importante.';
 const OBJECTIVE_EN =
   'Explain the current state of this project and identify the most important engineering work to do next.';
+const WORKSPACE_ROOT =
+  fs.realpathSync(path.resolve(__dirname, '../..'));
 
 function activation() {
   return Object.freeze({
     workspace: 'surgical-dev-ops',
-    repositoryPath: '/qualified/project',
+    repositoryPath: WORKSPACE_ROOT,
     interactionMode: Object.freeze({ mode: 'NATURAL' })
   });
 }

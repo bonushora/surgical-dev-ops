@@ -44,13 +44,14 @@ test('worktree and HEAD changes invalidate stale session authority', (context) =
 
 test('repository-root symlink alias and nested root cannot redefine a session', (context) => {
   const root = repository();
+  const physicalRoot = fs.realpathSync(root);
   const alias = `${root}-alias`;
   fs.symlinkSync(root, alias, 'dir');
   fs.mkdirSync(path.join(root, 'nested'));
   context.after(() => { fs.rmSync(alias, { force: true }); fs.rmSync(root, { recursive: true, force: true }); });
   assert.throws(() => createDeterministicWorkspaceSession({ authorizedRoot: path.join(root, 'nested'), humanSubject: 'human:test', authorizedAt: '2026-08-30T12:00:00.000Z' }), /repository/i);
   const session = createDeterministicWorkspaceSession({ authorizedRoot: alias, humanSubject: 'human:test', authorizedAt: '2026-08-30T12:00:00.000Z' });
-  assert.equal(session.physical.root, root);
+  assert.equal(session.physical.root, physicalRoot);
 });
 
 test('workspace replacement invalidates rather than transferring authority', (context) => {
