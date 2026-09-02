@@ -1,5 +1,18 @@
 'use strict';
 
+const NATURAL_GATEWAY_RESULT_CLASSES =
+  new Set([
+    'SUCCESS',
+    'FAILURE',
+    'DENIED',
+    'AUTHORITY_REQUIRED',
+    'STALE_STATE',
+    'CAS_MISMATCH',
+    'UNSUPPORTED',
+    'ENVIRONMENT_ERROR',
+    'INCOMPLETE_EVIDENCE'
+  ]);
+
 /*
  * NATURAL deterministic presentation boundary.
  *
@@ -239,8 +252,151 @@ function formatNaturalPresentation(
   return governedOutput;
 }
 
+function formatNaturalGatewayEvent(
+  event,
+  language = 'pt-BR'
+) {
+  if (
+    !event ||
+    typeof event !== 'object' ||
+    typeof event.operation !== 'string' ||
+    typeof event.type !== 'string'
+  ) {
+    return '';
+  }
+
+  const english = language === 'en';
+
+  if (event.type === 'OPERATION_STARTED') {
+    return english
+      ? `Governed operation started: ${event.operation}\n`
+      : `Operação governada iniciada: ${event.operation}\n`;
+  }
+
+  const classification =
+    typeof event.classification === 'string'
+      ? event.classification
+      : 'FAILURE';
+
+  if (classification === 'SUCCESS') {
+    return english
+      ? `Governed operation completed: ${classification}\n`
+      : `Operação governada concluída: ${classification}\n`;
+  }
+
+  if (classification === 'AUTHORITY_REQUIRED') {
+    return english
+      ? `Governed operation awaits authority: ${classification}\n`
+      : `Operação governada aguarda autoridade: ${classification}\n`;
+  }
+
+  return english
+    ? `Governed operation failed closed: ${classification}\n`
+    : `Operação governada falhou de forma segura: ${classification}\n`;
+}
+
+function formatNaturalGatewayResult(
+  dispatch,
+  language = 'pt-BR'
+) {
+  const result =
+    dispatch &&
+    dispatch.result;
+
+  if (
+    !dispatch ||
+    dispatch.schema !==
+      'sdo.integrated_governed_agent_gateway_dispatch.v1' ||
+    !result ||
+    typeof result !== 'object' ||
+    result.schema !==
+      'sdo.integrated_governed_agent_gateway_result.v1' ||
+    typeof result.classification !== 'string' ||
+    !NATURAL_GATEWAY_RESULT_CLASSES.has(
+      result.classification
+    ) ||
+    typeof result.reason !== 'string'
+  ) {
+    return language === 'en'
+      ? (
+          'Result: DENIED\n' +
+          'Reason: Malformed governed result.\n' +
+          'AI operational authority: none\n' +
+          'Mutation, push, merge, release, publication and deploy were not authorized.\n'
+        )
+      : (
+          'Resultado: DENIED\n' +
+          'Motivo: resultado governado malformado.\n' +
+          'Autoridade operacional da IA: nenhuma\n' +
+          'Mutação, push, merge, release, publicação e deploy não foram autorizados.\n'
+        );
+  }
+
+  const english = language === 'en';
+  const lines = [
+    `${english ? 'Result' : 'Resultado'}: ${result.classification}`,
+    `${english ? 'Reason' : 'Motivo'}: ${result.reason}`
+  ];
+
+  const data =
+    result.data &&
+    typeof result.data === 'object'
+      ? result.data
+      : null;
+
+  if (data && data.kind === 'WORKSPACE_STATUS') {
+    const repository = data.repository || {};
+    lines.push(
+      `${english ? 'Repository' : 'Repositório'}: ${repository.path || 'indisponível'}`,
+      `Branch: ${repository.branch || 'indisponível'}`,
+      `HEAD: ${repository.commit || 'indisponível'}`,
+      `${english ? 'Physical state' : 'Estado físico'}: ${data.clean ? (english ? 'clean' : 'limpo') : (english ? 'changes present' : 'com alterações')}`,
+      `${english ? 'Changed entries' : 'Entradas alteradas'}: ${Array.isArray(data.changedEntries) ? data.changedEntries.length : 0}`,
+      `Orchestrator: ${data.orchestratorStatus || 'indisponível'}`
+    );
+  } else if (data && data.kind === 'WORKSPACE_DIFF') {
+    lines.push(
+      `${english ? 'Governed diff bytes' : 'Bytes do diff governado'}: ${Number.isSafeInteger(data.bytes) ? data.bytes : 'indisponível'}`,
+      `Patch SHA-256: ${data.patchSha256 || 'indisponível'}`,
+      `${english ? 'Raw evidence reference' : 'Referência da evidência bruta'}: ${data.rawEvidenceReference || 'indisponível'}`,
+      `Orchestrator: ${data.orchestratorStatus || 'indisponível'}`
+    );
+  }
+
+  if (result.approvalRequest) {
+    const approval = result.approvalRequest;
+    lines.push(
+      `${english ? 'Requested operation' : 'Operação solicitada'}: ${approval.operation}`,
+      `${english ? 'Authority lifetime' : 'Validade da autoridade'}: ${approval.lifetime}`,
+      `${english ? 'Authority explicitly not granted' : 'Autoridade explicitamente não concedida'}: ${Array.isArray(approval.authorityNotGranted) ? approval.authorityNotGranted.join(', ') : 'none'}`
+    );
+  }
+
+  if (
+    typeof result.evidenceDigest === 'string' &&
+    /^[a-f0-9]{64}$/.test(result.evidenceDigest)
+  ) {
+    lines.push(
+      `${english ? 'Evidence SHA-256' : 'Evidência SHA-256'}: ${result.evidenceDigest}`
+    );
+  }
+
+  lines.push(
+    english
+      ? 'AI operational authority: none'
+      : 'Autoridade operacional da IA: nenhuma',
+    english
+      ? 'Mutation, push, merge, release, publication and deploy were not authorized.'
+      : 'Mutação, push, merge, release, publicação e deploy não foram autorizados.'
+  );
+
+  return `${lines.join('\n')}\n`;
+}
+
 module.exports = Object.freeze({
   extractGovernedPayload,
   parseWorktreeStatus,
-  formatNaturalPresentation
+  formatNaturalPresentation,
+  formatNaturalGatewayEvent,
+  formatNaturalGatewayResult
 });

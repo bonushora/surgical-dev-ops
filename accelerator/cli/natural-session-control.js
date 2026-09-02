@@ -59,6 +59,108 @@ function includesAny(
   );
 }
 
+function resolveNaturalGatewayIntent(value) {
+  const objective =
+    String(value || '').trim();
+
+  const tokens =
+    new Set(
+      normalize(objective)
+        .replace(/[^a-z0-9_./-]+/g, ' ')
+        .split(' ')
+        .filter(Boolean)
+    );
+
+  const hasAny = (...concepts) =>
+    concepts.some(
+      (concept) => tokens.has(concept)
+    );
+
+  const engineeringScope =
+    hasAny(
+      'projeto',
+      'project',
+      'repositorio',
+      'repository',
+      'workspace'
+    );
+
+  const statusConcept =
+    hasAny(
+      'estado',
+      'status',
+      'situacao',
+      'state'
+    );
+
+  const analyticalScope =
+    hasAny(
+      'explique',
+      'explicar',
+      'explain',
+      'identifique',
+      'identificar',
+      'identify',
+      'proximo',
+      'next',
+      'recomende',
+      'recommend'
+    );
+
+  const changedConcept =
+    hasAny(
+      'mudaram',
+      'mudou',
+      'modificados',
+      'modificadas',
+      'alterados',
+      'alteradas',
+      'changed',
+      'modified',
+      'changes'
+    );
+
+  const evidenceConcept =
+    hasAny(
+      'evidencia',
+      'evidence',
+      'prova',
+      'proof'
+    );
+
+  let operation = null;
+  let requiresMissionContext = false;
+
+  if (
+    engineeringScope &&
+    statusConcept &&
+    !analyticalScope
+  ) {
+    operation = 'workspace.status';
+  } else if (changedConcept) {
+    operation = 'workspace.diff';
+  } else if (evidenceConcept) {
+    operation = 'evidence.inspect';
+    requiresMissionContext = true;
+  }
+
+  if (!operation) {
+    return null;
+  }
+
+  return Object.freeze({
+    operation,
+    args: Object.freeze({}),
+    objective,
+    requiresMissionContext,
+    readOnly: true,
+    authorityExpansion: false,
+    operationalAuthority: false,
+    mutationAuthority: false,
+    publicationAuthority: false
+  });
+}
+
 function isNaturalMissionCancellationRequest(value) {
   const text =
     normalize(value)
@@ -581,6 +683,19 @@ function createNaturalSessionControl(
       });
     }
 
+    const gatewayIntent =
+      resolveNaturalGatewayIntent(
+        input
+      );
+
+    if (gatewayIntent) {
+      return Object.freeze({
+        matched: true,
+        action: 'GATEWAY_REQUEST',
+        intent: gatewayIntent
+      });
+    }
+
     const governedTask =
       detectNaturalGovernedTask(
         input
@@ -1002,5 +1117,6 @@ module.exports =
     formatProviderStatus,
     formatProviderCatalog,
     isNaturalMissionCancellationRequest,
+    resolveNaturalGatewayIntent,
     createNaturalSessionControl
   });

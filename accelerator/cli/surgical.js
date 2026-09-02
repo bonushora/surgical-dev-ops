@@ -35,8 +35,17 @@ const {
 } = require('./natural-intent');
 
 const {
-  formatNaturalPresentation
+  formatNaturalPresentation,
+  formatNaturalGatewayEvent,
+  formatNaturalGatewayResult
 } = require('./natural-presentation');
+
+const {
+  createGatewayRequest,
+  streamGatewayRequest
+} = require(
+  '../core/integrated-governed-agent-gateway'
+);
 
 const {
   createNaturalCognitiveSession
@@ -108,6 +117,7 @@ const {
 
 const {
   createNaturalAgenticMission,
+  updateNaturalAgenticMissionPlan,
   projectMissionView,
   formatMissionProjection,
   cancelNaturalAgenticMission,
@@ -135,6 +145,35 @@ const {
 const VERSION = '2.6.0-rc.6';
 const NATURAL_WORKSPACE_HUMAN_SUBJECT =
   'surgical-cli-local-session';
+
+const NATURAL_R1_GATEWAY_ALLOWED_CAPABILITIES =
+  Object.freeze([
+    'workspace.status',
+    'workspace.diff',
+    'evidence.inspect'
+  ]);
+
+const NATURAL_R1_GATEWAY_DENIED_CAPABILITIES =
+  Object.freeze([
+    'arbitrary.shell',
+    'credential.read',
+    'network.mutate',
+    'workspace.search',
+    'workspace.read',
+    'evidence.microread',
+    'tests.run',
+    'tests.runCanonical',
+    'mutation.propose',
+    'mutation.applyConditional',
+    'git.stage',
+    'git.commit',
+    'git.push',
+    'git.merge',
+    'git.tag',
+    'release.create',
+    'npm.publish',
+    'deploy'
+  ]);
 
 function humanText(activation, portuguese, english) {
   return usesEnglish(activation)
@@ -1049,6 +1088,12 @@ function createInteractiveSession(
   let agenticMission =
     null;
 
+  let naturalGatewayMissionSequence =
+    0;
+
+  let lastNaturalGatewayContext =
+    null;
+
   const runnerRuntime =
     cognitiveMode
       ? createNaturalRunnerRuntime()
@@ -1093,6 +1138,245 @@ function createInteractiveSession(
       agenticMission =
         null;
     }
+  }
+
+  function createNaturalGatewayMission(
+    intent,
+    observedAt
+  ) {
+    const session =
+      createDeterministicWorkspaceSession({
+        authorizedRoot:
+          activation.repositoryPath,
+        humanSubject:
+          NATURAL_WORKSPACE_HUMAN_SUBJECT,
+        authorizedAt:
+          observedAt
+      });
+
+    naturalGatewayMissionSequence += 1;
+
+    return createNaturalAgenticMission({
+      missionId:
+        `cli-natural-r1-${session.sessionFingerprint.slice(0, 24)}-${naturalGatewayMissionSequence}`,
+      objective:
+        intent.objective,
+      session,
+      createdAt:
+        observedAt,
+      plan: [
+        {
+          stepId:
+            `gateway-${naturalGatewayMissionSequence}-01`,
+          summary:
+            `Execute ${intent.operation} through the Integrated Governed Agent Gateway.`,
+          status:
+            'ACTIVE'
+        }
+      ],
+      authority: {
+        allowedCapabilities:
+          NATURAL_R1_GATEWAY_ALLOWED_CAPABILITIES,
+        deniedCapabilities:
+          NATURAL_R1_GATEWAY_DENIED_CAPABILITIES,
+        grants: []
+      }
+    });
+  }
+
+  function prepareNaturalGatewayMission(
+    intent,
+    observedAt
+  ) {
+    if (!intent.requiresMissionContext) {
+      return Object.freeze({
+        mission:
+          createNaturalGatewayMission(
+            intent,
+            observedAt
+          ),
+        args:
+          intent.args
+      });
+    }
+
+    if (
+      !agenticMission ||
+      !lastNaturalGatewayContext
+    ) {
+      return null;
+    }
+
+    const stepId =
+      `gateway-${naturalGatewayMissionSequence}-${String(agenticMission.plan.length + 1).padStart(2, '0')}`;
+
+    agenticMission =
+      updateNaturalAgenticMissionPlan(
+        agenticMission,
+        {
+          plan: [
+            ...agenticMission.plan,
+            {
+              stepId,
+              summary:
+                `Re-inspect physical evidence for ${lastNaturalGatewayContext.operation}.`,
+              status:
+                'ACTIVE'
+            }
+          ],
+          at:
+            observedAt,
+          summary:
+            'Explicit evidence request added to the governed live plan.'
+        }
+      );
+
+    return Object.freeze({
+      mission:
+        agenticMission,
+      args: Object.freeze({
+        ...lastNaturalGatewayContext.args,
+        operation:
+          lastNaturalGatewayContext.operation
+      })
+    });
+  }
+
+  async function dispatchNaturalGatewayIntent(
+    intent
+  ) {
+    const observedAt =
+      currentCanonicalInstant(
+        options
+      );
+
+    const prepared =
+      prepareNaturalGatewayMission(
+        intent,
+        observedAt
+      );
+
+    if (!prepared) {
+      output.write(
+        humanText(
+          activation,
+          'A referência de evidência está ambígua: ainda não existe uma operação governada anterior nesta missão. Peça primeiro o estado ou as alterações do projeto. Nenhuma operação foi executada e nenhuma autoridade foi concedida.\n',
+          'The evidence reference is ambiguous: this mission has no preceding governed operation. Ask for project status or changes first. No operation ran and no authority was granted.\n'
+        )
+      );
+      return;
+    }
+
+    agenticMission =
+      prepared.mission;
+
+    const requestSequence =
+      agenticMission.events.length + 1;
+
+    const request =
+      createGatewayRequest({
+        requestId:
+          `${agenticMission.missionId}-request-${requestSequence}`,
+        mission:
+          agenticMission,
+        operation:
+          intent.operation,
+        args:
+          prepared.args,
+        requestedAt:
+          observedAt
+      });
+
+    let dispatch =
+      null;
+
+    for await (
+      const item of streamGatewayRequest({
+        request,
+        mission:
+          agenticMission,
+        options: {
+          now:
+            () => observedAt,
+          runtime:
+            options.gatewayRuntime || {}
+        }
+      })
+    ) {
+      output.write(
+        formatNaturalGatewayEvent(
+          item.event,
+          activation.language
+        )
+      );
+
+      if (item.done) {
+        dispatch =
+          item.dispatch;
+      }
+    }
+
+    if (!dispatch || !dispatch.result) {
+      throw new Error(
+        'Integrated Gateway returned no structured dispatch.'
+      );
+    }
+
+    agenticMission =
+      dispatch.mission;
+
+    const completed =
+      dispatch.result.classification ===
+        'SUCCESS';
+
+    agenticMission =
+      updateNaturalAgenticMissionPlan(
+        agenticMission,
+        {
+          plan:
+            agenticMission.plan.map(
+              (step) =>
+                step.status === 'ACTIVE'
+                  ? {
+                      ...step,
+                      status:
+                        completed
+                          ? 'COMPLETED'
+                          : 'BLOCKED'
+                    }
+                  : step
+            ),
+          at:
+            observedAt,
+          summary:
+            completed
+              ? 'Governed Gateway operation completed with physical evidence.'
+              : `Governed Gateway operation stopped with ${dispatch.result.classification}.`
+        }
+      );
+
+    if (
+      completed &&
+      intent.operation !==
+        'evidence.inspect'
+    ) {
+      lastNaturalGatewayContext =
+        Object.freeze({
+          operation:
+            intent.operation,
+          args:
+            prepared.args,
+          evidenceDigest:
+            dispatch.result.evidenceDigest
+        });
+    }
+
+    output.write(
+      formatNaturalGatewayResult(
+        dispatch,
+        activation.language
+      )
+    );
   }
 
   rl.on('line', (line) => {
@@ -1233,7 +1517,21 @@ function createInteractiveSession(
               );
 
             if (controlled.matched) {
-              if (controlled.action === 'MISSION_PROJECTION') {
+              if (controlled.action === 'GATEWAY_REQUEST') {
+                try {
+                  await dispatchNaturalGatewayIntent(
+                    controlled.intent
+                  );
+                } catch (error) {
+                  output.write(
+                    humanText(
+                      activation,
+                      `A operação governada falhou de forma segura antes de produzir evidência válida. Motivo: ${error && error.message ? error.message : 'falha de ambiente'}. Nenhuma autoridade foi concedida.\n`,
+                      `The governed operation failed closed before producing valid evidence. Reason: ${error && error.message ? error.message : 'environment failure'}. No authority was granted.\n`
+                    )
+                  );
+                }
+              } else if (controlled.action === 'MISSION_PROJECTION') {
                 if (!agenticMission) {
                   output.write(
                     humanText(
