@@ -216,6 +216,60 @@ UNRESOLVED: no focused repair failure; complete NATURAL/provider and canonical r
 
 TIMESTAMP: 2026-09-01
 
+## P5R — Complete Local Requalification
+
+MISSION: NATURAL Qualified Provider Activation Manual-Acceptance Repair
+
+BASE_SHA: `2bb3b0d53acd50928893719ca760a83f71e0281c`
+
+CURRENT_SHA: `7c2e591c52aac737d7c52b3d2fa59942b47370b7`
+
+MILESTONE: P5R
+
+MILESTONE_STATUS: GREEN
+
+FILES_CHANGED: no runtime or test mutation was required during P5R; the final
+checkpoint updates only this continuity record. The complete mission range
+remains limited to the qualified NATURAL provider coordinator, runtime,
+session/control/CLI integration, focused tests and this record.
+
+TESTS_EXECUTED:
+
+- `node --test tests/accelerator/natural-*.test.js` (qualified rerun with bounded permission for hermetic temporary Git fixtures)
+- `npm test` (`node --test tests/accelerator/*.test.js`; qualified rerun with bounded permission for hermetic temporary Git fixtures)
+- `git diff --check`
+
+TEST_RESULTS: complete NATURAL subsystem 349 discovered, 349 passed, 0 failed,
+0 skipped; canonical repository suite 1238 discovered, 1233 passed, 0 failed,
+5 permitted platform skips; diff check passed. The five canonical skips were
+the macOS-only Seatbelt probe, two Windows-only native durability/capability
+probes, and two physical-path tests for lexical/physical temporary-directory
+divergence that is absent on this Linux host (`/tmp` resolves exactly to
+`/tmp`). Linux Bubblewrap qualification executed and passed.
+
+FOCUSED_CONTINUITY: the clean exact starting tree preserves every committed
+P4.1-P4.5 GREEN checkpoint. The interrupted-session clue reported a 102/102
+focused result, but the repository does not retain its exact command; no
+command or count was fabricated and the complete NATURAL plus canonical gates
+above independently qualify the exact committed tree.
+
+SECURITY_REVIEW: no real OpenAI credential; no live OpenAI connection; no
+unauthorized provider activation; no authority expansion; no secret exposure;
+no package-version or workflow change; no ADR drift; no tag, release, publish
+or deploy.
+
+NEXT_MILESTONE: conditional remote delivery and exact-SHA cross-platform CI
+
+AUTHORITY_REMAINING: exactly one normal delivery-branch push after fresh
+origin/main verification, PR creation/reuse and exact-SHA CI qualification;
+NO MERGE; NO TAG; NO RELEASE; NO PUBLISH; NO DEPLOY.
+
+UNRESOLVED: REAL/LIVE OPENAI API CONNECTION HAS NOT BEEN TESTED AND NO REAL
+CREDENTIAL WAS USED. Cross-platform remote CI remains to be qualified at the
+exact final local checkpoint SHA.
+
+TIMESTAMP: 2026-09-01
+
 ## P4 — NATURAL Provider UX
 
 MISSION: NATURAL Qualified Provider Activation Coordinator
