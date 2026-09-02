@@ -521,6 +521,45 @@ function formatNaturalReferenceContextProjection(
       );
 }
 
+function formatNaturalMissionContinuation(
+  continuation,
+  language = 'pt-BR'
+) {
+  if (
+    !continuation ||
+    continuation.schema !== 'sdo.natural_agentic_mission_continuation.v1' ||
+    typeof continuation.classification !== 'string' ||
+    typeof continuation.reason !== 'string' ||
+    continuation.authorityExpansion !== false ||
+    continuation.operationalAuthority !== false ||
+    continuation.mutationAuthority !== false
+  ) {
+    return language === 'en'
+      ? 'Continuation: DENIED\nReason: Malformed continuation decision.\nContinuation authority: none\n'
+      : 'Continuação: DENIED\nMotivo: decisão de continuação malformada.\nAutoridade da continuação: nenhuma\n';
+  }
+
+  const english = language === 'en';
+  const lines = [
+    `Continuation: ${continuation.classification}`,
+    `${english ? 'Reason' : 'Motivo'}: ${continuation.reason}`
+  ];
+
+  if (continuation.step) {
+    lines.push(
+      `${english ? 'Step' : 'Etapa'}: ${continuation.step.stepId}`,
+      `${english ? 'Operation' : 'Operação'}: ${continuation.step.operation || 'not established'}`
+    );
+  }
+
+  lines.push(
+    english
+      ? 'Continuation authority: none'
+      : 'Autoridade da continuação: nenhuma'
+  );
+  return `${lines.join('\n')}\n`;
+}
+
 module.exports = Object.freeze({
   extractGovernedPayload,
   parseWorktreeStatus,
@@ -528,5 +567,6 @@ module.exports = Object.freeze({
   formatNaturalGatewayEvent,
   formatNaturalGatewayResult,
   formatNaturalReferenceResolution,
-  formatNaturalReferenceContextProjection
+  formatNaturalReferenceContextProjection,
+  formatNaturalMissionContinuation
 });

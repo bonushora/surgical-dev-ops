@@ -299,7 +299,7 @@ test(
 );
 
 test(
-  'NATURAL CLI projects governed mission state without granting authority',
+  'NATURAL CLI fails closed instead of projecting a generic mission before an objective',
   async () => {
     const input = new PassThrough();
     const output = new PassThrough();
@@ -329,22 +329,12 @@ test(
 
     await new Promise((resolve) => setTimeout(resolve, 50));
 
-    assert.match(observed, /Mission: cli-natural-/);
-    assert.match(observed, /State: PLANNING/);
-    assert.match(observed, /Projection authority: none/);
-    assert.match(
-      observed,
-      /ACTIVE: Maintain governed conversational session state\./
-    );
-    assert.match(observed, /Authority projection:/);
-    assert.match(
-      observed,
-      /Local commit does not grant push\./
-    );
-    assert.doesNotMatch(
-      observed,
-      /No active governed mission/
-    );
+    assert.doesNotMatch(observed, /Mission: cli-natural-/);
+    assert.doesNotMatch(observed, /Interactive NATURAL governed engineering session/);
+    assert.doesNotMatch(observed, /Maintain governed conversational session state/);
+    assert.match(observed, /Nenhuma missão governada ativa pôde ser projetada/);
+    assert.match(observed, /Não há missão governada ativa para retomar/);
+    assert.doesNotMatch(observed, /operational authority: granted/i);
   }
 );
 

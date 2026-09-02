@@ -441,6 +441,91 @@ function resolveNaturalGatewayIntent(value) {
   });
 }
 
+function resolveNaturalMissionControlIntent(value) {
+  const tokens = naturalSemanticTokens(value);
+  const hasAny = (...concepts) => concepts.some((concept) => tokens.has(concept));
+  const hasAll = (...concepts) => concepts.every((concept) => tokens.has(concept));
+
+  const continuation =
+    hasAny('continue', 'continuar') &&
+    !hasAny('nao', 'not', 'stop', 'pare');
+
+  if (continuation) {
+    return Object.freeze({
+      action: 'MISSION_CONTINUE'
+    });
+  }
+
+  const statusQuestion =
+    (
+      hasAny('fazendo', 'doing') &&
+      hasAny('voce', 'you')
+    ) ||
+    (hasAny('objetivo', 'objective') && hasAny('atual', 'current')) ||
+    (
+      hasAny('missao', 'mission') &&
+      hasAny('estado', 'status', 'state')
+    );
+
+  if (statusQuestion) {
+    return Object.freeze({
+      action: 'MISSION_PROJECTION',
+      projection: 'status'
+    });
+  }
+
+  const planQuestion =
+    hasAny('plano', 'plan') ||
+    (hasAny('etapa', 'step') && hasAny('atual', 'current')) ||
+    hasAll('proximo', 'passo') ||
+    hasAll('next', 'step') ||
+    (
+      hasAny('next') &&
+      hasAny('what', 'qual', 'whats')
+    ) ||
+    (
+      hasAny(
+        'concluido',
+        'concluida',
+        'concluidos',
+        'concluidas',
+        'completed',
+        'remains'
+      ) &&
+      hasAny('que', 'what')
+    ) ||
+    (
+      hasAny(
+        'bloqueio',
+        'bloqueado',
+        'bloqueada',
+        'bloqueados',
+        'bloqueadas',
+        'blocked'
+      ) &&
+      hasAny(
+        'ha',
+        'algum',
+        'algo',
+        'anything',
+        'you',
+        'voce',
+        'mission',
+        'missao'
+      )
+    ) ||
+    (hasAny('falta', 'faltam') && hasAny('que', 'what'));
+
+  if (planQuestion) {
+    return Object.freeze({
+      action: 'MISSION_PROJECTION',
+      projection: 'plan'
+    });
+  }
+
+  return null;
+}
+
 function isNaturalMissionCancellationRequest(value) {
   const text =
     normalize(value)
@@ -875,6 +960,28 @@ function createNaturalSessionControl(
         projection: missionProjection,
         readOnly: true,
         authorityExpansion: false,
+        publicationAuthority: false
+      });
+    }
+
+    const naturalMissionControl =
+      resolveNaturalMissionControlIntent(input);
+
+    if (naturalMissionControl) {
+      const typedReference =
+        resolveNaturalEngineeringReferenceIntent(
+          input
+        );
+      return Object.freeze({
+        matched: true,
+        ...naturalMissionControl,
+        ...(typedReference
+          ? { intent: typedReference }
+          : {}),
+        readOnly: true,
+        authorityExpansion: false,
+        operationalAuthority: false,
+        mutationAuthority: false,
         publicationAuthority: false
       });
     }
@@ -1411,5 +1518,6 @@ module.exports =
     isNaturalMissionCancellationRequest,
     resolveNaturalEngineeringReferenceIntent,
     resolveNaturalGatewayIntent,
+    resolveNaturalMissionControlIntent,
     createNaturalSessionControl
   });

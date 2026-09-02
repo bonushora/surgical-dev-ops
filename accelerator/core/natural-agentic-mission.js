@@ -10,6 +10,7 @@ const {
 const MISSION_SCHEMA = 'sdo.natural_agentic_mission.v1';
 const EVENT_SCHEMA = 'sdo.natural_agentic_mission_event.v1';
 const PROJECTION_SCHEMA = 'sdo.natural_agentic_mission_projection.v1';
+const CONTINUATION_SCHEMA = 'sdo.natural_agentic_mission_continuation.v1';
 
 const MISSION_STATES = Object.freeze([
   'PLANNING',
@@ -32,6 +33,52 @@ const PLAN_STATUSES = Object.freeze([
   'COMPLETED',
   'BLOCKED'
 ]);
+
+const PLAN_RESULT_CLASSES = Object.freeze([
+  'SUCCESS',
+  'FAILURE',
+  'DENIED',
+  'AUTHORITY_REQUIRED',
+  'STALE_STATE',
+  'CAS_MISMATCH',
+  'UNSUPPORTED',
+  'ENVIRONMENT_ERROR',
+  'INCOMPLETE_EVIDENCE',
+  'PASSED',
+  'FAILED'
+]);
+
+const CONTINUATION_CLASSES = Object.freeze([
+  'ELIGIBLE',
+  'NO_NEXT_STEP',
+  'AMBIGUOUS_NEXT_STEP',
+  'STALE_STATE',
+  'AUTHORITY_REQUIRED'
+]);
+
+const PROCESS_LOCAL_CONTINUATION_OPERATIONS = Object.freeze([
+  'workspace.status',
+  'workspace.diff',
+  'evidence.inspect'
+]);
+
+const PLAN_INPUT_FIELDS = new Set([
+  'stepId',
+  'summary',
+  'status',
+  'operation',
+  'sourceOperation',
+  'resultClass',
+  'evidenceRef',
+  'blocker'
+]);
+
+const PLAN_TRANSITIONS = Object.freeze({
+  PENDING: Object.freeze(['PENDING', 'ACTIVE', 'BLOCKED']),
+  ACTIVE: Object.freeze(['ACTIVE', 'COMPLETED', 'BLOCKED']),
+  COMPLETED: Object.freeze(['COMPLETED']),
+  BLOCKED: Object.freeze(['BLOCKED'])
+});
 
 const EVENT_TYPES = Object.freeze({
   MISSION_STARTED: 'MISSION_STARTED',
@@ -207,9 +254,15 @@ function normalizePlan(plan = []) {
   if (!Array.isArray(plan) || plan.length > 64) {
     throw new Error('Mission plan is malformed.');
   }
-  return plan.map((item, index) => {
+  const normalized = plan.map((item, index) => {
     if (!item || typeof item !== 'object' || Array.isArray(item)) {
       throw new Error('Mission plan item is malformed.');
+    }
+    const unexpected = Object.keys(item).filter(
+      (key) => !PLAN_INPUT_FIELDS.has(key)
+    );
+    if (unexpected.length > 0) {
+      throw new Error(`Mission plan item contains an unexpected field: ${unexpected[0]}.`);
     }
     const summary = requireText(item.summary, 'Mission plan summary', 512);
     const status = requireText(item.status || 'PENDING', 'Mission plan status', 32).toUpperCase();
@@ -219,8 +272,69 @@ function normalizePlan(plan = []) {
     const stepId = item.stepId
       ? requireText(item.stepId, 'Mission plan step id', 128)
       : `step-${String(index + 1).padStart(2, '0')}`;
-    return deepFreeze({ stepId, summary, status });
+    const operation = requireOptionalText(
+      item.operation,
+      'Mission plan operation',
+      128
+    );
+    const sourceOperation = requireOptionalText(
+      item.sourceOperation,
+      'Mission plan source operation',
+      128
+    );
+    const resultClass = item.resultClass === undefined || item.resultClass === null
+      ? null
+      : requireText(item.resultClass, 'Mission plan result class', 64).toUpperCase();
+    const evidenceRef = item.evidenceRef === undefined || item.evidenceRef === null
+      ? null
+      : normalizeEvidenceRef(item.evidenceRef);
+    const blocker = requireOptionalText(
+      item.blocker,
+      'Mission plan blocker',
+      1024
+    );
+
+    if (resultClass && !PLAN_RESULT_CLASSES.includes(resultClass)) {
+      throw new Error('Mission plan result class is unsupported.');
+    }
+    if (
+      status === 'COMPLETED' &&
+      resultClass &&
+      !['SUCCESS', 'PASSED'].includes(resultClass)
+    ) {
+      throw new Error('A failed mission plan result cannot be completed.');
+    }
+    if (
+      status === 'BLOCKED' &&
+      resultClass &&
+      ['SUCCESS', 'PASSED'].includes(resultClass)
+    ) {
+      throw new Error('A successful mission plan result cannot be blocked.');
+    }
+    if (blocker && status !== 'BLOCKED') {
+      throw new Error('Mission plan blocker requires BLOCKED status.');
+    }
+
+    return deepFreeze({
+      stepId,
+      summary,
+      status,
+      ...(operation ? { operation } : {}),
+      ...(sourceOperation ? { sourceOperation } : {}),
+      ...(resultClass ? { resultClass } : {}),
+      ...(evidenceRef ? { evidenceRef } : {}),
+      ...(blocker ? { blocker } : {})
+    });
   });
+
+  if (new Set(normalized.map((item) => item.stepId)).size !== normalized.length) {
+    throw new Error('Mission plan step ids must be unique.');
+  }
+  if (normalized.filter((item) => item.status === 'ACTIVE').length > 1) {
+    throw new Error('Mission plan cannot contain multiple active steps.');
+  }
+
+  return normalized;
 }
 
 function normalizeCapabilities(input, fallback) {
@@ -543,6 +657,171 @@ function updateNaturalAgenticMissionPlan(mission, { plan, at, summary = 'Governe
   });
 }
 
+function updateNaturalAgenticMissionPlanStep(
+  mission,
+  {
+    stepId,
+    status,
+    operation,
+    sourceOperation,
+    resultClass,
+    evidenceRef,
+    blocker,
+    at,
+    eventSummary = 'Governed live plan step updated.'
+  } = {}
+) {
+  const current = validateNaturalAgenticMission(mission);
+  const id = requireText(stepId, 'Mission plan step id', 128);
+  const existing = current.plan.find((step) => step.stepId === id);
+
+  if (!existing) {
+    throw new Error('Mission plan step is unavailable.');
+  }
+
+  const nextStatus = requireText(
+    status || existing.status,
+    'Mission plan status',
+    32
+  ).toUpperCase();
+
+  if (
+    !PLAN_STATUSES.includes(nextStatus) ||
+    !PLAN_TRANSITIONS[existing.status].includes(nextStatus)
+  ) {
+    throw new Error('Mission plan step transition is unsupported.');
+  }
+
+  const replacement = {
+    ...existing,
+    status: nextStatus
+  };
+  const optionalFields = {
+    operation,
+    sourceOperation,
+    resultClass,
+    evidenceRef,
+    blocker
+  };
+
+  for (const [key, value] of Object.entries(optionalFields)) {
+    if (value === undefined) continue;
+    if (value === null) {
+      delete replacement[key];
+    } else {
+      replacement[key] = value;
+    }
+  }
+
+  return updateNaturalAgenticMissionPlan(current, {
+    plan: current.plan.map((step) =>
+      step.stepId === id
+        ? replacement
+        : step
+    ),
+    at,
+    summary: requireText(eventSummary, 'Mission plan event summary', 512)
+  });
+}
+
+function validateStructuredGatewayPlanResult(result) {
+  if (
+    !result ||
+    result.schema !== 'sdo.integrated_governed_agent_gateway_result.v1' ||
+    !Object.isFrozen(result) ||
+    result.operationalAuthority !== false ||
+    result.mutationAuthority !== false
+  ) {
+    throw new Error('Immutable zero-authority governed result is required.');
+  }
+
+  const operation = requireText(
+    result.operation,
+    'Governed result operation',
+    128
+  );
+  const classification = requireText(
+    result.classification,
+    'Governed result classification',
+    64
+  ).toUpperCase();
+
+  if (!PLAN_RESULT_CLASSES.includes(classification)) {
+    throw new Error('Governed result classification is unsupported.');
+  }
+
+  requireText(result.reason, 'Governed result reason', 1024);
+  requireDigest(result.evidenceDigest, 'Governed result evidence digest');
+
+  const {
+    resultFingerprint,
+    ...body
+  } = result;
+
+  if (
+    requireDigest(resultFingerprint, 'Governed result fingerprint') !==
+      fingerprint('sdo.integrated_governed_agent_gateway_result.v1', body)
+  ) {
+    throw new Error('Governed result has lost integrity.');
+  }
+
+  return deepFreeze({
+    missionId: requireText(result.missionId, 'Governed result mission id', 256),
+    operation,
+    classification,
+    reason: result.reason,
+    evidenceDigest: result.evidenceDigest
+  });
+}
+
+function recordNaturalAgenticMissionPlanResult(
+  mission,
+  {
+    stepId,
+    result,
+    at
+  } = {}
+) {
+  const current = validateNaturalAgenticMission(mission);
+  const id = requireText(stepId, 'Mission plan step id', 128);
+  const step = current.plan.find((item) => item.stepId === id);
+  const governed = validateStructuredGatewayPlanResult(result);
+
+  if (
+    !step ||
+    step.status !== 'ACTIVE' ||
+    step.operation !== governed.operation ||
+    governed.missionId !== current.missionId
+  ) {
+    throw new Error('Governed result does not match the active mission plan step.');
+  }
+
+  const succeeded = governed.classification === 'SUCCESS';
+  let updated = updateNaturalAgenticMissionPlanStep(current, {
+    stepId: id,
+    status: succeeded ? 'COMPLETED' : 'BLOCKED',
+    resultClass: governed.classification,
+    evidenceRef: {
+      kind: governed.operation,
+      fingerprint: governed.evidenceDigest
+    },
+    blocker: succeeded ? null : governed.reason,
+    at,
+    eventSummary: succeeded
+      ? 'Governed operation completed the active live-plan step.'
+      : 'Governed operation blocked the active live-plan step.'
+  });
+
+  if (!succeeded && updated.state !== 'BLOCKED') {
+    updated = blockNaturalAgenticMission(updated, {
+      reason: governed.reason,
+      at
+    });
+  }
+
+  return updated;
+}
+
 function recordNaturalAgenticMissionChange(mission, { target, summary, beforeSha256 = null, afterSha256 = null, at } = {}) {
   const current = validateNaturalAgenticMission(mission);
   const change = deepFreeze({
@@ -774,15 +1053,167 @@ function planCounts(plan) {
   }, {});
 }
 
+function livePlanState(plan, missionState) {
+  const terminal = TERMINAL_STATES.has(missionState);
+  const active = plan.find((item) => item.status === 'ACTIVE') || null;
+  const blocked = [...plan].reverse().find((item) => item.status === 'BLOCKED') || null;
+  const pending = plan.filter((item) => item.status === 'PENDING');
+  const completed = plan.filter((item) => item.status === 'COMPLETED');
+  const lastResult = [...plan].reverse().find((item) => item.resultClass) || null;
+
+  return deepFreeze({
+    currentStep: terminal ? null : active || blocked,
+    nextStep: !terminal && pending.length === 1 ? pending[0] : null,
+    nextStepAmbiguous: !terminal && pending.length > 1,
+    completedSteps: completed,
+    pendingSteps: pending,
+    blockedSteps: plan.filter((item) => item.status === 'BLOCKED'),
+    lastGovernedResult: lastResult
+      ? deepFreeze({
+          stepId: lastResult.stepId,
+          operation: lastResult.operation || null,
+          classification: lastResult.resultClass,
+          evidenceRef: lastResult.evidenceRef || null,
+          blocker: lastResult.blocker || null
+        })
+      : null
+  });
+}
+
+function continuationEnvelope(classification, mission, reason, step = null) {
+  if (!CONTINUATION_CLASSES.includes(classification)) {
+    throw new Error('Mission continuation classification is unsupported.');
+  }
+  const body = {
+    schema: CONTINUATION_SCHEMA,
+    classification,
+    missionId: mission.missionId,
+    missionFingerprint: mission.missionFingerprint,
+    reason: requireText(reason, 'Mission continuation reason', 1024),
+    step,
+    processLocal: true,
+    physicalStateValidated: classification !== 'STALE_STATE',
+    authorityExpansion: false,
+    operationalAuthority: false,
+    mutationAuthority: false
+  };
+  return deepFreeze({
+    ...body,
+    continuationFingerprint: fingerprint(CONTINUATION_SCHEMA, body)
+  });
+}
+
+function hasCurrentPhysicalBinding(mission, revalidation) {
+  return Boolean(
+    revalidation &&
+    revalidation.schema === REVALIDATION_SCHEMA &&
+    Object.isFrozen(revalidation) &&
+    revalidation.decision === 'VALID' &&
+    revalidation.sessionFingerprint === mission.binding.sessionFingerprint &&
+    revalidation.samePhysical === true &&
+    revalidation.sameRepository === true &&
+    revalidation.sameWorktree === true &&
+    revalidation.operationalAuthority === false &&
+    revalidation.mutationAuthority === false &&
+    revalidation.current &&
+    revalidation.current.physicalWorkspaceIdentity === mission.binding.physicalWorkspaceIdentity &&
+    revalidation.current.repositoryHead === mission.binding.repositoryHead &&
+    revalidation.current.worktreeFingerprint === mission.binding.worktreeFingerprint
+  );
+}
+
+function selectNaturalAgenticMissionContinuation({ mission, revalidation } = {}) {
+  const current = validateNaturalAgenticMission(mission);
+
+  if (!hasCurrentPhysicalBinding(current, revalidation)) {
+    return continuationEnvelope(
+      'STALE_STATE',
+      current,
+      'Process-local continuation stopped because physical mission state is stale.'
+    );
+  }
+
+  const blocked = [...current.plan].reverse().find((item) => item.status === 'BLOCKED');
+  if (blocked && blocked.resultClass === 'STALE_STATE') {
+    return continuationEnvelope(
+      'STALE_STATE',
+      current,
+      blocked.blocker || 'Process-local continuation is blocked by stale physical state.',
+      blocked
+    );
+  }
+  if (
+    blocked &&
+    ['AUTHORITY_REQUIRED', 'DENIED'].includes(blocked.resultClass)
+  ) {
+    return continuationEnvelope(
+      'AUTHORITY_REQUIRED',
+      current,
+      blocked.blocker || 'The current mission step requires independent authority.',
+      blocked
+    );
+  }
+
+  const pending = current.plan.filter((item) => item.status === 'PENDING');
+  if (pending.length === 0) {
+    return continuationEnvelope(
+      'NO_NEXT_STEP',
+      current,
+      'The current mission has no pending live-plan step.'
+    );
+  }
+  if (pending.length > 1) {
+    return continuationEnvelope(
+      'AMBIGUOUS_NEXT_STEP',
+      current,
+      'More than one pending live-plan step is eligible for clarification.'
+    );
+  }
+
+  const step = pending[0];
+  if (
+    !step.operation ||
+    !PROCESS_LOCAL_CONTINUATION_OPERATIONS.includes(step.operation) ||
+    !current.authority.allowedCapabilities.includes(step.operation) ||
+    current.authority.deniedCapabilities.includes(step.operation)
+  ) {
+    return continuationEnvelope(
+      'AUTHORITY_REQUIRED',
+      current,
+      'The next live-plan step is not independently authorized for process-local continuation.',
+      step
+    );
+  }
+
+  return continuationEnvelope(
+    'ELIGIBLE',
+    current,
+    'Exactly one physically valid and already-authorized live-plan step is eligible.',
+    step
+  );
+}
+
 function projectMissionStatus(mission) {
   const current = validateNaturalAgenticMission(mission);
+  const live = livePlanState(current.plan, current.state);
   return deepFreeze({
     ...projectionBase(current, 'status'),
     binding: current.binding,
     plan: planCounts(current.plan),
     lastQualification: current.tests.lastResult,
+    currentStep: live.currentStep,
+    nextStep: live.nextStep,
+    nextStepAmbiguous: live.nextStepAmbiguous,
+    lastGovernedResult: live.lastGovernedResult,
+    blocker: live.blockedSteps.at(-1)?.blocker || null,
+    pendingApproval: live.blockedSteps.some(
+      (item) => item.resultClass === 'AUTHORITY_REQUIRED'
+    ),
+    workspace: current.binding.repositoryPath,
+    repository: current.binding.repositoryPath,
     currentHead: current.binding.repositoryHead,
     worktreeFingerprint: current.binding.worktreeFingerprint,
+    provider: current.provider,
     activeAuthority: current.authority.allowedCapabilities,
     unavailableAuthority: current.authority.deniedCapabilities
   });
@@ -790,9 +1221,17 @@ function projectMissionStatus(mission) {
 
 function projectMissionPlan(mission) {
   const current = validateNaturalAgenticMission(mission);
+  const live = livePlanState(current.plan, current.state);
   return deepFreeze({
     ...projectionBase(current, 'plan'),
-    plan: current.plan
+    plan: current.plan,
+    currentStep: live.currentStep,
+    nextStep: live.nextStep,
+    nextStepAmbiguous: live.nextStepAmbiguous,
+    completedSteps: live.completedSteps,
+    pendingSteps: live.pendingSteps,
+    blockedSteps: live.blockedSteps,
+    lastGovernedResult: live.lastGovernedResult
   });
 }
 
@@ -889,15 +1328,34 @@ function formatMissionProjection(projection) {
       `Mission: ${projection.missionId}\n` +
       `State: ${projection.state}\n` +
       `Objective: ${projection.objective}\n` +
+      `Current step: ${projection.currentStep ? projection.currentStep.summary : 'none'}\n` +
+      `Next step: ${projection.nextStep ? projection.nextStep.summary : projection.nextStepAmbiguous ? 'clarification required' : 'none'}\n` +
+      `Last governed result: ${projection.lastGovernedResult ? projection.lastGovernedResult.classification : 'not yet established'}\n` +
+      `Last test: ${projection.lastQualification ? projection.lastQualification.classification : 'not yet established'}\n` +
+      `Blocker: ${projection.blocker || 'none'}\n` +
+      `Pending approval: ${projection.pendingApproval ? 'yes' : 'no'}\n` +
+      `Provider: ${projection.provider.providerId} (${projection.provider.providerKind}; authority none)\n` +
+      `Workspace: ${projection.workspace}\n` +
       `HEAD: ${projection.currentHead}\n` +
       `Plan: ${projection.plan.completed} completed, ${projection.plan.active} active, ${projection.plan.pending} pending, ${projection.plan.blocked} blocked\n` +
       'Projection authority: none\n'
     );
   }
   if (projection.projection === 'plan') {
-    return projection.plan.map((item) =>
-      `${item.status}: ${item.summary}`
-    ).join('\n') + (projection.plan.length ? '\n' : 'No mission plan recorded.\n');
+    const steps = projection.plan.map((item) =>
+      `${item.status}${item.operation ? ` [${item.operation}]` : ''}: ${item.summary}` +
+      `${item.resultClass ? ` — ${item.resultClass}` : ''}` +
+      `${item.blocker ? ` — ${item.blocker}` : ''}`
+    ).join('\n');
+    return (
+      `Mission: ${projection.missionId}\n` +
+      `Objective: ${projection.objective}\n` +
+      `Current step: ${projection.currentStep ? projection.currentStep.summary : 'none'}\n` +
+      `Next step: ${projection.nextStep ? projection.nextStep.summary : projection.nextStepAmbiguous ? 'clarification required' : 'none'}\n` +
+      `Last governed result: ${projection.lastGovernedResult ? projection.lastGovernedResult.classification : 'not yet established'}\n` +
+      (steps ? `${steps}\n` : 'No mission plan recorded.\n') +
+      'Plan authority: none\n'
+    );
   }
   if (projection.projection === 'changes') {
     return projection.changes.map((item) =>
@@ -932,8 +1390,11 @@ module.exports = Object.freeze({
   MISSION_SCHEMA,
   EVENT_SCHEMA,
   PROJECTION_SCHEMA,
+  CONTINUATION_SCHEMA,
   MISSION_STATES,
   PLAN_STATUSES,
+  PLAN_RESULT_CLASSES,
+  CONTINUATION_CLASSES,
   EVENT_TYPES,
   DEFAULT_AVAILABLE_CAPABILITIES,
   DEFAULT_ALLOWED_CAPABILITIES,
@@ -942,6 +1403,9 @@ module.exports = Object.freeze({
   validateNaturalAgenticMission,
   transitionNaturalAgenticMission,
   updateNaturalAgenticMissionPlan,
+  updateNaturalAgenticMissionPlanStep,
+  recordNaturalAgenticMissionPlanResult,
+  selectNaturalAgenticMissionContinuation,
   recordNaturalAgenticMissionChange,
   recordNaturalAgenticMissionTestResult,
   qualifyNaturalAgenticMissionGreen,

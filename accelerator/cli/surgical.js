@@ -39,7 +39,8 @@ const {
   formatNaturalGatewayEvent,
   formatNaturalGatewayResult,
   formatNaturalReferenceResolution,
-  formatNaturalReferenceContextProjection
+  formatNaturalReferenceContextProjection,
+  formatNaturalMissionContinuation
 } = require('./natural-presentation');
 
 const {
@@ -130,8 +131,12 @@ const {
   createNaturalAgenticMission,
   transitionNaturalAgenticMission,
   updateNaturalAgenticMissionPlan,
+  updateNaturalAgenticMissionPlanStep,
+  recordNaturalAgenticMissionPlanResult,
+  selectNaturalAgenticMissionContinuation,
   projectMissionView,
   formatMissionProjection,
+  blockNaturalAgenticMission,
   cancelNaturalAgenticMission,
   resumeNaturalAgenticMission
 } = require('../core/natural-agentic-mission');
@@ -1111,57 +1116,6 @@ function createInteractiveSession(
       ? createNaturalRunnerRuntime()
       : null;
 
-  if (cognitiveMode) {
-    try {
-      const missionObservedAt =
-        currentCanonicalInstant(options);
-      const missionSession =
-        createDeterministicWorkspaceSession({
-          authorizedRoot:
-            activation.repositoryPath,
-          humanSubject:
-            NATURAL_WORKSPACE_HUMAN_SUBJECT,
-          authorizedAt:
-            missionObservedAt
-        });
-
-      agenticMission =
-        createNaturalAgenticMission({
-          missionId:
-            `cli-natural-${missionSession.sessionFingerprint.slice(0, 32)}`,
-          objective:
-            'Interactive NATURAL governed engineering session.',
-          session:
-            missionSession,
-          createdAt:
-            missionObservedAt,
-          plan: [
-            {
-              stepId:
-                'session-ready',
-              summary:
-                'Maintain governed conversational session state.',
-              status:
-                'ACTIVE'
-            }
-          ]
-        });
-
-      naturalEngineeringReferenceContext =
-        createNaturalEngineeringReferenceContext({
-          mission:
-            agenticMission,
-          createdAt:
-            missionObservedAt
-        });
-    } catch {
-      agenticMission =
-        null;
-      naturalEngineeringReferenceContext =
-        null;
-    }
-  }
-
   function createNaturalGatewayMission(
     intent,
     observedAt
@@ -1180,7 +1134,7 @@ function createInteractiveSession(
 
     return createNaturalAgenticMission({
       missionId:
-        `cli-natural-r1-${session.sessionFingerprint.slice(0, 24)}-${naturalGatewayMissionSequence}`,
+        `cli-natural-r3-${session.sessionFingerprint.slice(0, 24)}-${naturalGatewayMissionSequence}`,
       objective:
         intent.objective,
       session,
@@ -1193,7 +1147,21 @@ function createInteractiveSession(
           summary:
             `Execute ${intent.operation} through the Integrated Governed Agent Gateway.`,
           status:
-            'ACTIVE'
+            'PENDING',
+          operation:
+            intent.operation
+        },
+        {
+          stepId:
+            `gateway-${naturalGatewayMissionSequence}-02`,
+          summary:
+            `Inspect the governed evidence produced by ${intent.operation}.`,
+          status:
+            'PENDING',
+          operation:
+            'evidence.inspect',
+          sourceOperation:
+            intent.operation
         }
       ],
       authority: {
@@ -1210,6 +1178,46 @@ function createInteractiveSession(
     intent,
     observedAt
   ) {
+    if (intent.continuationStepId) {
+      if (!agenticMission) {
+        return null;
+      }
+      const step =
+        agenticMission.plan.find(
+          (item) =>
+            item.stepId === intent.continuationStepId &&
+            item.status === 'PENDING' &&
+            item.operation === intent.operation
+        );
+      if (!step) {
+        return null;
+      }
+      agenticMission =
+        updateNaturalAgenticMissionPlanStep(
+          agenticMission,
+          {
+            stepId:
+              step.stepId,
+            status:
+              'ACTIVE',
+            at:
+              observedAt,
+            eventSummary:
+              'Process-local continuation activated the unambiguous live-plan step.'
+          }
+        );
+      return Object.freeze({
+        mission:
+          agenticMission,
+        stepId:
+          step.stepId,
+        args:
+          intent.args,
+        sourceOperation:
+          intent.sourceOperation
+      });
+    }
+
     if (!intent.typedReference) {
       const mission =
         createNaturalGatewayMission(
@@ -1217,16 +1225,35 @@ function createInteractiveSession(
           observedAt
         );
 
+      const stepId =
+        mission.plan[0].stepId;
+
+      const activeMission =
+        updateNaturalAgenticMissionPlanStep(
+          mission,
+          {
+            stepId,
+            status:
+              'ACTIVE',
+            at:
+              observedAt,
+            eventSummary:
+              'The governed operation became the active live-plan step.'
+          }
+        );
+
       naturalEngineeringReferenceContext =
         createNaturalEngineeringReferenceContext({
-          mission,
+          mission:
+            activeMission,
           createdAt:
             observedAt
         });
 
       return Object.freeze({
         mission:
-          mission,
+          activeMission,
+        stepId,
         args:
           intent.args,
         sourceOperation:
@@ -1238,33 +1265,63 @@ function createInteractiveSession(
       return null;
     }
 
-    const stepId =
-      `gateway-${naturalGatewayMissionSequence}-${String(agenticMission.plan.length + 1).padStart(2, '0')}`;
-
-    agenticMission =
-      updateNaturalAgenticMissionPlan(
-        agenticMission,
-        {
-          plan: [
-            ...agenticMission.plan,
-            {
-              stepId,
-              summary:
-                `Resolve ${intent.referenceType} and execute ${intent.operation} through the Integrated Governed Agent Gateway.`,
-              status:
-                'ACTIVE'
-            }
-          ],
-          at:
-            observedAt,
-          summary:
-            'Explicit evidence request added to the governed live plan.'
-        }
+    const pendingStep =
+      agenticMission.plan.find(
+        (step) =>
+          step.status === 'PENDING' &&
+          step.operation === intent.operation &&
+          (
+            !intent.sourceOperation ||
+            !step.sourceOperation ||
+            step.sourceOperation === intent.sourceOperation
+          )
       );
+    const stepId =
+      pendingStep
+        ? pendingStep.stepId
+        : `gateway-${naturalGatewayMissionSequence}-${String(agenticMission.plan.length + 1).padStart(2, '0')}`;
+
+    agenticMission = pendingStep
+      ? updateNaturalAgenticMissionPlanStep(
+          agenticMission,
+          {
+            stepId,
+            status:
+              'ACTIVE',
+            at:
+              observedAt,
+            eventSummary:
+              'The bounded reference selected the existing live-plan step.'
+          }
+        )
+      : updateNaturalAgenticMissionPlan(
+          agenticMission,
+          {
+            plan: [
+              ...agenticMission.plan,
+              {
+                stepId,
+                summary:
+                  `Resolve ${intent.referenceType} and execute ${intent.operation} through the Integrated Governed Agent Gateway.`,
+                status:
+                  'ACTIVE',
+                operation:
+                  intent.operation,
+                sourceOperation:
+                  intent.sourceOperation
+              }
+            ],
+            at:
+              observedAt,
+            summary:
+              'Explicit evidence request added to the governed live plan.'
+          }
+        );
 
     return Object.freeze({
       mission:
         agenticMission,
+      stepId,
       args:
         intent.args,
       sourceOperation:
@@ -1280,10 +1337,46 @@ function createInteractiveSession(
       return intent;
     }
 
-    if (
-      !agenticMission ||
-      !naturalEngineeringReferenceContext
-    ) {
+    if (!agenticMission) {
+      const session =
+        createDeterministicWorkspaceSession({
+          authorizedRoot:
+            activation.repositoryPath,
+          humanSubject:
+            NATURAL_WORKSPACE_HUMAN_SUBJECT,
+          authorizedAt:
+            observedAt
+        });
+
+      naturalGatewayMissionSequence += 1;
+      agenticMission =
+        createNaturalAgenticMission({
+          missionId:
+            `cli-natural-r3-${session.sessionFingerprint.slice(0, 24)}-${naturalGatewayMissionSequence}`,
+          objective:
+            intent.objective,
+          session,
+          createdAt:
+            observedAt,
+          plan: [],
+          authority: {
+            allowedCapabilities:
+              NATURAL_R1_GATEWAY_ALLOWED_CAPABILITIES,
+            deniedCapabilities:
+              NATURAL_R1_GATEWAY_DENIED_CAPABILITIES,
+            grants: []
+          }
+        });
+      naturalEngineeringReferenceContext =
+        createNaturalEngineeringReferenceContext({
+          mission:
+            agenticMission,
+          createdAt:
+            observedAt
+        });
+    }
+
+    if (!naturalEngineeringReferenceContext) {
       throw new Error(
         'Bounded engineering reference context is unavailable.'
       );
@@ -1315,31 +1408,60 @@ function createInteractiveSession(
     );
 
     if (
-      resolution.classification ===
-        'STALE_REFERENT'
-    ) {
-      agenticMission =
-        transitionNaturalAgenticMission(
-          agenticMission,
-          {
-            type:
-              'STATE_INVALIDATED',
-            state:
-              'BLOCKED',
-            summary:
-              'Conversational engineering reference was invalidated by physical-state change.',
-            at:
-              observedAt,
-            resultClass:
-              'STALE_REFERENT'
-          }
-        );
-    }
-
-    if (
       resolution.classification !==
         'RESOLVED'
     ) {
+      const resultClasses = {
+        NO_REFERENT:
+          'INCOMPLETE_EVIDENCE',
+        AMBIGUOUS_REFERENT:
+          'INCOMPLETE_EVIDENCE',
+        STALE_REFERENT:
+          'STALE_STATE',
+        UNSUPPORTED_REFERENT:
+          'UNSUPPORTED'
+      };
+      const stepId =
+        `reference-${naturalGatewayMissionSequence}-${String(agenticMission.plan.length + 1).padStart(2, '0')}`;
+      agenticMission =
+        updateNaturalAgenticMissionPlan(
+          agenticMission,
+          {
+            plan: [
+              ...agenticMission.plan,
+              {
+                stepId,
+                summary:
+                  `Resolve the bounded ${intent.referenceType} engineering reference.`,
+                status:
+                  'BLOCKED',
+                ...(intent.operation
+                  ? { operation: intent.operation }
+                  : {}),
+                resultClass:
+                  resultClasses[resolution.classification],
+                blocker:
+                  resolution.reason
+              }
+            ],
+            at:
+              observedAt,
+            summary:
+              'Bounded engineering reference failed closed.'
+          }
+        );
+      if (agenticMission.state !== 'BLOCKED') {
+        agenticMission =
+          blockNaturalAgenticMission(
+            agenticMission,
+            {
+              reason:
+                resolution.reason,
+              at:
+                observedAt
+            }
+          );
+      }
       return null;
     }
 
@@ -1352,6 +1474,61 @@ function createInteractiveSession(
         intent.referenceAction
       )
     ) {
+      if (
+        [
+          'REQUEST_MUTATION',
+          'REQUEST_PUBLICATION'
+        ].includes(intent.referenceAction)
+      ) {
+        const publication =
+          intent.referenceAction === 'REQUEST_PUBLICATION';
+        const stepId =
+          `authority-${naturalGatewayMissionSequence}-${String(agenticMission.plan.length + 1).padStart(2, '0')}`;
+        const blocker = publication
+          ? 'An exact governed publication proposal and independent human authority are required.'
+          : 'An exact governed mutation proposal and independent human authority are required.';
+        agenticMission =
+          updateNaturalAgenticMissionPlan(
+            agenticMission,
+            {
+              plan: [
+                ...agenticMission.plan,
+                {
+                  stepId,
+                  summary: publication
+                    ? 'Request bounded publication authority for the resolved referent.'
+                    : 'Request bounded mutation authority for the resolved referent.',
+                  status:
+                    'BLOCKED',
+                  operation: publication
+                    ? 'npm.publish'
+                    : 'mutation.applyConditional',
+                  sourceOperation:
+                    resolution.reference.operation,
+                  resultClass:
+                    'AUTHORITY_REQUIRED',
+                  blocker
+                }
+              ],
+              at:
+                observedAt,
+              summary:
+                'Reference resolution recorded an independent authority boundary.'
+            }
+          );
+        if (agenticMission.state !== 'BLOCKED') {
+          agenticMission =
+            blockNaturalAgenticMission(
+              agenticMission,
+              {
+                reason:
+                  blocker,
+                at:
+                  observedAt
+              }
+            );
+        }
+      }
       return null;
     }
 
@@ -1480,34 +1657,16 @@ function createInteractiveSession(
 
     agenticMission =
       dispatch.mission;
-
-    const completed =
-      dispatch.result.classification ===
-        'SUCCESS';
-
     agenticMission =
-      updateNaturalAgenticMissionPlan(
+      recordNaturalAgenticMissionPlanResult(
         agenticMission,
         {
-          plan:
-            agenticMission.plan.map(
-              (step) =>
-                step.status === 'ACTIVE'
-                  ? {
-                      ...step,
-                      status:
-                        completed
-                          ? 'COMPLETED'
-                          : 'BLOCKED'
-                    }
-                  : step
-            ),
+          stepId:
+            prepared.stepId,
+          result:
+            dispatch.result,
           at:
-            observedAt,
-          summary:
-            completed
-              ? 'Governed Gateway operation completed with physical evidence.'
-              : `Governed Gateway operation stopped with ${dispatch.result.classification}.`
+            observedAt
         }
       );
 
@@ -1533,6 +1692,124 @@ function createInteractiveSession(
         dispatch,
         activation.language
       )
+    );
+  }
+
+  async function continueNaturalAgenticMission() {
+    if (!agenticMission) {
+      output.write(
+        'Continuation: NO_MISSION\n' +
+        humanText(
+          activation,
+          'Motivo: nenhuma missão governada existe no processo atual.\nAutoridade da continuação: nenhuma\n',
+          'Reason: no governed mission exists in the current process.\nContinuation authority: none\n'
+        )
+      );
+      return;
+    }
+
+    const observedAt =
+      currentCanonicalInstant(options);
+    const revalidation =
+      revalidateDeterministicWorkspaceSession(
+        agenticMission.session
+      );
+    const continuation =
+      selectNaturalAgenticMissionContinuation({
+        mission:
+          agenticMission,
+        revalidation
+      });
+
+    output.write(
+      formatNaturalMissionContinuation(
+        continuation,
+        activation.language
+      )
+    );
+
+    if (continuation.classification === 'STALE_STATE') {
+      const pending =
+        agenticMission.plan.filter(
+          (step) => step.status === 'PENDING'
+        );
+      if (pending.length === 1) {
+        agenticMission =
+          updateNaturalAgenticMissionPlanStep(
+            agenticMission,
+            {
+              stepId:
+                pending[0].stepId,
+              status:
+                'BLOCKED',
+              resultClass:
+                'STALE_STATE',
+              blocker:
+                continuation.reason,
+              at:
+                observedAt,
+              eventSummary:
+                'Process-local continuation invalidated the stale live-plan step.'
+            }
+          );
+      }
+      if (agenticMission.state !== 'BLOCKED') {
+        agenticMission =
+          transitionNaturalAgenticMission(
+            agenticMission,
+            {
+              type:
+                'STATE_INVALIDATED',
+              state:
+                'BLOCKED',
+              summary:
+                continuation.reason,
+              at:
+                observedAt,
+              resultClass:
+                'STALE_STATE'
+            }
+          );
+      }
+      return;
+    }
+
+    if (continuation.classification !== 'ELIGIBLE') {
+      return;
+    }
+
+    const step =
+      continuation.step;
+    await dispatchNaturalGatewayIntent(
+      Object.freeze({
+        operation:
+          step.operation,
+        args:
+          step.operation === 'evidence.inspect'
+            ? Object.freeze({
+                operation:
+                  step.sourceOperation
+              })
+            : Object.freeze({}),
+        objective:
+          agenticMission.objective,
+        sourceOperation:
+          step.sourceOperation || step.operation,
+        continuationStepId:
+          step.stepId,
+        requiresMissionContext:
+          true,
+        readOnly:
+          true,
+        authorityExpansion:
+          false,
+        operationalAuthority:
+          false,
+        mutationAuthority:
+          false,
+        publicationAuthority:
+          false
+      })
     );
   }
 
@@ -1691,6 +1968,18 @@ function createInteractiveSession(
                     )
                   );
                 }
+              } else if (controlled.action === 'MISSION_CONTINUE') {
+                try {
+                  await continueNaturalAgenticMission();
+                } catch (error) {
+                  output.write(
+                    humanText(
+                      activation,
+                      `A continuação falhou de forma segura. Motivo: ${error && error.message ? error.message : 'falha de ambiente'}. Nenhuma autoridade foi concedida.\n`,
+                      `Continuation failed closed. Reason: ${error && error.message ? error.message : 'environment failure'}. No authority was granted.\n`
+                    )
+                  );
+                }
               } else if (controlled.action === 'MISSION_PROJECTION') {
                 if (!agenticMission) {
                   output.write(
@@ -1701,6 +1990,57 @@ function createInteractiveSession(
                     )
                   );
                 } else {
+                  const revalidation =
+                    revalidateDeterministicWorkspaceSession(
+                      agenticMission.session
+                    );
+                  if (
+                    revalidation.decision !== 'VALID' &&
+                    agenticMission.state !== 'BLOCKED'
+                  ) {
+                    const observedAt =
+                      currentCanonicalInstant(options);
+                    const pending =
+                      agenticMission.plan.filter(
+                        (step) => step.status === 'PENDING'
+                      );
+                    if (pending.length === 1) {
+                      agenticMission =
+                        updateNaturalAgenticMissionPlanStep(
+                          agenticMission,
+                          {
+                            stepId:
+                              pending[0].stepId,
+                            status:
+                              'BLOCKED',
+                            resultClass:
+                              'STALE_STATE',
+                            blocker:
+                              'Mission projection detected stale physical workspace state.',
+                            at:
+                              observedAt,
+                            eventSummary:
+                              'Mission projection invalidated the stale live-plan step.'
+                          }
+                        );
+                    }
+                    agenticMission =
+                      transitionNaturalAgenticMission(
+                        agenticMission,
+                        {
+                          type:
+                            'STATE_INVALIDATED',
+                          state:
+                            'BLOCKED',
+                          summary:
+                            'Mission projection failed closed because physical workspace state changed.',
+                          at:
+                            observedAt,
+                          resultClass:
+                            'STALE_STATE'
+                        }
+                      );
+                  }
                   output.write(
                     formatMissionProjection(
                       projectMissionView(
