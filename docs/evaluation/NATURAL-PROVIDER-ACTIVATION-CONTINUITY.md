@@ -148,6 +148,38 @@ UNRESOLVED: interactive pasted multiline input can still enqueue opaque sequenti
 
 TIMESTAMP: 2026-09-01
 
+## P4.4 — NATURAL Input, Cancellation and Backpressure Repair
+
+MISSION: NATURAL Qualified Provider Activation Manual-Acceptance Repair
+
+BASE_SHA: `2c720cbbbe4c2590cfa1a17d28fd6266fff5904b`
+
+CURRENT_SHA: `eb0bba06cd65e9676c902ce07916a308e0d05050`
+
+MILESTONE: P4.4
+
+MILESTONE_STATUS: GREEN
+
+FILES_CHANGED:
+
+- `accelerator/cli/surgical.js`
+- `tests/accelerator/natural-cli-async-session.test.js`
+
+TESTS_EXECUTED:
+
+- `node --test --test-isolation=none tests/accelerator/natural-cli-async-session.test.js tests/accelerator/natural-mission-cancellation-regression.test.js tests/accelerator/natural-terminal-boundary.test.js` (bounded trusted read-only Git-fixture permission)
+- `git diff --check`
+
+TEST_RESULTS: async input/backpressure/cancellation/terminal 22/22 passed; exactly one cognitive call for a three-line interactive paste; diff check passed.
+
+NEXT_MILESTONE: P4.5 — adversarial provider-authority regression
+
+AUTHORITY_REMAINING: bounded local repair, testing and checkpoint commits; remote delivery remains conditional on complete P5R GREEN and exact remote preconditions; NO MERGE; NO TAG; NO RELEASE; NO PUBLISH; NO DEPLOY.
+
+UNRESOLVED: explicit adversarial provider-authority and credential-boundary regression coverage remains.
+
+TIMESTAMP: 2026-09-01
+
 ## P4 — NATURAL Provider UX
 
 MISSION: NATURAL Qualified Provider Activation Coordinator
