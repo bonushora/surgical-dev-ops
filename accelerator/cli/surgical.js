@@ -137,6 +137,16 @@ const {
 } = require('./natural-runner-runtime');
 
 const {
+  createNaturalMissionContinuityCheckpoint,
+  resumeNaturalMissionContinuity
+} = require('./natural-mission-continuity');
+
+const {
+  saveNaturalMissionContinuity,
+  loadNaturalMissionContinuity
+} = require('../adapters/natural-mission-continuity-store');
+
+const {
   createNaturalAgenticMission,
   transitionNaturalAgenticMission,
   updateNaturalAgenticMissionPlan,
@@ -1006,6 +1016,32 @@ function createInteractiveSession(
   const output =
     options.output || process.stdout;
 
+  const continuityStateRoot =
+    typeof options.continuityStateRoot === 'string' &&
+    options.continuityStateRoot.trim()
+      ? options.continuityStateRoot
+      : null;
+
+  const continuityRecord =
+    Boolean(
+      activation.interactionMode &&
+      ['NATURAL', 'ENGINEER'].includes(activation.interactionMode.mode)
+    ) && continuityStateRoot
+      ? loadNaturalMissionContinuity({
+          stateRoot: continuityStateRoot,
+          repositoryPath: activation.repositoryPath
+        })
+      : null;
+
+  const continuityResume =
+    continuityRecord
+      ? resumeNaturalMissionContinuity({
+          checkpoint: continuityRecord,
+          repositoryPath: activation.repositoryPath,
+          resumedAt: currentCanonicalInstant(options)
+        })
+      : null;
+
   const terminal =
     options.terminal === undefined
       ? Boolean(input.isTTY && output.isTTY)
@@ -1112,27 +1148,56 @@ function createInteractiveSession(
     null;
 
   let pendingRepairLoop =
-    null;
+    continuityResume
+      ? continuityResume.repairLoop
+      : null;
 
   let agenticMission =
-    null;
+    continuityResume
+      ? continuityResume.mission
+      : null;
 
   let naturalGatewayMissionSequence =
-    0;
+    continuityResume
+      ? 1
+      : 0;
 
   let naturalEngineeringReferenceContext =
-    null;
+    continuityResume
+      ? continuityResume.referenceContext
+      : null;
 
   let projectedNaturalMissionId =
-    null;
+    continuityResume
+      ? continuityResume.mission.missionId
+      : null;
 
   let projectedNaturalMissionEventSequence =
-    0;
+    continuityResume
+      ? continuityResume.historicalEventCount
+      : 0;
 
   const runnerRuntime =
     cognitiveMode
       ? createNaturalRunnerRuntime()
       : null;
+
+  function persistNaturalMissionContinuity(mission) {
+    if (!continuityStateRoot || !mission) return null;
+    const checkpoint = createNaturalMissionContinuityCheckpoint({
+      mission,
+      repairLoop:
+        pendingRepairLoop &&
+        pendingRepairLoop.mission.missionFingerprint === mission.missionFingerprint
+          ? pendingRepairLoop
+          : null,
+      recordedAt: currentCanonicalInstant(options)
+    });
+    return saveNaturalMissionContinuity({
+      stateRoot: continuityStateRoot,
+      checkpoint
+    });
+  }
 
   function projectNaturalMissionEvent(
     event,
@@ -1175,6 +1240,7 @@ function createInteractiveSession(
     if (!mission || !Array.isArray(mission.events)) {
       return;
     }
+    persistNaturalMissionContinuity(mission);
     for (const event of mission.events) {
       projectNaturalMissionEvent(
         event,
@@ -1184,6 +1250,17 @@ function createInteractiveSession(
         }
       );
     }
+  }
+
+  if (continuityResume) {
+    output.write(
+      humanText(
+        activation,
+        'Missão governada durável reconstruída somente a partir do registro físico e da revalidação atual. Autoridades anteriores não foram restauradas.\n',
+        'Durable governed mission reconstructed only from its physical record and current revalidation. Previous authority was not restored.\n'
+      )
+    );
+    projectNaturalMissionEvents(agenticMission);
   }
 
   function naturalRepairGatewayOptions() {
@@ -3601,6 +3678,10 @@ async function main(
     {
       input,
       output,
+      continuityStateRoot:
+        options.continuityStateRoot ||
+        process.env.SDO_NATURAL_MISSION_STATE_ROOT ||
+        null,
       patchOptions:
         patchOptionsFromEnvironment()
     }

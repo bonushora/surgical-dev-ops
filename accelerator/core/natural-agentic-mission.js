@@ -120,6 +120,36 @@ const EVENT_FIELDS = Object.freeze([
   'eventHash'
 ]);
 
+const MISSION_FIELDS = Object.freeze([
+  'schema',
+  'missionId',
+  'objective',
+  'state',
+  'stateSequence',
+  'createdAt',
+  'updatedAt',
+  'binding',
+  'session',
+  'plan',
+  'tests',
+  'changes',
+  'authority',
+  'journal',
+  'events',
+  'resumeCount',
+  'durableResumeCount',
+  'provider',
+  'persistentMission',
+  'livePlan',
+  'providerDirectFilesystem',
+  'providerDirectShell',
+  'providerDirectGit',
+  'providerDirectNetwork',
+  'operationalAuthority',
+  'mutationAuthority',
+  'missionFingerprint'
+]);
+
 const DEFAULT_AVAILABLE_CAPABILITIES = Object.freeze([
   'workspace.status',
   'workspace.search',
@@ -259,6 +289,110 @@ function rejectSensitiveText(value, label) {
   if (SECRET_PATTERNS.some((pattern) => pattern.test(value))) {
     throw new Error(`${label} contains sensitive content.`);
   }
+}
+
+function requireExactFields(value, fields, label) {
+  if (
+    !value ||
+    typeof value !== 'object' ||
+    Array.isArray(value) ||
+    Object.keys(value).length !== fields.length ||
+    fields.some((field) => !Object.prototype.hasOwnProperty.call(value, field))
+  ) {
+    throw new Error(`${label} is malformed.`);
+  }
+}
+
+function rejectUnsafeObjectShape(value, depth = 0) {
+  if (depth > 32) throw new Error('Persisted mission object depth is unbounded.');
+  if (!value || typeof value !== 'object') return;
+  for (const key of Object.keys(value)) {
+    if (['__proto__', 'prototype', 'constructor'].includes(key)) {
+      throw new Error('Persisted mission contains an unsafe object key.');
+    }
+    rejectUnsafeObjectShape(value[key], depth + 1);
+  }
+}
+
+function rehydrateWorkspaceSession(value) {
+  requireExactFields(
+    value,
+    [
+      'schema', 'humanSubject', 'authorizedAt', 'physical',
+      'physicalWorkspaceIdentity', 'repositoryHead', 'worktreeFingerprint',
+      'sessionFingerprint', 'active', 'reusableWithoutRevalidation',
+      'operationalAuthority', 'mutationAuthority'
+    ],
+    'Persisted workspace session'
+  );
+  requireExactFields(
+    value.physical,
+    ['root', 'device', 'inode', 'birthtimeNs', 'ctimeNs'],
+    'Persisted physical workspace identity'
+  );
+  if (
+    value.schema !== SESSION_SCHEMA ||
+    value.active !== true ||
+    value.reusableWithoutRevalidation !== false ||
+    value.operationalAuthority !== false ||
+    value.mutationAuthority !== false
+  ) {
+    throw new Error('Persisted workspace session safety boundary is malformed.');
+  }
+  const physical = {
+    root: requireText(value.physical.root, 'Persisted workspace root', 4096),
+    device: requireText(value.physical.device, 'Persisted workspace device', 128),
+    inode: requireText(value.physical.inode, 'Persisted workspace inode', 128),
+    birthtimeNs: requireText(value.physical.birthtimeNs, 'Persisted workspace birth time', 128),
+    ctimeNs: requireText(value.physical.ctimeNs, 'Persisted workspace change time', 128)
+  };
+  const binding = {
+    humanSubject: requireText(
+      value.humanSubject,
+      'Persisted workspace human subject',
+      256
+    ),
+    authorizedAt: requireTimestamp(
+      value.authorizedAt,
+      'Persisted workspace authorization time'
+    ),
+    physical,
+    physicalWorkspaceIdentity: requireDigest(
+      value.physicalWorkspaceIdentity,
+      'Persisted physical workspace fingerprint'
+    ),
+    repositoryHead: requireObjectId(value.repositoryHead, 'Persisted repository HEAD'),
+    worktreeFingerprint: requireDigest(
+      value.worktreeFingerprint,
+      'Persisted worktree fingerprint'
+    )
+  };
+  const physicalWorkspaceIdentity = crypto
+    .createHash('sha256')
+    .update(JSON.stringify(physical))
+    .digest('hex');
+  const sessionFingerprint = crypto
+    .createHash('sha256')
+    .update(JSON.stringify(binding))
+    .digest('hex');
+  if (
+    physicalWorkspaceIdentity !== binding.physicalWorkspaceIdentity ||
+    sessionFingerprint !== requireDigest(
+      value.sessionFingerprint,
+      'Persisted workspace session fingerprint'
+    )
+  ) {
+    throw new Error('Persisted workspace session has lost integrity.');
+  }
+  return deepFreeze({
+    schema: SESSION_SCHEMA,
+    ...binding,
+    sessionFingerprint,
+    active: true,
+    reusableWithoutRevalidation: false,
+    operationalAuthority: false,
+    mutationAuthority: false
+  });
 }
 
 function normalizeState(value) {
@@ -580,6 +714,175 @@ function validateNaturalAgenticMission(mission) {
   return mission;
 }
 
+function rehydrateNaturalAgenticMission(value) {
+  rejectUnsafeObjectShape(value);
+  requireExactFields(value, MISSION_FIELDS, 'Persisted NATURAL mission');
+  if (value.schema !== MISSION_SCHEMA) {
+    throw new Error('Persisted NATURAL mission schema is unsupported.');
+  }
+  const session = rehydrateWorkspaceSession(value.session);
+  const binding = bindingFromSession(session);
+  if (JSON.stringify(canonicalize(value.binding)) !== JSON.stringify(canonicalize(binding))) {
+    throw new Error('Persisted NATURAL mission binding does not match its workspace session.');
+  }
+  const plan = deepFreeze(normalizePlan(value.plan));
+  const authority = normalizeAuthority(value.authority);
+  const provider = normalizeProvider(value.provider);
+  if (
+    JSON.stringify(canonicalize(value.plan)) !== JSON.stringify(canonicalize(plan)) ||
+    JSON.stringify(canonicalize(value.authority)) !== JSON.stringify(canonicalize(authority)) ||
+    JSON.stringify(canonicalize(value.provider)) !== JSON.stringify(canonicalize(provider))
+  ) {
+    throw new Error('Persisted NATURAL mission projection is malformed.');
+  }
+
+  requireExactFields(value.tests, ['targeted', 'canonical', 'lastResult'], 'Persisted mission tests');
+  if (!Array.isArray(value.tests.targeted) || value.tests.targeted.length > 256) {
+    throw new Error('Persisted targeted test evidence is malformed.');
+  }
+  const targeted = value.tests.targeted.map((item) => normalizeTestEvidence(item));
+  const canonical = value.tests.canonical === null
+    ? null
+    : normalizeTestEvidence(value.tests.canonical);
+  const lastResult = value.tests.lastResult === null
+    ? null
+    : normalizeTestEvidence(value.tests.lastResult);
+  const tests = deepFreeze({ targeted, canonical, lastResult });
+  if (JSON.stringify(canonicalize(value.tests)) !== JSON.stringify(canonicalize(tests))) {
+    throw new Error('Persisted mission test evidence is malformed.');
+  }
+
+  if (!Array.isArray(value.changes) || value.changes.length > 256) {
+    throw new Error('Persisted mission changes are malformed.');
+  }
+  const changes = deepFreeze(value.changes.map((change) => {
+    requireExactFields(
+      change,
+      ['target', 'summary', 'beforeSha256', 'afterSha256'],
+      'Persisted mission change'
+    );
+    return deepFreeze({
+      target: requireText(change.target, 'Persisted change target', 1024),
+      summary: requireText(change.summary, 'Persisted change summary', 512),
+      beforeSha256: change.beforeSha256 === null
+        ? null
+        : requireDigest(change.beforeSha256, 'Persisted change before digest'),
+      afterSha256: change.afterSha256 === null
+        ? null
+        : requireDigest(change.afterSha256, 'Persisted change after digest')
+    });
+  }));
+
+  if (!Array.isArray(value.events) || value.events.length < 1 || value.events.length > 2048) {
+    throw new Error('Persisted mission event history is malformed.');
+  }
+  const events = deepFreeze(value.events.map((input, index) => {
+    const event = validateNaturalAgenticMissionEvent(deepFreeze(input));
+    const previous = index === 0 ? '0'.repeat(64) : value.events[index - 1].eventHash;
+    if (
+      event.missionId !== value.missionId ||
+      event.sequence !== index + 1 ||
+      event.previousEventHash !== previous ||
+      (index > 0 && Date.parse(event.at) < Date.parse(value.events[index - 1].at))
+    ) {
+      throw new Error('Persisted mission event sequence has lost integrity.');
+    }
+    return event;
+  }));
+
+  requireExactFields(
+    value.journal,
+    ['durableEvidenceRefs', 'eventCount', 'latestEventHash', 'contentTelemetry'],
+    'Persisted mission journal'
+  );
+  if (
+    !Array.isArray(value.journal.durableEvidenceRefs) ||
+    value.journal.durableEvidenceRefs.length > 256 ||
+    value.journal.eventCount !== events.length ||
+    value.journal.latestEventHash !== events.at(-1).eventHash ||
+    value.journal.contentTelemetry !== false
+  ) {
+    throw new Error('Persisted mission journal has lost integrity.');
+  }
+  const durableEvidenceRefs = deepFreeze(
+    value.journal.durableEvidenceRefs.map((reference) => normalizeEvidenceRef(reference))
+  );
+  const journal = deepFreeze({
+    durableEvidenceRefs,
+    eventCount: events.length,
+    latestEventHash: events.at(-1).eventHash,
+    contentTelemetry: false
+  });
+
+  if (
+    !Number.isSafeInteger(value.stateSequence) || value.stateSequence < 1 ||
+    !Number.isSafeInteger(value.resumeCount) || value.resumeCount < 0 ||
+    !Number.isSafeInteger(value.durableResumeCount) || value.durableResumeCount < 0 ||
+    value.durableResumeCount > value.resumeCount ||
+    value.persistentMission !== true ||
+    value.livePlan !== true ||
+    value.providerDirectFilesystem !== false ||
+    value.providerDirectShell !== false ||
+    value.providerDirectGit !== false ||
+    value.providerDirectNetwork !== false ||
+    value.operationalAuthority !== false ||
+    value.mutationAuthority !== false
+  ) {
+    throw new Error('Persisted mission safety boundary is malformed.');
+  }
+  const base = {
+    schema: MISSION_SCHEMA,
+    missionId: requireText(value.missionId, 'Persisted mission id', 256),
+    objective: requireText(value.objective, 'Persisted mission objective', 4096),
+    state: normalizeState(value.state),
+    stateSequence: value.stateSequence,
+    createdAt: requireTimestamp(value.createdAt, 'Persisted mission creation time'),
+    updatedAt: requireTimestamp(value.updatedAt, 'Persisted mission update time'),
+    binding,
+    session,
+    plan,
+    tests,
+    changes,
+    authority,
+    journal,
+    events,
+    resumeCount: value.resumeCount,
+    durableResumeCount: value.durableResumeCount,
+    provider,
+    persistentMission: true,
+    livePlan: true,
+    providerDirectFilesystem: false,
+    providerDirectShell: false,
+    providerDirectGit: false,
+    providerDirectNetwork: false,
+    operationalAuthority: false,
+    mutationAuthority: false
+  };
+  if (base.events.at(-1).state !== base.state || Date.parse(base.updatedAt) < Date.parse(base.createdAt)) {
+    throw new Error('Persisted mission state does not match its event history.');
+  }
+  const mission = withMissionFingerprint(base);
+  if (mission.missionFingerprint !== requireDigest(value.missionFingerprint, 'Persisted mission fingerprint')) {
+    throw new Error('Persisted NATURAL mission has lost integrity.');
+  }
+  return mission;
+}
+
+function prepareNaturalAgenticMissionForDurableRestart(mission) {
+  const current = validateNaturalAgenticMission(mission);
+  const next = {
+    ...current,
+    authority: normalizeAuthority({
+      ...current.authority,
+      grants: [],
+      usedAuthorityRefs: [],
+      staleGrantsInvalidated: true
+    })
+  };
+  delete next.missionFingerprint;
+  return withMissionFingerprint(next);
+}
+
 function createNaturalAgenticMission({
   missionId,
   objective,
@@ -647,6 +950,7 @@ function createNaturalAgenticMission({
     }),
     events: deepFreeze(events),
     resumeCount: 0,
+    durableResumeCount: 0,
     provider: normalizeProvider(provider),
     persistentMission: true,
     livePlan: true,
@@ -663,7 +967,15 @@ function createNaturalAgenticMission({
 function appendEvent(mission, input) {
   const current = validateNaturalAgenticMission(mission);
   const nextState = normalizeState(input.state || current.state);
-  if (TERMINAL_STATES.has(current.state) && nextState !== current.state) {
+  const physicalInvalidationOfGreen =
+    current.state === 'GREEN' &&
+    nextState === 'BLOCKED' &&
+    input.type === EVENT_TYPES.STATE_INVALIDATED;
+  if (
+    TERMINAL_STATES.has(current.state) &&
+    nextState !== current.state &&
+    !physicalInvalidationOfGreen
+  ) {
     throw new Error('Terminal mission state cannot transition.');
   }
   const at = requireTimestamp(input.at, 'Mission event timestamp');
@@ -1122,7 +1434,13 @@ function consumeMissionAuthorityGrant(mission, authorityRef, { at } = {}) {
   });
 }
 
-function resumeNaturalAgenticMission({ mission, revalidation, resumedAt, authority = null } = {}) {
+function resumeNaturalAgenticMission({
+  mission,
+  revalidation,
+  resumedAt,
+  authority = null,
+  restartKind = 'PROCESS_LOCAL'
+} = {}) {
   const current = validateNaturalAgenticMission(mission);
   if (current.state === 'CANCELLED') {
     throw new Error('Cancelled mission cannot resume.');
@@ -1131,12 +1449,32 @@ function resumeNaturalAgenticMission({ mission, revalidation, resumedAt, authori
     throw new Error('Immutable workspace revalidation evidence is required.');
   }
   const at = requireTimestamp(resumedAt, 'Mission resume timestamp');
+  const durableRestart = restartKind === 'DURABLE_PROCESS_RESTART';
+  if (!durableRestart && restartKind !== 'PROCESS_LOCAL') {
+    throw new Error('Mission restart kind is unsupported.');
+  }
   const valid =
     revalidation.decision === 'VALID' &&
     revalidation.sessionFingerprint === current.binding.sessionFingerprint;
   if (!valid) {
+    const changed = [];
+    if (revalidation.samePhysical !== true) changed.push('physical workspace identity');
+    if (revalidation.sameRepository !== true) changed.push('repository HEAD');
+    if (revalidation.sameWorktree !== true) changed.push('worktree state');
+    const invalidationReason =
+      `Resume failed closed because ${changed.join(', ') || 'physical workspace state'} changed while the process was offline.`;
     const invalidated = {
       ...current,
+      plan: normalizePlan(current.plan.map((step) =>
+        ['PENDING', 'ACTIVE'].includes(step.status)
+          ? {
+              ...step,
+              status: 'BLOCKED',
+              resultClass: 'STALE_STATE',
+              blocker: invalidationReason
+            }
+          : step
+      )),
       authority: normalizeAuthority({
         allowedCapabilities: [
           'mission.status',
@@ -1156,7 +1494,7 @@ function resumeNaturalAgenticMission({ mission, revalidation, resumedAt, authori
     return appendEvent(withMissionFingerprint(invalidated), {
       type: EVENT_TYPES.STATE_INVALIDATED,
       state: 'BLOCKED',
-      summary: 'Resume failed closed because physical workspace state changed.',
+      summary: invalidationReason,
       at,
       resultClass: 'STALE_STATE'
     });
@@ -1164,6 +1502,7 @@ function resumeNaturalAgenticMission({ mission, revalidation, resumedAt, authori
   const next = {
     ...current,
     resumeCount: current.resumeCount + 1,
+    durableResumeCount: current.durableResumeCount + (durableRestart ? 1 : 0),
     authority: normalizeAuthority({
       ...(authority || current.authority),
       grants: [],
@@ -1244,7 +1583,8 @@ function continuationEnvelope(classification, mission, reason, step = null) {
     missionFingerprint: mission.missionFingerprint,
     reason: requireText(reason, 'Mission continuation reason', 1024),
     step,
-    processLocal: true,
+    processLocal: mission.durableResumeCount === 0,
+    durableRestart: mission.durableResumeCount > 0,
     physicalStateValidated: classification !== 'STALE_STATE',
     authorityExpansion: false,
     operationalAuthority: false,
@@ -1358,7 +1698,10 @@ function projectMissionStatus(mission) {
     nextStep: live.nextStep,
     nextStepAmbiguous: live.nextStepAmbiguous,
     lastGovernedResult: live.lastGovernedResult,
-    blocker: live.blockedSteps.at(-1)?.blocker || null,
+    blocker: live.blockedSteps.at(-1)?.blocker ||
+      (current.events.at(-1).type === EVENT_TYPES.STATE_INVALIDATED
+        ? current.events.at(-1).summary
+        : null),
     pendingApproval: live.blockedSteps.some(
       (item) => item.resultClass === 'AUTHORITY_REQUIRED'
     ),
@@ -1442,7 +1785,10 @@ function projectMissionActivity(mission) {
     nextStep: live.nextStep,
     nextStepAmbiguous: live.nextStepAmbiguous,
     lastGovernedResult: live.lastGovernedResult,
-    blocker: live.blockedSteps.at(-1)?.blocker || null,
+    blocker: live.blockedSteps.at(-1)?.blocker ||
+      (current.events.at(-1).type === EVENT_TYPES.STATE_INVALIDATED
+        ? current.events.at(-1).summary
+        : null),
     pendingApproval: live.blockedSteps.some(
       (item) => item.resultClass === 'AUTHORITY_REQUIRED'
     )
@@ -1602,6 +1948,8 @@ module.exports = Object.freeze({
   DEFAULT_DENIED_CAPABILITIES,
   createNaturalAgenticMission,
   validateNaturalAgenticMission,
+  rehydrateNaturalAgenticMission,
+  prepareNaturalAgenticMissionForDurableRestart,
   transitionNaturalAgenticMission,
   updateNaturalAgenticMissionPlan,
   updateNaturalAgenticMissionPlanStep,

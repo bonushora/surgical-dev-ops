@@ -19,8 +19,13 @@ const {
   recordNaturalAgenticMissionAuthorityGrant,
   completeNaturalAgenticMissionGreen,
   blockNaturalAgenticMission,
-  cancelNaturalAgenticMission
+  cancelNaturalAgenticMission,
+  prepareNaturalAgenticMissionForDurableRestart
 } = require('../core/natural-agentic-mission');
+
+const {
+  evaluateNaturalDevelopmentTaskBoundary
+} = require('./natural-development-task-contract');
 
 const {
   createGatewayRequest,
@@ -75,6 +80,54 @@ const DENIED_CAPABILITIES = Object.freeze([
   'release.create',
   'npm.publish',
   'deploy'
+]);
+
+const LOOP_FIELDS = Object.freeze([
+  'schema', 'state', 'objective', 'mission', 'allowedTargets', 'testTarget',
+  'qualificationTarget', 'qualificationAuthorityRef', 'attemptCeiling',
+  'attempts', 'pending', 'approvalRequest', 'lastDispatch', 'stopReason',
+  'processLocal', 'durableRestart', 'operationalAuthority',
+  'mutationAuthority', 'providerAuthority', 'gitAuthority', 'remoteAuthority',
+  'releaseAuthority'
+]);
+const COMPACT_ATTEMPT_FIELDS = Object.freeze([
+  'attempt', 'target', 'proposalFingerprint', 'authorizationFingerprint',
+  'beforeSha256', 'afterSha256', 'mutationEvidenceDigest',
+  'testClassification', 'testEvidenceDigest'
+]);
+const COMPACT_PENDING_FIELDS = Object.freeze([
+  'schema', 'state', 'contract', 'patchProposal',
+  'physicalWorkspaceIdentity', 'repositoryPath', 'reusableApproval',
+  'operationalAuthority', 'mutationAuthority'
+]);
+const RESTART_APPROVAL_FIELDS = Object.freeze([
+  'operation', 'proposalFingerprint', 'decision', 'reusableAuthority'
+]);
+const DURABLE_PATCH_FIELDS = Object.freeze([
+  'schema', 'contractFingerprint', 'planningFingerprint', 'objective',
+  'target', 'beforeSha256', 'replacementBase64', 'replacementBytes',
+  'replacementSha256', 'reason', 'validationKind', 'patchAttempt',
+  'exactDiff', 'state', 'requiresExactR3Authority', 'reusableApproval',
+  'operationalAuthority', 'mutationAuthority', 'approvalAuthority',
+  'dispatchAuthority', 'proposalFingerprint'
+]);
+const DURABLE_CONTRACT_FIELDS = Object.freeze([
+  'schema', 'objective', 'physicalWorkspaceIdentity', 'repositoryHead',
+  'workMode', 'allowedTargets', 'validationKinds', 'riskCeiling',
+  'evidenceStepCeiling', 'patchAttemptCeiling', 'mutationPolicy',
+  'validationPolicy', 'credentialUse', 'genericShell',
+  'externalSideEffects', 'architecturalDecision', 'stopConditions',
+  'successCriterion', 'reusableApproval', 'operationalAuthority',
+  'mutationAuthority', 'approvalAuthority', 'dispatchAuthority',
+  'contractFingerprint'
+]);
+
+const SECRET_PATTERNS = Object.freeze([
+  /-----BEGIN (?:RSA |EC |OPENSSH |DSA )?PRIVATE KEY-----/i,
+  /\b(?:AKIA|ASIA)[A-Z0-9]{16}\b/,
+  /\bBearer\s+[A-Za-z0-9._~+/-]{12,}/i,
+  /\b(?:gh[pousr]_[A-Za-z0-9]{20,}|sk-[A-Za-z0-9_-]{20,}|npm_[A-Za-z0-9]{20,})\b/,
+  /\b(?:api[_-]?key|access[_-]?token|auth[_-]?token|client[_-]?secret|password|passwd)\s*[:=]\s*[^\s,;]+/i
 ]);
 
 function deepFreeze(value) {
@@ -172,6 +225,288 @@ function validateNaturalGovernedRepairLoop(loop) {
   }
   validateNaturalAgenticMission(loop.mission);
   return loop;
+}
+
+function exactFields(value, fields, label) {
+  if (
+    !value ||
+    typeof value !== 'object' ||
+    Array.isArray(value) ||
+    Object.keys(value).length !== fields.length ||
+    fields.some((field) => !Object.prototype.hasOwnProperty.call(value, field))
+  ) {
+    throw new Error(`${label} is malformed.`);
+  }
+}
+
+function unlabelledFingerprint(value) {
+  return crypto.createHash('sha256').update(JSON.stringify(value)).digest('hex');
+}
+
+function validateDurablePatchProposal(proposal) {
+  exactFields(proposal, DURABLE_PATCH_FIELDS, 'Persisted R5 patch proposal');
+  exactFields(
+    proposal.exactDiff,
+    ['schema', 'representation', 'target', 'before', 'after', 'contentChanged', 'diffFingerprint'],
+    'Persisted R5 exact diff'
+  );
+  exactFields(proposal.exactDiff.before, ['sha256', 'bytes'], 'Persisted R5 BEFORE diff');
+  exactFields(proposal.exactDiff.after, ['sha256', 'bytes'], 'Persisted R5 AFTER diff');
+  const replacement = Buffer.from(proposal.replacementBase64, 'base64');
+  const { diffFingerprint, ...diffBinding } = proposal.exactDiff;
+  const { proposalFingerprint, ...binding } = proposal;
+  if (
+    proposal.schema !== 'sdo.natural_development_patch_proposal.v1' ||
+    proposal.exactDiff.schema !== 'sdo.natural_development_exact_diff.v1' ||
+    proposal.state !== 'HUMAN_REVIEW_REQUIRED' ||
+    proposal.requiresExactR3Authority !== true ||
+    proposal.reusableApproval !== false ||
+    proposal.operationalAuthority !== false ||
+    proposal.mutationAuthority !== false ||
+    proposal.approvalAuthority !== false ||
+    proposal.dispatchAuthority !== false ||
+    !Number.isInteger(proposal.patchAttempt) ||
+    proposal.patchAttempt < 1 ||
+    proposal.patchAttempt > 8 ||
+    replacement.length < 1 ||
+    replacement.length > 1024 * 1024 ||
+    replacement.toString('base64') !== proposal.replacementBase64 ||
+    replacement.length !== proposal.replacementBytes ||
+    crypto.createHash('sha256').update(replacement).digest('hex') !== proposal.replacementSha256 ||
+    target(proposal.target, 'Persisted R5 patch target') !== proposal.target ||
+    proposal.exactDiff.target !== proposal.target ||
+    proposal.exactDiff.representation !== 'FULL_FILE_REPLACEMENT' ||
+    proposal.exactDiff.before.sha256 !== proposal.beforeSha256 ||
+    proposal.exactDiff.after.sha256 !== proposal.replacementSha256 ||
+    proposal.exactDiff.after.bytes !== proposal.replacementBytes ||
+    proposal.exactDiff.contentChanged !== true ||
+    unlabelledFingerprint(diffBinding) !== diffFingerprint ||
+    unlabelledFingerprint(binding) !== proposalFingerprint
+  ) {
+    throw new Error('Persisted R5 patch proposal has lost integrity.');
+  }
+  digest(proposal.contractFingerprint, 'Persisted R5 contract fingerprint');
+  digest(proposal.planningFingerprint, 'Persisted R5 planning fingerprint');
+  digest(proposal.beforeSha256, 'Persisted R5 BEFORE fingerprint');
+  digest(proposal.replacementSha256, 'Persisted R5 replacement fingerprint');
+  return proposal;
+}
+
+function compactAttempt(attempt) {
+  return deepFreeze({
+    attempt: attempt.attempt,
+    target: target(attempt.target, 'Persisted repair target'),
+    proposalFingerprint: digest(attempt.proposalFingerprint, 'Persisted proposal fingerprint'),
+    authorizationFingerprint: digest(
+      attempt.authorizationFingerprint,
+      'Historical authorization fingerprint'
+    ),
+    beforeSha256: digest(attempt.beforeSha256, 'Persisted repair before digest'),
+    afterSha256: digest(attempt.afterSha256, 'Persisted repair after digest'),
+    mutationEvidenceDigest: digest(
+      attempt.mutationEvidenceDigest,
+      'Persisted mutation evidence digest'
+    ),
+    testClassification: requireText(
+      attempt.testClassification,
+      'Persisted test classification',
+      32
+    ),
+    testEvidenceDigest: digest(
+      attempt.testEvidenceDigest,
+      'Persisted test evidence digest'
+    )
+  });
+}
+
+function compactPending(pending, persisted = false) {
+  if (!pending) return null;
+  if (persisted) {
+    exactFields(pending, COMPACT_PENDING_FIELDS, 'Persisted pending R5 repair');
+  }
+  exactFields(
+    pending.contract,
+    DURABLE_CONTRACT_FIELDS,
+    'Persisted R5 development contract'
+  );
+  const proposal = validateDurablePatchProposal(pending.patchProposal);
+  const replacement = Buffer.from(proposal.replacementBase64, 'base64').toString('utf8');
+  const durablePayload = JSON.stringify({
+    contract: pending.contract,
+    proposal
+  });
+  if (
+    SECRET_PATTERNS.some((pattern) =>
+      pattern.test(replacement) || pattern.test(durablePayload)
+    )
+  ) {
+    throw new Error('Pending repair contains sensitive content and cannot be persisted.');
+  }
+  const contractStep = deepFreeze({
+    physicalWorkspaceIdentity: pending.contract.physicalWorkspaceIdentity,
+    repositoryHead: pending.contract.repositoryHead,
+    target: proposal.target,
+    risk: 'R3',
+    validationKind: proposal.validationKind === 'NONE' ? null : proposal.validationKind,
+    evidenceStep: 1,
+    patchAttempt: proposal.patchAttempt,
+    mutating: true,
+    credentialUse: false,
+    externalSideEffect: false,
+    architecturalDecision: false,
+    genericShell: false,
+    conflictOrRecoveryRequired: false
+  });
+  const boundary = evaluateNaturalDevelopmentTaskBoundary(pending.contract, contractStep);
+  if (
+    boundary.decision !== 'CONTAINED' ||
+    proposal.contractFingerprint !== pending.contract.contractFingerprint
+  ) {
+    throw new Error('Pending repair contract cannot be durably reconstructed.');
+  }
+  return deepFreeze({
+    schema: 'sdo.interactive_natural_development_pending.v1',
+    state: 'EXACT_HUMAN_REVIEW_REQUIRED',
+    contract: pending.contract,
+    patchProposal: proposal,
+    physicalWorkspaceIdentity: digest(
+      pending.physicalWorkspaceIdentity,
+      'Pending repair workspace identity'
+    ),
+    repositoryPath: requireText(pending.repositoryPath, 'Pending repair repository', 4096),
+    reusableApproval: false,
+    operationalAuthority: false,
+    mutationAuthority: false
+  });
+}
+
+function prepareNaturalGovernedRepairLoopForDurableRestart(loop) {
+  const current = validateNaturalGovernedRepairLoop(loop);
+  const pending = compactPending(current.pending);
+  return loopValue({
+    schema: LOOP_SCHEMA,
+    state: current.state,
+    objective: current.objective,
+    mission: prepareNaturalAgenticMissionForDurableRestart(current.mission),
+    allowedTargets: [...current.allowedTargets],
+    testTarget: current.testTarget,
+    qualificationTarget: current.qualificationTarget,
+    qualificationAuthorityRef: current.qualificationAuthorityRef,
+    attemptCeiling: current.attemptCeiling,
+    attempts: current.attempts.map(compactAttempt),
+    pending,
+    approvalRequest: pending
+      ? deepFreeze({
+          operation: 'mutation.applyConditional',
+          proposalFingerprint: pending.patchProposal.proposalFingerprint,
+          decision: 'FRESH_HUMAN_AUTHORITY_REQUIRED',
+          reusableAuthority: false
+        })
+      : null,
+    lastDispatch: null,
+    stopReason: current.stopReason,
+    processLocal: false,
+    durableRestart: true
+  });
+}
+
+function rehydrateNaturalGovernedRepairLoop(value, { mission } = {}) {
+  exactFields(value, LOOP_FIELDS, 'Persisted R5 repair loop');
+  if (
+    value.schema !== LOOP_SCHEMA ||
+    value.processLocal !== false ||
+    value.durableRestart !== true ||
+    value.lastDispatch !== null ||
+    value.operationalAuthority !== false ||
+    value.mutationAuthority !== false ||
+    value.providerAuthority !== false ||
+    value.gitAuthority !== false ||
+    value.remoteAuthority !== false ||
+    value.releaseAuthority !== false ||
+    !Array.isArray(value.attempts) ||
+    value.attempts.length > value.attemptCeiling
+  ) {
+    throw new Error('Persisted R5 repair loop safety boundary is malformed.');
+  }
+  const pending = value.pending === null
+    ? null
+    : compactPending(deepFreeze(value.pending), true);
+  if (value.approvalRequest !== null) {
+    exactFields(
+      value.approvalRequest,
+      RESTART_APPROVAL_FIELDS,
+      'Persisted R5 approval descriptor'
+    );
+    if (
+      value.approvalRequest.operation !== 'mutation.applyConditional' ||
+      value.approvalRequest.decision !== 'FRESH_HUMAN_AUTHORITY_REQUIRED' ||
+      value.approvalRequest.reusableAuthority !== false ||
+      !pending ||
+      value.approvalRequest.proposalFingerprint !== pending.patchProposal.proposalFingerprint
+    ) {
+      throw new Error('Persisted R5 approval descriptor is malformed.');
+    }
+  }
+  const restored = loopValue({
+    schema: LOOP_SCHEMA,
+    state: requireText(value.state, 'Persisted R5 state', 32),
+    objective: requireText(value.objective, 'Persisted R5 objective'),
+    mission,
+    allowedTargets: value.allowedTargets.map((item) => target(item, 'Persisted allowed target')),
+    testTarget: target(value.testTarget, 'Persisted targeted test'),
+    qualificationTarget: target(value.qualificationTarget, 'Persisted qualification test'),
+    qualificationAuthorityRef: requireText(
+      value.qualificationAuthorityRef,
+      'Persisted qualification authority reference',
+      256
+    ),
+    attemptCeiling: value.attemptCeiling,
+    attempts: value.attempts.map((attempt) => {
+      exactFields(attempt, COMPACT_ATTEMPT_FIELDS, 'Persisted R5 repair attempt');
+      return compactAttempt(attempt);
+    }),
+    pending,
+    approvalRequest: value.approvalRequest === null
+      ? null
+      : deepFreeze(value.approvalRequest),
+    lastDispatch: null,
+    stopReason: value.stopReason === null
+      ? null
+      : requireText(value.stopReason, 'Persisted R5 stop reason', 128),
+    processLocal: false,
+    durableRestart: true
+  });
+  if (
+    restored.objective !== mission.objective ||
+    (pending && pending.repositoryPath !== mission.binding.repositoryPath)
+  ) {
+    throw new Error('Persisted R5 repair loop belongs to another mission or workspace.');
+  }
+  return validateNaturalGovernedRepairLoop(restored);
+}
+
+function bindNaturalGovernedRepairLoopAfterRestart(
+  loop,
+  { mission, physicalStateValid } = {}
+) {
+  const current = validateNaturalGovernedRepairLoop(loop);
+  validateNaturalAgenticMission(mission);
+  if (mission.missionId !== current.mission.missionId) {
+    throw new Error('Restarted R5 loop mission identity is inconsistent.');
+  }
+  return loopValue({
+    ...current,
+    state: physicalStateValid === true ? current.state : 'BLOCKED',
+    mission,
+    pending: physicalStateValid === true ? current.pending : null,
+    approvalRequest: physicalStateValid === true ? current.approvalRequest : null,
+    lastDispatch: null,
+    stopReason: physicalStateValid === true
+      ? current.stopReason
+      : 'STALE_STATE',
+    processLocal: false,
+    durableRestart: true
+  });
 }
 
 function createNaturalGovernedRepairLoop({
@@ -877,6 +1212,9 @@ module.exports = Object.freeze({
   DENIED_CAPABILITIES,
   createNaturalGovernedRepairLoop,
   validateNaturalGovernedRepairLoop,
+  prepareNaturalGovernedRepairLoopForDurableRestart,
+  rehydrateNaturalGovernedRepairLoop,
+  bindNaturalGovernedRepairLoopAfterRestart,
   investigateNaturalGovernedRepairFailure,
   proposeNaturalGovernedRepair,
   authorizeAndContinueNaturalGovernedRepair,
