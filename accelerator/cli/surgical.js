@@ -37,7 +37,9 @@ const {
 const {
   formatNaturalPresentation,
   formatNaturalGatewayEvent,
-  formatNaturalGatewayResult
+  formatNaturalGatewayResult,
+  formatNaturalReferenceResolution,
+  formatNaturalReferenceContextProjection
 } = require('./natural-presentation');
 
 const {
@@ -45,6 +47,15 @@ const {
   streamGatewayRequest
 } = require(
   '../core/integrated-governed-agent-gateway'
+);
+
+const {
+  createNaturalEngineeringReferenceContext,
+  recordNaturalEngineeringGatewayResult,
+  resolveNaturalEngineeringReference,
+  projectNaturalEngineeringReferenceContext
+} = require(
+  '../core/natural-engineering-reference-context'
 );
 
 const {
@@ -117,6 +128,7 @@ const {
 
 const {
   createNaturalAgenticMission,
+  transitionNaturalAgenticMission,
   updateNaturalAgenticMissionPlan,
   projectMissionView,
   formatMissionProjection,
@@ -1091,7 +1103,7 @@ function createInteractiveSession(
   let naturalGatewayMissionSequence =
     0;
 
-  let lastNaturalGatewayContext =
+  let naturalEngineeringReferenceContext =
     null;
 
   const runnerRuntime =
@@ -1134,8 +1146,18 @@ function createInteractiveSession(
             }
           ]
         });
+
+      naturalEngineeringReferenceContext =
+        createNaturalEngineeringReferenceContext({
+          mission:
+            agenticMission,
+          createdAt:
+            missionObservedAt
+        });
     } catch {
       agenticMission =
+        null;
+      naturalEngineeringReferenceContext =
         null;
     }
   }
@@ -1188,22 +1210,31 @@ function createInteractiveSession(
     intent,
     observedAt
   ) {
-    if (!intent.requiresMissionContext) {
+    if (!intent.typedReference) {
+      const mission =
+        createNaturalGatewayMission(
+          intent,
+          observedAt
+        );
+
+      naturalEngineeringReferenceContext =
+        createNaturalEngineeringReferenceContext({
+          mission,
+          createdAt:
+            observedAt
+        });
+
       return Object.freeze({
         mission:
-          createNaturalGatewayMission(
-            intent,
-            observedAt
-          ),
+          mission,
         args:
-          intent.args
+          intent.args,
+        sourceOperation:
+          intent.operation
       });
     }
 
-    if (
-      !agenticMission ||
-      !lastNaturalGatewayContext
-    ) {
+    if (!agenticMission) {
       return null;
     }
 
@@ -1219,7 +1250,7 @@ function createInteractiveSession(
             {
               stepId,
               summary:
-                `Re-inspect physical evidence for ${lastNaturalGatewayContext.operation}.`,
+                `Resolve ${intent.referenceType} and execute ${intent.operation} through the Integrated Governed Agent Gateway.`,
               status:
                 'ACTIVE'
             }
@@ -1234,11 +1265,131 @@ function createInteractiveSession(
     return Object.freeze({
       mission:
         agenticMission,
-      args: Object.freeze({
-        ...lastNaturalGatewayContext.args,
-        operation:
-          lastNaturalGatewayContext.operation
-      })
+      args:
+        intent.args,
+      sourceOperation:
+        intent.sourceOperation
+    });
+  }
+
+  function resolveNaturalGatewayReferenceIntent(
+    intent,
+    observedAt
+  ) {
+    if (!intent.referenceType) {
+      return intent;
+    }
+
+    if (
+      !agenticMission ||
+      !naturalEngineeringReferenceContext
+    ) {
+      throw new Error(
+        'Bounded engineering reference context is unavailable.'
+      );
+    }
+
+    const revalidation =
+      revalidateDeterministicWorkspaceSession(
+        agenticMission.session
+      );
+    const resolution =
+      resolveNaturalEngineeringReference({
+        context:
+          naturalEngineeringReferenceContext,
+        mission:
+          agenticMission,
+        requestedType:
+          intent.referenceType,
+        requestedAction:
+          intent.referenceAction,
+        revalidation
+      });
+
+    output.write(
+      formatNaturalReferenceResolution(
+        resolution,
+        activation.language,
+        intent.referenceAction
+      )
+    );
+
+    if (
+      resolution.classification ===
+        'STALE_REFERENT'
+    ) {
+      agenticMission =
+        transitionNaturalAgenticMission(
+          agenticMission,
+          {
+            type:
+              'STATE_INVALIDATED',
+            state:
+              'BLOCKED',
+            summary:
+              'Conversational engineering reference was invalidated by physical-state change.',
+            at:
+              observedAt,
+            resultClass:
+              'STALE_REFERENT'
+          }
+        );
+    }
+
+    if (
+      resolution.classification !==
+        'RESOLVED'
+    ) {
+      return null;
+    }
+
+    if (
+      [
+        'REQUEST_MUTATION',
+        'REQUEST_PUBLICATION',
+        'PROJECT_REFERENCE'
+      ].includes(
+        intent.referenceAction
+      )
+    ) {
+      return null;
+    }
+
+    const reference =
+      resolution.reference;
+    const repeat =
+      intent.referenceAction ===
+        'REPEAT_OPERATION';
+
+    return Object.freeze({
+      ...intent,
+      operation:
+        repeat
+          ? reference.operation
+          : 'evidence.inspect',
+      args:
+        repeat
+          ? Object.freeze({})
+          : Object.freeze({
+              operation:
+                reference.operation
+            }),
+      sourceOperation:
+        reference.operation,
+      typedReference:
+        reference,
+      referenceResolution:
+        resolution,
+      requiresMissionContext:
+        true,
+      authorityExpansion:
+        false,
+      operationalAuthority:
+        false,
+      mutationAuthority:
+        false,
+      publicationAuthority:
+        false
     });
   }
 
@@ -1250,21 +1401,26 @@ function createInteractiveSession(
         options
       );
 
-    const prepared =
-      prepareNaturalGatewayMission(
+    const resolvedIntent =
+      resolveNaturalGatewayReferenceIntent(
         intent,
         observedAt
       );
 
-    if (!prepared) {
-      output.write(
-        humanText(
-          activation,
-          'A referência de evidência está ambígua: ainda não existe uma operação governada anterior nesta missão. Peça primeiro o estado ou as alterações do projeto. Nenhuma operação foi executada e nenhuma autoridade foi concedida.\n',
-          'The evidence reference is ambiguous: this mission has no preceding governed operation. Ask for project status or changes first. No operation ran and no authority was granted.\n'
-        )
-      );
+    if (!resolvedIntent) {
       return;
+    }
+
+    const prepared =
+      prepareNaturalGatewayMission(
+        resolvedIntent,
+        observedAt
+      );
+
+    if (!prepared) {
+      throw new Error(
+        'Task-specific mission is unavailable for the governed reference.'
+      );
     }
 
     agenticMission =
@@ -1280,7 +1436,7 @@ function createInteractiveSession(
         mission:
           agenticMission,
         operation:
-          intent.operation,
+          resolvedIntent.operation,
         args:
           prepared.args,
         requestedAt:
@@ -1355,21 +1511,22 @@ function createInteractiveSession(
         }
       );
 
-    if (
-      completed &&
-      intent.operation !==
-        'evidence.inspect'
-    ) {
-      lastNaturalGatewayContext =
-        Object.freeze({
-          operation:
-            intent.operation,
-          args:
-            prepared.args,
-          evidenceDigest:
-            dispatch.result.evidenceDigest
-        });
-    }
+    naturalEngineeringReferenceContext =
+      recordNaturalEngineeringGatewayResult(
+        naturalEngineeringReferenceContext,
+        {
+          mission:
+            agenticMission,
+          gatewayOperation:
+            resolvedIntent.operation,
+          sourceOperation:
+            prepared.sourceOperation,
+          result:
+            dispatch.result,
+          createdAt:
+            observedAt
+        }
+      );
 
     output.write(
       formatNaturalGatewayResult(
@@ -1517,7 +1674,10 @@ function createInteractiveSession(
               );
 
             if (controlled.matched) {
-              if (controlled.action === 'GATEWAY_REQUEST') {
+              if (
+                controlled.action === 'GATEWAY_REQUEST' ||
+                controlled.action === 'REFERENCE_REQUEST'
+              ) {
                 try {
                   await dispatchNaturalGatewayIntent(
                     controlled.intent
@@ -1547,6 +1707,17 @@ function createInteractiveSession(
                         agenticMission,
                         controlled.projection
                       )
+                    ) +
+                    (
+                      controlled.projection === 'status' &&
+                      naturalEngineeringReferenceContext
+                        ? formatNaturalReferenceContextProjection(
+                            projectNaturalEngineeringReferenceContext(
+                              naturalEngineeringReferenceContext
+                            ),
+                            activation.language
+                          )
+                        : ''
                     )
                   );
                 }

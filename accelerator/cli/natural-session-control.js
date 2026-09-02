@@ -59,16 +59,308 @@ function includesAny(
   );
 }
 
+function naturalSemanticTokens(value) {
+  return new Set(
+    normalize(value)
+      .replace(/[^a-z0-9_./-]+/g, ' ')
+      .split(' ')
+      .filter(Boolean)
+  );
+}
+
+function isWeakNaturalEngineeringDeictic(tokens) {
+  const hasAny = (...concepts) =>
+    concepts.some(
+      (concept) => tokens.has(concept)
+    );
+  const deictic =
+    hasAny(
+      'isso',
+      'isto',
+      'este',
+      'esta',
+      'esse',
+      'essa',
+      'aquele',
+      'aquilo',
+      'this',
+      'that',
+      'it',
+      'those'
+    );
+  const explicitEngineeringObject =
+    hasAny(
+      'projeto',
+      'project',
+      'repositorio',
+      'repository',
+      'workspace',
+      'arquivo',
+      'file',
+      'funcao',
+      'function',
+      'codigo',
+      'code',
+      'arquitetura',
+      'architecture'
+    );
+
+  return (
+    deictic &&
+    !explicitEngineeringObject
+  );
+}
+
+function resolveNaturalEngineeringReferenceIntent(value) {
+  const objective =
+    String(value || '').trim();
+  const tokens =
+    naturalSemanticTokens(
+      objective
+    );
+  const hasAny = (...concepts) =>
+    concepts.some(
+      (concept) => tokens.has(concept)
+    );
+
+  const evidence =
+    hasAny(
+      'evidencia',
+      'evidence',
+      'prova',
+      'proof'
+    );
+  const changes =
+    hasAny(
+      'mudancas',
+      'mudaram',
+      'mudou',
+      'modificados',
+      'modificadas',
+      'alteracoes',
+      'alterados',
+      'alteradas',
+      'changed',
+      'changes',
+      'modified'
+    );
+  const contextual =
+    hasAny(
+      'e',
+      'essas',
+      'esses',
+      'essas',
+      'those',
+      'these',
+      'about'
+    );
+  const weakDeictic =
+    isWeakNaturalEngineeringDeictic(
+      tokens
+    );
+  const repeat =
+    hasAny(
+      'novamente',
+      'outra',
+      'again',
+      'repeat',
+      'repita'
+    );
+  const mutation =
+    hasAny(
+      'corrija',
+      'corrigir',
+      'conserte',
+      'fix',
+      'repair'
+    );
+  const publication =
+    hasAny(
+      'publique',
+      'publicar',
+      'publish'
+    );
+  const operation =
+    hasAny(
+      'operacao',
+      'operation'
+    );
+  const result =
+    hasAny(
+      'resultado',
+      'result'
+    );
+  const failure =
+    hasAny(
+      'falhou',
+      'falha',
+      'erro',
+      'failed',
+      'failure',
+      'error'
+    );
+  const test =
+    hasAny(
+      'teste',
+      'test'
+    );
+  const planStep =
+    hasAny(
+      'etapa',
+      'step'
+    ) &&
+    hasAny(
+      'atual',
+      'current'
+    );
+  const recommendation =
+    hasAny(
+      'recomendacao',
+      'recomendou',
+      'recommendation',
+      'recommended'
+    );
+  const checkpoint =
+    hasAny(
+      'checkpoint'
+    );
+  const patch =
+    hasAny(
+      'patch'
+    );
+  const last =
+    hasAny(
+      'ultimo',
+      'ultima',
+      'last'
+    );
+  const happened =
+    hasAny(
+      'aconteceu',
+      'ocorreu',
+      'happened'
+    );
+
+  let referenceType = null;
+  let referenceAction =
+    'INSPECT_EVIDENCE';
+
+  if (mutation && weakDeictic) {
+    referenceType = 'DEICTIC';
+    referenceAction = 'REQUEST_MUTATION';
+  } else if (publication && weakDeictic) {
+    referenceType = 'DEICTIC';
+    referenceAction = 'REQUEST_PUBLICATION';
+  } else if (evidence) {
+    referenceType = 'LAST_EVIDENCE';
+  } else if (changes && contextual) {
+    referenceType = 'CURRENT_DIFF';
+    referenceAction = 'REPEAT_OPERATION';
+  } else if (repeat) {
+    referenceType = 'LAST_OPERATION';
+    referenceAction = 'REPEAT_OPERATION';
+  } else if (
+    failure &&
+    (
+      last ||
+      weakDeictic ||
+      hasAny('que', 'what', 'why', 'por')
+    )
+  ) {
+    referenceType = 'LAST_FAILURE';
+  } else if (
+    test &&
+    (
+      last ||
+      weakDeictic
+    )
+  ) {
+    referenceType = 'LAST_TEST';
+  } else if (planStep) {
+    referenceType = 'CURRENT_PLAN_STEP';
+    referenceAction = 'PROJECT_REFERENCE';
+  } else if (recommendation && last) {
+    referenceType = 'LAST_RECOMMENDATION';
+    referenceAction = 'PROJECT_REFERENCE';
+  } else if (checkpoint) {
+    referenceType = 'CURRENT_CHECKPOINT';
+    referenceAction = 'PROJECT_REFERENCE';
+  } else if (patch && last) {
+    referenceType = 'LAST_PATCH';
+  } else if (
+    (
+      operation &&
+      (
+        happened ||
+        weakDeictic
+      )
+    ) ||
+    (result && last)
+  ) {
+    referenceType = 'LAST_OPERATION';
+  } else if (
+    weakDeictic &&
+    hasAny(
+      'mostre',
+      'mostrar',
+      'explique',
+      'explicar',
+      'show',
+      'explain',
+      'what',
+      'e'
+    )
+  ) {
+    referenceType = 'DEICTIC';
+  }
+
+  if (!referenceType) {
+    return null;
+  }
+
+  const operationForReference =
+    referenceType === 'CURRENT_DIFF'
+      ? 'workspace.diff'
+      : referenceAction === 'PROJECT_REFERENCE'
+        ? null
+        : 'evidence.inspect';
+
+  return Object.freeze({
+    operation:
+      operationForReference,
+    args: Object.freeze({}),
+    objective,
+    referenceType,
+    referenceAction,
+    requiresMissionContext: true,
+    readOnly:
+      ![
+        'REQUEST_MUTATION',
+        'REQUEST_PUBLICATION'
+      ].includes(referenceAction),
+    authorityExpansion: false,
+    operationalAuthority: false,
+    mutationAuthority: false,
+    publicationAuthority: false
+  });
+}
+
 function resolveNaturalGatewayIntent(value) {
   const objective =
     String(value || '').trim();
 
+  const referenceIntent =
+    resolveNaturalEngineeringReferenceIntent(
+      objective
+    );
+
+  if (referenceIntent) {
+    return referenceIntent;
+  }
+
   const tokens =
-    new Set(
-      normalize(objective)
-        .replace(/[^a-z0-9_./-]+/g, ' ')
-        .split(' ')
-        .filter(Boolean)
+    naturalSemanticTokens(
+      objective
     );
 
   const hasAny = (...concepts) =>
@@ -120,16 +412,7 @@ function resolveNaturalGatewayIntent(value) {
       'changes'
     );
 
-  const evidenceConcept =
-    hasAny(
-      'evidencia',
-      'evidence',
-      'prova',
-      'proof'
-    );
-
   let operation = null;
-  let requiresMissionContext = false;
 
   if (
     engineeringScope &&
@@ -139,9 +422,6 @@ function resolveNaturalGatewayIntent(value) {
     operation = 'workspace.status';
   } else if (changedConcept) {
     operation = 'workspace.diff';
-  } else if (evidenceConcept) {
-    operation = 'evidence.inspect';
-    requiresMissionContext = true;
   }
 
   if (!operation) {
@@ -152,7 +432,7 @@ function resolveNaturalGatewayIntent(value) {
     operation,
     args: Object.freeze({}),
     objective,
-    requiresMissionContext,
+    requiresMissionContext: false,
     readOnly: true,
     authorityExpansion: false,
     operationalAuthority: false,
@@ -689,9 +969,21 @@ function createNaturalSessionControl(
       );
 
     if (gatewayIntent) {
+      const referenceBoundary =
+        [
+          'REQUEST_MUTATION',
+          'REQUEST_PUBLICATION'
+        ].includes(
+          gatewayIntent.referenceAction
+        ) ||
+        gatewayIntent.operation === null;
+
       return Object.freeze({
         matched: true,
-        action: 'GATEWAY_REQUEST',
+        action:
+          referenceBoundary
+            ? 'REFERENCE_REQUEST'
+            : 'GATEWAY_REQUEST',
         intent: gatewayIntent
       });
     }
@@ -1117,6 +1409,7 @@ module.exports =
     formatProviderStatus,
     formatProviderCatalog,
     isNaturalMissionCancellationRequest,
+    resolveNaturalEngineeringReferenceIntent,
     resolveNaturalGatewayIntent,
     createNaturalSessionControl
   });

@@ -393,10 +393,140 @@ function formatNaturalGatewayResult(
   return `${lines.join('\n')}\n`;
 }
 
+function formatNaturalReferenceResolution(
+  resolution,
+  language = 'pt-BR',
+  requestedAction = 'INSPECT_EVIDENCE'
+) {
+  const english = language === 'en';
+
+  if (
+    !resolution ||
+    resolution.schema !==
+      'sdo.natural_engineering_reference_resolution.v1' ||
+    typeof resolution.classification !== 'string'
+  ) {
+    return english
+      ? (
+          'Reference: UNSUPPORTED_REFERENT\n' +
+          'The bounded reference result is malformed. No operation ran and no authority was granted.\n'
+        )
+      : (
+          'Referência: UNSUPPORTED_REFERENT\n' +
+          'O resultado da referência delimitada está malformado. Nenhuma operação foi executada e nenhuma autoridade foi concedida.\n'
+        );
+  }
+
+  if (
+    resolution.classification === 'RESOLVED' &&
+    resolution.reference
+  ) {
+    const lines = [
+      `${english ? 'Governed reference resolved' : 'Referência governada resolvida'}: ${resolution.reference.type}`,
+      `${english ? 'Physical revalidation' : 'Revalidação física'}: ${resolution.physicalState}`,
+      english
+        ? 'Reference authority: none'
+        : 'Autoridade da referência: nenhuma'
+    ];
+
+    if (requestedAction === 'REQUEST_MUTATION') {
+      lines.push(
+        'State: HUMAN_AUTHORITY_REQUIRED',
+        english
+          ? 'Resolving the reference did not authorize mutation. No mutation was dispatched.'
+          : 'Resolver a referência não autorizou mutação. Nenhuma mutação foi despachada.'
+      );
+    } else if (requestedAction === 'REQUEST_PUBLICATION') {
+      lines.push(
+        'State: HUMAN_AUTHORITY_REQUIRED',
+        english
+          ? 'Resolving the reference did not authorize publication. Nothing was published.'
+          : 'Resolver a referência não autorizou publicação. Nada foi publicado.'
+      );
+    }
+
+    return `${lines.join('\n')}\n`;
+  }
+
+  const messages = {
+    NO_REFERENT: english
+      ? 'No previous governed referent of this type exists in the current mission.'
+      : 'Não há um referente governado anterior desse tipo na missão atual.',
+    AMBIGUOUS_REFERENT: english
+      ? 'More than one governed result can satisfy this weak reference. Clarification is required.'
+      : 'Há mais de um resultado governado ao qual essa referência fraca pode se referir. É necessário esclarecer.',
+    STALE_REFERENT: english
+      ? 'The physical state changed after this result. The stale reference was not used.'
+      : 'O estado físico mudou depois desse resultado. A referência obsoleta não foi usada.',
+    UNSUPPORTED_REFERENT: english
+      ? 'This engineering reference is not represented by the current bounded runtime.'
+      : 'Essa referência de engenharia não é representada pelo runtime delimitado atual.'
+  };
+  const lines = [
+    `${english ? 'Reference' : 'Referência'}: ${resolution.classification}`,
+    `${english ? 'Requested type' : 'Tipo solicitado'}: ${resolution.requestedType}`,
+    messages[resolution.classification] ||
+      (english
+        ? 'The reference failed closed.'
+        : 'A referência falhou de forma segura.')
+  ];
+
+  if (
+    Array.isArray(resolution.candidateTypes) &&
+    resolution.candidateTypes.length > 0
+  ) {
+    lines.push(
+      `${english ? 'Candidates' : 'Candidatos'}: ${resolution.candidateTypes.join(', ')}`
+    );
+  }
+
+  lines.push(
+    english
+      ? 'No governed operation ran and no authority was granted.'
+      : 'Nenhuma operação governada foi executada e nenhuma autoridade foi concedida.'
+  );
+
+  return `${lines.join('\n')}\n`;
+}
+
+function formatNaturalReferenceContextProjection(
+  projection,
+  language = 'pt-BR'
+) {
+  if (
+    !projection ||
+    projection.schema !==
+      'sdo.natural_engineering_reference_projection.v1' ||
+    !Array.isArray(projection.types)
+  ) {
+    return '';
+  }
+
+  const english = language === 'en';
+  const types =
+    projection.types.length > 0
+      ? projection.types.join(', ')
+      : 'none';
+
+  return english
+    ? (
+        `Bounded references: ${types}\n` +
+        'Reference persistence: current process only\n' +
+        'Reference authority: none\n'
+      )
+    : (
+        `Referências delimitadas: ${types}\n` +
+        'Persistência de referência: somente o processo atual\n' +
+        'Autoridade da referência: nenhuma\n'
+      );
+}
+
 module.exports = Object.freeze({
   extractGovernedPayload,
   parseWorktreeStatus,
   formatNaturalPresentation,
   formatNaturalGatewayEvent,
-  formatNaturalGatewayResult
+  formatNaturalGatewayResult,
+  formatNaturalReferenceResolution,
+  formatNaturalReferenceContextProjection
 });
