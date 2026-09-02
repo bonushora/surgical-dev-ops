@@ -1,5 +1,10 @@
 'use strict';
 
+const {
+  validateNaturalAgenticMission,
+  validateNaturalAgenticMissionEvent
+} = require('../core/natural-agentic-mission');
+
 const NATURAL_GATEWAY_RESULT_CLASSES =
   new Set([
     'SUCCESS',
@@ -254,45 +259,118 @@ function formatNaturalPresentation(
 
 function formatNaturalGatewayEvent(
   event,
-  language = 'pt-BR'
+  language = 'pt-BR',
+  context = {}
 ) {
-  if (
-    !event ||
-    typeof event !== 'object' ||
-    typeof event.operation !== 'string' ||
-    typeof event.type !== 'string'
-  ) {
+  let canonicalEvent;
+  try {
+    canonicalEvent =
+      validateNaturalAgenticMissionEvent(
+        event
+      );
+  } catch {
     return '';
   }
 
   const english = language === 'en';
+  let mission = null;
+  try {
+    mission = context.mission
+      ? validateNaturalAgenticMission(context.mission)
+      : null;
+  } catch {
+    return '';
+  }
+  if (mission && mission.missionId !== canonicalEvent.missionId) {
+    return '';
+  }
+  const contextualOperation =
+    typeof context.operation === 'string' &&
+    /^[A-Za-z0-9._-]{1,128}$/.test(context.operation)
+      ? context.operation
+      : null;
+  const contextualStep = mission && context.stepId
+    ? mission.plan.find((step) => step.stepId === context.stepId) || null
+    : mission
+      ? mission.plan.find((step) => step.status === 'ACTIVE') ||
+        [...mission.plan].reverse().find((step) => step.status === 'BLOCKED') ||
+        [...mission.plan].reverse().find((step) => step.resultClass) ||
+        null
+      : null;
+  const operation = contextualOperation || contextualStep?.operation || null;
+  const operationText = operation || (english ? 'not established' : 'não estabelecida');
+  const resultClass = canonicalEvent.resultClass ||
+    (english ? 'not established' : 'não estabelecido');
 
-  if (event.type === 'OPERATION_STARTED') {
+  if (canonicalEvent.type === 'MISSION_STARTED') {
     return english
-      ? `Governed operation started: ${event.operation}\n`
-      : `Operação governada iniciada: ${event.operation}\n`;
+      ? `Governed mission started: ${mission ? mission.objective : canonicalEvent.missionId}\n`
+      : `Missão governada iniciada: ${mission ? mission.objective : canonicalEvent.missionId}\n`;
+  }
+  if (canonicalEvent.type === 'PLAN_UPDATED') {
+    const isCurrentEvent = mission?.events.at(-1)?.eventHash === canonicalEvent.eventHash;
+    const status = isCurrentEvent ? contextualStep?.status : null;
+    return english
+      ? `Governed plan updated: ${status || canonicalEvent.summary}${status && operation ? ` [${operation}]` : ''}\n`
+      : `Plano governado atualizado: ${status || canonicalEvent.summary}${status && operation ? ` [${operation}]` : ''}\n`;
+  }
+  if (['OPERATION_STARTED', 'TEST_STARTED'].includes(canonicalEvent.type)) {
+    return english
+      ? `Governed operation started: ${operationText}\n`
+      : `Operação governada iniciada: ${operationText}\n`;
+  }
+  if (canonicalEvent.type === 'EVIDENCE_DISCOVERED') {
+    return english
+      ? `Governed evidence discovered: ${operationText} — ${resultClass}\n`
+      : `Evidência governada descoberta: ${operationText} — ${resultClass}\n`;
+  }
+  if (['OPERATION_COMPLETED', 'TEST_PASSED'].includes(canonicalEvent.type)) {
+    return english
+      ? `Governed operation completed: ${resultClass} [${operationText}]\n`
+      : `Operação governada concluída: ${resultClass} [${operationText}]\n`;
+  }
+  if (['OPERATION_DENIED', 'TEST_FAILED', 'AUTHORITY_DENIED'].includes(canonicalEvent.type)) {
+    return english
+      ? `Governed operation failed closed: ${operationText} — ${resultClass}\nReason: ${canonicalEvent.summary}\n`
+      : `Operação governada falhou de forma segura: ${operationText} — ${resultClass}\nMotivo: ${canonicalEvent.summary}\n`;
+  }
+  if (canonicalEvent.type === 'AUTHORITY_REQUIRED') {
+    return english
+      ? `Governed operation requires authority: ${operationText} — ${resultClass} (not granted)\nReason: ${canonicalEvent.summary}\n`
+      : `Autoridade governada requerida: ${operationText} — ${resultClass} (ainda não concedida)\nMotivo: ${canonicalEvent.summary}\n`;
+  }
+  if (canonicalEvent.type === 'AUTHORITY_GRANTED') {
+    return english
+      ? `Bounded governed authority reference consumed: ${operationText}\n`
+      : `Referência de autoridade governada limitada consumida: ${operationText}\n`;
+  }
+  if (canonicalEvent.type === 'STATE_INVALIDATED') {
+    return english
+      ? `Governed state invalidated: ${resultClass}\nReason: ${canonicalEvent.summary}\n`
+      : `Estado governado invalidado: ${resultClass}\nMotivo: ${canonicalEvent.summary}\n`;
+  }
+  if (canonicalEvent.type === 'MISSION_BLOCKED') {
+    return english
+      ? `Governed mission blocked: ${canonicalEvent.summary}\n`
+      : `Missão governada bloqueada: ${canonicalEvent.summary}\n`;
+  }
+  if (canonicalEvent.type === 'WORKSPACE_VALIDATED') {
+    return english
+      ? `Governed workspace validated: ${resultClass}\n`
+      : `Workspace governado validado: ${resultClass}\n`;
+  }
+  if (canonicalEvent.type === 'MISSION_GREEN') {
+    return english
+      ? 'Governed mission GREEN: canonical qualification passed.\n'
+      : 'Missão governada GREEN: qualificação canônica aprovada.\n';
+  }
+  if (canonicalEvent.type === 'MISSION_CANCELLED') {
+    return english
+      ? `Governed mission cancelled: ${canonicalEvent.summary}\n`
+      : `Missão governada cancelada: ${canonicalEvent.summary}\n`;
   }
 
-  const classification =
-    typeof event.classification === 'string'
-      ? event.classification
-      : 'FAILURE';
-
-  if (classification === 'SUCCESS') {
-    return english
-      ? `Governed operation completed: ${classification}\n`
-      : `Operação governada concluída: ${classification}\n`;
-  }
-
-  if (classification === 'AUTHORITY_REQUIRED') {
-    return english
-      ? `Governed operation awaits authority: ${classification}\n`
-      : `Operação governada aguarda autoridade: ${classification}\n`;
-  }
-
-  return english
-    ? `Governed operation failed closed: ${classification}\n`
-    : `Operação governada falhou de forma segura: ${classification}\n`;
+  return '';
 }
 
 function formatNaturalGatewayResult(

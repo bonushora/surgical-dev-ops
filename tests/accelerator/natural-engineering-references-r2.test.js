@@ -398,7 +398,18 @@ test('resolved conversational target does not authorize mutation or depend on a 
     assert.match(outcome.stdout, /Referência governada resolvida:/);
     assert.match(outcome.stdout, /HUMAN_AUTHORITY_REQUIRED/);
     assert.match(outcome.stdout, /resolver a referência não autorizou mutação/i);
-    assert.doesNotMatch(outcome.stdout, /mutation\.applyConditional/);
+    assert.doesNotMatch(
+      outcome.stdout,
+      /Operação governada iniciada: mutation\.applyConditional/
+    );
+    assert.match(
+      outcome.stdout,
+      /Autoridade governada requerida: mutation\.applyConditional.*não concedida/i
+    );
+    assert.doesNotMatch(
+      outcome.stdout,
+      /Autoridade governada concedida/
+    );
     assert.doesNotMatch(outcome.stdout, /Processando com o provider cognitivo local/);
     assert.equal(
       fs.readFileSync(path.join(fixture.repository, 'package-lock.json'), 'utf8'),

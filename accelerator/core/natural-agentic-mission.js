@@ -103,6 +103,23 @@ const EVENT_TYPES = Object.freeze({
   MISSION_CANCELLED: 'MISSION_CANCELLED'
 });
 
+const EVENT_FIELDS = Object.freeze([
+  'schema',
+  'missionId',
+  'sequence',
+  'type',
+  'state',
+  'summary',
+  'at',
+  'evidenceRef',
+  'resultClass',
+  'previousEventHash',
+  'contentRecorded',
+  'operationalAuthority',
+  'mutationAuthority',
+  'eventHash'
+]);
+
 const DEFAULT_AVAILABLE_CAPABILITIES = Object.freeze([
   'workspace.status',
   'workspace.search',
@@ -500,6 +517,44 @@ function createMissionEvent(input) {
     ...body,
     eventHash: fingerprint(EVENT_SCHEMA, body)
   });
+}
+
+function validateNaturalAgenticMissionEvent(event) {
+  if (
+    !event ||
+    typeof event !== 'object' ||
+    Array.isArray(event) ||
+    !Object.isFrozen(event) ||
+    Object.keys(event).length !== EVENT_FIELDS.length ||
+    EVENT_FIELDS.some((field) => !Object.prototype.hasOwnProperty.call(event, field))
+  ) {
+    throw new Error('Immutable canonical NATURAL mission event is required.');
+  }
+  if (!Number.isSafeInteger(event.sequence) || event.sequence < 1) {
+    throw new Error('Mission event sequence is malformed.');
+  }
+  if (
+    event.contentRecorded !== false ||
+    event.operationalAuthority !== false ||
+    event.mutationAuthority !== false
+  ) {
+    throw new Error('Mission event cannot carry content or authority.');
+  }
+
+  const {
+    eventHash,
+    ...recordedBody
+  } = event;
+  const normalizedBody = eventBody(event);
+  if (
+    JSON.stringify(canonicalize(recordedBody)) !==
+      JSON.stringify(canonicalize(normalizedBody)) ||
+    requireDigest(eventHash, 'Mission event hash') !==
+      fingerprint(EVENT_SCHEMA, normalizedBody)
+  ) {
+    throw new Error('NATURAL mission event has lost integrity.');
+  }
+  return event;
 }
 
 function withMissionFingerprint(base) {
@@ -1279,6 +1334,23 @@ function projectMissionJournal(mission) {
   });
 }
 
+function projectMissionActivity(mission) {
+  const current = validateNaturalAgenticMission(mission);
+  const live = livePlanState(current.plan, current.state);
+  return deepFreeze({
+    ...projectionBase(current, 'activity'),
+    latestEvent: validateNaturalAgenticMissionEvent(current.events.at(-1)),
+    currentStep: live.currentStep,
+    nextStep: live.nextStep,
+    nextStepAmbiguous: live.nextStepAmbiguous,
+    lastGovernedResult: live.lastGovernedResult,
+    blocker: live.blockedSteps.at(-1)?.blocker || null,
+    pendingApproval: live.blockedSteps.some(
+      (item) => item.resultClass === 'AUTHORITY_REQUIRED'
+    )
+  });
+}
+
 function projectMissionView(mission, view) {
   const selected = requireText(view, 'Mission projection', 64).replace(/^\//, '').toLowerCase();
   if (selected === 'status') return projectMissionStatus(mission);
@@ -1287,6 +1359,7 @@ function projectMissionView(mission, view) {
   if (selected === 'tests') return projectMissionTests(mission);
   if (selected === 'authority') return projectMissionAuthority(mission);
   if (selected === 'journal') return projectMissionJournal(mission);
+  if (selected === 'activity') return projectMissionActivity(mission);
   throw new Error('Mission projection is unsupported.');
 }
 
@@ -1319,7 +1392,7 @@ function missionExpectedState(mission) {
   });
 }
 
-function formatMissionProjection(projection) {
+function formatMissionProjection(projection, language = 'en') {
   if (!projection || projection.schema !== PROJECTION_SCHEMA || !Object.isFrozen(projection)) {
     throw new Error('Immutable mission projection is required.');
   }
@@ -1383,6 +1456,35 @@ function formatMissionProjection(projection) {
       'Content telemetry: false\n'
     );
   }
+  if (projection.projection === 'activity') {
+    const operation = projection.currentStep?.operation ||
+      projection.lastGovernedResult?.operation ||
+      null;
+    if (language === 'pt-BR') {
+      return (
+        'Atividade atual da missão:\n' +
+        `Missão: ${projection.missionId}\n` +
+        `Estado: ${projection.state}\n` +
+        `Último evento: ${projection.latestEvent.type}\n` +
+        `Operação: ${operation || 'não estabelecida'}\n` +
+        `Último resultado governado: ${projection.lastGovernedResult ? projection.lastGovernedResult.classification : 'não estabelecido'}\n` +
+        `Bloqueio: ${projection.blocker || 'nenhum'}\n` +
+        `Autoridade pendente: ${projection.pendingApproval ? 'sim, ainda não concedida' : 'não'}\n` +
+        'Autoridade da projeção: nenhuma\n'
+      );
+    }
+    return (
+      'Current mission activity:\n' +
+      `Mission: ${projection.missionId}\n` +
+      `State: ${projection.state}\n` +
+      `Latest event: ${projection.latestEvent.type}\n` +
+      `Operation: ${operation || 'not established'}\n` +
+      `Last governed result: ${projection.lastGovernedResult ? projection.lastGovernedResult.classification : 'not established'}\n` +
+      `Blocker: ${projection.blocker || 'none'}\n` +
+      `Pending authority: ${projection.pendingApproval ? 'yes, not granted' : 'no'}\n` +
+      'Projection authority: none\n'
+    );
+  }
   return `${projection.projection}: ${projection.state}\n`;
 }
 
@@ -1396,6 +1498,7 @@ module.exports = Object.freeze({
   PLAN_RESULT_CLASSES,
   CONTINUATION_CLASSES,
   EVENT_TYPES,
+  validateNaturalAgenticMissionEvent,
   DEFAULT_AVAILABLE_CAPABILITIES,
   DEFAULT_ALLOWED_CAPABILITIES,
   DEFAULT_DENIED_CAPABILITIES,
@@ -1419,6 +1522,7 @@ module.exports = Object.freeze({
   projectMissionTests,
   projectMissionAuthority,
   projectMissionJournal,
+  projectMissionActivity,
   projectMissionView,
   substituteMissionProvider,
   missionExpectedState,

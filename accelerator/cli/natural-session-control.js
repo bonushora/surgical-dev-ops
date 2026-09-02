@@ -456,6 +456,28 @@ function resolveNaturalMissionControlIntent(value) {
     });
   }
 
+  const activityQuestion =
+    hasAny('acontecendo', 'happening') ||
+    (
+      hasAny('acabou', 'just') &&
+      hasAny('acontecer', 'aconteceu', 'happened')
+    ) ||
+    (
+      hasAny('operacao', 'operation') &&
+      hasAny('terminou', 'terminada', 'finish', 'finished')
+    ) ||
+    (
+      hasAny('parou', 'stop', 'stopped') &&
+      hasAny('por', 'why')
+    );
+
+  if (activityQuestion) {
+    return Object.freeze({
+      action: 'MISSION_PROJECTION',
+      projection: 'activity'
+    });
+  }
+
   const statusQuestion =
     (
       hasAny('fazendo', 'doing') &&

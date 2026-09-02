@@ -22,6 +22,7 @@ const {
   EVENT_TYPES,
   DEFAULT_DENIED_CAPABILITIES,
   validateNaturalAgenticMission,
+  validateNaturalAgenticMissionEvent,
   transitionNaturalAgenticMission,
   recordNaturalAgenticMissionTestResult,
   consumeMissionAuthorityGrant,
@@ -35,7 +36,6 @@ const REQUEST_SCHEMA = 'sdo.integrated_governed_agent_gateway_request.v1';
 const RESULT_SCHEMA = 'sdo.integrated_governed_agent_gateway_result.v1';
 const DISPATCH_SCHEMA = 'sdo.integrated_governed_agent_gateway_dispatch.v1';
 const APPROVAL_REQUEST_SCHEMA = 'sdo.integrated_governed_agent_gateway_approval_request.v1';
-const STREAM_EVENT_SCHEMA = 'sdo.integrated_governed_agent_gateway_stream_event.v1';
 const PROTOCOL_VERSION = 'sdo.integrated_governed_agent_gateway.v1';
 
 const RESULT_CLASSES = Object.freeze([
@@ -870,6 +870,29 @@ function performOperation({ mission, request, definition, revalidation, options 
   };
 }
 
+function notifyMissionEvents(previousMission, updatedMission, observer) {
+  if (typeof observer !== 'function') return;
+  const previous = validateNaturalAgenticMission(previousMission);
+  const updated = validateNaturalAgenticMission(updatedMission);
+  if (
+    previous.missionId !== updated.missionId ||
+    updated.events.length < previous.events.length ||
+    previous.events.some(
+      (event, index) => updated.events[index]?.eventHash !== event.eventHash
+    )
+  ) {
+    throw new Error('Observed mission event history is not an append-only continuation.');
+  }
+  for (const event of updated.events.slice(previous.events.length)) {
+    const canonicalEvent = validateNaturalAgenticMissionEvent(event);
+    try {
+      observer(canonicalEvent);
+    } catch {
+      // Presentation observers cannot affect governed execution.
+    }
+  }
+}
+
 function dispatchGatewayRequest({ request, mission, options = {} } = {}) {
   const latency = createLatencyTrace(options);
   latency.mark('acknowledged');
@@ -946,6 +969,7 @@ function dispatchGatewayRequest({ request, mission, options = {} } = {}) {
       at: requestedAt,
       resultClass: 'DENIED'
     });
+    notifyMissionEvents(current, denied, options.onMissionEvent);
     return resultEnvelope({
       request: validatedRequest,
       mission: current,
@@ -978,6 +1002,7 @@ function dispatchGatewayRequest({ request, mission, options = {} } = {}) {
           fingerprint: approvalRequest.approvalRequestFingerprint
         }
       });
+      notifyMissionEvents(current, waiting, options.onMissionEvent);
       return resultEnvelope({
         request: validatedRequest,
         mission: current,
@@ -1002,6 +1027,7 @@ function dispatchGatewayRequest({ request, mission, options = {} } = {}) {
         revalidation,
         resumedAt: requestedAt
       });
+      notifyMissionEvents(current, projectedMission, options.onMissionEvent);
       data = projectMissionView(projectedMission, 'status');
       const resumeClassification = projectedMission.state === 'BLOCKED'
         ? 'STALE_STATE'
@@ -1041,6 +1067,7 @@ function dispatchGatewayRequest({ request, mission, options = {} } = {}) {
           fingerprint: approvalRequest.approvalRequestFingerprint
         }
       });
+      notifyMissionEvents(current, projectedMission, options.onMissionEvent);
       latency.mark('normalized');
       return resultEnvelope({
         request: validatedRequest,
@@ -1075,6 +1102,7 @@ function dispatchGatewayRequest({ request, mission, options = {} } = {}) {
     at: requestedAt,
     resultClass: 'SUCCESS'
   });
+  notifyMissionEvents(current, executing, options.onMissionEvent);
   latency.mark('firstProgress');
 
   let revalidation = null;
@@ -1088,6 +1116,7 @@ function dispatchGatewayRequest({ request, mission, options = {} } = {}) {
         at: requestedAt,
         resultClass: 'STALE_STATE'
       });
+      notifyMissionEvents(executing, invalidated, options.onMissionEvent);
       return resultEnvelope({
         request: validatedRequest,
         mission: current,
@@ -1122,6 +1151,7 @@ function dispatchGatewayRequest({ request, mission, options = {} } = {}) {
       at: requestedAt,
       resultClass: 'FAILURE'
     });
+    notifyMissionEvents(executing, failed, options.onMissionEvent);
     latency.mark('normalized');
     return resultEnvelope({
       request: validatedRequest,
@@ -1178,6 +1208,8 @@ function dispatchGatewayRequest({ request, mission, options = {} } = {}) {
     });
   }
 
+  notifyMissionEvents(executing, completed, options.onMissionEvent);
+
   latency.mark('normalized');
   return resultEnvelope({
     request: validatedRequest,
@@ -1191,60 +1223,54 @@ function dispatchGatewayRequest({ request, mission, options = {} } = {}) {
   });
 }
 
-function createGatewayStreamEvent({ request, sequence, type, summary, classification = null, monotonicMs }) {
-  const body = {
-    schema: STREAM_EVENT_SCHEMA,
-    requestId: request.requestId,
-    missionId: request.missionId,
-    operation: request.operation,
-    sequence,
-    type: requireText(type, 'Gateway stream event type', 64),
-    summary: requireText(summary, 'Gateway stream event summary', 512),
-    classification,
-    monotonicMs,
-    contentRecorded: false,
-    presentationOnly: true,
-    operationalAuthority: false,
-    mutationAuthority: false
-  };
-  return deepFreeze({
-    ...body,
-    eventFingerprint: fingerprint(STREAM_EVENT_SCHEMA, body)
-  });
-}
-
 async function* streamGatewayRequest({ request, mission, options = {}, execute = null } = {}) {
   const validated = validateGatewayRequest(request);
-  const first = createGatewayStreamEvent({
-    request: validated,
-    sequence: 1,
-    type: 'OPERATION_STARTED',
-    summary: 'Gateway accepted operation for governed dispatch.',
-    monotonicMs: monotonicMs(options)
-  });
-  yield deepFreeze({
-    schema: 'sdo.integrated_governed_agent_gateway_stream_item.v1',
-    event: first,
-    dispatch: null,
-    done: false
-  });
+  const observedEvents = [];
+  const observedHashes = new Set();
+  const upstreamObserver = options.onMissionEvent;
+  const observe = (event) => {
+    const canonicalEvent = validateNaturalAgenticMissionEvent(event);
+    if (observedHashes.has(canonicalEvent.eventHash)) return;
+    observedHashes.add(canonicalEvent.eventHash);
+    observedEvents.push(canonicalEvent);
+    if (typeof upstreamObserver === 'function') {
+      try {
+        upstreamObserver(canonicalEvent);
+      } catch {
+        // Presentation observers cannot affect governed execution.
+      }
+    }
+  };
 
   const dispatch = await Promise.resolve(
     execute
       ? execute()
-      : dispatchGatewayRequest({ request: validated, mission, options })
+      : dispatchGatewayRequest({
+          request: validated,
+          mission,
+          options: {
+            ...options,
+            onMissionEvent: observe
+          }
+        })
   );
-  const second = createGatewayStreamEvent({
-    request: validated,
-    sequence: 2,
-    type: 'OPERATION_COMPLETED',
-    summary: dispatch.result.reason,
-    classification: dispatch.result.classification,
-    monotonicMs: monotonicMs(options)
-  });
+
+  if (dispatch?.result?.events) {
+    for (const event of dispatch.result.events) observe(event);
+  }
+
+  for (const event of observedEvents) {
+    yield deepFreeze({
+      schema: 'sdo.integrated_governed_agent_gateway_stream_item.v1',
+      event,
+      dispatch: null,
+      done: false
+    });
+  }
+
   yield deepFreeze({
     schema: 'sdo.integrated_governed_agent_gateway_stream_item.v1',
-    event: second,
+    event: null,
     dispatch,
     done: true
   });
@@ -1255,7 +1281,6 @@ module.exports = Object.freeze({
   RESULT_SCHEMA,
   DISPATCH_SCHEMA,
   APPROVAL_REQUEST_SCHEMA,
-  STREAM_EVENT_SCHEMA,
   PROTOCOL_VERSION,
   RESULT_CLASSES,
   OPERATIONS,

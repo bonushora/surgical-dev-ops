@@ -1111,10 +1111,68 @@ function createInteractiveSession(
   let naturalEngineeringReferenceContext =
     null;
 
+  let projectedNaturalMissionId =
+    null;
+
+  let projectedNaturalMissionEventSequence =
+    0;
+
   const runnerRuntime =
     cognitiveMode
       ? createNaturalRunnerRuntime()
       : null;
+
+  function projectNaturalMissionEvent(
+    event,
+    {
+      mission = agenticMission,
+      operation = null,
+      stepId = null
+    } = {}
+  ) {
+    if (!event || typeof event !== 'object') {
+      return;
+    }
+    if (projectedNaturalMissionId !== event.missionId) {
+      projectedNaturalMissionId = event.missionId;
+      projectedNaturalMissionEventSequence = 0;
+    }
+    if (event.sequence <= projectedNaturalMissionEventSequence) {
+      return;
+    }
+    const presentation =
+      formatNaturalGatewayEvent(
+        event,
+        activation.language,
+        {
+          mission,
+          operation,
+          stepId
+        }
+      );
+    projectedNaturalMissionEventSequence = event.sequence;
+    if (presentation) {
+      output.write(presentation);
+    }
+  }
+
+  function projectNaturalMissionEvents(
+    mission,
+    context = {}
+  ) {
+    if (!mission || !Array.isArray(mission.events)) {
+      return;
+    }
+    for (const event of mission.events) {
+      projectNaturalMissionEvent(
+        event,
+        {
+          ...context,
+          mission
+        }
+      );
+    }
+  }
 
   function createNaturalGatewayMission(
     intent,
@@ -1450,6 +1508,27 @@ function createInteractiveSession(
               'Bounded engineering reference failed closed.'
           }
         );
+      if (
+        resolution.classification ===
+          'STALE_REFERENT'
+      ) {
+        agenticMission =
+          transitionNaturalAgenticMission(
+            agenticMission,
+            {
+              type:
+                'STATE_INVALIDATED',
+              state:
+                'BLOCKED',
+              summary:
+                resolution.reason,
+              at:
+                observedAt,
+              resultClass:
+                'STALE_STATE'
+            }
+          );
+      }
       if (agenticMission.state !== 'BLOCKED') {
         agenticMission =
           blockNaturalAgenticMission(
@@ -1514,6 +1593,22 @@ function createInteractiveSession(
                 observedAt,
               summary:
                 'Reference resolution recorded an independent authority boundary.'
+            }
+          );
+        agenticMission =
+          transitionNaturalAgenticMission(
+            agenticMission,
+            {
+              type:
+                'AUTHORITY_REQUIRED',
+              state:
+                agenticMission.state,
+              summary:
+                blocker,
+              at:
+                observedAt,
+              resultClass:
+                'AUTHORITY_REQUIRED'
             }
           );
         if (agenticMission.state !== 'BLOCKED') {
@@ -1585,6 +1680,9 @@ function createInteractiveSession(
       );
 
     if (!resolvedIntent) {
+      projectNaturalMissionEvents(
+        agenticMission
+      );
       return;
     }
 
@@ -1602,6 +1700,16 @@ function createInteractiveSession(
 
     agenticMission =
       prepared.mission;
+
+    projectNaturalMissionEvents(
+      agenticMission,
+      {
+        operation:
+          resolvedIntent.operation,
+        stepId:
+          prepared.stepId
+      }
+    );
 
     const requestSequence =
       agenticMission.events.length + 1;
@@ -1632,16 +1740,36 @@ function createInteractiveSession(
           now:
             () => observedAt,
           runtime:
-            options.gatewayRuntime || {}
+            options.gatewayRuntime || {},
+          onMissionEvent:
+            (event) =>
+              projectNaturalMissionEvent(
+                event,
+                {
+                  mission:
+                    agenticMission,
+                  operation:
+                    resolvedIntent.operation,
+                  stepId:
+                    prepared.stepId
+                }
+              )
         }
       })
     ) {
-      output.write(
-        formatNaturalGatewayEvent(
+      if (item.event) {
+        projectNaturalMissionEvent(
           item.event,
-          activation.language
-        )
-      );
+          {
+            mission:
+              agenticMission,
+            operation:
+              resolvedIntent.operation,
+            stepId:
+              prepared.stepId
+          }
+        );
+      }
 
       if (item.done) {
         dispatch =
@@ -1669,6 +1797,16 @@ function createInteractiveSession(
             observedAt
         }
       );
+
+    projectNaturalMissionEvents(
+      agenticMission,
+      {
+        operation:
+          resolvedIntent.operation,
+        stepId:
+          prepared.stepId
+      }
+    );
 
     naturalEngineeringReferenceContext =
       recordNaturalEngineeringGatewayResult(
@@ -1771,6 +1909,9 @@ function createInteractiveSession(
             }
           );
       }
+      projectNaturalMissionEvents(
+        agenticMission
+      );
       return;
     }
 
@@ -1996,7 +2137,8 @@ function createInteractiveSession(
                     );
                   if (
                     revalidation.decision !== 'VALID' &&
-                    agenticMission.state !== 'BLOCKED'
+                    agenticMission.events.at(-1).type !==
+                      'STATE_INVALIDATED'
                   ) {
                     const observedAt =
                       currentCanonicalInstant(options);
@@ -2041,12 +2183,16 @@ function createInteractiveSession(
                         }
                       );
                   }
+                  projectNaturalMissionEvents(
+                    agenticMission
+                  );
                   output.write(
                     formatMissionProjection(
                       projectMissionView(
                         agenticMission,
                         controlled.projection
-                      )
+                      ),
+                      activation.language
                     ) +
                     (
                       controlled.projection === 'status' &&
@@ -2095,6 +2241,10 @@ function createInteractiveSession(
                       );
                   }
 
+                  projectNaturalMissionEvents(
+                    agenticMission
+                  );
+
                   output.write(
                     humanText(
                       activation,
@@ -2105,7 +2255,8 @@ function createInteractiveSession(
                       projectMissionView(
                         agenticMission,
                         'status'
-                      )
+                      ),
+                      activation.language
                     )
                   );
                 }
@@ -2132,7 +2283,8 @@ function createInteractiveSession(
                       projectMissionView(
                         agenticMission,
                         'status'
-                      )
+                      ),
+                      activation.language
                     )
                   );
                 } else {
@@ -2148,12 +2300,16 @@ function createInteractiveSession(
                       resumedAt:
                         currentCanonicalInstant(options)
                     });
+                  projectNaturalMissionEvents(
+                    agenticMission
+                  );
                   output.write(
                     formatMissionProjection(
                       projectMissionView(
                         agenticMission,
                         'status'
-                      )
+                      ),
+                      activation.language
                     )
                   );
                 }
