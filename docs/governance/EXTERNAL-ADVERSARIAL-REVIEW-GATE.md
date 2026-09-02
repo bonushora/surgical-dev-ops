@@ -1,9 +1,9 @@
 # External Adversarial Review Gate
 
-**Status:** APPROVED / FROZEN  
-**Authority:** Human project authority  
-**Classification:** Operational governance gate  
-**Trigger:** Complete GREEN qualification of ADR-038  
+**Status:** APPROVED / FROZEN
+**Authority:** Human project authority
+**Classification:** Operational governance gate
+**Trigger:** Complete GREEN qualification of ADR-038
 **Project:** Surgical DevOps
 
 ## Purpose
