@@ -48,7 +48,10 @@ const RESOLUTION_CLASSES = Object.freeze([
 
 const REFERENCE_OPERATIONS = Object.freeze([
   'workspace.status',
-  'workspace.diff'
+  'workspace.diff',
+  'tests.run',
+  'tests.runCanonical',
+  'mutation.applyConditional'
 ]);
 
 const GATEWAY_OPERATIONS = Object.freeze([

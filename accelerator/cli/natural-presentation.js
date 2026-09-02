@@ -319,6 +319,16 @@ function formatNaturalGatewayEvent(
       ? `Governed operation started: ${operationText}\n`
       : `Operação governada iniciada: ${operationText}\n`;
   }
+  if (canonicalEvent.type === 'REPAIR_STARTED') {
+    return english
+      ? `Governed repair started: ${operationText}\n`
+      : `Reparo governado iniciado: ${operationText}\n`;
+  }
+  if (canonicalEvent.type === 'QUALIFICATION_STARTED') {
+    return english
+      ? `Governed qualification started: ${operationText}\n`
+      : `Qualificação governada iniciada: ${operationText}\n`;
+  }
   if (canonicalEvent.type === 'EVIDENCE_DISCOVERED') {
     return english
       ? `Governed evidence discovered: ${operationText} — ${resultClass}\n`
@@ -341,8 +351,8 @@ function formatNaturalGatewayEvent(
   }
   if (canonicalEvent.type === 'AUTHORITY_GRANTED') {
     return english
-      ? `Bounded governed authority reference consumed: ${operationText}\n`
-      : `Referência de autoridade governada limitada consumida: ${operationText}\n`;
+      ? `Exact bounded governed authority recorded: ${operationText}\n`
+      : `Autoridade governada exata e limitada registrada: ${operationText}\n`;
   }
   if (canonicalEvent.type === 'STATE_INVALIDATED') {
     return english
@@ -437,6 +447,22 @@ function formatNaturalGatewayResult(
       `${english ? 'Governed diff bytes' : 'Bytes do diff governado'}: ${Number.isSafeInteger(data.bytes) ? data.bytes : 'indisponível'}`,
       `Patch SHA-256: ${data.patchSha256 || 'indisponível'}`,
       `${english ? 'Raw evidence reference' : 'Referência da evidência bruta'}: ${data.rawEvidenceReference || 'indisponível'}`,
+      `Orchestrator: ${data.orchestratorStatus || 'indisponível'}`
+    );
+  } else if (data && data.kind === 'CONDITIONAL_MUTATION') {
+    lines.push(
+      `${english ? 'Repair target' : 'Alvo do reparo'}: ${data.target || 'indisponível'}`,
+      `BEFORE SHA-256: ${data.beforeSha256 || 'indisponível'}`,
+      `AFTER SHA-256: ${data.afterSha256 || 'indisponível'}`,
+      `${english ? 'Transaction' : 'Transação'}: ${data.transactionId || 'indisponível'}`,
+      `Orchestrator: ${data.orchestratorStatus || 'indisponível'}`
+    );
+  } else if (data && data.kind === 'TEST_RUN') {
+    lines.push(
+      `${english ? 'Test target' : 'Alvo do teste'}: ${data.target || 'indisponível'}`,
+      `${english ? 'Discovered' : 'Descobertos'}: ${Number.isSafeInteger(data.testsDiscovered) ? data.testsDiscovered : 'indisponível'}`,
+      `${english ? 'Passed' : 'Aprovados'}: ${Number.isSafeInteger(data.passed) ? data.passed : 'indisponível'}`,
+      `${english ? 'Failed' : 'Falharam'}: ${Number.isSafeInteger(data.failed) ? data.failed : 'indisponível'}`,
       `Orchestrator: ${data.orchestratorStatus || 'indisponível'}`
     );
   }

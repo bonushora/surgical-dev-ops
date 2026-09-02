@@ -41,7 +41,8 @@ async function prepareInteractiveNaturalDevelopment({
   activation,
   cognitiveSession,
   dispatchEvidence,
-  workMode = 'SUPERVISED_MICROTASKS'
+  workMode = 'SUPERVISED_MICROTASKS',
+  patchAttempt = 1
 } = {}) {
   if (
     !request || typeof request.objective !== 'string' ||
@@ -88,7 +89,7 @@ async function prepareInteractiveNaturalDevelopment({
     contract,
     planningResult,
     governedProposal,
-    patchAttempt: 1
+    patchAttempt
   });
 
   return freeze({

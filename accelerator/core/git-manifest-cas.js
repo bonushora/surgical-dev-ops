@@ -454,15 +454,21 @@ function createRefCas(
 function bootstrapManifestAuthority({
   workspace,
   target,
-  expectedBeforeSha256
+  expectedBeforeSha256,
+  inspectOnly = false
 }) {
   const root =
     canonicalWorkspace(workspace);
 
+  const requestedTarget =
+    path.isAbsolute(target || '')
+      ? target
+      : path.join(root, requireText(target, 'target'));
+
   const relative =
     relativeTarget(
       root,
-      target
+      requestedTarget
     );
 
   if (
@@ -543,6 +549,19 @@ function bootstrapManifestAuthority({
       manifestOid: existing,
       contentSha256:
         manifest.contentSha256
+    });
+  }
+
+  if (inspectOnly === true) {
+    return freeze({
+      schema: RESULT_SCHEMA,
+      decision: 'INSPECTED_ORDINARY',
+      workspace: root,
+      target: canonicalTarget,
+      relative,
+      ref,
+      manifestOid: null,
+      contentSha256: expectedBeforeSha256
     });
   }
 

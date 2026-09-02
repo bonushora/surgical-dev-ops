@@ -877,7 +877,17 @@ function recordNaturalAgenticMissionPlanResult(
   return updated;
 }
 
-function recordNaturalAgenticMissionChange(mission, { target, summary, beforeSha256 = null, afterSha256 = null, at } = {}) {
+function recordNaturalAgenticMissionChange(
+  mission,
+  {
+    target,
+    summary,
+    beforeSha256 = null,
+    afterSha256 = null,
+    authorityRef = null,
+    at
+  } = {}
+) {
   const current = validateNaturalAgenticMission(mission);
   const change = deepFreeze({
     target: requireText(target, 'Mission change target', 1024),
@@ -885,9 +895,30 @@ function recordNaturalAgenticMissionChange(mission, { target, summary, beforeSha
     beforeSha256: beforeSha256 === null ? null : requireDigest(beforeSha256, 'Change before SHA-256'),
     afterSha256: afterSha256 === null ? null : requireDigest(afterSha256, 'Change after SHA-256')
   });
+  let nextAuthority = current.authority;
+  if (authorityRef !== null) {
+    const ref = requireText(authorityRef, 'Authority reference', 256);
+    const grant = current.authority.grants.find(
+      (item) => item.authorityRef === ref
+    );
+    if (
+      !grant ||
+      current.authority.usedAuthorityRefs.includes(ref)
+    ) {
+      throw new Error('Mission authority grant is unavailable or already consumed.');
+    }
+    nextAuthority = normalizeAuthority({
+      ...current.authority,
+      usedAuthorityRefs: [
+        ...current.authority.usedAuthorityRefs,
+        ref
+      ]
+    });
+  }
   const next = {
     ...current,
-    changes: [...current.changes, change]
+    changes: [...current.changes, change],
+    authority: nextAuthority
   };
   delete next.missionFingerprint;
   return appendEvent(withMissionFingerprint(next), {
@@ -899,6 +930,50 @@ function recordNaturalAgenticMissionChange(mission, { target, summary, beforeSha
       kind: 'WORKSPACE_CHANGE',
       target: change.target,
       fingerprint: fingerprint('sdo.natural_agentic_mission_change.v1', change)
+    }
+  });
+}
+
+function recordNaturalAgenticMissionAuthorityGrant(
+  mission,
+  { grant, at } = {}
+) {
+  const current = validateNaturalAgenticMission(mission);
+  const normalizedGrant = normalizeAuthorityGrant(grant);
+  if (
+    current.authority.grants.some(
+      (item) => item.authorityRef === normalizedGrant.authorityRef
+    ) ||
+    current.authority.usedAuthorityRefs.includes(
+      normalizedGrant.authorityRef
+    ) ||
+    Date.parse(normalizedGrant.issuedAt) > Date.parse(at) ||
+    Date.parse(normalizedGrant.expiresAt) <= Date.parse(at)
+  ) {
+    throw new Error('Mission authority grant is duplicated, stale or not yet valid.');
+  }
+  const next = {
+    ...current,
+    authority: normalizeAuthority({
+      ...current.authority,
+      grants: [
+        ...current.authority.grants,
+        normalizedGrant
+      ]
+    })
+  };
+  delete next.missionFingerprint;
+  return appendEvent(withMissionFingerprint(next), {
+    type: EVENT_TYPES.AUTHORITY_GRANTED,
+    state: current.state,
+    summary: 'Exact bounded human authority was recorded for one governed operation.',
+    at,
+    evidenceRef: {
+      kind: 'AUTHORITY_GRANT',
+      fingerprint: fingerprint(
+        'sdo.natural_agentic_mission_authority_grant.v1',
+        normalizedGrant
+      )
     }
   });
 }
@@ -969,7 +1044,30 @@ function qualifyNaturalAgenticMissionGreen(mission, { canonicalEvidence, at } = 
     mission,
     { testEvidence: evidence, at, state: 'QUALIFYING' }
   );
-  return appendEvent(withTests, {
+  return completeNaturalAgenticMissionGreen(withTests, {
+    at,
+    requireCompletedPlan: false
+  });
+}
+
+function completeNaturalAgenticMissionGreen(
+  mission,
+  { at, requireCompletedPlan = true } = {}
+) {
+  const current = validateNaturalAgenticMission(mission);
+  const canonical = current.tests.canonical;
+  if (
+    !canonical ||
+    canonical.canonical !== true ||
+    canonical.classification !== 'PASSED' ||
+    canonical.failed !== 0 ||
+    (requireCompletedPlan && current.plan.some(
+      (step) => ['PENDING', 'ACTIVE'].includes(step.status)
+    ))
+  ) {
+    throw new Error('GREEN requires completed plan and passing canonical qualification evidence.');
+  }
+  return appendEvent(current, {
     type: EVENT_TYPES.MISSION_GREEN,
     state: 'GREEN',
     summary: 'Canonical qualification evidence is GREEN.',
@@ -977,8 +1075,8 @@ function qualifyNaturalAgenticMissionGreen(mission, { canonicalEvidence, at } = 
     resultClass: 'PASSED',
     evidenceRef: {
       kind: 'CANONICAL_TEST_RESULT',
-      target: evidence.target,
-      fingerprint: evidence.evidenceDigest
+      target: canonical.target,
+      fingerprint: canonical.evidenceDigest
     }
   });
 }
@@ -1510,8 +1608,10 @@ module.exports = Object.freeze({
   recordNaturalAgenticMissionPlanResult,
   selectNaturalAgenticMissionContinuation,
   recordNaturalAgenticMissionChange,
+  recordNaturalAgenticMissionAuthorityGrant,
   recordNaturalAgenticMissionTestResult,
   qualifyNaturalAgenticMissionGreen,
+  completeNaturalAgenticMissionGreen,
   blockNaturalAgenticMission,
   cancelNaturalAgenticMission,
   consumeMissionAuthorityGrant,

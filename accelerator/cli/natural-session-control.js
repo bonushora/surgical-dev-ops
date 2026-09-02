@@ -245,8 +245,14 @@ function resolveNaturalEngineeringReferenceIntent(value) {
   let referenceAction =
     'INSPECT_EVIDENCE';
 
-  if (mutation && weakDeictic) {
-    referenceType = 'DEICTIC';
+  if (
+    mutation &&
+    (
+      weakDeictic ||
+      hasAny('tente', 'try', 'teste', 'test', 'testar')
+    )
+  ) {
+    referenceType = weakDeictic ? 'DEICTIC' : 'LAST_FAILURE';
     referenceAction = 'REQUEST_MUTATION';
   } else if (publication && weakDeictic) {
     referenceType = 'DEICTIC';
@@ -478,6 +484,41 @@ function resolveNaturalMissionControlIntent(value) {
     });
   }
 
+  const changeQuestion =
+    hasAny('mudou', 'mudei', 'alterou', 'change', 'changed') &&
+    hasAny('que', 'what') &&
+    hasAny('voce', 'you');
+
+  if (changeQuestion) {
+    return Object.freeze({
+      action: 'MISSION_PROJECTION',
+      projection: 'changes'
+    });
+  }
+
+  const failedTestQuestion =
+    hasAny('teste', 'test') &&
+    hasAny('falhou', 'falha', 'failed', 'fail') &&
+    hasAny('por', 'why');
+
+  if (failedTestQuestion) {
+    return Object.freeze({
+      action: 'MISSION_PROJECTION',
+      projection: 'tests'
+    });
+  }
+
+  const redQuestion =
+    hasAny('vermelho', 'red') &&
+    hasAny('que', 'what');
+
+  if (redQuestion) {
+    return Object.freeze({
+      action: 'MISSION_PROJECTION',
+      projection: 'plan'
+    });
+  }
+
   const statusQuestion =
     (
       hasAny('fazendo', 'doing') &&
@@ -630,6 +671,57 @@ function detectBoundedMutationRequest(text) {
     language: 'en',
     target: english[1],
     requestedValue: english[2]
+  });
+}
+
+function detectBoundedRepairLoopRequest(value) {
+  const text = normalize(value);
+  const tokens = naturalSemanticTokens(text);
+  const repair = [
+    'corrija', 'corrigir', 'repare', 'reparar', 'repair', 'fix'
+  ].some((item) => tokens.has(item));
+  const test = ['teste', 'testar', 'test'].some((item) => tokens.has(item));
+  const qualification = [
+    'qualifique', 'qualificacao', 'qualification', 'canonical'
+  ].some((item) => tokens.has(item));
+  if (!repair || !test || !qualification) return null;
+
+  const paths = [...text.matchAll(
+    /(?:^|\s)([a-z0-9_.-]+(?:\/[a-z0-9_.-]+)*\.js)(?=$|[\s,;])/g
+  )].map((match) => ({
+    value: match[1],
+    index: match.index + match[0].indexOf(match[1])
+  }));
+  if (paths.length < 3 || paths.length > 10) return null;
+
+  const marker = (values) => Math.max(
+    ...values.map((item) => text.lastIndexOf(item))
+  );
+  const testMarker = marker([' teste ', ' testar ', ' test ']);
+  const qualificationMarker = marker([
+    ' qualifique ', ' qualificacao ', ' qualification ', ' canonical '
+  ]);
+  if (testMarker < 0 || qualificationMarker < 0) return null;
+  const testPath = paths.find((item) => item.index > testMarker);
+  const qualificationPath = paths.find((item) => item.index > qualificationMarker);
+  if (!testPath || !qualificationPath || testPath.value === qualificationPath.value) {
+    return null;
+  }
+  const targets = paths
+    .map((item) => item.value)
+    .filter((item) => item !== testPath.value && item !== qualificationPath.value);
+  if (targets.length === 0 || new Set(targets).size !== targets.length) return null;
+
+  return Object.freeze({
+    objective: String(value || '').trim(),
+    allowedTargets: Object.freeze(targets),
+    testTarget: testPath.value,
+    qualificationTarget: qualificationPath.value,
+    attemptCeiling: Math.min(8, Math.max(2, targets.length)),
+    authorityExpansion: false,
+    operationalAuthority: false,
+    mutationAuthority: false,
+    publicationAuthority: false
   });
 }
 
@@ -1023,6 +1115,17 @@ function createNaturalSessionControl(
     }
 
     if (!pendingTask) {
+      const repairLoopRequest =
+        detectBoundedRepairLoopRequest(input);
+
+      if (repairLoopRequest) {
+        return Object.freeze({
+          matched: true,
+          action: 'REPAIR_LOOP_START',
+          request: repairLoopRequest
+        });
+      }
+
       const mutationRequest =
         detectBoundedMutationRequest(text);
 
@@ -1541,5 +1644,6 @@ module.exports =
     resolveNaturalEngineeringReferenceIntent,
     resolveNaturalGatewayIntent,
     resolveNaturalMissionControlIntent,
+    detectBoundedRepairLoopRequest,
     createNaturalSessionControl
   });
