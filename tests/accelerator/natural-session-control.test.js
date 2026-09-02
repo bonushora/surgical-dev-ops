@@ -291,7 +291,7 @@ test(
 );
 
 test(
-  'NATURAL help is conversational rather than command-list primary',
+  'NATURAL help requests governed presentation without owning capability truth',
   () => {
     const control =
       createNaturalSessionControl();
@@ -306,25 +306,13 @@ test(
       true
     );
 
-    assert.match(
-      result.output,
-      /conversar comigo normalmente/i
-    );
-
-    assert.match(
-      result.output,
-      /Em que ponto estamos/i
-    );
-
-    assert.match(
-      result.output,
-      /Trabalhe sozinha até a próxima fronteira/i
-    );
-
-    assert.match(
-      result.output,
-      /detalhes técnicos/i
-    );
+    assert.equal(result.action, 'HELP_REQUEST');
+    assert.equal(result.topic, 'GENERAL');
+    assert.equal(result.observational, true);
+    assert.equal(result.operationalAuthority, false);
+    assert.equal(result.mutationAuthority, false);
+    assert.equal(result.approvalAuthority, false);
+    assert.equal(result.output, undefined);
   }
 );
 

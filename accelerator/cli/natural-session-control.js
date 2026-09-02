@@ -589,6 +589,93 @@ function resolveNaturalMissionControlIntent(value) {
   return null;
 }
 
+function naturalHelpRequest(topic, subjects = []) {
+  return Object.freeze({
+    matched: true,
+    action: 'HELP_REQUEST',
+    topic,
+    subjects: Object.freeze([...subjects]),
+    observational: true,
+    authorityExpansion: false,
+    operationalAuthority: false,
+    mutationAuthority: false,
+    approvalAuthority: false,
+    dispatchAuthority: false,
+    publicationAuthority: false
+  });
+}
+
+function resolveNaturalHelpRequest(value) {
+  const text = normalize(value);
+  if (!text) return null;
+
+  const tokens = naturalSemanticTokens(value);
+  const hasAny = (...concepts) => concepts.some((concept) => tokens.has(concept));
+  const startsAsHelp =
+    text === 'help' ||
+    text === 'ajuda' ||
+    text.startsWith('help ') ||
+    text.startsWith('ajuda ');
+  const authority = hasAny(
+    'autoridade',
+    'autorizacao',
+    'authority',
+    'authorization',
+    'approval'
+  );
+  const subjects = [];
+  if (tokens.has('commit')) subjects.push('git.commit');
+  if (tokens.has('push')) subjects.push('git.push');
+
+  if (
+    (startsAsHelp && subjects.length > 0) ||
+    (authority && subjects.length > 0 && hasAny('permite', 'permitir', 'allow', 'allows', 'does'))
+  ) {
+    return naturalHelpRequest('AUTHORITY_SCOPE', subjects);
+  }
+
+  if (
+    authority &&
+    hasAny('por', 'porque', 'why') &&
+    hasAny('precisa', 'necessaria', 'necessario', 'need', 'needed', 'required')
+  ) {
+    return naturalHelpRequest('AUTHORITY_REASON');
+  }
+
+  const currentActions =
+    hasAny('agora', 'now') &&
+    (
+      (
+        hasAny('posso', 'pode', 'can') &&
+        hasAny('fazer', 'do')
+      ) ||
+      hasAny('disponivel', 'available')
+    );
+  if (currentActions) {
+    return naturalHelpRequest('CURRENT_ACTIONS');
+  }
+
+  const generalCapabilityQuestion =
+    startsAsHelp ||
+    includesAny(
+      text,
+      [
+        'o que voce pode fazer',
+        'o que voce consegue fazer',
+        'como voce pode me ajudar',
+        'como posso usar voce',
+        'como posso usar o surgical devops',
+        'what can you do',
+        'how can you help me',
+        'how can i use surgical devops'
+      ]
+    );
+
+  return generalCapabilityQuestion
+    ? naturalHelpRequest('GENERAL')
+    : null;
+}
+
 function isNaturalMissionCancellationRequest(value) {
   const text =
     normalize(value)
@@ -1114,6 +1201,13 @@ function createNaturalSessionControl(
       });
     }
 
+    const helpRequest =
+      resolveNaturalHelpRequest(input);
+
+    if (helpRequest) {
+      return helpRequest;
+    }
+
     if (!pendingTask) {
       const repairLoopRequest =
         detectBoundedRepairLoopRequest(input);
@@ -1344,31 +1438,6 @@ function createNaturalSessionControl(
         matched: true,
         action: 'EXPERIENCE_STATUS',
         language: text === 'estado da experiencia' ? 'pt-BR' : 'en'
-      });
-    }
-
-    if (
-      text === 'ajuda' ||
-      text === 'help' ||
-      includesAny(
-        text,
-        [
-          'o que voce pode fazer',
-          'como voce pode me ajudar',
-          'como posso usar voce',
-          'como posso usar o surgical devops',
-          'what can you do',
-          'how can you help me',
-          'how can i use surgical devops'
-        ]
-      )
-    ) {
-      return Object.freeze({
-        matched: true,
-        action:
-          'CONTINUE',
-        output:
-          naturalHelpMessage(language)
       });
     }
 
@@ -1644,6 +1713,7 @@ module.exports =
     resolveNaturalEngineeringReferenceIntent,
     resolveNaturalGatewayIntent,
     resolveNaturalMissionControlIntent,
+    resolveNaturalHelpRequest,
     detectBoundedRepairLoopRequest,
     createNaturalSessionControl
   });

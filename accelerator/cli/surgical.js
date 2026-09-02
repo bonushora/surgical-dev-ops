@@ -45,7 +45,8 @@ const {
 
 const {
   createGatewayRequest,
-  streamGatewayRequest
+  streamGatewayRequest,
+  OPERATIONS
 } = require(
   '../core/integrated-governed-agent-gateway'
 );
@@ -81,8 +82,18 @@ const {
   createNaturalSessionControl,
   formatProviderStatus,
   formatProviderCatalog,
-  isNaturalMissionCancellationRequest
+  isNaturalMissionCancellationRequest,
+  resolveNaturalHelpRequest
 } = require('./natural-session-control');
+
+const {
+  createNaturalHelpProjection,
+  formatNaturalHelpProjection
+} = require('./natural-help-projection');
+
+const {
+  createQualifiedCommandCatalog
+} = require('../core/qualified-command-catalog');
 
 const {
   createNaturalExperienceSnapshot,
@@ -210,6 +221,9 @@ const NATURAL_R1_GATEWAY_DENIED_CAPABILITIES =
     'npm.publish',
     'deploy'
   ]);
+
+const NATURAL_HELP_QUALIFIED_COMMAND_CATALOG =
+  createQualifiedCommandCatalog();
 
 function humanText(activation, portuguese, english) {
   return usesEnglish(activation)
@@ -1181,6 +1195,124 @@ function createInteractiveSession(
     cognitiveMode
       ? createNaturalRunnerRuntime()
       : null;
+
+  function currentNaturalHelpPendingDecision() {
+    if (
+      pendingRepairLoop &&
+      pendingRepairLoop.state === 'AUTHORITY_REQUIRED' &&
+      pendingRepairLoop.pending &&
+      pendingRepairLoop.pending.patchProposal
+    ) {
+      return Object.freeze({
+        kind: 'REPAIR',
+        state: pendingRepairLoop.state,
+        proposalFingerprint:
+          pendingRepairLoop.pending.patchProposal.proposalFingerprint,
+        reusableApproval: false
+      });
+    }
+
+    if (
+      pendingDevelopment &&
+      pendingDevelopment.patchProposal
+    ) {
+      return Object.freeze({
+        kind: 'DEVELOPMENT',
+        state: pendingDevelopment.state,
+        proposalFingerprint:
+          pendingDevelopment.patchProposal.proposalFingerprint,
+        reusableApproval: false
+      });
+    }
+
+    const experience =
+      sessionControl
+        ? sessionControl.experienceState()
+        : null;
+
+    if (!experience || !experience.pendingAuthorization) {
+      return null;
+    }
+
+    return Object.freeze({
+      kind: experience.pendingAuthorization.kind,
+      state: 'HUMAN_DECISION_PENDING',
+      reusableApproval: false
+    });
+  }
+
+  function currentNaturalHelpRepairProjection() {
+    if (!pendingRepairLoop) return null;
+    return Object.freeze({
+      state: pendingRepairLoop.state,
+      lastTestClassification:
+        pendingRepairLoop.mission.tests.lastResult
+          ? pendingRepairLoop.mission.tests.lastResult.classification
+          : null,
+      stopReason: pendingRepairLoop.stopReason,
+      durableRestart: pendingRepairLoop.durableRestart === true
+    });
+  }
+
+  function currentNaturalHelpContinuityProjection() {
+    if (!continuityResume) return null;
+    return Object.freeze({
+      classification: continuityResume.classification,
+      revalidationDecision: continuityResume.revalidation.decision,
+      continuationEligible: continuityResume.continuationEligible,
+      authorityRevalidated: continuityResume.authorityRevalidated,
+      providerMemoryUsed: continuityResume.providerMemoryUsed,
+      historicalEventCount: continuityResume.historicalEventCount
+    });
+  }
+
+  function formatCurrentNaturalHelp(helpRequest) {
+    let missionStatus = null;
+    let missionAuthority = null;
+    let continuation = null;
+
+    if (agenticMission) {
+      missionStatus =
+        projectMissionView(
+          agenticMission,
+          'status'
+        );
+      missionAuthority =
+        projectMissionView(
+          agenticMission,
+          'authority'
+        );
+      continuation =
+        selectNaturalAgenticMissionContinuation({
+          mission: agenticMission,
+          revalidation:
+            revalidateDeterministicWorkspaceSession(
+              agenticMission.session
+            )
+        });
+    }
+
+    return formatNaturalHelpProjection(
+      createNaturalHelpProjection({
+        request: helpRequest,
+        language: activation.language,
+        gatewayOperations: OPERATIONS,
+        qualifiedCommandCatalog:
+          NATURAL_HELP_QUALIFIED_COMMAND_CATALOG,
+        missionStatus,
+        missionAuthority,
+        continuation,
+        pendingDecision:
+          currentNaturalHelpPendingDecision(),
+        repair:
+          currentNaturalHelpRepairProjection(),
+        continuity:
+          currentNaturalHelpContinuityProjection(),
+        provider:
+          options.helpProviderState || null
+      })
+    );
+  }
 
   function persistNaturalMissionContinuity(mission) {
     if (!continuityStateRoot || !mission) return null;
@@ -2181,6 +2313,27 @@ function createInteractiveSession(
         .then(async () => {
           const normalizedLine = String(line || '').trim();
 
+          const pendingHelpRequest =
+            (
+              pendingDevelopment ||
+              (
+                pendingRepairLoop &&
+                pendingRepairLoop.state === 'AUTHORITY_REQUIRED'
+              )
+            )
+              ? resolveNaturalHelpRequest(line)
+              : null;
+
+          if (pendingHelpRequest) {
+            output.write(
+              formatCurrentNaturalHelp(
+                pendingHelpRequest
+              )
+            );
+            resumeAndPrompt();
+            return;
+          }
+
           if (
             pendingRepairLoop &&
             pendingRepairLoop.state === 'AUTHORITY_REQUIRED' &&
@@ -2399,7 +2552,13 @@ function createInteractiveSession(
               );
 
             if (controlled.matched) {
-              if (controlled.action === 'REPAIR_LOOP_START') {
+              if (controlled.action === 'HELP_REQUEST') {
+                output.write(
+                  formatCurrentNaturalHelp(
+                    controlled
+                  )
+                );
+              } else if (controlled.action === 'REPAIR_LOOP_START') {
                 try {
                   const observedAt = currentCanonicalInstant(options);
                   const session = createDeterministicWorkspaceSession({
