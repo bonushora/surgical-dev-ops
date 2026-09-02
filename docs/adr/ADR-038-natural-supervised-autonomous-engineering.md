@@ -642,6 +642,149 @@ invariants.
 The human can deterministically inspect the current mission authority envelope,
 including explicitly unavailable authority classes.
 
+### R. Prospective production Experience Green
+
+This criterion applies prospectively to the still-unimplemented ADR-038 runtime
+milestone. It does not reopen completed milestones, alter their historical
+qualification or invalidate previously recorded GREEN evidence.
+
+For an unfinished milestone that claims user-visible NATURAL behavior,
+qualification requires all four of the following:
+
+```text
+COMPONENT GREEN
++ PRODUCTION CALL-PATH GREEN
++ INTEGRATION GREEN
++ EXPERIENCE GREEN
+= MILESTONE GREEN
+```
+
+`COMPONENT GREEN` proves the bounded component contract. `PRODUCTION CALL-PATH
+GREEN` proves that the normal NATURAL entry path reaches that component.
+`INTEGRATION GREEN` proves the governed composition across mission, gateway and
+Orchestrator boundaries. `EXPERIENCE GREEN` proves that a professional engineer
+can reach and understand the promised behavior through the normal NATURAL
+experience. A helper used only by tests, a gateway operation unreachable from
+the production entry path, a mission field not updated by actual work, an event
+stream not projected to the human or a cognitive answer that guesses physical
+state cannot satisfy this criterion.
+
+The production proof SHALL preserve the ADR-036 and ADR-037 architecture and
+demonstrate one coherent path:
+
+```text
+human natural language
+→ task-specific governed mission
+→ bounded conversational engineering context
+→ bounded mission-reference resolution
+→ structured governed request
+→ Integrated Governed Agent Gateway
+→ Surgical Orchestrator
+→ governed workspace, tool, Git and test capabilities
+→ structured evidence and mission events
+→ NATURAL conversational projection
+```
+
+This path does not make conversation, memory or provider output operational
+authority. Before a conversational referent affects an operation, it SHALL be
+resolved into a bounded mission reference and revalidated against sovereign
+physical evidence. Ambiguous or stale references SHALL fail closed or request
+clarification. Semantic reference classes include, without freezing interface
+names, the last failure, test, evidence item, changed file, patch,
+recommendation, current plan step, blocker, ADR, milestone and checkpoint.
+
+The active mission used by this proof SHALL represent the human's actual
+engineering objective. Its governed projection SHALL update from real work and,
+where applicable, expose the current step, completed and pending work, last
+qualified checkpoint, changed files, test state, failure, evidence, blocker,
+authority, pending approval, provider and current physical repository binding.
+A generic interactive-session objective with a static session-maintenance plan
+is not sufficient for Experience Green. Mission state remains a governed
+projection; Git, filesystem, journal and other qualified physical evidence
+remain sovereign.
+
+Conversational acceptance SHALL be semantic and mission-bound rather than a
+catalogue with one regular expression per phrase. Representative PT-BR probes
+include:
+
+- `continue de onde paramos`;
+- `continue`;
+- `faça o que você recomendou`;
+- `o que falhou?` and `por que falhou?`;
+- `mostre a evidência`;
+- `corrija isso` and `teste novamente`;
+- `continue até o verde`;
+- `o que você está fazendo?` and `qual é o próximo passo?`;
+- `quais arquivos você modificou?` and `qual é o estado dos testes?`;
+- `o que falta antes do merge?`;
+- `que autoridade você tem agora?` and `você pode continuar sem mim?`;
+- `não altere nada; investigue primeiro`;
+- `retome a missão anterior`.
+
+Semantically equivalent English formulations SHALL receive equivalent governed
+behavior where the product requires PT-BR/English parity. Cognitive language
+interpretation MAY assist routing, but any operational continuation SHALL
+materialize as a structured, mission-bound governed request before execution.
+
+At least one production NATURAL acceptance scenario SHALL prove the applicable
+end-to-end engineering slice without manual command or output copy/paste except
+for explicit human input at a genuine authority boundary:
+
+```text
+natural request
+→ physical-state and evidence inspection
+→ explanation or bounded proposal
+→ contextual authority request when required
+→ governed mutation
+→ targeted qualification
+→ evidence-driven repair while authorized
+→ canonical qualification when applicable
+→ evidence, checkpoint and engineering report
+```
+
+The failure path SHALL demonstrate the real production sequence from failure to
+evidence, diagnosis, bounded repair, authority validation, mutation and
+requalification until GREEN or BLOCKED. A `REPAIRING` state value or isolated
+transition test is not sufficient. Tests and invariants SHALL NOT be weakened to
+manufacture GREEN.
+
+Normal NATURAL interaction SHALL consume real governed mission events and
+project already-known deterministic progress without fabricated activity,
+percentages or test state. Where physically applicable, the proof SHALL cover
+early acknowledgement, workspace validation, evidence discovery, operation and
+test progress, repair and qualification transitions, authority requests,
+checkpoints, blockers and GREEN completion.
+
+Continuation qualification SHALL distinguish conversational continuation,
+mission continuation, process restart, physical-state reconstruction and
+authority reconstruction. Durable resume SHALL load continuity evidence,
+inspect the workspace and repository, reconcile SHA/diff/evidence, revalidate
+authority and continue or fail closed. Provider or conversational memory alone
+cannot restore mission truth or historical authority.
+
+Authority presentation SHALL let the human understand naturally what Surgical
+may do, what requires approval, what is pending, what is forbidden and what was
+explicitly not granted. It SHALL preserve the non-transitive boundaries between
+local mutation, push, merge, tag, release, package publication and deployment.
+
+Future qualification for this criterion SHALL cover the applicable layers
+without duplicating already-qualified tests unnecessarily:
+
+1. unit contracts for bounded state, references and events;
+2. mission-to-gateway-to-Orchestrator integration;
+3. the normal production NATURAL entry path;
+4. equivalent conversational semantics;
+5. professional-engineering experience acceptance;
+6. adversarial ambiguity, stale-reference, authority and provider cases;
+7. restart and physical-continuity reconstruction;
+8. the canonical repository suite;
+9. Linux, Windows and macOS qualification where applicable.
+
+The immediate production proof MAY use the NATURAL CLI, but the governed
+mission, plan, events, authority, evidence, gateway and Orchestrator semantics
+SHALL remain presentation-neutral for future CLI, TUI, private Web or Desktop
+projections. No client becomes operational authority.
+
 ## 27. Adversarial public qualification readiness
 
 The architecture MUST be designed to withstand adversarial evaluation of the
