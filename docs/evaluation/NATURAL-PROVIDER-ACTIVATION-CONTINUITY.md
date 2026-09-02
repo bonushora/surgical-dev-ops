@@ -180,6 +180,42 @@ UNRESOLVED: explicit adversarial provider-authority and credential-boundary regr
 
 TIMESTAMP: 2026-09-01
 
+## P4.5 — Adversarial Provider Authority Repair
+
+MISSION: NATURAL Qualified Provider Activation Manual-Acceptance Repair
+
+BASE_SHA: `304cb448a10a467b8bf5fe9dea81fca4f2deffeb`
+
+CURRENT_SHA: `f0bc25b8fd99e0aa6ec1e138fd82e4f18cb9ea54`
+
+MILESTONE: P4.5
+
+MILESTONE_STATUS: GREEN
+
+FILES_CHANGED:
+
+- `tests/accelerator/natural-cli-async-session.test.js`
+- `tests/accelerator/natural-provider-activation.test.js`
+
+TESTS_EXECUTED:
+
+- `node tests/accelerator/natural-provider-activation.test.js`
+- `node tests/accelerator/natural-provider-activation-coordinator.test.js`
+- `node --test --test-isolation=none --test-name-pattern="adversarial provider prompts" tests/accelerator/natural-cli-async-session.test.js`
+- `node tests/accelerator/sensitive-content-boundary.test.js`
+- `node --test --test-isolation=none tests/accelerator/integrated-governed-agent-gateway.test.js` (bounded trusted read-only Git-fixture permission)
+- `git diff --check`
+
+TEST_RESULTS: adversarial provider/resolver/CLI/sensitive-boundary/gateway 43/43 passed; zero cognitive, activation or local-selection dispatch for adversarial provider prompts; diff check passed. The diagnostic sandboxed gateway invocation failed closed on 11 trusted Git reads before the qualified rerun passed 13/13.
+
+NEXT_MILESTONE: P5R — full local requalification
+
+AUTHORITY_REMAINING: bounded local requalification and final checkpoint; remote delivery only after complete P5R GREEN and exact remote preconditions; NO MERGE; NO TAG; NO RELEASE; NO PUBLISH; NO DEPLOY.
+
+UNRESOLVED: no focused repair failure; complete NATURAL/provider and canonical repository qualification remain.
+
+TIMESTAMP: 2026-09-01
+
 ## P4 — NATURAL Provider UX
 
 MISSION: NATURAL Qualified Provider Activation Coordinator
