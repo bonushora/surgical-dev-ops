@@ -1,6 +1,75 @@
 # External Engineering Review Package — Surgical DevOps
 
-## Current ADR-025 review baseline
+## Current ADR-038 review target — package-preparation state
+
+The current target is the complete ADR-038 supervised autonomous engineering
+runtime. Its exact runtime completion baseline is
+`2c0686288bdf7e156f37115c40de1e0fe3caedd7`, including Experience Green. R1
+through R7 are internal runtime checkpoints under that one runtime-delivery
+milestone; they are not official ADR milestones.
+
+Three physical states must remain distinct:
+
+1. `2c0686288bdf7e156f37115c40de1e0fe3caedd7` is the exact ADR-038 runtime
+   baseline.
+2. `d2e49908dd50720dfa307d85c391fa20d046ce07` is the starting HEAD for this
+   uncommitted package-preparation worktree.
+3. The exact review-candidate SHA does not exist until the repaired package is
+   committed and observed with Git. This package can be REVIEW-CANDIDATE-READY
+   before that commit exists, but the final review SHA is not frozen here.
+
+No post-ADR-038 remote multiplatform CI run is recorded. The qualification in
+this preparation state is local evidence only: it must not be described as
+remote, post-merge, release or publication evidence. No workflow run ID is
+invented.
+
+### Runtime boundary under review
+
+The deterministic Gateway → Orchestrator authority boundary admits a
+task-specific mission and task-specific plan, bounded engineering references
+and canonical mission-event truth. The runtime may investigate, locally edit,
+test and use repair-until-green within a valid mission, but it cannot obtain a
+result by manufactured GREEN, weakened tests or suppressed physical evidence.
+
+The current authority contract is:
+
+- the human authorizes a mission-scoped envelope identified as
+  `MISSION_SCOPED`;
+- one human mission authorization may derive bounded short-lived single-use G4
+  mutation grants;
+- the mission grant is `brokerOnly`, and mission authority cannot itself be
+  dispatched directly;
+- every derived operation remains bound to objective, operation, target, scope,
+  risk, tenant/project binding, physical baseline, state and applicable CAS;
+- a used G4 cannot be reused, and no target, scope, risk or operation may be
+  widened;
+- physical divergence invalidates stale mission authority;
+- stale snapshot invalidation after GREEN and CANCELLED is mandatory;
+- durable interruption/restart/resume reconstruction revalidates physical
+  continuity, and restart does not restore operational authority;
+- HelpMe is guidance only, never authority creation or amplification;
+- provider independence is preserved: substitution cannot expand security
+  authority, and there is no hidden model sovereignty;
+- authority non-transitivity is explicit:
+  `local mutation != push != merge != tag != release != publication != deploy`.
+
+Canonical events and fresh physical state decide whether a transition or effect
+occurred. The event stream must not diverge from the filesystem, Git state,
+mission journal or CAS. Plans, summaries, provider output and conversation are
+not substitutes for exact physical evidence over conversational/model memory.
+Repair attempts are bounded and evidence-driven; exhaustion, ambiguity or lack
+of progress fails closed instead of manufacturing GREEN.
+
+### Current non-claims and next boundary
+
+No external review has occurred. This package makes no absolute-security claim.
+It does not claim that the final review SHA is frozen, that public exposure is
+authorized, or that local mutation grants any Git or remote authority. After a
+human commits this repair, the real commit may be inspected, qualified and
+separately frozen as the review candidate. Public exposure remains a later,
+separately authorized operation under the frozen external-review gate.
+
+## Historical ADR-025 review baseline
 
 | Item | Evidence |
 | --- | --- |
@@ -20,7 +89,7 @@
 | Review challenge | [`review/TRY_TO_BREAK_IT.md`](review/TRY_TO_BREAK_IT.md) |
 | Machine-readable manifest | [`review/QUALIFICATION_MANIFEST.json`](review/QUALIFICATION_MANIFEST.json) |
 
-The current local implementation adds the ADR-036 persistent NATURAL governed
+That historical local implementation added the ADR-036 persistent NATURAL governed
 mission and the ADR-037 Integrated Governed Agent Gateway to the existing
 ADR-034 deterministic workspace experience. The model still does not receive
 direct filesystem, shell, Git, mutation, network, release or publish authority;
@@ -29,7 +98,7 @@ denied. This is an invitation to independent review, not a claim that an
 independent audit has already occurred. The historical v2.5.1 baseline remains
 below so its earlier evidence is not rewritten.
 
-The current local suite also covers the manual counterexample in which governed
+That historical local suite also covered the manual counterexample in which governed
 project evidence was acquired but lacked an explicit relationship in the
 serialized cognitive context. The regression inspects the real provider
 envelope, verifies the nonzero evidence count and normalized content, and keeps
@@ -165,7 +234,7 @@ Review these modules in order:
 12. `accelerator/cli/governed-patch-dispatch.js`
 13. `accelerator/core/production-mutation-runtime.js`
 
-## Claims supported by the current baseline
+## Claims supported by that historical baseline
 
 - The cognitive provider is not a mutation provider.
 - AI output cannot directly create operational authority.

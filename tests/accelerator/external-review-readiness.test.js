@@ -9,6 +9,61 @@ const path = require('node:path');
 const ROOT = path.resolve(__dirname, '../..');
 const read = (relative) => fs.readFileSync(path.join(ROOT, relative), 'utf8');
 const sha = (relative) => crypto.createHash('sha256').update(read(relative), 'utf8').digest('hex');
+const ADR038_RUNTIME_COMMIT = '2c0686288bdf7e156f37115c40de1e0fe3caedd7';
+const PACKAGE_PREPARATION_HEAD = 'd2e49908dd50720dfa307d85c391fa20d046ce07';
+
+function assertCurrentAdr038Manifest(manifest) {
+  const target = manifest.currentAdr038ReviewTarget;
+  assert.equal(target.architectureDecision, 'ADR-038');
+  assert.deepEqual(target.runtimeCompletion, {
+    commit: ADR038_RUNTIME_COMMIT,
+    qualification: 'COMPLETE_GREEN',
+    experience: 'GREEN',
+    checkpointMeaning: 'R1-R7_INTERNAL_RUNTIME_CHECKPOINTS_NOT_OFFICIAL_ADR_MILESTONES'
+  });
+  assert.deepEqual(target.packagePreparation, {
+    startingHead: PACKAGE_PREPARATION_HEAD,
+    physicalState: 'UNCOMMITTED_WORKTREE_REPAIR',
+    readiness: 'REVIEW_CANDIDATE_READY',
+    reviewCandidateCommit: null,
+    reviewShaFrozen: false
+  });
+  assert.deepEqual(target.remoteQualification, {
+    postAdr038RunExists: false,
+    runId: null,
+    platforms: [],
+    evidence: 'NO_POST_ADR038_REMOTE_MULTIPLATFORM_CI_EVIDENCE'
+  });
+  assert.deepEqual(target.authority, {
+    envelope: 'MISSION_SCOPED',
+    missionGrantDispatch: 'brokerOnly',
+    missionAuthorityDirectlyDispatchable: false,
+    derivedG4: 'BOUNDED_SHORT_LIVED_SINGLE_USE',
+    helpMeAuthority: 'GUIDANCE_ONLY',
+    providerSecurityAuthority: 'NONE',
+    nonTransitive: true,
+    localMutationImpliesPush: false,
+    pushImpliesMerge: false,
+    mergeImpliesTag: false,
+    tagImpliesRelease: false,
+    releaseImpliesPublication: false,
+    publicationImpliesDeploy: false
+  });
+  assert.deepEqual(target.claims, {
+    absoluteSecurity: false,
+    externalReviewCompleted: false,
+    reviewShaFrozen: false,
+    publicExposureAuthorized: false
+  });
+}
+
+function clone(value) {
+  return JSON.parse(JSON.stringify(value));
+}
+
+function attackIds(document) {
+  return [...new Set(document.match(/ADR038-A\d{2}/g) || [])].sort();
+}
 
 test('ADR-025 manifest binds the public green baseline and immutable protocol bytes', () => {
   const manifest = JSON.parse(read('docs/review/QUALIFICATION_MANIFEST.json'));
@@ -104,6 +159,121 @@ test('ADR-025 manifest binds the public green baseline and immutable protocol by
   );
   assert.equal(manifest.protocols['BH-SEP-v2.2-sha256'], sha('protocols/BH-SEP.md'));
   assert.equal(manifest.protocols['BH-SDP-v2.2-sha256'], sha('protocols/BH-SDP.md'));
+});
+
+test('post-ADR-038 manifest binds the runtime while leaving the future review SHA unfrozen', () => {
+  const manifest = JSON.parse(read('docs/review/QUALIFICATION_MANIFEST.json'));
+  assertCurrentAdr038Manifest(manifest);
+});
+
+test('post-ADR-038 manifest validation rejects stale or manufactured readiness', () => {
+  const manifest = JSON.parse(read('docs/review/QUALIFICATION_MANIFEST.json'));
+  const mutations = [
+    (candidate) => { delete candidate.currentAdr038ReviewTarget.architectureDecision; },
+    (candidate) => { candidate.currentAdr038ReviewTarget.runtimeCompletion.commit = '0'.repeat(40); },
+    (candidate) => { delete candidate.currentAdr038ReviewTarget.runtimeCompletion.experience; },
+    (candidate) => { candidate.currentAdr038ReviewTarget.authority.envelope = 'UNBOUNDED'; },
+    (candidate) => { candidate.currentAdr038ReviewTarget.authority.missionGrantDispatch = 'direct'; },
+    (candidate) => { candidate.currentAdr038ReviewTarget.claims.externalReviewCompleted = true; },
+    (candidate) => {
+      candidate.currentAdr038ReviewTarget.packagePreparation.reviewCandidateCommit = 'f'.repeat(40);
+      candidate.currentAdr038ReviewTarget.packagePreparation.reviewShaFrozen = true;
+    },
+    (candidate) => { candidate.currentAdr038ReviewTarget.authority.nonTransitive = false; },
+    (candidate) => { candidate.currentAdr038ReviewTarget.authority.localMutationImpliesPush = true; }
+  ];
+
+  for (const mutate of mutations) {
+    const candidate = clone(manifest);
+    mutate(candidate);
+    assert.throws(() => assertCurrentAdr038Manifest(candidate));
+  }
+});
+
+test('current package describes the complete ADR-038 supervised runtime truthfully', () => {
+  const currentPackage = [
+    read('docs/EXTERNAL_ENGINEERING_REVIEW.md'),
+    read('docs/review/TRY_TO_BREAK_IT.md'),
+    read('docs/review/ADVERSARIAL_PLAYBOOK.md')
+  ].join('\n');
+
+  for (const required of [
+    'ADR-038',
+    ADR038_RUNTIME_COMMIT,
+    'Experience Green',
+    'R1 through R7',
+    'internal runtime checkpoints',
+    'not official ADR milestones',
+    'Gateway → Orchestrator',
+    'task-specific mission',
+    'task-specific plan',
+    'bounded engineering references',
+    'canonical mission-event truth',
+    'repair-until-green',
+    'manufactured GREEN',
+    'durable interruption/restart/resume reconstruction',
+    'HelpMe',
+    'guidance only',
+    'MISSION_SCOPED',
+    'brokerOnly',
+    'one human mission authorization',
+    'short-lived single-use G4',
+    'mission authority cannot itself be dispatched directly',
+    'stale snapshot invalidation after GREEN and CANCELLED',
+    'restart does not restore operational authority',
+    'tenant/project binding',
+    'provider independence',
+    'authority non-transitivity',
+    'local mutation != push != merge != tag != release != publication != deploy',
+    'no hidden model sovereignty',
+    'physical evidence over conversational/model memory',
+    'No external review has occurred',
+    'final review SHA is not frozen'
+  ]) {
+    assert.match(
+      currentPackage,
+      new RegExp(required.replace(/[.*+?^${}()|[\]\\]/g, '\\$&').replace(/\s+/g, '\\s+'), 'i')
+    );
+  }
+});
+
+test('ADR-038 English and Portuguese challenges carry the same authority attacks', () => {
+  const englishChallenge = read('docs/review/TRY_TO_BREAK_IT.md');
+  const portugueseChallenge = read('docs/review/TRY_TO_BREAK_IT_PT-BR.md');
+  const englishPlaybook = read('docs/review/ADVERSARIAL_PLAYBOOK.md');
+  const portuguesePlaybook = read('docs/review/ADVERSARIAL_PLAYBOOK_PT-BR.md');
+  const expectedAttackIds = Array.from(
+    { length: 16 },
+    (_, index) => `ADR038-A${String(index + 1).padStart(2, '0')}`
+  );
+
+  assert.deepEqual(attackIds(englishChallenge), expectedAttackIds);
+  assert.deepEqual(attackIds(portugueseChallenge), expectedAttackIds);
+  assert.deepEqual(attackIds(englishPlaybook), expectedAttackIds);
+  assert.deepEqual(attackIds(portuguesePlaybook), expectedAttackIds);
+
+  for (const [english, portuguese] of [
+    [englishChallenge, portugueseChallenge],
+    [englishPlaybook, portuguesePlaybook]
+  ]) {
+    for (const boundary of [
+      'MISSION_SCOPED',
+      'brokerOnly',
+      'G4',
+      'GREEN',
+      'CANCELLED',
+      'HelpMe',
+      'tenant/project',
+      'local mutation != push != merge != tag != release != publication != deploy'
+    ]) {
+      const pattern = new RegExp(
+        boundary.replace(/[.*+?^${}()|[\]\\]/g, '\\$&').replace(/\s+/g, '\\s+'),
+        'i'
+      );
+      assert.match(english, pattern);
+      assert.match(portuguese, pattern);
+    }
+  }
 });
 
 test('review package contains exact reproduction adversarial targets and honest non-claims', () => {
