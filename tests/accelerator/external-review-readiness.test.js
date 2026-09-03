@@ -11,6 +11,9 @@ const read = (relative) => fs.readFileSync(path.join(ROOT, relative), 'utf8');
 const sha = (relative) => crypto.createHash('sha256').update(read(relative), 'utf8').digest('hex');
 const ADR038_RUNTIME_COMMIT = '2c0686288bdf7e156f37115c40de1e0fe3caedd7';
 const PACKAGE_PREPARATION_HEAD = 'd2e49908dd50720dfa307d85c391fa20d046ce07';
+const QUALIFIED_RUNTIME_CANDIDATE = '26c3c5469433eb012f7d6370b0e3f67a7c2d4a46';
+const QUALIFICATION_CONTROL_COMMIT = '2611eea9b2e99cbe74e5753f314c443f103b3ccd';
+const QUALIFICATION_RUN_ID = '33795522712';
 
 function assertCurrentAdr038Manifest(manifest) {
   const target = manifest.currentAdr038ReviewTarget;
@@ -23,16 +26,21 @@ function assertCurrentAdr038Manifest(manifest) {
   });
   assert.deepEqual(target.packagePreparation, {
     startingHead: PACKAGE_PREPARATION_HEAD,
-    physicalState: 'UNCOMMITTED_WORKTREE_REPAIR',
+    physicalState: 'COMMITTED_CANDIDATE_PENDING_FREEZE',
     readiness: 'REVIEW_CANDIDATE_READY',
     reviewCandidateCommit: null,
     reviewShaFrozen: false
   });
   assert.deepEqual(target.remoteQualification, {
-    postAdr038RunExists: false,
-    runId: null,
-    platforms: [],
-    evidence: 'NO_POST_ADR038_REMOTE_MULTIPLATFORM_CI_EVIDENCE'
+    postAdr038RunExists: true,
+    workflow: 'Accelerator Conformance',
+    event: 'workflow_dispatch',
+    controlCommit: QUALIFICATION_CONTROL_COMMIT,
+    targetCommit: QUALIFIED_RUNTIME_CANDIDATE,
+    runId: QUALIFICATION_RUN_ID,
+    conclusion: 'success',
+    platforms: ['ubuntu-latest', 'macos-latest', 'windows-latest'],
+    evidence: 'EXACT_SHA_WORKFLOW_DISPATCH_QUALIFIED'
   });
   assert.deepEqual(target.authority, {
     envelope: 'MISSION_SCOPED',

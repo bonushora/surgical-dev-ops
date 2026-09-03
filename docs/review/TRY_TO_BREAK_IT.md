@@ -23,13 +23,13 @@ runtime at exact runtime completion SHA
 `2c0686288bdf7e156f37115c40de1e0fe3caedd7`, including Experience Green. R1
 through R7 are internal runtime checkpoints, not official ADR milestones.
 
-The package repair starts from physical HEAD
-`d2e49908dd50720dfa307d85c391fa20d046ce07`. Its future review-candidate SHA is
-deliberately `null` in the manifest: it can only be recorded from Git after this
-repair is committed. The package may be REVIEW-CANDIDATE-READY first. The final
-review SHA is not frozen, No external review has occurred, and no public
-exposure is authorized. There is no post-ADR-038 remote multiplatform CI run;
-all post-ADR-038 qualification recorded during preparation is local only.
+The package preparation began at physical HEAD
+`d2e49908dd50720dfa307d85c391fa20d046ce07`. The immutable runtime candidate is
+`26c3c5469433eb012f7d6370b0e3f67a7c2d4a46`, qualified by Exact-SHA control
+`2611eea9b2e99cbe74e5753f314c443f103b3ccd` in run `33795522712` on Ubuntu,
+macOS and Windows. The composed package commit receives its own SHA only after
+this commit; the final review SHA is not frozen, No external review has
+occurred, and no public exposure is authorized.
 
 The claim to falsify is that the deterministic Gateway → Orchestrator boundary
 keeps task-specific mission and task-specific plan execution inside bounded

@@ -19,14 +19,15 @@ Um bypass reproduzível deve tornar vermelha a qualificação afetada até que s
 O alvo atual do runtime é ADR-038 COMPLETE GREEN no SHA exato de conclusão
 `2c0686288bdf7e156f37115c40de1e0fe3caedd7`, incluindo Experience Green. R1 a
 R7 são checkpoints internos do runtime, não marcos oficiais da ADR. O HEAD de
-preparação do pacote é `d2e49908dd50720dfa307d85c391fa20d046ce07`; ele não é o
+preparação do pacote começou em `d2e49908dd50720dfa307d85c391fa20d046ce07`; ele não é o
 SHA de conclusão do runtime nem um SHA de revisão congelado.
 
 Esta preparação está REVIEW-CANDIDATE-READY, mas seu SHA final de revisão não
-está congelado. Nenhuma revisão externa ocorreu, nenhuma exposição pública está
-autorizada e nenhuma execução remota multiplataforma pós-ADR-038 é alegada. A
-campanha externa deve aguardar um SHA real de commit ser registrado e congelado
-por um humano.
+está congelado. O candidato qualificado do runtime é
+`26c3c5469433eb012f7d6370b0e3f67a7c2d4a46`; o controle Exact-SHA
+`2611eea9b2e99cbe74e5753f314c443f103b3ccd` o qualificou no run `33795522712`
+em Ubuntu, macOS e Windows. Nenhuma revisão externa ocorreu e nenhuma
+exposição pública está autorizada. O SHA final de revisão não está congelado.
 
 O alvo possui fronteira determinística Gateway → Orchestrator, missão específica
 da tarefa, plano específico da tarefa, referências de engenharia limitadas,

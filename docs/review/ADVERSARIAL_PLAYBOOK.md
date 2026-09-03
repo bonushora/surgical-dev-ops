@@ -25,14 +25,13 @@ qualification red until fixed and retained as a permanent regression test.
 The current runtime target is ADR-038 COMPLETE GREEN at exact completion SHA
 `2c0686288bdf7e156f37115c40de1e0fe3caedd7`, including Experience Green. R1
 through R7 are internal runtime checkpoints, not official ADR milestones. The
-package-preparation HEAD is
-`d2e49908dd50720dfa307d85c391fa20d046ce07`; it is neither the runtime completion
-SHA nor a frozen review SHA.
-
-This preparation is REVIEW-CANDIDATE-READY, but its final review SHA is not
-frozen. No external review has occurred, no public exposure is authorized and
-no post-ADR-038 remote multiplatform CI run is claimed. The external campaign
-must wait for a real committed SHA to be recorded and frozen by a human.
+Package preparation began at
+`d2e49908dd50720dfa307d85c391fa20d046ce07`. The qualified runtime candidate is
+`26c3c5469433eb012f7d6370b0e3f67a7c2d4a46`; Exact-SHA control
+`2611eea9b2e99cbe74e5753f314c443f103b3ccd` qualified it in run `33795522712`
+across Ubuntu, macOS and Windows. This composition receives a new Git SHA only
+after commit. Its final review SHA is not frozen. No external review has
+occurred and no public exposure is authorized.
 
 The target has a deterministic Gateway → Orchestrator boundary, task-specific
 mission and task-specific plan, bounded engineering references, canonical

@@ -17,14 +17,13 @@ ADR-038 no SHA exato de conclusão do runtime
 `2c0686288bdf7e156f37115c40de1e0fe3caedd7`, incluindo Experience Green. R1 a
 R7 são checkpoints internos do runtime, não marcos oficiais da ADR.
 
-O reparo do pacote começa no HEAD físico
-`d2e49908dd50720dfa307d85c391fa20d046ce07`. Seu futuro SHA candidato à revisão
-está deliberadamente como `null` no manifesto: ele só pode ser registrado a
-partir do Git depois do commit deste reparo. O pacote pode ficar
-REVIEW-CANDIDATE-READY antes disso. O SHA final de revisão não está congelado,
-nenhuma revisão externa ocorreu e nenhuma exposição pública está autorizada.
-Não existe execução remota multiplataforma pós-ADR-038; toda qualificação
-pós-ADR-038 registrada durante a preparação é apenas local.
+O preparo do pacote começou no HEAD físico
+`d2e49908dd50720dfa307d85c391fa20d046ce07`. O candidato imutável do runtime é
+`26c3c5469433eb012f7d6370b0e3f67a7c2d4a46`, qualificado pelo controle Exact-SHA
+`2611eea9b2e99cbe74e5753f314c443f103b3ccd` no run `33795522712` em Ubuntu,
+macOS e Windows. O commit do pacote composto receberá seu próprio SHA somente
+depois deste commit; o SHA final de revisão não está congelado, nenhuma revisão
+externa ocorreu e nenhuma exposição pública está autorizada.
 
 A afirmação a falsificar é que a fronteira determinística Gateway → Orchestrator
 mantém a execução da missão específica da tarefa e do plano específico da
