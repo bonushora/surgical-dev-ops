@@ -42,6 +42,7 @@ jobs:
 
       - name: Verify exact requested qualification identity
         if: github.event_name == 'workflow_dispatch'
+        id: exact_ref
         shell: bash
         env:
           QUALIFICATION_REF: ${{ inputs.qualification_ref }}
@@ -58,7 +59,20 @@ jobs:
           checked_out_sha="$(git rev-parse --verify HEAD^{commit})"
           test "$resolved_sha" = "$checked_out_sha"
           test -n "$resolved_sha"
+          echo "resolved_sha=$resolved_sha" >> "$GITHUB_OUTPUT"
           echo "Qualified exact commit: $resolved_sha"
+
+      - name: Materialize deterministic exact-ref branch identity
+        if: github.event_name == 'workflow_dispatch'
+        shell: bash
+        env:
+          RESOLVED_SHA: ${{ steps.exact_ref.outputs.resolved_sha }}
+        run: |
+          set -euo pipefail
+          qualification_branch="qualification/exact-ref/${RESOLVED_SHA:0:12}"
+          git switch -c "$qualification_branch"
+          test "$(git branch --show-current)" = "$qualification_branch"
+          test "$(git rev-parse --verify HEAD^{commit})" = "$RESOLVED_SHA"
 
       - name: Materialize deterministic pull-request merge branch
         if: github.event_name == 'pull_request'
