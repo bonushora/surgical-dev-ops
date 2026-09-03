@@ -171,8 +171,11 @@ function resolveNaturalEngineeringReferenceIntent(value) {
       'corrija',
       'corrigir',
       'conserte',
+      'resolva',
+      'resolver',
       'fix',
-      'repair'
+      'repair',
+      'solve'
     );
   const publication =
     hasAny(
@@ -285,7 +288,13 @@ function resolveNaturalEngineeringReferenceIntent(value) {
   } else if (planStep) {
     referenceType = 'CURRENT_PLAN_STEP';
     referenceAction = 'PROJECT_REFERENCE';
-  } else if (recommendation && last) {
+  } else if (
+    recommendation &&
+    (
+      last ||
+      hasAny('faca', 'do')
+    )
+  ) {
     referenceType = 'LAST_RECOMMENDATION';
     referenceAction = 'PROJECT_REFERENCE';
   } else if (checkpoint) {
@@ -452,9 +461,42 @@ function resolveNaturalMissionControlIntent(value) {
   const hasAny = (...concepts) => concepts.some((concept) => tokens.has(concept));
   const hasAll = (...concepts) => concepts.every((concept) => tokens.has(concept));
 
-  const continuation =
+  const resume =
+    hasAny('retome', 'retomar', 'resume') &&
+    hasAny('missao', 'mission');
+  if (resume) {
+    return Object.freeze({
+      action: 'MISSION_RESUME'
+    });
+  }
+
+  const continuationAuthorityQuestion =
     hasAny('continue', 'continuar') &&
-    !hasAny('nao', 'not', 'stop', 'pare');
+    hasAny('pode', 'can') &&
+    hasAny('sem', 'without') &&
+    hasAny('mim', 'me');
+  const authorityQuestion =
+    hasAny('autoridade', 'autorizacao', 'authority', 'authorization') &&
+    hasAny('que', 'qual', 'what', 'which') &&
+    hasAny('tem', 'have');
+  if (continuationAuthorityQuestion || authorityQuestion) {
+    return Object.freeze({
+      action: 'MISSION_PROJECTION',
+      projection: 'authority'
+    });
+  }
+
+  const explicitContinuation =
+    hasAny('continue', 'continuar') ||
+    hasAll('keep', 'going');
+  const boundedCompletion =
+    hasAny('faca', 'do') &&
+    hasAny('necessario', 'necessaria', 'necessary') &&
+    hasAny('concluir', 'complete');
+  const continuation =
+    (explicitContinuation || boundedCompletion) &&
+    !hasAny('nao', 'not', 'stop', 'pare', 'help', 'ajuda') &&
+    !hasAll('don', 't');
 
   if (continuation) {
     return Object.freeze({
@@ -485,8 +527,17 @@ function resolveNaturalMissionControlIntent(value) {
   }
 
   const changeQuestion =
-    hasAny('mudou', 'mudei', 'alterou', 'change', 'changed') &&
-    hasAny('que', 'what') &&
+    hasAny(
+      'mudou',
+      'mudei',
+      'alterou',
+      'modificou',
+      'change',
+      'changed',
+      'modify',
+      'modified'
+    ) &&
+    hasAny('que', 'quais', 'what', 'which') &&
     hasAny('voce', 'you');
 
   if (changeQuestion) {
@@ -502,6 +553,17 @@ function resolveNaturalMissionControlIntent(value) {
     hasAny('por', 'why');
 
   if (failedTestQuestion) {
+    return Object.freeze({
+      action: 'MISSION_PROJECTION',
+      projection: 'tests'
+    });
+  }
+
+  const testStateQuestion =
+    hasAny('teste', 'testes', 'test', 'tests') &&
+    hasAny('estado', 'status', 'state');
+
+  if (testStateQuestion) {
     return Object.freeze({
       action: 'MISSION_PROJECTION',
       projection: 'tests'

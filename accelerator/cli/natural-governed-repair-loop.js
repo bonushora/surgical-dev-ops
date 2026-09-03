@@ -33,6 +33,10 @@ const {
 } = require('../core/integrated-governed-agent-gateway');
 
 const {
+  createNaturalRepairMissionAuthorityRequest,
+  materializeLocalNaturalRepairMissionAuthority,
+  deriveLocalNaturalDevelopmentAuthorizationFromRepairMission,
+  invalidateLocalNaturalRepairMissionAuthority,
   materializeLocalNaturalDevelopmentAuthorization
 } = require('./natural-development-local-authorization');
 
@@ -41,6 +45,7 @@ const LOOP_SCHEMA = 'sdo.natural_governed_repair_loop.v1';
 const LOOP_STATES = Object.freeze([
   'INVESTIGATING',
   'READY_FOR_REPAIR',
+  'MISSION_AUTHORITY_READY',
   'AUTHORITY_REQUIRED',
   'TESTING',
   'QUALIFYING',
@@ -85,13 +90,15 @@ const DENIED_CAPABILITIES = Object.freeze([
 const LOOP_FIELDS = Object.freeze([
   'schema', 'state', 'objective', 'mission', 'allowedTargets', 'testTarget',
   'qualificationTarget', 'qualificationAuthorityRef', 'attemptCeiling',
-  'attempts', 'pending', 'approvalRequest', 'lastDispatch', 'stopReason',
+  'attempts', 'pending', 'approvalRequest', 'missionAuthorityRequest',
+  'missionMutationAuthority', 'lastDispatch', 'stopReason',
   'processLocal', 'durableRestart', 'operationalAuthority',
   'mutationAuthority', 'providerAuthority', 'gitAuthority', 'remoteAuthority',
   'releaseAuthority'
 ]);
 const COMPACT_ATTEMPT_FIELDS = Object.freeze([
   'attempt', 'target', 'proposalFingerprint', 'authorizationFingerprint',
+  'missionAuthorityFingerprint',
   'beforeSha256', 'afterSha256', 'mutationEvidenceDigest',
   'testClassification', 'testEvidenceDigest'
 ]);
@@ -204,6 +211,7 @@ function loopValue(value) {
 }
 
 function validateNaturalGovernedRepairLoop(loop) {
+  exactFields(loop, LOOP_FIELDS, 'R5 repair loop');
   if (
     !loop ||
     loop.schema !== LOOP_SCHEMA ||
@@ -219,11 +227,93 @@ function validateNaturalGovernedRepairLoop(loop) {
     !Array.isArray(loop.attempts) ||
     !Number.isInteger(loop.attemptCeiling) ||
     loop.attemptCeiling < 1 ||
-    loop.attemptCeiling > 8
+    loop.attemptCeiling > 8 ||
+    !Object.prototype.hasOwnProperty.call(loop, 'missionAuthorityRequest') ||
+    !Object.prototype.hasOwnProperty.call(loop, 'missionMutationAuthority') ||
+    (loop.missionAuthorityRequest !== null &&
+      (!Object.isFrozen(loop.missionAuthorityRequest) ||
+        loop.missionAuthorityRequest.schema !==
+          'sdo.natural_repair_mission_authority_request.v1')) ||
+    (loop.missionMutationAuthority !== null &&
+      (!Object.isFrozen(loop.missionMutationAuthority) ||
+        loop.missionMutationAuthority.schema !==
+          'sdo.natural_repair_mission_authority.v1')) ||
+    (loop.state === 'MISSION_AUTHORITY_READY' &&
+      (!loop.pending || !loop.missionMutationAuthority)) ||
+    (['GREEN', 'BLOCKED', 'CANCELLED'].includes(loop.state) &&
+      (loop.missionAuthorityRequest !== null ||
+        loop.missionMutationAuthority !== null))
   ) {
     throw new Error('Immutable bounded R5 repair loop is required.');
   }
   validateNaturalAgenticMission(loop.mission);
+  const request = loop.missionAuthorityRequest;
+  if (
+    request &&
+    (
+      request.missionId !== loop.mission.missionId ||
+      request.objective !== loop.objective ||
+      request.repositoryPath !== loop.mission.binding.repositoryPath ||
+      request.physicalWorkspaceIdentity !==
+        loop.mission.binding.physicalWorkspaceIdentity ||
+      request.repositoryHead !== loop.mission.binding.repositoryHead ||
+      request.worktreeFingerprint !== loop.mission.binding.worktreeFingerprint ||
+      JSON.stringify(request.allowedTargets) !==
+        JSON.stringify(loop.allowedTargets) ||
+      request.testTarget !== loop.testTarget ||
+      request.qualificationTarget !== loop.qualificationTarget ||
+      request.attemptCeiling !== loop.attemptCeiling ||
+      JSON.stringify(request.deniedCapabilities) !==
+        JSON.stringify(loop.mission.authority.deniedCapabilities)
+    )
+  ) {
+    throw new Error('R5 mission authority request differs from sovereign mission state.');
+  }
+  const authority = loop.missionMutationAuthority;
+  const canonicalAuthorityGrant = authority
+    ? loop.mission.authority.grants.find(
+        (grant) => grant.authorityRef === authority.authorityFingerprint
+      )
+    : null;
+  if (
+    authority &&
+    (
+      !request ||
+      authority.authorityRequestFingerprint !==
+        request.authorityRequestFingerprint ||
+      authority.missionId !== loop.mission.missionId ||
+      authority.objective !== loop.objective ||
+      authority.repositoryPath !== loop.mission.binding.repositoryPath ||
+      authority.physicalWorkspaceIdentity !==
+        loop.mission.binding.physicalWorkspaceIdentity ||
+      authority.repositoryHead !== loop.mission.binding.repositoryHead ||
+      authority.worktreeFingerprint !== loop.mission.binding.worktreeFingerprint ||
+      JSON.stringify(authority.allowedTargets) !==
+        JSON.stringify(loop.allowedTargets) ||
+      authority.testTarget !== loop.testTarget ||
+      authority.qualificationTarget !== loop.qualificationTarget ||
+      authority.attemptCeiling !== loop.attemptCeiling ||
+      JSON.stringify(authority.deniedCapabilities) !==
+        JSON.stringify(loop.mission.authority.deniedCapabilities) ||
+      !canonicalAuthorityGrant ||
+      canonicalAuthorityGrant.capability !== 'mutation.applyConditional' ||
+      canonicalAuthorityGrant.operation !== 'mutation.applyConditional' ||
+      canonicalAuthorityGrant.lifetime !== 'MISSION_SCOPED' ||
+      !canonicalAuthorityGrant.scope ||
+      canonicalAuthorityGrant.scope.brokerOnly !== true ||
+      canonicalAuthorityGrant.scope.authorityRequestFingerprint !==
+        authority.authorityRequestFingerprint ||
+      canonicalAuthorityGrant.scope.tenantId !== authority.tenantId ||
+      canonicalAuthorityGrant.scope.projectId !== authority.projectId ||
+      JSON.stringify(canonicalAuthorityGrant.scope.allowedTargets) !==
+        JSON.stringify(authority.allowedTargets) ||
+      loop.mission.authority.usedAuthorityRefs.includes(
+        authority.authorityFingerprint
+      )
+    )
+  ) {
+    throw new Error('R5 mission authority differs from sovereign mission state.');
+  }
   return loop;
 }
 
@@ -301,6 +391,12 @@ function compactAttempt(attempt) {
       attempt.authorizationFingerprint,
       'Historical authorization fingerprint'
     ),
+    missionAuthorityFingerprint: attempt.missionAuthorityFingerprint === null
+      ? null
+      : digest(
+          attempt.missionAuthorityFingerprint,
+          'Historical mission-authority fingerprint'
+        ),
     beforeSha256: digest(attempt.beforeSha256, 'Persisted repair before digest'),
     afterSha256: digest(attempt.afterSha256, 'Persisted repair after digest'),
     mutationEvidenceDigest: digest(
@@ -382,6 +478,9 @@ function compactPending(pending, persisted = false) {
 
 function prepareNaturalGovernedRepairLoopForDurableRestart(loop) {
   const current = validateNaturalGovernedRepairLoop(loop);
+  invalidateLocalNaturalRepairMissionAuthority(
+    current.missionMutationAuthority
+  );
   const pending = compactPending(current.pending);
   return loopValue({
     schema: LOOP_SCHEMA,
@@ -403,6 +502,8 @@ function prepareNaturalGovernedRepairLoopForDurableRestart(loop) {
           reusableAuthority: false
         })
       : null,
+    missionAuthorityRequest: null,
+    missionMutationAuthority: null,
     lastDispatch: null,
     stopReason: current.stopReason,
     processLocal: false,
@@ -417,6 +518,8 @@ function rehydrateNaturalGovernedRepairLoop(value, { mission } = {}) {
     value.processLocal !== false ||
     value.durableRestart !== true ||
     value.lastDispatch !== null ||
+    value.missionAuthorityRequest !== null ||
+    value.missionMutationAuthority !== null ||
     value.operationalAuthority !== false ||
     value.mutationAuthority !== false ||
     value.providerAuthority !== false ||
@@ -469,6 +572,8 @@ function rehydrateNaturalGovernedRepairLoop(value, { mission } = {}) {
     approvalRequest: value.approvalRequest === null
       ? null
       : deepFreeze(value.approvalRequest),
+    missionAuthorityRequest: null,
+    missionMutationAuthority: null,
     lastDispatch: null,
     stopReason: value.stopReason === null
       ? null
@@ -500,6 +605,8 @@ function bindNaturalGovernedRepairLoopAfterRestart(
     mission,
     pending: physicalStateValid === true ? current.pending : null,
     approvalRequest: physicalStateValid === true ? current.approvalRequest : null,
+    missionAuthorityRequest: null,
+    missionMutationAuthority: null,
     lastDispatch: null,
     stopReason: physicalStateValid === true
       ? current.stopReason
@@ -597,6 +704,8 @@ function createNaturalGovernedRepairLoop({
     attempts: [],
     pending: null,
     approvalRequest: null,
+    missionAuthorityRequest: null,
+    missionMutationAuthority: null,
     lastDispatch: null,
     stopReason: null,
     processLocal: true,
@@ -637,6 +746,22 @@ function evidenceRef(dispatchResult, kind) {
     kind,
     target: dispatchResult.result.data && dispatchResult.result.data.target,
     fingerprint: digest(dispatchResult.result.evidenceDigest, 'Gateway evidence digest')
+  };
+}
+
+function missionAuthorityScope(authority) {
+  return {
+    brokerOnly: true,
+    authorityRequestFingerprint: authority.authorityRequestFingerprint,
+    tenantId: authority.tenantId,
+    projectId: authority.projectId,
+    mutationClass: authority.mutationClass,
+    allowedTargets: authority.allowedTargets,
+    testTarget: authority.testTarget,
+    qualificationTarget: authority.qualificationTarget,
+    riskCeiling: authority.riskCeiling,
+    attemptCeiling: authority.attemptCeiling,
+    qualificationRequired: authority.qualificationRequired
   };
 }
 
@@ -699,11 +824,78 @@ function investigateNaturalGovernedRepairFailure(loop, { at, gatewayOptions = {}
     at,
     eventSummary: 'The first evidence-bound repair proposal may now be prepared.'
   });
+  const missionAuthorityRequest = createNaturalRepairMissionAuthorityRequest({
+    missionId: mission.missionId,
+    objective: current.objective,
+    repositoryPath: mission.binding.repositoryPath,
+    physicalWorkspaceIdentity: mission.binding.physicalWorkspaceIdentity,
+    repositoryHead: mission.binding.repositoryHead,
+    worktreeFingerprint: mission.binding.worktreeFingerprint,
+    initialFailureEvidenceDigest: testDispatch.result.evidenceDigest,
+    allowedTargets: current.allowedTargets,
+    testTarget: current.testTarget,
+    qualificationTarget: current.qualificationTarget,
+    attemptCeiling: current.attemptCeiling,
+    deniedCapabilities: DENIED_CAPABILITIES
+  });
   return loopValue({
     ...current,
     state: 'READY_FOR_REPAIR',
     mission,
+    missionAuthorityRequest,
     lastDispatch: testDispatch
+  });
+}
+
+function authorizeNaturalGovernedRepairMission(
+  loop,
+  {
+    approvedAuthorityRequestFingerprint,
+    authorityRoot,
+    journalStorageRoot,
+    tenantId = null,
+    projectId = null,
+    at
+  } = {}
+) {
+  const current = validateNaturalGovernedRepairLoop(loop);
+  if (
+    current.state !== 'READY_FOR_REPAIR' ||
+    !current.missionAuthorityRequest ||
+    current.missionMutationAuthority
+  ) {
+    throw new Error('No bounded R5 repair mission is awaiting human authority.');
+  }
+  const authority = materializeLocalNaturalRepairMissionAuthority({
+    authorityRequest: current.missionAuthorityRequest,
+    approvedAuthorityRequestFingerprint,
+    authorityRoot,
+    journalStorageRoot,
+    tenantId,
+    projectId
+  });
+  const recordedAt = Date.parse(timestamp(at)) > Date.parse(authority.issuedAt)
+    ? timestamp(at)
+    : authority.issuedAt;
+  const mission = recordNaturalAgenticMissionAuthorityGrant(current.mission, {
+    grant: {
+      authorityRef: authority.authorityFingerprint,
+      capability: 'mutation.applyConditional',
+      operation: 'mutation.applyConditional',
+      scope: missionAuthorityScope(authority),
+      issuedAt: authority.issuedAt,
+      expiresAt: authority.expiresAt,
+      lifetime: 'MISSION_SCOPED',
+      authorityNotGranted: authority.deniedCapabilities
+    },
+    at: recordedAt
+  });
+  return loopValue({
+    ...current,
+    mission,
+    missionMutationAuthority: authority,
+    lastDispatch: null,
+    stopReason: null
   });
 }
 
@@ -798,16 +990,21 @@ function proposeNaturalGovernedRepair(loop, { pending, at, gatewayOptions = {} }
     at,
     eventSummary: `Minimal repair proposal ${attempt} was physically bound and validated.`
   });
-  const authorityStepId = `await-authority-${attempt}`;
+  const missionScoped = current.missionMutationAuthority !== null;
+  const authorityStepId = missionScoped
+    ? `validate-mission-authority-${attempt}`
+    : `await-authority-${attempt}`;
   const applyStepId = `apply-repair-${attempt}`;
   const testStepId = `test-repair-${attempt}`;
   mission = updateNaturalAgenticMissionPlan(mission, {
     plan: insertBeforeQualification(mission.plan, [
       {
         stepId: authorityStepId,
-        summary: `Await exact mutation authority for ${exact.patchProposal.target}.`,
+        summary: missionScoped
+          ? `Validate the bounded mission authority for ${exact.patchProposal.target}.`
+          : `Await exact mutation authority for ${exact.patchProposal.target}.`,
         status: 'ACTIVE',
-        operation: 'authority.request',
+        operation: missionScoped ? 'authority.inspect' : 'authority.request',
         sourceOperation: 'mutation.applyConditional'
       },
       {
@@ -824,8 +1021,21 @@ function proposeNaturalGovernedRepair(loop, { pending, at, gatewayOptions = {} }
       }
     ]),
     at,
-    summary: `Repair attempt ${attempt} entered the independent authority boundary.`
+    summary: missionScoped
+      ? `Repair attempt ${attempt} entered deterministic mission-envelope validation.`
+      : `Repair attempt ${attempt} entered the independent authority boundary.`
   });
+  if (missionScoped) {
+    return loopValue({
+      ...current,
+      state: 'MISSION_AUTHORITY_READY',
+      mission,
+      pending: exact,
+      approvalRequest: null,
+      lastDispatch: proposalDispatch,
+      stopReason: null
+    });
+  }
   const scope = {
     target: exact.patchProposal.target,
     beforeSha256: exact.patchProposal.beforeSha256,
@@ -882,6 +1092,9 @@ function stopAfterDispatch(current, dispatchResult, stepId, at) {
     reason: dispatchResult.result.reason,
     at
   });
+  invalidateLocalNaturalRepairMissionAuthority(
+    current.missionMutationAuthority
+  );
   return loopValue({
     ...current,
     state: 'BLOCKED',
@@ -889,14 +1102,19 @@ function stopAfterDispatch(current, dispatchResult, stepId, at) {
     lastDispatch: dispatchResult,
     pending: null,
     approvalRequest: null,
+    missionAuthorityRequest: null,
+    missionMutationAuthority: null,
     stopReason: classification
   });
 }
 
-function authorizeAndContinueNaturalGovernedRepair(
+function continueNaturalGovernedRepairWithAuthorization(
   loop,
   {
-    approvedProposalFingerprint,
+    authorization,
+    authorityStepId,
+    authoritySummary,
+    missionAuthorityFingerprint = null,
     authorityRoot,
     journalStorageRoot,
     tenantId = null,
@@ -906,24 +1124,11 @@ function authorizeAndContinueNaturalGovernedRepair(
   } = {}
 ) {
   const current = validateNaturalGovernedRepairLoop(loop);
-  if (current.state !== 'AUTHORITY_REQUIRED' || !current.pending) {
-    throw new Error('No exact R5 repair proposal is awaiting authority.');
+  if (!current.pending || !authorization) {
+    throw new Error('No authorized exact R5 repair proposal is ready to continue.');
   }
   const exact = current.pending;
   const proposal = exact.patchProposal;
-  if (approvedProposalFingerprint !== proposal.proposalFingerprint) {
-    throw new Error('Human authority does not match the exact pending repair proposal.');
-  }
-  const authorization = materializeLocalNaturalDevelopmentAuthorization({
-    patchProposal: proposal,
-    approvedProposalFingerprint,
-    physicalWorkspaceIdentity: exact.physicalWorkspaceIdentity,
-    repositoryPath: exact.repositoryPath,
-    authorityRoot,
-    journalStorageRoot,
-    tenantId,
-    projectId
-  });
   const requestedAt = timestamp(at);
   const operationAt = Date.parse(requestedAt) > Date.parse(authorization.authorizedAt)
     ? requestedAt
@@ -944,7 +1149,7 @@ function authorizeAndContinueNaturalGovernedRepair(
   });
   const attempt = current.attempts.length + 1;
   mission = updateNaturalAgenticMissionPlanStep(mission, {
-    stepId: `await-authority-${attempt}`,
+    stepId: authorityStepId,
     status: 'COMPLETED',
     resultClass: 'SUCCESS',
     evidenceRef: {
@@ -953,7 +1158,7 @@ function authorizeAndContinueNaturalGovernedRepair(
       fingerprint: authorization.authorizationFingerprint
     },
     at: authorization.authorizedAt,
-    eventSummary: `Exact one-shot authority for repair ${attempt} was verified.`
+    eventSummary: authoritySummary
   });
   mission = updateNaturalAgenticMissionPlanStep(mission, {
     stepId: `apply-repair-${attempt}`,
@@ -1045,6 +1250,7 @@ function authorizeAndContinueNaturalGovernedRepair(
     target: proposal.target,
     proposalFingerprint: proposal.proposalFingerprint,
     authorizationFingerprint: authorization.authorizationFingerprint,
+    missionAuthorityFingerprint,
     beforeSha256: proposal.beforeSha256,
     afterSha256: proposal.replacementSha256,
     mutationEvidenceDigest: mutationDispatch.result.evidenceDigest,
@@ -1067,6 +1273,9 @@ function authorizeAndContinueNaturalGovernedRepair(
         reason: 'R5 repair-attempt ceiling reached with physical tests still RED.',
         at: operationAt
       });
+      invalidateLocalNaturalRepairMissionAuthority(
+        current.missionMutationAuthority
+      );
       return loopValue({
         ...current,
         state: 'BLOCKED',
@@ -1074,6 +1283,8 @@ function authorizeAndContinueNaturalGovernedRepair(
         attempts,
         pending: null,
         approvalRequest: null,
+        missionAuthorityRequest: null,
+        missionMutationAuthority: null,
         lastDispatch: testDispatch,
         stopReason: 'PATCH_ATTEMPT_BOUND_REACHED'
       });
@@ -1135,6 +1346,9 @@ function authorizeAndContinueNaturalGovernedRepair(
     eventSummary: 'The bounded canonical qualification ladder completed physically GREEN.'
   });
   mission = completeNaturalAgenticMissionGreen(mission, { at: operationAt });
+  invalidateLocalNaturalRepairMissionAuthority(
+    current.missionMutationAuthority
+  );
   return loopValue({
     ...current,
     state: 'GREEN',
@@ -1142,8 +1356,101 @@ function authorizeAndContinueNaturalGovernedRepair(
     attempts,
     pending: null,
     approvalRequest: null,
+    missionAuthorityRequest: null,
+    missionMutationAuthority: null,
     lastDispatch: qualificationDispatch,
     stopReason: null
+  });
+}
+
+function authorizeAndContinueNaturalGovernedRepair(
+  loop,
+  {
+    approvedProposalFingerprint,
+    authorityRoot,
+    journalStorageRoot,
+    tenantId = null,
+    projectId = null,
+    at,
+    gatewayOptions = {}
+  } = {}
+) {
+  const current = validateNaturalGovernedRepairLoop(loop);
+  if (current.state !== 'AUTHORITY_REQUIRED' || !current.pending) {
+    throw new Error('No exact R5 repair proposal is awaiting authority.');
+  }
+  const proposal = current.pending.patchProposal;
+  if (approvedProposalFingerprint !== proposal.proposalFingerprint) {
+    throw new Error('Human authority does not match the exact pending repair proposal.');
+  }
+  const authorization = materializeLocalNaturalDevelopmentAuthorization({
+    patchProposal: proposal,
+    approvedProposalFingerprint,
+    physicalWorkspaceIdentity: current.pending.physicalWorkspaceIdentity,
+    repositoryPath: current.pending.repositoryPath,
+    authorityRoot,
+    journalStorageRoot,
+    tenantId,
+    projectId
+  });
+  const attempt = current.attempts.length + 1;
+  return continueNaturalGovernedRepairWithAuthorization(current, {
+    authorization,
+    authorityStepId: `await-authority-${attempt}`,
+    authoritySummary: `Exact one-shot authority for repair ${attempt} was verified.`,
+    authorityRoot,
+    journalStorageRoot,
+    tenantId,
+    projectId,
+    at,
+    gatewayOptions
+  });
+}
+
+function continueNaturalGovernedRepairWithMissionAuthority(
+  loop,
+  {
+    authorityRoot,
+    journalStorageRoot,
+    tenantId = null,
+    projectId = null,
+    at,
+    gatewayOptions = {}
+  } = {}
+) {
+  const current = validateNaturalGovernedRepairLoop(loop);
+  if (
+    current.state !== 'MISSION_AUTHORITY_READY' ||
+    !current.pending ||
+    !current.missionMutationAuthority
+  ) {
+    throw new Error('No bounded mission-authorized R5 repair is ready.');
+  }
+  const proposal = current.pending.patchProposal;
+  const authorization =
+    deriveLocalNaturalDevelopmentAuthorizationFromRepairMission({
+      missionAuthority: current.missionMutationAuthority,
+      mission: current.mission,
+      patchProposal: proposal,
+      authorityRoot,
+      journalStorageRoot,
+      tenantId,
+      projectId
+    });
+  const attempt = current.attempts.length + 1;
+  return continueNaturalGovernedRepairWithAuthorization(current, {
+    authorization,
+    authorityStepId: `validate-mission-authority-${attempt}`,
+    authoritySummary:
+      `Mission envelope and exact one-shot authority for repair ${attempt} were revalidated.`,
+    missionAuthorityFingerprint:
+      current.missionMutationAuthority.authorityFingerprint,
+    authorityRoot,
+    journalStorageRoot,
+    tenantId,
+    projectId,
+    at,
+    gatewayOptions
   });
 }
 
@@ -1185,6 +1492,8 @@ function denyNaturalGovernedRepairAuthority(loop, { at, reason = 'Human denied t
     mission,
     pending: null,
     approvalRequest: null,
+    missionAuthorityRequest: null,
+    missionMutationAuthority: null,
     stopReason: 'AUTHORITY_DENIED'
   });
 }
@@ -1195,12 +1504,17 @@ function cancelNaturalGovernedRepairLoop(loop, { at, reason = 'Human cancelled t
     throw new Error('Terminal R5 repair loop cannot be cancelled again.');
   }
   const mission = cancelNaturalAgenticMission(current.mission, { reason, at });
+  invalidateLocalNaturalRepairMissionAuthority(
+    current.missionMutationAuthority
+  );
   return loopValue({
     ...current,
     state: 'CANCELLED',
     mission,
     pending: null,
     approvalRequest: null,
+    missionAuthorityRequest: null,
+    missionMutationAuthority: null,
     stopReason: 'CANCELLED'
   });
 }
@@ -1216,8 +1530,10 @@ module.exports = Object.freeze({
   rehydrateNaturalGovernedRepairLoop,
   bindNaturalGovernedRepairLoopAfterRestart,
   investigateNaturalGovernedRepairFailure,
+  authorizeNaturalGovernedRepairMission,
   proposeNaturalGovernedRepair,
   authorizeAndContinueNaturalGovernedRepair,
+  continueNaturalGovernedRepairWithMissionAuthority,
   denyNaturalGovernedRepairAuthority,
   cancelNaturalGovernedRepairLoop
 });

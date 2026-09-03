@@ -249,8 +249,33 @@ function detectExplicitFileTask(text) {
 function detectProjectAnalysis(text) {
   const normalized =
     normalizeNaturalText(text);
+  const tokens =
+    new Set(
+      normalized
+        .split(' ')
+        .filter(Boolean)
+    );
+  const hasAny =
+    (...concepts) =>
+      concepts.some(
+        (concept) => tokens.has(concept)
+      );
+
+  const investigateBeforeChange =
+    hasAny('investigue', 'investigar', 'investigate') &&
+    hasAny('primeiro', 'first') &&
+    hasAny('nao', 'not') &&
+    hasAny(
+      'altere',
+      'mude',
+      'modifique',
+      'change',
+      'modify',
+      'edit'
+    );
 
   const explanationOrAnalysis =
+    investigateBeforeChange ||
     includesAny(
       normalized,
       [

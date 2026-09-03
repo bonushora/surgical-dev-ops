@@ -137,8 +137,10 @@ const {
 const {
   createNaturalGovernedRepairLoop,
   investigateNaturalGovernedRepairFailure,
+  authorizeNaturalGovernedRepairMission,
   proposeNaturalGovernedRepair,
   authorizeAndContinueNaturalGovernedRepair,
+  continueNaturalGovernedRepairWithMissionAuthority,
   denyNaturalGovernedRepairAuthority,
   cancelNaturalGovernedRepairLoop
 } = require('./natural-governed-repair-loop');
@@ -1199,6 +1201,21 @@ function createInteractiveSession(
   function currentNaturalHelpPendingDecision() {
     if (
       pendingRepairLoop &&
+      pendingRepairLoop.state === 'READY_FOR_REPAIR' &&
+      pendingRepairLoop.missionAuthorityRequest &&
+      !pendingRepairLoop.missionMutationAuthority
+    ) {
+      return Object.freeze({
+        kind: 'REPAIR_MISSION',
+        state: 'HUMAN_DECISION_PENDING',
+        authorityRequestFingerprint:
+          pendingRepairLoop.missionAuthorityRequest.authorityRequestFingerprint,
+        reusableApproval: false
+      });
+    }
+
+    if (
+      pendingRepairLoop &&
       pendingRepairLoop.state === 'AUTHORITY_REQUIRED' &&
       pendingRepairLoop.pending &&
       pendingRepairLoop.pending.patchProposal
@@ -1250,7 +1267,13 @@ function createInteractiveSession(
           ? pendingRepairLoop.mission.tests.lastResult.classification
           : null,
       stopReason: pendingRepairLoop.stopReason,
-      durableRestart: pendingRepairLoop.durableRestart === true
+      durableRestart: pendingRepairLoop.durableRestart === true,
+      missionScopedAuthorityActive:
+        pendingRepairLoop.missionMutationAuthority !== null,
+      missionAuthorityFingerprint:
+        pendingRepairLoop.missionMutationAuthority
+          ? pendingRepairLoop.missionMutationAuthority.authorityFingerprint
+          : null
     });
   }
 
@@ -1966,6 +1989,8 @@ function createInteractiveSession(
       operation: 'mutation.applyConditional'
     });
     const proposal = pendingRepairLoop.pending.patchProposal;
+    const missionAuthorized =
+      pendingRepairLoop.state === 'MISSION_AUTHORITY_READY';
     output.write(
       formatNaturalGatewayResult(
         pendingRepairLoop.lastDispatch,
@@ -1982,10 +2007,68 @@ function createInteractiveSession(
       `Proposal: ${proposal.proposalFingerprint}\n` +
       humanText(
         activation,
-        `Para autorizar somente este reparo: aprovar reparo ${proposal.proposalFingerprint}\n`,
-        `To authorize only this repair: approve repair ${proposal.proposalFingerprint}\n`
+        missionAuthorized
+          ? 'O envelope humano delimitado será revalidado antes desta mutação; nenhuma nova aprovação humana é necessária.\n'
+          : `Para autorizar somente este reparo: aprovar reparo ${proposal.proposalFingerprint}\n`,
+        missionAuthorized
+          ? 'The bounded human envelope will be revalidated before this mutation; no new human approval is required.\n'
+          : `To authorize only this repair: approve repair ${proposal.proposalFingerprint}\n`
       )
     );
+    if (missionAuthorized) {
+      const patchOptions = options.patchOptions || patchOptionsFromEnvironment();
+      pendingRepairLoop =
+        continueNaturalGovernedRepairWithMissionAuthority(
+          pendingRepairLoop,
+          {
+            ...patchOptions,
+            at: currentCanonicalInstant(options),
+            gatewayOptions: naturalRepairGatewayOptions()
+          }
+        );
+      agenticMission = pendingRepairLoop.mission;
+      projectNaturalMissionEvents(agenticMission);
+      if (
+        naturalEngineeringReferenceContext &&
+        pendingRepairLoop.lastDispatch &&
+        pendingRepairLoop.lastDispatch.result
+      ) {
+        naturalEngineeringReferenceContext =
+          recordNaturalEngineeringGatewayResult(
+            naturalEngineeringReferenceContext,
+            {
+              mission: agenticMission,
+              gatewayOperation: pendingRepairLoop.lastDispatch.result.operation,
+              sourceOperation: 'tests.run',
+              result: pendingRepairLoop.lastDispatch.result,
+              createdAt: agenticMission.updatedAt
+            }
+          );
+      }
+      output.write(
+        formatNaturalGatewayResult(
+          pendingRepairLoop.lastDispatch,
+          activation.language
+        )
+      );
+      if (pendingRepairLoop.state === 'READY_FOR_REPAIR') {
+        output.write(
+          humanText(
+            activation,
+            'O teste físico continua RED. O próximo reparo delimitado será investigado dentro do mesmo envelope.\n',
+            'The physical test remains RED. The next bounded repair will be investigated inside the same envelope.\n'
+          )
+        );
+      } else if (pendingRepairLoop.state === 'GREEN') {
+        output.write(
+          humanText(
+            activation,
+            'O teste focal e a qualificação delimitada estão GREEN. A autoridade de missão expirou e nenhuma autoridade Git foi concedida.\n',
+            'The focused test and bounded qualification are GREEN. Mission authority expired and no Git authority was granted.\n'
+          )
+        );
+      }
+    }
   }
 
   async function dispatchNaturalGatewayIntent(
@@ -2318,7 +2401,14 @@ function createInteractiveSession(
               pendingDevelopment ||
               (
                 pendingRepairLoop &&
-                pendingRepairLoop.state === 'AUTHORITY_REQUIRED'
+                (
+                  pendingRepairLoop.state === 'AUTHORITY_REQUIRED' ||
+                  (
+                    pendingRepairLoop.state === 'READY_FOR_REPAIR' &&
+                    pendingRepairLoop.missionAuthorityRequest &&
+                    !pendingRepairLoop.missionMutationAuthority
+                  )
+                )
               )
             )
               ? resolveNaturalHelpRequest(line)
@@ -2330,6 +2420,71 @@ function createInteractiveSession(
                 pendingHelpRequest
               )
             );
+            resumeAndPrompt();
+            return;
+          }
+
+          if (
+            pendingRepairLoop &&
+            pendingRepairLoop.state === 'READY_FOR_REPAIR' &&
+            pendingRepairLoop.missionAuthorityRequest &&
+            !pendingRepairLoop.missionMutationAuthority &&
+            /^(?:autorizar|authorize) (?:miss[aã]o|mission)\b/i.test(normalizedLine)
+          ) {
+            const request = pendingRepairLoop.missionAuthorityRequest;
+            const approval = normalizedLine.match(
+              /^(?:autorizar|authorize) (?:miss[aã]o|mission) ([a-f0-9]{64})$/i
+            );
+            if (
+              !approval ||
+              approval[1].toLowerCase() !== request.authorityRequestFingerprint
+            ) {
+              output.write(
+                humanText(
+                  activation,
+                  `A autoridade delimitada não corresponde ao envelope físico atual. Use "autorizar missão ${request.authorityRequestFingerprint}".\n`,
+                  `The bounded authority does not match the current physical envelope. Use "authorize mission ${request.authorityRequestFingerprint}".\n`
+                )
+              );
+              resumeAndPrompt();
+              return;
+            }
+            try {
+              const patchOptions = options.patchOptions || patchOptionsFromEnvironment();
+              pendingRepairLoop = authorizeNaturalGovernedRepairMission(
+                pendingRepairLoop,
+                {
+                  approvedAuthorityRequestFingerprint:
+                    request.authorityRequestFingerprint,
+                  ...patchOptions,
+                  at: currentCanonicalInstant(options)
+                }
+              );
+              agenticMission = pendingRepairLoop.mission;
+              projectNaturalMissionEvents(agenticMission, {
+                operation: 'authority.inspect'
+              });
+              output.write(
+                humanText(
+                  activation,
+                  'Autoridade humana process-local delimitada à missão foi verificada. Cada mutação continuará sujeita ao envelope, G4 exato, Gateway e CAS.\n',
+                  'Process-local human authority bounded to the mission was verified. Every mutation remains subject to the envelope, exact G4, Gateway, and CAS.\n'
+                )
+              );
+              while (pendingRepairLoop.state === 'READY_FOR_REPAIR') {
+                await prepareNaturalGovernedRepair(
+                  currentCanonicalInstant(options)
+                );
+              }
+            } catch (error) {
+              output.write(
+                humanText(
+                  activation,
+                  `A missão delimitada parou de forma segura: ${error && error.message ? error.message : 'falha de ambiente'}. Nenhuma autoridade foi ampliada.\n`,
+                  `The bounded mission stopped safely: ${error && error.message ? error.message : 'environment failure'}. No authority was widened.\n`
+                )
+              );
+            }
             resumeAndPrompt();
             return;
           }
@@ -2610,8 +2765,8 @@ function createInteractiveSession(
                       pendingRepairLoop.state === 'READY_FOR_REPAIR'
                         ? humanText(
                             activation,
-                            'Falha física delimitada e registrada. Diga "corrija isso" para preparar uma proposta mínima; nenhuma mutação está autorizada.\n',
-                            'A bounded physical failure was recorded. Say "fix this" to prepare a minimal proposal; no mutation is authorized.\n'
+                            `Falha física delimitada e registrada. Para autorizar o loop inteiro somente neste envelope: autorizar missão ${pendingRepairLoop.missionAuthorityRequest.authorityRequestFingerprint}\nComo alternativa, diga "corrija isso" para manter aprovação exata por reparo.\n`,
+                            `A bounded physical failure was recorded. To authorize the whole loop only inside this envelope: authorize mission ${pendingRepairLoop.missionAuthorityRequest.authorityRequestFingerprint}\nAlternatively, say "fix this" to keep exact per-repair approval.\n`
                           )
                         : humanText(
                             activation,

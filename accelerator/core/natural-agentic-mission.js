@@ -1278,7 +1278,9 @@ function recordNaturalAgenticMissionAuthorityGrant(
   return appendEvent(withMissionFingerprint(next), {
     type: EVENT_TYPES.AUTHORITY_GRANTED,
     state: current.state,
-    summary: 'Exact bounded human authority was recorded for one governed operation.',
+    summary: normalizedGrant.lifetime === 'MISSION_SCOPED'
+      ? 'Bounded human authority was recorded for one governed mission scope.'
+      : 'Exact bounded human authority was recorded for one governed operation.',
     at,
     evidenceRef: {
       kind: 'AUTHORITY_GRANT',

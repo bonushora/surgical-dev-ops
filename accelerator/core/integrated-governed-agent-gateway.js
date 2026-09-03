@@ -483,6 +483,7 @@ function activeAuthorityGrant(mission, operation, authorityRef, at, args = {}) {
     entry.capability === capability
   );
   if (!grant) return null;
+  if (grant.scope && grant.scope.brokerOnly === true) return null;
   if (mission.authority.usedAuthorityRefs.includes(authorityRef)) return null;
   if (Date.parse(at) >= Date.parse(grant.expiresAt)) return null;
   if (

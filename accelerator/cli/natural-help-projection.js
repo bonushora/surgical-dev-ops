@@ -278,6 +278,10 @@ function boundedPending(value) {
       typeof value.proposalFingerprint === 'string'
         ? value.proposalFingerprint
         : null,
+    authorityRequestFingerprint:
+      typeof value.authorityRequestFingerprint === 'string'
+        ? value.authorityRequestFingerprint
+        : null,
     reusableApproval: value.reusableApproval === true
   });
 }
@@ -290,9 +294,15 @@ function boundedRepair(value) {
     lastTestClassification: value.lastTestClassification || null,
     stopReason: value.stopReason || null,
     durableRestart: value.durableRestart === true,
+    missionScopedAuthorityActive:
+      value.missionScopedAuthorityActive === true,
+    missionAuthorityFingerprint:
+      typeof value.missionAuthorityFingerprint === 'string'
+        ? value.missionAuthorityFingerprint
+        : null,
     physicalRed:
       value.lastTestClassification === 'FAILED' &&
-      ['READY_FOR_REPAIR', 'AUTHORITY_REQUIRED', 'TESTING'].includes(value.state)
+      ['READY_FOR_REPAIR', 'MISSION_AUTHORITY_READY', 'AUTHORITY_REQUIRED', 'TESTING'].includes(value.state)
   });
 }
 
@@ -513,6 +523,13 @@ function contextLinesEnglish(projection) {
     if (pendingDecision.proposalFingerprint) {
       lines.push(`Pending proposal: ${pendingDecision.proposalFingerprint}`);
     }
+    if (pendingDecision.authorityRequestFingerprint) {
+      lines.push(`Pending bounded mission authority: ${pendingDecision.authorityRequestFingerprint}`);
+    }
+  }
+
+  if (repair && repair.missionScopedAuthorityActive) {
+    lines.push('A process-local bounded repair authority is active; HelpMe can inspect it but cannot use, widen, or persist it.');
   }
 
   if (repair && repair.physicalRed) {
@@ -580,6 +597,13 @@ function contextLinesPortuguese(projection) {
     if (pendingDecision.proposalFingerprint) {
       lines.push(`Proposta pendente: ${pendingDecision.proposalFingerprint}`);
     }
+    if (pendingDecision.authorityRequestFingerprint) {
+      lines.push(`Autoridade delimitada de missão pendente: ${pendingDecision.authorityRequestFingerprint}`);
+    }
+  }
+
+  if (repair && repair.missionScopedAuthorityActive) {
+    lines.push('Uma autoridade process-local e delimitada de reparo está ativa; o HelpMe pode inspecioná-la, mas não pode usá-la, ampliá-la ou persisti-la.');
   }
 
   if (repair && repair.physicalRed) {
