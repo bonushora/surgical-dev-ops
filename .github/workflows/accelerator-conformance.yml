@@ -9,6 +9,12 @@ on:
   pull_request:
     branches:
       - main
+  workflow_dispatch:
+    inputs:
+      qualification_ref:
+        description: Explicit Git ref or commit SHA to qualify
+        required: true
+        type: string
 
 permissions:
   contents: read
@@ -30,6 +36,29 @@ jobs:
     steps:
       - name: Checkout repository
         uses: actions/checkout@v6
+        with:
+          fetch-depth: 0
+          ref: ${{ github.event_name == 'workflow_dispatch' && inputs.qualification_ref || github.ref }}
+
+      - name: Verify exact requested qualification identity
+        if: github.event_name == 'workflow_dispatch'
+        shell: bash
+        env:
+          QUALIFICATION_REF: ${{ inputs.qualification_ref }}
+        run: |
+          set -euo pipefail
+          test -n "$QUALIFICATION_REF"
+          case "$QUALIFICATION_REF" in
+            -*|*" "*|*$'\t'*|*$'\n'*)
+              echo "qualification_ref is malformed or ambiguous" >&2
+              exit 1
+              ;;
+          esac
+          resolved_sha="$(git rev-parse --verify --end-of-options "${QUALIFICATION_REF}^{commit}")"
+          checked_out_sha="$(git rev-parse --verify HEAD^{commit})"
+          test "$resolved_sha" = "$checked_out_sha"
+          test -n "$resolved_sha"
+          echo "Qualified exact commit: $resolved_sha"
 
       - name: Materialize deterministic pull-request merge branch
         if: github.event_name == 'pull_request'
@@ -86,7 +115,7 @@ jobs:
 
   publish-npm:
     name: Publish qualified npm package
-    if: startsWith(github.ref, 'refs/tags/v')
+    if: github.event_name != 'workflow_dispatch' && startsWith(github.ref, 'refs/tags/v')
     needs:
       - accelerator-conformance
     runs-on: ubuntu-latest
