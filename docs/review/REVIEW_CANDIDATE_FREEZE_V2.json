@@ -1,0 +1,43 @@
+{
+  "schema": "sdo.external_adversarial_review_freeze.v2",
+  "status": "FROZEN",
+  "reviewCandidateSha": "2714236e1aa7f9f6b971dd509889e46d819daea9",
+  "reviewCandidateParent": "26c3c5469433eb012f7d6370b0e3f67a7c2d4a46",
+  "reviewObject": {
+    "commit": "2714236e1aa7f9f6b971dd509889e46d819daea9",
+    "tree": "ea613baa08978b67e2680fb25d47d3f03bad97e6",
+    "parent": "26c3c5469433eb012f7d6370b0e3f67a7c2d4a46"
+  },
+  "qualifiedRuntimeSha": "26c3c5469433eb012f7d6370b0e3f67a7c2d4a46",
+  "qualificationControlSha": "2611eea9b2e99cbe74e5753f314c443f103b3ccd",
+  "qualificationRunId": "33798043482",
+  "qualificationWorkflow": "Accelerator Conformance",
+  "qualificationEvent": "workflow_dispatch",
+  "qualificationMatrix": {
+    "ubuntu": "SUCCESS",
+    "macos": "SUCCESS",
+    "windows": "SUCCESS"
+  },
+  "exactShaQualification": true,
+  "reviewShaFrozen": true,
+  "publicExposurePerformed": false,
+  "externalReview": {
+    "occurred": false,
+    "publicExposureAuthorized": false
+  },
+  "historicalReviewSha": "55015717ba5747e8b008442769d9707627698861",
+  "historicalFreezeSha": "a45aeb8c4c430fd950129fed10375e30251036bd",
+  "authority": {
+    "freezeDoesNotAuthorizePush": true,
+    "freezeDoesNotAuthorizeMerge": true,
+    "freezeDoesNotAuthorizeTag": true,
+    "freezeDoesNotAuthorizeRelease": true,
+    "freezeDoesNotAuthorizePublication": true,
+    "freezeDoesNotAuthorizeDeploy": true
+  },
+  "identityRule": {
+    "reviewedObjectIsExactlyTheRecordedCommit": true,
+    "freezeRecordIsOutsideReviewedObject": true,
+    "reviewObjectMustNotBeRewrittenToMentionThisRecord": true
+  }
+}
