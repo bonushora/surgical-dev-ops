@@ -523,7 +523,9 @@ test('provider unavailability changes no deterministic HelpMe capability or gove
   assert.equal(unavailable.deterministicTruthAvailable, true);
 });
 
-test('production HelpMe reaches projection without provider or mission transition', async () => {
+test('production HelpMe reaches projection without provider or mission transition', async (t) => {
+  const fixture = repairFixture();
+  t.after(fixture.cleanup);
   const input = new PassThrough();
   const output = new PassThrough();
   let observed = '';
@@ -531,7 +533,7 @@ test('production HelpMe reaches projection without provider or mission transitio
   output.on('data', (chunk) => { observed += chunk.toString(); });
 
   createInteractiveSession(
-    createInteractiveActivation(ROOT, 'NATURAL', 'en'),
+    createInteractiveActivation(fixture.repository, 'NATURAL', 'en'),
     {
       input,
       output,
@@ -566,14 +568,16 @@ test('production HelpMe reaches projection without provider or mission transitio
   assert.doesNotMatch(observed, /mutation\.applyConditional.*SUCCESS/);
 });
 
-test('help preserves a pending bounded decision and cannot consume approval-shaped text', async () => {
+test('help preserves a pending bounded decision and cannot consume approval-shaped text', async (t) => {
+  const fixture = repairFixture();
+  t.after(fixture.cleanup);
   const input = new PassThrough();
   const output = new PassThrough();
   let observed = '';
   output.on('data', (chunk) => { observed += chunk.toString(); });
 
   createInteractiveSession(
-    createInteractiveActivation(ROOT, 'NATURAL', 'en'),
+    createInteractiveActivation(fixture.repository, 'NATURAL', 'en'),
     {
       input,
       output,
