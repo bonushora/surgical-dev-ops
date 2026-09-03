@@ -1,0 +1,58 @@
+{
+  "schema": "sdo.external_adversarial_review_freeze.v1",
+  "status": "FROZEN",
+  "reviewObject": {
+    "commit": "55015717ba5747e8b008442769d9707627698861",
+    "tree": "ba8cf314d621593a8011f165c952902a167f9af2",
+    "parent": "484cf6cd7c8d1596bf2238c6d8804506137a8f3c"
+  },
+  "runtimeBaseline": {
+    "architectureDecision": "ADR-038",
+    "completionCommit": "2c0686288bdf7e156f37115c40de1e0fe3caedd7",
+    "qualification": "COMPLETE_GREEN",
+    "experienceGreen": true
+  },
+  "localExactShaQualification": {
+    "qualified": true,
+    "readiness": {
+      "passed": 12,
+      "failed": 0
+    },
+    "adr038Focused": {
+      "passed": 80,
+      "failed": 0
+    },
+    "canonical": {
+      "discovered": 1322,
+      "passed": 1317,
+      "failed": 0,
+      "platformSkips": 5
+    },
+    "packageDryRun": {
+      "qualified": true,
+      "package": "surgical-dev-ops@2.6.0-rc.6",
+      "files": 248
+    },
+    "gitDiffCheck": "GREEN"
+  },
+  "remoteQualification": {
+    "postAdr038MultiplatformCI": "QUALIFIED"
+  },
+  "externalReview": {
+    "occurred": false,
+    "publicExposureAuthorized": false
+  },
+  "authority": {
+    "freezeDoesNotAuthorizePush": true,
+    "freezeDoesNotAuthorizeMerge": true,
+    "freezeDoesNotAuthorizeTag": true,
+    "freezeDoesNotAuthorizeRelease": true,
+    "freezeDoesNotAuthorizePublication": true,
+    "freezeDoesNotAuthorizeDeploy": true
+  },
+  "identityRule": {
+    "reviewedObjectIsExactlyTheRecordedCommit": true,
+    "freezeRecordIsOutsideReviewedObject": true,
+    "reviewObjectMustNotBeRewrittenToMentionThisRecord": true
+  }
+}
