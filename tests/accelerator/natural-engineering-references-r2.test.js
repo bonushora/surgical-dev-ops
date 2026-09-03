@@ -22,6 +22,7 @@ const {
   createNaturalEngineeringReferent,
   createNaturalEngineeringReferenceContext,
   recordNaturalEngineeringGatewayResult,
+  recordNaturalGovernedReadOnlyEvidence,
   resolveNaturalEngineeringReference,
   projectNaturalEngineeringReferenceContext
 } = require('../../accelerator/core/natural-engineering-reference-context');
@@ -32,6 +33,12 @@ const {
 const {
   createHermeticGitRepository
 } = require('./helpers/hermetic-git-repository');
+const {
+  createGovernedReadOnlyRequest
+} = require('../../accelerator/cli/governed-readonly-dispatch');
+const {
+  executeGovernedMachineAccess
+} = require('../../accelerator/core/machine-access-governed-composition');
 
 const CLI = require.resolve('../../accelerator/cli/surgical');
 const NOW = '2099-01-01T00:00:00.000Z';
@@ -414,6 +421,99 @@ test('resolved conversational target does not authorize mutation or depend on a 
     assert.equal(
       fs.readFileSync(path.join(fixture.repository, 'package-lock.json'), 'utf8'),
       before
+    );
+  } finally {
+    fixture.cleanup();
+  }
+});
+
+test('governed read-only evidence has a distinct reference recorder and is never represented as an Integrated Gateway result', () => {
+  const fixture = createHermeticGitRepository();
+
+  try {
+    assert.equal(
+      typeof recordNaturalGovernedReadOnlyEvidence,
+      'function',
+      'GovernedMachineAccess evidence requires its own reference recorder instead of fabricating an Integrated Gateway result.'
+    );
+
+    const mission = missionFor(fixture.repository);
+    const context = createNaturalEngineeringReferenceContext({
+      mission,
+      createdAt: NOW
+    });
+
+    const governedRequest = createGovernedReadOnlyRequest(
+      {
+        repositoryPath: fixture.repository,
+        capabilityType: 'GIT_READ',
+        target: 'workspace-files'
+      },
+      { now: () => NOW }
+    );
+
+    const governed = executeGovernedMachineAccess(governedRequest);
+
+    assert.equal(governed.orchestration.status, 'COMPLETED');
+    assert.equal(governed.machineAccess.operationType, 'LIST_DIRECTORY');
+    assert.equal(
+      governed.machineAccess.evidence.adapterEvidence,
+      governed.execution
+    );
+    assert.equal(Object.isFrozen(governed), true);
+
+    const recorded = recordNaturalGovernedReadOnlyEvidence(context, {
+      mission,
+      governedRequest,
+      governed,
+      createdAt: NOW
+    });
+
+    assert.equal(Object.isFrozen(recorded), true);
+
+    const resolved = resolveNaturalEngineeringReference({
+      context: recorded,
+      mission,
+      requestedType: 'LAST_EVIDENCE',
+      revalidation:
+        revalidateDeterministicWorkspaceSession(
+          mission.session
+        )
+    });
+
+    assert.equal(resolved.classification, 'RESOLVED');
+    assert.equal(resolved.reference.type, 'LAST_EVIDENCE');
+    assert.equal(resolved.reference.operationalAuthority, false);
+    assert.equal(resolved.reference.mutationAuthority, false);
+
+    assert.throws(
+      () => recordNaturalGovernedReadOnlyEvidence(context, {
+        mission,
+        governedRequest,
+        governed: Object.freeze({
+          response: 'provider-shaped prose pretending to be evidence'
+        }),
+        createdAt: NOW
+      }),
+      /governed|evidence|machine|orchestration|execution/i
+    );
+
+    const tampered = Object.freeze({
+      ...governed,
+      machineAccess: Object.freeze({
+        ...governed.machineAccess,
+        operationType: 'WRITE_FILE'
+      })
+    });
+
+    assert.throws(
+      () => recordNaturalGovernedReadOnlyEvidence(context, {
+        mission,
+        governedRequest,
+        governed: tampered,
+        createdAt: NOW
+      }),
+      /governed|evidence|machine|operation|authority|binding/i
     );
   } finally {
     fixture.cleanup();

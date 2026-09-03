@@ -19,6 +19,18 @@ const cli =
   );
 
 const {
+  createGovernedReadOnlyRequest
+} = require(
+  '../../accelerator/cli/governed-readonly-dispatch'
+);
+
+const {
+  executeGovernedMachineAccess
+} = require(
+  '../../accelerator/core/machine-access-governed-composition'
+);
+
+const {
   materializeGovernedEngineeringProposal
 } = require(
   '../../accelerator/core/governed-engineering-proposal'
@@ -1189,8 +1201,11 @@ test(
       observed += chunk.toString();
     });
 
+    const activation =
+      naturalActivation();
+
     cli.createInteractiveSession(
-      naturalActivation(),
+      activation,
       {
         input,
         output,
@@ -1203,36 +1218,25 @@ test(
           }
         }),
         dispatchEvidence(intent) {
-          if (intent.capabilityType === 'GIT_READ') {
-            return {
-              orchestration: { status: 'COMPLETED' },
-              execution: {
-                schema: 'sdo.git_read_result.v1',
-                selector: 'WORKSPACE_FILES',
-                result: {
-                  files: [
-                    'README.md',
-                    'docs/ENGINEERING_EVIDENCE.md',
-                    'ROADMAP.md'
-                  ]
-                }
-              }
-            };
-          }
+          const governedRequest =
+            createGovernedReadOnlyRequest({
+              repositoryPath:
+                activation.repositoryPath,
+              capabilityType:
+                intent.capabilityType,
+              target:
+                intent.target
+            });
 
-          return {
-            orchestration: { status: 'COMPLETED' },
-            execution: {
-              schema: 'sdo.filesystem_read_result.v1',
-              target: { requested: intent.target },
-              evidence: {
-                bytes: 64,
-                sha256: 'a'.repeat(64),
-                content:
-                  `Qualified content from ${intent.target}.`
-              }
-            }
-          };
+          const governed =
+            executeGovernedMachineAccess(
+              governedRequest
+            );
+
+          return Object.freeze({
+            governedRequest,
+            governed
+          });
         }
       }
     );
@@ -1251,8 +1255,6 @@ test(
       (resolve) => setTimeout(resolve, 50)
     );
 
-    input.end();
-
     assert.match(
       observed,
       /foram obtidas 4 evidências governadas.*provider não concluiu o processamento cognitivo/i
@@ -1268,6 +1270,34 @@ test(
     assert.match(
       observed,
       /nenhum arquivo foi alterado/i
+    );
+
+    input.write(
+      'mostre a última evidência\n'
+    );
+
+    await new Promise(
+      (resolve) => setTimeout(resolve, 50)
+    );
+
+    input.end();
+
+    assert.doesNotMatch(
+      observed,
+      /Referência: NO_REFERENT/,
+      observed
+    );
+
+    assert.match(
+      observed,
+      /Referência governada resolvida: LAST_EVIDENCE/,
+      observed
+    );
+
+    assert.doesNotMatch(
+      observed,
+      /Nenhuma operação governada foi executada/,
+      observed
     );
   }
 );

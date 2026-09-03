@@ -261,18 +261,64 @@ function detectProjectAnalysis(text) {
         (concept) => tokens.has(concept)
       );
 
-  const investigateBeforeChange =
-    hasAny('investigue', 'investigar', 'investigate') &&
-    hasAny('primeiro', 'first') &&
+  const investigativeObjective =
+    hasAny(
+      'investigue',
+      'investigar',
+      'investigate',
+      'procure',
+      'busque',
+      'look',
+      'analise',
+      'analisar',
+      'analyze',
+      'analyse',
+      'examine',
+      'examinar'
+    );
+
+  const projectScope =
+    hasAny(
+      'projeto',
+      'repositorio',
+      'project',
+      'repository'
+    );
+
+  const explicitNoMutation =
     hasAny('nao', 'not') &&
     hasAny(
       'altere',
+      'alteracao',
+      'alteracoes',
       'mude',
+      'mudanca',
+      'mudancas',
       'modifique',
+      'modificacao',
+      'modificacoes',
       'change',
+      'changes',
       'modify',
-      'edit'
+      'modification',
+      'modifications',
+      'edit',
+      'edits'
     );
+
+  const explicitInvestigateBeforeChange =
+    investigativeObjective &&
+    hasAny('primeiro', 'first') &&
+    explicitNoMutation;
+
+  const readOnlyProjectInvestigation =
+    investigativeObjective &&
+    projectScope &&
+    explicitNoMutation;
+
+  const investigateBeforeChange =
+    explicitInvestigateBeforeChange ||
+    readOnlyProjectInvestigation;
 
   const explanationOrAnalysis =
     investigateBeforeChange ||

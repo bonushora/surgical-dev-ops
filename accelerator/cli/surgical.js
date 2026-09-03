@@ -54,6 +54,7 @@ const {
 const {
   createNaturalEngineeringReferenceContext,
   recordNaturalEngineeringGatewayResult,
+  recordNaturalGovernedReadOnlyEvidence,
   resolveNaturalEngineeringReference,
   projectNaturalEngineeringReferenceContext
 } = require(
@@ -291,10 +292,36 @@ function dispatchNaturalWorkspaceEvidence(
     typeof options.dispatchEvidence ===
       'function'
   ) {
-    return options.dispatchEvidence(
+    const dispatched = options.dispatchEvidence(
       intent,
       activation.repositoryPath
     );
+
+    // Bootstrap consumes the canonical governed result directly. The
+    // recursive loop may additionally carry its exact request provenance in
+    // a frozen two-field envelope; unwrap only that validated composition
+    // shape here and leave all other shapes fail-closed at the bootstrap
+    // contract.
+    if (
+      dispatched &&
+      typeof dispatched === 'object' &&
+      Object.isFrozen(dispatched) &&
+      Object.keys(dispatched).length === 2 &&
+      Object.prototype.hasOwnProperty.call(
+        dispatched,
+        'governedRequest'
+      ) &&
+      Object.prototype.hasOwnProperty.call(
+        dispatched,
+        'governed'
+      ) &&
+      Object.isFrozen(dispatched.governedRequest) &&
+      Object.isFrozen(dispatched.governed)
+    ) {
+      return dispatched.governed;
+    }
+
+    return dispatched;
   }
 
   return dispatchGovernedReadOnly(
@@ -1439,9 +1466,11 @@ function createInteractiveSession(
 
   function createNaturalGatewayMission(
     intent,
-    observedAt
+    observedAt,
+    existingSession = null
   ) {
     const session =
+      existingSession ||
       createDeterministicWorkspaceSession({
         authorizedRoot:
           activation.repositoryPath,
@@ -3196,6 +3225,27 @@ function createInteractiveSession(
                           activation,
                           options
                         );
+
+                      if (!agenticMission) {
+                        agenticMission =
+                          createNaturalGatewayMission(
+                            Object.freeze({
+                              objective:
+                                task.objective,
+                              operation:
+                                'evidence.inspect'
+                            }),
+                            workspaceContext.observedAt,
+                            workspaceContext.experience.session
+                          );
+                        naturalEngineeringReferenceContext =
+                          createNaturalEngineeringReferenceContext({
+                            mission:
+                              agenticMission,
+                            createdAt:
+                              workspaceContext.observedAt
+                          });
+                      }
                     } catch {
                       output.write(
                         humanText(
@@ -3218,6 +3268,37 @@ function createInteractiveSession(
                         cognitiveSession,
                         dispatchEvidence:
                           options.dispatchEvidence,
+                        onGovernedEvidence(
+                          governedEvidence
+                        ) {
+                          if (
+                            !agenticMission ||
+                            !naturalEngineeringReferenceContext
+                          ) {
+                            throw new Error(
+                              'Governed evidence cannot be recorded without the current bounded mission context.'
+                            );
+                          }
+
+                          naturalEngineeringReferenceContext =
+                            recordNaturalGovernedReadOnlyEvidence(
+                              naturalEngineeringReferenceContext,
+                              {
+                                mission:
+                                  agenticMission,
+                                governedRequest:
+                                  governedEvidence
+                                    .governedRequest,
+                                governed:
+                                  governedEvidence
+                                    .governed,
+                                createdAt:
+                                  currentCanonicalInstant(
+                                    options
+                                  )
+                              }
+                            );
+                        },
                         sensitiveContentPolicy:
                           workspaceContext
                             .experience

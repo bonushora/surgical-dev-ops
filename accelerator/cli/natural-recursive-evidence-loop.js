@@ -460,9 +460,15 @@ function dispatchGovernedMachineEvidence(
         intent.target
     });
 
-  return executeGovernedMachineAccess(
-    governedRequest
-  );
+  const governed =
+    executeGovernedMachineAccess(
+      governedRequest
+    );
+
+  return deepFreeze({
+    governedRequest,
+    governed
+  });
 }
 
 function deterministicProjectGroundingDecision(
@@ -617,12 +623,22 @@ async function runNaturalRecursiveEvidenceLoop(
     dispatchEvidence =
       dispatchGovernedMachineEvidence,
     onProgress = null,
+    onGovernedEvidence = null,
     evaluateEvidenceIntent = null,
     deterministicProjectGrounding = true,
     sensitiveContentPolicy =
       createSensitiveContentPolicy()
   } = {}
 ) {
+  if (
+    onGovernedEvidence !== null &&
+    typeof onGovernedEvidence !== 'function'
+  ) {
+    throw new Error(
+      'Governed evidence observer must be a function.'
+    );
+  }
+
   if (
     !task ||
     typeof task !== 'object' ||
@@ -995,13 +1011,36 @@ async function runNaturalRecursiveEvidenceLoop(
     );
 
     let governed;
+    let governedDispatch;
 
     try {
-      governed =
+      governedDispatch =
         dispatchEvidence(
           containment.governedIntent,
           activation.repositoryPath
         );
+
+      const hasGovernedProvenance =
+        Boolean(
+          governedDispatch &&
+          typeof governedDispatch === 'object' &&
+          governedDispatch.governedRequest &&
+          governedDispatch.governed
+        );
+
+      governed =
+        hasGovernedProvenance
+          ? governedDispatch.governed
+          : governedDispatch;
+
+      if (
+        hasGovernedProvenance &&
+        onGovernedEvidence
+      ) {
+        onGovernedEvidence(
+          governedDispatch
+        );
+      }
     } catch {
       return finalResult({
         status:

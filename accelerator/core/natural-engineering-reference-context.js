@@ -54,6 +54,11 @@ const REFERENCE_OPERATIONS = Object.freeze([
   'mutation.applyConditional'
 ]);
 
+const REFERENT_OPERATIONS = Object.freeze([
+  ...REFERENCE_OPERATIONS,
+  'governed.readOnlyEvidence'
+]);
+
 const GATEWAY_OPERATIONS = Object.freeze([
   ...REFERENCE_OPERATIONS,
   'evidence.inspect'
@@ -274,7 +279,7 @@ function createNaturalEngineeringReferent(input = {}) {
       128
     );
 
-  if (!REFERENCE_OPERATIONS.includes(operation)) {
+  if (!REFERENT_OPERATIONS.includes(operation)) {
     throw new Error(
       'Engineering reference operation is unsupported.'
     );
@@ -367,7 +372,7 @@ function validateNaturalEngineeringReferent(referent) {
 
   if (
     !SUPPORTED_REFERENCE_TYPES.includes(referent.type) ||
-    !REFERENCE_OPERATIONS.includes(referent.operation) ||
+    !REFERENT_OPERATIONS.includes(referent.operation) ||
     !RESULT_CLASSES.includes(referent.resultClassification) ||
     !/^[a-f0-9]{64}$/.test(referenceId || '') ||
     fingerprint(REFERENT_SCHEMA, body) !== referenceId
@@ -576,6 +581,225 @@ function referenceTypesForResult(
   return Object.freeze([
     ...new Set(types)
   ]);
+}
+
+
+function validateGovernedReadOnlyEvidence(
+  governedRequest,
+  governed
+) {
+  if (
+    !governedRequest ||
+    typeof governedRequest !== 'object' ||
+    Array.isArray(governedRequest) ||
+    !Object.isFrozen(governedRequest) ||
+    !governedRequest.execution ||
+    !Object.isFrozen(governedRequest.execution)
+  ) {
+    throw new Error(
+      'Immutable governed read-only request is required.'
+    );
+  }
+
+  if (
+    !governed ||
+    typeof governed !== 'object' ||
+    Array.isArray(governed) ||
+    !Object.isFrozen(governed) ||
+    !governed.orchestration ||
+    !governed.machineAccess ||
+    !Object.isFrozen(governed.machineAccess) ||
+    governed.orchestration.status !== 'COMPLETED'
+  ) {
+    throw new Error(
+      'Immutable completed governed machine evidence is required.'
+    );
+  }
+
+  const execution =
+    governedRequest.execution;
+
+  if (
+    governed.orchestration.operationId !==
+      execution.operationId ||
+    governed.machineAccess.operationId !==
+      execution.operationId ||
+    governed.machineAccess.workspace !==
+      execution.workspace
+  ) {
+    throw new Error(
+      'Governed machine evidence is not bound to the originating operation.'
+    );
+  }
+
+  const expectedOperationType =
+    execution.adapter === 'FILESYSTEM_READ' &&
+    execution.action === 'READ_FILE'
+      ? 'READ_FILE'
+      : execution.adapter === 'PROCESS_VALIDATION' &&
+          execution.action === 'NODE_SYNTAX_CHECK'
+        ? 'RUN_FIXED_VALIDATION'
+        : execution.adapter === 'GIT_READ' &&
+            execution.action === 'WORKSPACE_FILES'
+          ? 'LIST_DIRECTORY'
+          : null;
+
+  if (
+    !expectedOperationType ||
+    governed.machineAccess.operationType !==
+      expectedOperationType
+  ) {
+    throw new Error(
+      'Governed machine evidence operation binding is invalid.'
+    );
+  }
+
+  if (
+    !governed.machineAccess.evidence ||
+    governed.machineAccess.evidence.adapterEvidence !==
+      governed.execution
+  ) {
+    throw new Error(
+      'Governed machine evidence lost adapter-evidence integrity.'
+    );
+  }
+
+  return deepFreeze({
+    operation:
+      `governed.${execution.adapter}.${execution.action}`,
+    evidenceDigest:
+      fingerprint(
+        'sdo.governed_read_only_reference_evidence.v1',
+        {
+          operationId:
+            execution.operationId,
+          workspace:
+            execution.workspace,
+          adapter:
+            execution.adapter,
+          action:
+            execution.action,
+          operationType:
+            governed.machineAccess.operationType,
+          execution:
+            governed.execution
+        }
+      ),
+    resultFingerprint:
+      fingerprint(
+        'sdo.governed_read_only_reference_result.v1',
+        {
+          orchestration:
+            governed.orchestration,
+          machineAccess:
+            governed.machineAccess
+        }
+      )
+  });
+}
+
+function recordNaturalGovernedReadOnlyEvidence(
+  context,
+  {
+    mission,
+    governedRequest,
+    governed,
+    createdAt
+  } = {}
+) {
+  const currentContext =
+    validateNaturalEngineeringReferenceContext(
+      context
+    );
+
+  const missionBinding =
+    requireContextMission(
+      currentContext,
+      mission
+    );
+
+  if (!missionBinding.valid) {
+    throw new Error(
+      'Engineering reference context belongs to another mission or physical state.'
+    );
+  }
+
+  const evidence =
+    validateGovernedReadOnlyEvidence(
+      governedRequest,
+      governed
+    );
+
+  const at =
+    requireTimestamp(
+      createdAt,
+      'Reference update timestamp'
+    );
+
+  if (
+    Date.parse(at) <
+      Date.parse(currentContext.updatedAt)
+  ) {
+    throw new Error(
+      'Reference context time cannot move backwards.'
+    );
+  }
+
+  const nextSequence =
+    currentContext.resultSequence + 1;
+
+  const types =
+    Object.freeze([
+      'LAST_OPERATION',
+      'LAST_EVIDENCE'
+    ]);
+
+  const replacements =
+    types.map(
+      (type) =>
+        createNaturalEngineeringReferent({
+          mission:
+            missionBinding.current,
+          type,
+          operation:
+            'governed.readOnlyEvidence',
+          evidenceDigest:
+            evidence.evidenceDigest,
+          resultFingerprint:
+            evidence.resultFingerprint,
+          resultClassification:
+            'SUCCESS',
+          createdAt:
+            at,
+          sequence:
+            nextSequence
+        })
+    );
+
+  const replacedTypes =
+    new Set(types);
+
+  return withContextFingerprint({
+    missionId:
+      currentContext.missionId,
+    binding:
+      currentContext.binding,
+    references: [
+      ...currentContext.references.filter(
+        (reference) =>
+          !replacedTypes.has(
+            reference.type
+          )
+      ),
+      ...replacements
+    ],
+    resultSequence:
+      nextSequence,
+    createdAt:
+      currentContext.createdAt,
+    updatedAt:
+      at
+  });
 }
 
 function recordNaturalEngineeringGatewayResult(
@@ -985,6 +1209,7 @@ module.exports = Object.freeze({
   createNaturalEngineeringReferenceContext,
   validateNaturalEngineeringReferenceContext,
   recordNaturalEngineeringGatewayResult,
+  recordNaturalGovernedReadOnlyEvidence,
   resolveNaturalEngineeringReference,
   projectNaturalEngineeringReferenceContext
 });
