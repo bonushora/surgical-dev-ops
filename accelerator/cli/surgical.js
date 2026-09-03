@@ -26,8 +26,12 @@ const {
 } = require('./governed-patch-dispatch');
 
 const {
-  recordSessionStarted
-} = require('../telemetry/session-telemetry');
+  createTelemetryProducer
+} = require('../telemetry/producer');
+
+const {
+  telemetryStateRoot
+} = require('../telemetry/installation-identity');
 
 const {
   interpretNaturalIntent,
@@ -2218,10 +2222,16 @@ async function main(
    * Delivery outcome never participates in
    * Surgical operational authority.
    */
-  recordSessionStarted({
-    activation,
-    version: VERSION
-  }).catch(() => {});
+  try {
+    createTelemetryProducer({
+      stateRoot: telemetryStateRoot()
+    }).appStarted({
+      tenant: 'local',
+      project: 'local'
+    }).catch(() => {});
+  } catch {
+    // Telemetry is observational and cannot affect startup.
+  }
 
   output.write(
     formatInteractiveActivation(activation)
