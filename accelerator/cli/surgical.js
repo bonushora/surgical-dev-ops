@@ -30,6 +30,10 @@ const {
 } = require('../telemetry/producer');
 
 const {
+  createTelemetryProducerHttpTransport
+} = require('../telemetry/producer-http-transport');
+
+const {
   telemetryStateRoot
 } = require('../telemetry/installation-identity');
 
@@ -2223,8 +2227,41 @@ async function main(
    * Surgical operational authority.
    */
   try {
+    const telemetryEndpoint =
+      String(
+        process.env.SDO_TELEMETRY_ENDPOINT || ''
+      ).trim();
+
+    const telemetryProducerToken =
+      String(
+        process.env.SDO_TELEMETRY_PRODUCER_TOKEN || ''
+      ).trim();
+
+    let telemetryTransport;
+
+    if (
+      telemetryEndpoint &&
+      telemetryProducerToken
+    ) {
+      try {
+        telemetryTransport =
+          createTelemetryProducerHttpTransport({
+            endpoint:
+              telemetryEndpoint,
+            producerToken:
+              telemetryProducerToken
+          });
+      } catch {
+        telemetryTransport =
+          undefined;
+      }
+    }
+
     createTelemetryProducer({
-      stateRoot: telemetryStateRoot()
+      stateRoot:
+        telemetryStateRoot(),
+      transport:
+        telemetryTransport
     }).appStarted({
       tenant: 'local',
       project: 'local'
