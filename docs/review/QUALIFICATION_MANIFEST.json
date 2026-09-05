@@ -121,14 +121,15 @@
       "checkpointMeaning": "R1-R7_INTERNAL_RUNTIME_CHECKPOINTS_NOT_OFFICIAL_ADR_MILESTONES"
     },
     "packagePreparation": {
-      "startingHead": "c718165638787171ddd500ea4893eb5a5906ef4d",
-      "physicalState": "COMMITTED_CANDIDATE",
+      "startingHead": "2714236e1aa7f9f6b971dd509889e46d819daea9",
+      "physicalState": "COMMITTED_CANDIDATE_FROZEN",
       "readiness": "REVIEW_CANDIDATE_FROZEN",
-      "reviewCandidateCommit": "c718165638787171ddd500ea4893eb5a5906ef4d",
+      "reviewCandidateCommit": "2714236e1aa7f9f6b971dd509889e46d819daea9",
+      "reviewPackageCommit": "1a9dd5aca16366c3a0f5525e8835e1c6b9f73ca9",
       "reviewShaFrozen": true,
       "functionalComparison": {
         "previouslyTestedSha": "1be3ea3c6964a86181f78b3d0654522fb5f85334",
-        "candidateSha": "c718165638787171ddd500ea4893eb5a5906ef4d",
+        "candidateSha": "2714236e1aa7f9f6b971dd509889e46d819daea9",
         "excludedPaths": [
           "README*",
           "docs/**",
@@ -139,14 +140,28 @@
       },
       "adversarialValidation": {
         "tests": [
-          "tests/accelerator/external-review-readiness.test.js",
-          "tests/accelerator/natural-adversarial-qualification.test.js",
-          "tests/accelerator/natural-development-rc3-adversarial-readiness.test.js"
+          "tests/accelerator/natural-gateway-production-r1.test.js",
+          "tests/accelerator/natural-engineering-references-r2.test.js",
+          "tests/accelerator/natural-task-specific-live-plan-r3.test.js",
+          "tests/accelerator/natural-truthful-event-projection-r4.test.js",
+          "tests/accelerator/natural-governed-repair-loop-r5.test.js",
+          "tests/accelerator/natural-durable-mission-continuity-r6.test.js",
+          "tests/accelerator/natural-supervised-autonomous-experience-r7.test.js",
+          "tests/accelerator/natural-mission-scoped-mutation-authority.test.js",
+          "tests/accelerator/natural-mission-scoped-mutation-authority-adversarial.test.js",
+          "tests/accelerator/natural-help-projection.test.js"
         ],
+        "passed": 81,
+        "failed": 0,
+        "skipped": 0,
+        "execution": "node --test tests/accelerator/natural-gateway-production-r1.test.js tests/accelerator/natural-engineering-references-r2.test.js tests/accelerator/natural-task-specific-live-plan-r3.test.js tests/accelerator/natural-truthful-event-projection-r4.test.js tests/accelerator/natural-governed-repair-loop-r5.test.js tests/accelerator/natural-durable-mission-continuity-r6.test.js tests/accelerator/natural-supervised-autonomous-experience-r7.test.js tests/accelerator/natural-mission-scoped-mutation-authority.test.js tests/accelerator/natural-mission-scoped-mutation-authority-adversarial.test.js tests/accelerator/natural-help-projection.test.js"
+      },
+      "historicalAdversarialValidation": {
+        "candidateSha": "c718165638787171ddd500ea4893eb5a5906ef4d",
         "passed": 17,
         "failed": 0,
         "skipped": 0,
-        "execution": "node --test <three affected adversarial test files>"
+        "preserved": true
       },
       "manifestJson": "VALID",
       "gitDiffCheck": "GREEN"
