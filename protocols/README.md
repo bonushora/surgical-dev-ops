@@ -44,10 +44,10 @@ normative Portuguese text.
 
 ### v2.3 — current
 
-- [BH-SEP v2.3 — PT-BR](./v2.3/BH-SEP.md)
-- [BH-SDP v2.3 — PT-BR](./v2.3/BH-SDP.md)
-- [BH-SEP v2.3 — EN](./v2.3/BH-SEP_EN.md)
-- [BH-SDP v2.3 — EN](./v2.3/BH-SDP_EN.md)
+- [BH-SEP v2.3 — PT-BR](https://raw.githubusercontent.com/bonushora/surgical-dev-ops/main/protocols/v2.3/BH-SEP.md)
+- [BH-SDP v2.3 — PT-BR](https://raw.githubusercontent.com/bonushora/surgical-dev-ops/main/protocols/v2.3/BH-SDP.md)
+- [BH-SEP v2.3 — EN](https://raw.githubusercontent.com/bonushora/surgical-dev-ops/main/protocols/v2.3/BH-SEP_EN.md)
+- [BH-SDP v2.3 — EN](https://raw.githubusercontent.com/bonushora/surgical-dev-ops/main/protocols/v2.3/BH-SDP_EN.md)
 - [Copiar os dois protocolos — PT-BR](https://raw.githubusercontent.com/bonushora/surgical-dev-ops/main/protocols/v2.3/BH-PROTOCOLS.md)
 - [Copy both protocols — EN](https://raw.githubusercontent.com/bonushora/surgical-dev-ops/main/protocols/v2.3/BH-PROTOCOLS_EN.md)
 
