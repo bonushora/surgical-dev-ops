@@ -1,5 +1,10 @@
 'use strict';
 
+const {
+  validateMissionExecutionEnvelope,
+  evaluateMissionRunnerStep
+} = require('../core/mission-runner-policy');
+
 const SCHEMA = 'sdo.natural_runner_runtime.v1';
 const STATES = Object.freeze([
   'INACTIVE',
@@ -34,6 +39,7 @@ function base(state, boundary, detail = null) {
 
 function createNaturalRunnerRuntime() {
   let current = base('INACTIVE', 'NONE');
+  let envelope = null;
 
   function requirePending(pending) {
     if (
@@ -49,13 +55,38 @@ function createNaturalRunnerRuntime() {
   }
 
   return Object.freeze({
-    start() {
+    start(missionEnvelope = null) {
+      envelope = missionEnvelope === null
+        ? null
+        : validateMissionExecutionEnvelope(missionEnvelope);
       current = base(
         'CONTINUING',
         'AUTHORIZED_BOUNDED_CONTINUITY',
-        'RUNNER may continue planning and qualified read-only evidence, but cannot mint mutation authority.'
+        envelope
+          ? envelope.envelopeFingerprint
+          : 'RUNNER may continue planning and qualified read-only evidence, but cannot mint mutation authority.'
       );
       return current;
+    },
+
+    evaluate(step) {
+      if (!envelope) {
+        current = base(
+          'FAILED_CLOSED',
+          'MISSION_ENVELOPE_REQUIRED',
+          'A v2.3 mission execution envelope is required for proportional continuation.'
+        );
+        return current;
+      }
+      const evaluated = evaluateMissionRunnerStep({ envelope, ...step });
+      const state = evaluated.classification === 'CONTINUE' ||
+        evaluated.classification === 'REUSE_EVIDENCE'
+        ? 'CONTINUING'
+        : evaluated.classification === 'HUMAN_AUTHORITY_REQUIRED'
+          ? 'EXACT_HUMAN_REVIEW_REQUIRED'
+          : 'FAILED_CLOSED';
+      current = base(state, evaluated.classification, evaluated.reason);
+      return Object.freeze({ ...current, policy: evaluated });
     },
 
     exactHumanReviewRequired(pending) {
