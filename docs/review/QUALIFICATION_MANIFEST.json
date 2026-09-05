@@ -112,6 +112,73 @@
     "runtimeMutationDuringFinalEvidenceRecording": false,
     "manualAcceptance": "GREEN"
   },
+  "currentAdr038ReviewTarget": {
+    "architectureDecision": "ADR-038",
+    "runtimeCompletion": {
+      "commit": "2c0686288bdf7e156f37115c40de1e0fe3caedd7",
+      "qualification": "COMPLETE_GREEN",
+      "experience": "GREEN",
+      "checkpointMeaning": "R1-R7_INTERNAL_RUNTIME_CHECKPOINTS_NOT_OFFICIAL_ADR_MILESTONES"
+    },
+    "packagePreparation": {
+      "startingHead": "c718165638787171ddd500ea4893eb5a5906ef4d",
+      "physicalState": "COMMITTED_CANDIDATE",
+      "readiness": "REVIEW_CANDIDATE_FROZEN",
+      "reviewCandidateCommit": "c718165638787171ddd500ea4893eb5a5906ef4d",
+      "reviewShaFrozen": true,
+      "functionalComparison": {
+        "previouslyTestedSha": "1be3ea3c6964a86181f78b3d0654522fb5f85334",
+        "candidateSha": "c718165638787171ddd500ea4893eb5a5906ef4d",
+        "excludedPaths": [
+          "README*",
+          "docs/**",
+          "protocols/**"
+        ],
+        "functionalDifferencesDetected": true,
+        "testSelection": "Only affected adversarial and review tests were executed"
+      },
+      "adversarialValidation": {
+        "tests": [
+          "tests/accelerator/external-review-readiness.test.js",
+          "tests/accelerator/natural-adversarial-qualification.test.js",
+          "tests/accelerator/natural-development-rc3-adversarial-readiness.test.js"
+        ],
+        "passed": 17,
+        "failed": 0,
+        "skipped": 0,
+        "execution": "node --test <three affected adversarial test files>"
+      },
+      "manifestJson": "VALID",
+      "gitDiffCheck": "GREEN"
+    },
+    "remoteQualification": {
+      "postAdr038RunExists": false,
+      "runId": null,
+      "platforms": [],
+      "evidence": "NO_POST_ADR038_REMOTE_MULTIPLATFORM_CI_EVIDENCE"
+    },
+    "authority": {
+      "envelope": "MISSION_SCOPED",
+      "missionGrantDispatch": "brokerOnly",
+      "missionAuthorityDirectlyDispatchable": false,
+      "derivedG4": "BOUNDED_SHORT_LIVED_SINGLE_USE",
+      "helpMeAuthority": "GUIDANCE_ONLY",
+      "providerSecurityAuthority": "NONE",
+      "nonTransitive": true,
+      "localMutationImpliesPush": false,
+      "pushImpliesMerge": false,
+      "mergeImpliesTag": false,
+      "tagImpliesRelease": false,
+      "releaseImpliesPublication": false,
+      "publicationImpliesDeploy": false
+    },
+    "claims": {
+      "absoluteSecurity": false,
+      "externalReviewCompleted": false,
+      "reviewShaFrozen": true,
+      "publicExposureAuthorized": false
+    }
+  },
   "protocols": {
     "BH-SEP-v2.2-sha256": "f4e8639163b0321fff86133a69ec59c2822ccdebcd24d2ccb459b5bc1c3b35cb",
     "BH-SDP-v2.2-sha256": "04ea782ada1abf7fb959329054c57f87a0e86fca99a31d2e37751d3bdf7d47bc"
