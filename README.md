@@ -118,6 +118,17 @@ surgical-devops --help
 surgical-devops
 ```
 
+To run the governed Codex SDK integration with the same command on Linux,
+macOS, and Windows:
+
+```bash
+npm run start:codex
+```
+
+This path uses the local Codex authentication already configured on the machine.
+Codex remains cognitive-only and read-only; physical mutations continue through
+the governed Surgical DevOps adapters.
+
 The compatibility executable `surgical` is also provided. To run the suite:
 
 On first launch in a human terminal, bilingual onboarding selects one of the

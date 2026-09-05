@@ -168,6 +168,11 @@ test('canonical CLI exposes a single explicit Codex selector', () => {
   assert.match(source, /--codex\s+Use Codex SDK cognition/);
   assert.match(source, /codex:\s*options\.codex === true/);
   assert.doesNotMatch(source, /CODEX_API_KEY|OPENAI_API_KEY/);
+  const packageDefinition = require('../../package.json');
+  assert.equal(
+    packageDefinition.scripts['start:codex'],
+    'node accelerator/cli/surgical.js --interaction NATURAL --codex'
+  );
 });
 
 test('Codex SDK adapter source exposes no direct filesystem or publication authority', () => {
