@@ -507,7 +507,7 @@ test(
           ) {
             assert.match(
               history[1],
-              /TARGET: README_EN\.md/
+              /TARGET: README\.md/
             );
             return respondDecision(
               'The project is grounded in governed evidence.'
@@ -522,12 +522,12 @@ test(
           ) {
             return gitEvidence([
               'README.md',
-              'README_EN.md'
+              'README_PT-BR.md'
             ]);
           }
 
           return fileEvidence(
-            'README_EN.md',
+            'README.md',
             '# Surgical DevOps\n' +
               'x'.repeat(5000)
           );
@@ -540,7 +540,7 @@ test(
     );
     assert.equal(
       dispatched[1].target,
-      'README_EN.md'
+      'README.md'
     );
     assert.ok(
       result.evidence[1].summary.length <

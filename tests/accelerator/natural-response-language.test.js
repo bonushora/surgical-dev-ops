@@ -26,7 +26,7 @@ test(
     );
     assert.equal(
       detectNaturalResponseLanguage(
-        'Analyze the file README_EN.md'
+        'Analyze the file README.md'
       ),
       'en'
     );

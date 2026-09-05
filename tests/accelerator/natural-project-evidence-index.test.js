@@ -25,7 +25,7 @@ const binding = (overrides = {}) => Object.freeze({
 
 const query = (overrides = {}) => Object.freeze({
   ...binding(),
-  target: 'README_EN.md',
+  target: 'README.md',
   freshPhysicalObservationRequired: false,
   ...overrides
 });
@@ -34,7 +34,7 @@ function populated() {
   const index = createNaturalProjectEvidenceIndex(binding());
   const content = 'Governed project description.\n';
   const entry = createNaturalProjectEvidenceEntry(index, {
-    target: 'README_EN.md',
+    target: 'README.md',
     content,
     contentSha256: digest(content),
     bytes: Buffer.byteLength(content),
@@ -50,7 +50,7 @@ test('commit-bound index reuses exact governed project evidence at zero physical
   assert.equal(result.status, 'HIT');
   assert.equal(result.physicalReadRequired, false);
   assert.equal(result.evidenceCost, 'INDEX_REUSE');
-  assert.equal(result.entry.target, 'README_EN.md');
+  assert.equal(result.entry.target, 'README.md');
   assert.match(result.entry.content, /Governed project/);
   assert.equal(result.operationalAuthority, false);
   assert.equal(result.mutationAuthority, false);
@@ -117,7 +117,7 @@ test('replacement is immutable deterministic and bounded to one canonical target
   const first = populated();
   const content = 'Replacement governed description.\n';
   const replacement = createNaturalProjectEvidenceEntry(first, {
-    target: 'README_EN.md', content, contentSha256: digest(content),
+    target: 'README.md', content, contentSha256: digest(content),
     bytes: Buffer.byteLength(content), observedAt: '2026-08-25T16:01:00.000Z'
   });
   const second = admitNaturalProjectEvidence(first, replacement);

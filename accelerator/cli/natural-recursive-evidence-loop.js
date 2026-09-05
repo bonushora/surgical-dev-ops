@@ -75,11 +75,9 @@ const PROJECT_GROUNDING_TARGETS =
   Object.freeze({
     'pt-BR': Object.freeze([
     'README.md',
-    'README_PT-BR.md',
-    'README_EN.md'
+    'README_PT-BR.md'
     ]),
     en: Object.freeze([
-      'README_EN.md',
       'README.md',
       'README_PT-BR.md'
     ])

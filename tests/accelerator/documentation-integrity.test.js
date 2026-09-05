@@ -60,7 +60,6 @@ test('international documentation has no unresolved local Markdown targets', () 
   const files = [
     'README.md',
     'README_PT-BR.md',
-    'README_EN.md',
     'docs/AI_PROVIDER_SELECTION.md',
     'docs/AI_PROVIDER_SELECTION_PT-BR.md',
     'docs/ENGINEERING_EVIDENCE.md',
@@ -150,7 +149,7 @@ test('manual NATURAL acceptance preserves equivalent English and Portuguese reco
 test('npm package preserves both public languages and no reconstruction artifact', () => {
   const packageDefinition = JSON.parse(read('package.json'));
   assert.ok(packageDefinition.files.includes('README.md'));
-  assert.ok(packageDefinition.files.includes('README_EN.md'));
+  assert.equal(packageDefinition.files.includes('README_EN.md'), false);
   assert.ok(packageDefinition.files.includes('README_PT-BR.md'));
   assert.ok(packageDefinition.files.includes('SECURITY.md'));
   assert.ok(packageDefinition.files.includes('docs/'));

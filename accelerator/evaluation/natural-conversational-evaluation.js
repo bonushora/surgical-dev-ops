@@ -224,7 +224,7 @@ function canonicalScenarios() {
       language:
         'en',
       requiredEvidenceTarget:
-        'README_EN.md',
+        'README.md',
       requiredConcepts: [
         'Surgical DevOps',
         'Orchestrator',
@@ -253,7 +253,7 @@ function canonicalScenarios() {
       language:
         'en',
       requiredEvidenceTarget:
-        'README_EN.md',
+        'README.md',
       requiredConcepts: [
         'Surgical DevOps',
         'Orchestrator',

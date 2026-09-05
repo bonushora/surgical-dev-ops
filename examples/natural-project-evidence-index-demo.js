@@ -19,13 +19,13 @@ const binding = Object.freeze({
 
 let index = createNaturalProjectEvidenceIndex(binding);
 index = admitNaturalProjectEvidence(index, createNaturalProjectEvidenceEntry(index, {
-  target: 'README_EN.md', content, contentSha256: hash(content),
+  target: 'README.md', content, contentSha256: hash(content),
   bytes: Buffer.byteLength(content), observedAt: '2026-08-25T16:00:00.000Z'
 }));
 
 const result = lookupNaturalProjectEvidence(index, {
   ...binding,
-  target: 'README_EN.md',
+  target: 'README.md',
   freshPhysicalObservationRequired: false
 });
 

@@ -119,7 +119,7 @@ test(
     );
     assert.equal(
       scenarios[1].requiredEvidenceTarget,
-      'README_EN.md'
+      'README.md'
     );
     assert.equal(
       scenarios.every(Object.isFrozen),
@@ -414,7 +414,7 @@ test(
       oneScenario({
         language: 'en',
         requiredEvidenceTarget:
-          'README_EN.md',
+          'README.md',
         requiredConcepts: [
           'Surgical DevOps',
           'authority'

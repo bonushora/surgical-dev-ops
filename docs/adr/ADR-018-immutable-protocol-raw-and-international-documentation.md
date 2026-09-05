@@ -17,9 +17,10 @@ protocol authority.
 
 ## 2. Decision
 
-The default `README.md` is English. `README_PT-BR.md` is the equivalent
-Portuguese public entry point. `README_EN.md` is a full English mirror of
-`README.md`, retained as a compatibility path.
+The default `README.md` is the only English public entry point. `README_PT-BR.md`
+is the canonical Portuguese public entry point. The `README_EN.md` compatibility
+path was explicitly retired by decision and must not be restored; this decision
+does not affect the immutable protocol RAW artifacts below.
 
 The following original Portuguese protocol artifacts are immutable:
 
