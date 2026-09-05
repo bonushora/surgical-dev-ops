@@ -490,6 +490,7 @@ Options:
   --version              Show version / Mostrar versão
   --interaction <mode>   Select / Selecionar NATURAL, ENGINEER or EXPERT
   --language <language>  Select / Selecionar en or pt-BR
+  --codex                Use Codex SDK cognition / Usar cognição Codex SDK
   --configure            Configure and persist / Configurar e persistir
 `
   );
@@ -1174,6 +1175,15 @@ function createInteractiveSession(
         ? createNaturalCognitiveSession({
             fetchImplementation:
               options.fetchImplementation,
+
+            codex:
+              options.codex === true
+                ? {
+                    enabled: true,
+                    workingDirectory: activation.repositoryPath,
+                    ...(options.codexOptions || {})
+                  }
+                : null,
 
             assistanceContext,
 
@@ -4054,6 +4064,11 @@ async function main(
       language
     );
 
+  const codex = argv.includes('--codex');
+  if (codex && !['NATURAL', 'ENGINEER'].includes(activation.interactionMode.mode)) {
+    throw new Error('--codex requires NATURAL or ENGINEER interaction mode.');
+  }
+
   /*
    * Best-effort privacy-preserving telemetry.
    * Delivery outcome never participates in
@@ -4078,7 +4093,8 @@ async function main(
         process.env.SDO_NATURAL_MISSION_STATE_ROOT ||
         null,
       patchOptions:
-        patchOptionsFromEnvironment()
+        patchOptionsFromEnvironment(),
+      codex
     }
   );
 }

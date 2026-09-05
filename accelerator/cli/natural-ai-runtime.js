@@ -41,6 +41,11 @@ const {
 } = require('../adapters/openai-frontier-ai-provider-adapter');
 
 const {
+  CODEX_SDK_PROVIDER_ID,
+  createCodexSDKAIProviderAdapter
+} = require('../adapters/codex-sdk-ai-provider-adapter');
+
+const {
   OPENAI_FRONTIER_PROFILE
 } = require('./natural-frontier-provider-registry');
 
@@ -250,6 +255,46 @@ function createNaturalOpenAIComposition(input = {}) {
   });
 }
 
+function createNaturalCodexComposition(input = {}) {
+  const adapter = createCodexSDKAIProviderAdapter(input);
+  const providerId = CODEX_SDK_PROVIDER_ID;
+  const providerPort = createAIProviderPort({
+    providerId,
+    capabilities: AI_CAPABILITIES
+  });
+  const selector = createAIProviderSelector({ providers: [{ providerId }] });
+  const executionSeam = createAIProviderExecutionSeam({
+    providerId,
+    invoke: async (request) => Object.freeze({
+      schema: 'sdo.ai_cognitive_result.v1',
+      requestId: request.requestId,
+      requestFingerprint: request.fingerprint,
+      providerId: request.providerId,
+      capability: request.capability,
+      status: 'COMPLETED',
+      output: await adapter.invoke(request)
+    })
+  });
+  const runtime = createGovernedAIRuntime({
+    selector,
+    providerPorts: { [providerId]: providerPort },
+    executionSeams: { [providerId]: executionSeam }
+  });
+  return Object.freeze({
+    schema: 'sdo.natural_codex_ai_composition.v1',
+    providerId,
+    provider: 'OpenAI Codex SDK',
+    model: adapter.model,
+    local: true,
+    configured: true,
+    operationalAuthority: false,
+    mutationAuthority: false,
+    publicationAuthority: false,
+    runtime,
+    currentThreadId: adapter.currentThreadId
+  });
+}
+
 async function invokeNaturalCognitive(
   composition,
   input
@@ -258,7 +303,8 @@ async function invokeNaturalCognitive(
     !composition ||
     ![
       'sdo.natural_local_ai_composition.v1',
-      'sdo.natural_openai_ai_composition.v1'
+      'sdo.natural_openai_ai_composition.v1',
+      'sdo.natural_codex_ai_composition.v1'
     ].includes(composition.schema) ||
     !Object.isFrozen(composition) ||
     composition.operationalAuthority !==
@@ -303,5 +349,6 @@ async function invokeNaturalCognitive(
 module.exports = Object.freeze({
   createNaturalLocalAIComposition,
   createNaturalOpenAIComposition,
+  createNaturalCodexComposition,
   invokeNaturalCognitive
 });

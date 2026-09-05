@@ -12,6 +12,7 @@ const {
 const {
   createNaturalLocalAIComposition,
   createNaturalOpenAIComposition,
+  createNaturalCodexComposition,
   invokeNaturalCognitive
 } = require(
   './natural-ai-runtime'
@@ -291,6 +292,22 @@ function remoteDiscovery(state, reason, available = false) {
   });
 }
 
+function codexDiscovery(state, reason, available = false, model = null) {
+  return Object.freeze({
+    schema: 'sdo.natural_provider_discovery.v1',
+    providerId: 'openai:codex-sdk',
+    provider: 'OpenAI Codex SDK',
+    model: model || 'configured-default',
+    local: true,
+    available,
+    active: state === 'ACTIVE',
+    cognitiveAuthority: true,
+    operationalAuthority: false,
+    state,
+    reason
+  });
+}
+
 function projectLocalDiscovery(discovery, selected = false) {
   const providerState =
     deriveProviderState(
@@ -357,6 +374,28 @@ function createNaturalCognitiveSession(
   let statePromise = null;
 
   async function initialize() {
+    if (input.codex && input.codex.enabled === true) {
+      try {
+        const composition = createNaturalCodexComposition(input.codex);
+        return Object.freeze({
+          discovery: codexDiscovery(
+            'ACTIVE',
+            'Codex SDK is selected behind the governed cognitive boundary.',
+            true,
+            composition.model
+          ),
+          composition
+        });
+      } catch {
+        return Object.freeze({
+          discovery: codexDiscovery(
+            'CONFIGURATION_REQUIRED',
+            'Codex SDK configuration is unavailable.'
+          ),
+          composition: null
+        });
+      }
+    }
     const discovered =
       await discoverNaturalDefaultProvider({
         fetchImplementation,
