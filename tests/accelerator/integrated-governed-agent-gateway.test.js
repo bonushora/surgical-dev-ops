@@ -432,11 +432,11 @@ test('local deterministic fast path avoids provider calls and keeps deterministi
   }
 });
 
-test('streaming emits first useful progress before long operation completion', async () => {
+test('streaming never anticipates a pending operation and reuses its canonical mission events', async () => {
   const root = fixture();
   try {
     const current = mission(root);
-    const currentRequest = request(current, 'mission.status');
+    const currentRequest = request(current, 'workspace.status');
     let resolveOperation;
     let operationCompleted = false;
     const pending = new Promise((resolve) => {
@@ -445,23 +445,35 @@ test('streaming emits first useful progress before long operation completion', a
       operationCompleted = true;
       return value;
     });
-    const values = [1, 2];
     const iterator = gateway.streamGatewayRequest({
       request: currentRequest,
       mission: current,
-      options: { monotonicMs: () => values.shift() || 2 },
       execute: () => pending
     });
-    const first = await iterator.next();
-    assert.equal(first.value.done, false);
-    assert.equal(first.value.event.type, 'OPERATION_STARTED');
+    let firstSettled = false;
+    const pendingFirst = iterator.next().then((item) => {
+      firstSettled = true;
+      return item;
+    });
+    await new Promise((resolve) => setImmediate(resolve));
+    assert.equal(firstSettled, false);
     assert.equal(operationCompleted, false);
 
-    resolveOperation(dispatch(current, 'mission.status'));
+    resolveOperation(dispatch(current, 'workspace.status'));
+    const first = await pendingFirst;
+    assert.equal(first.value.done, false);
+    assert.equal(first.value.event.type, 'OPERATION_STARTED');
+    assert.equal(first.value.event.schema, 'sdo.natural_agentic_mission_event.v1');
+    assert.equal(operationCompleted, true);
+
     const second = await iterator.next();
-    assert.equal(second.value.done, true);
+    assert.equal(second.value.done, false);
     assert.equal(second.value.event.type, 'OPERATION_COMPLETED');
-    assert.equal(second.value.dispatch.result.classification, 'SUCCESS');
+
+    const completed = await iterator.next();
+    assert.equal(completed.value.done, true);
+    assert.equal(completed.value.event, null);
+    assert.equal(completed.value.dispatch.result.classification, 'SUCCESS');
   } finally {
     fs.rmSync(root, { recursive: true, force: true });
   }

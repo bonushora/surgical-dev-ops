@@ -33,6 +33,18 @@ const {
 } = require('../adapters/ollama-local-transport');
 
 const {
+  createOpenAIResponsesTransport
+} = require('../adapters/openai-responses-transport');
+
+const {
+  createOpenAIFrontierAIProviderAdapter
+} = require('../adapters/openai-frontier-ai-provider-adapter');
+
+const {
+  OPENAI_FRONTIER_PROFILE
+} = require('./natural-frontier-provider-registry');
+
+const {
   requireQualifiedLocalModel
 } = require(
   './natural-qualified-model-registry'
@@ -186,14 +198,68 @@ function createNaturalLocalAIComposition(
   });
 }
 
+function createNaturalOpenAIComposition(input = {}) {
+  const transport = input.transport ||
+    (typeof input.fetchImplementation === 'function' &&
+      typeof input.credentialProvider === 'function'
+      ? createOpenAIResponsesTransport({
+          fetchImplementation: input.fetchImplementation,
+          credentialProvider: input.credentialProvider
+        }).invoke
+      : null);
+
+  if (typeof transport !== 'function') {
+    throw new Error('Qualified OpenAI transport and credential boundary are required.');
+  }
+
+  const providerId = OPENAI_FRONTIER_PROFILE.providerId;
+  const providerPort = createAIProviderPort({
+    providerId,
+    capabilities: AI_CAPABILITIES
+  });
+  const selector = createAIProviderSelector({ providers: [{ providerId }] });
+  const adapter = createOpenAIFrontierAIProviderAdapter({ transport });
+  const executionSeam = createAIProviderExecutionSeam({
+    providerId,
+    invoke: async (request) => Object.freeze({
+      schema: 'sdo.ai_cognitive_result.v1',
+      requestId: request.requestId,
+      requestFingerprint: request.fingerprint,
+      providerId: request.providerId,
+      capability: request.capability,
+      status: 'COMPLETED',
+      output: await adapter.invoke(request)
+    })
+  });
+  const runtime = createGovernedAIRuntime({
+    selector,
+    providerPorts: { [providerId]: providerPort },
+    executionSeams: { [providerId]: executionSeam }
+  });
+
+  return Object.freeze({
+    schema: 'sdo.natural_openai_ai_composition.v1',
+    providerId,
+    provider: OPENAI_FRONTIER_PROFILE.provider,
+    model: OPENAI_FRONTIER_PROFILE.model,
+    local: false,
+    configured: true,
+    operationalAuthority: false,
+    mutationAuthority: false,
+    runtime
+  });
+}
+
 async function invokeNaturalCognitive(
   composition,
   input
 ) {
   if (
     !composition ||
-    composition.schema !==
-      'sdo.natural_local_ai_composition.v1' ||
+    ![
+      'sdo.natural_local_ai_composition.v1',
+      'sdo.natural_openai_ai_composition.v1'
+    ].includes(composition.schema) ||
     !Object.isFrozen(composition) ||
     composition.operationalAuthority !==
       false ||
@@ -236,5 +302,6 @@ async function invokeNaturalCognitive(
 
 module.exports = Object.freeze({
   createNaturalLocalAIComposition,
+  createNaturalOpenAIComposition,
   invokeNaturalCognitive
 });

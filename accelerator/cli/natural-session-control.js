@@ -29,6 +29,14 @@ const {
   isEnglish
 } = require('./human-language');
 
+const {
+  PROVIDER_INTENTS,
+  PROVIDER_CATALOG,
+  resolveNaturalProviderIntent
+} = require(
+  './natural-provider-activation-coordinator'
+);
+
 function normalize(value) {
   return String(value || '')
     .normalize('NFD')
@@ -49,6 +57,685 @@ function includesAny(
     (pattern) =>
       text.includes(pattern)
   );
+}
+
+function naturalSemanticTokens(value) {
+  return new Set(
+    normalize(value)
+      .replace(/[^a-z0-9_./-]+/g, ' ')
+      .split(' ')
+      .filter(Boolean)
+  );
+}
+
+function isWeakNaturalEngineeringDeictic(tokens) {
+  const hasAny = (...concepts) =>
+    concepts.some(
+      (concept) => tokens.has(concept)
+    );
+  const deictic =
+    hasAny(
+      'isso',
+      'isto',
+      'este',
+      'esta',
+      'esse',
+      'essa',
+      'aquele',
+      'aquilo',
+      'this',
+      'that',
+      'it',
+      'those'
+    );
+  const explicitEngineeringObject =
+    hasAny(
+      'projeto',
+      'project',
+      'repositorio',
+      'repository',
+      'workspace',
+      'arquivo',
+      'file',
+      'funcao',
+      'function',
+      'codigo',
+      'code',
+      'arquitetura',
+      'architecture'
+    );
+
+  return (
+    deictic &&
+    !explicitEngineeringObject
+  );
+}
+
+function resolveNaturalEngineeringReferenceIntent(value) {
+  const objective =
+    String(value || '').trim();
+  const tokens =
+    naturalSemanticTokens(
+      objective
+    );
+  const hasAny = (...concepts) =>
+    concepts.some(
+      (concept) => tokens.has(concept)
+    );
+
+  const evidence =
+    hasAny(
+      'evidencia',
+      'evidence',
+      'prova',
+      'proof'
+    );
+  const changes =
+    hasAny(
+      'mudancas',
+      'mudaram',
+      'mudou',
+      'modificados',
+      'modificadas',
+      'alteracoes',
+      'alterados',
+      'alteradas',
+      'changed',
+      'changes',
+      'modified'
+    );
+  const contextual =
+    hasAny(
+      'e',
+      'essas',
+      'esses',
+      'essas',
+      'those',
+      'these',
+      'about'
+    );
+  const weakDeictic =
+    isWeakNaturalEngineeringDeictic(
+      tokens
+    );
+  const repeat =
+    hasAny(
+      'novamente',
+      'outra',
+      'again',
+      'repeat',
+      'repita'
+    );
+  const mutation =
+    hasAny(
+      'corrija',
+      'corrigir',
+      'conserte',
+      'resolva',
+      'resolver',
+      'fix',
+      'repair',
+      'solve'
+    );
+  const publication =
+    hasAny(
+      'publique',
+      'publicar',
+      'publish'
+    );
+  const operation =
+    hasAny(
+      'operacao',
+      'operation'
+    );
+  const result =
+    hasAny(
+      'resultado',
+      'result'
+    );
+  const failure =
+    hasAny(
+      'falhou',
+      'falha',
+      'erro',
+      'failed',
+      'failure',
+      'error'
+    );
+  const test =
+    hasAny(
+      'teste',
+      'test'
+    );
+  const planStep =
+    hasAny(
+      'etapa',
+      'step'
+    ) &&
+    hasAny(
+      'atual',
+      'current'
+    );
+  const recommendation =
+    hasAny(
+      'recomendacao',
+      'recomendou',
+      'recommendation',
+      'recommended'
+    );
+  const checkpoint =
+    hasAny(
+      'checkpoint'
+    );
+  const patch =
+    hasAny(
+      'patch'
+    );
+  const last =
+    hasAny(
+      'ultimo',
+      'ultima',
+      'last'
+    );
+  const happened =
+    hasAny(
+      'aconteceu',
+      'ocorreu',
+      'happened'
+    );
+
+  let referenceType = null;
+  let referenceAction =
+    'INSPECT_EVIDENCE';
+
+  if (
+    mutation &&
+    (
+      weakDeictic ||
+      hasAny('tente', 'try', 'teste', 'test', 'testar')
+    )
+  ) {
+    referenceType = weakDeictic ? 'DEICTIC' : 'LAST_FAILURE';
+    referenceAction = 'REQUEST_MUTATION';
+  } else if (publication && weakDeictic) {
+    referenceType = 'DEICTIC';
+    referenceAction = 'REQUEST_PUBLICATION';
+  } else if (evidence) {
+    referenceType = 'LAST_EVIDENCE';
+  } else if (changes && contextual) {
+    referenceType = 'CURRENT_DIFF';
+    referenceAction = 'REPEAT_OPERATION';
+  } else if (repeat) {
+    referenceType = 'LAST_OPERATION';
+    referenceAction = 'REPEAT_OPERATION';
+  } else if (
+    failure &&
+    (
+      last ||
+      weakDeictic ||
+      hasAny('que', 'what', 'why', 'por')
+    )
+  ) {
+    referenceType = 'LAST_FAILURE';
+  } else if (
+    test &&
+    (
+      last ||
+      weakDeictic
+    )
+  ) {
+    referenceType = 'LAST_TEST';
+  } else if (planStep) {
+    referenceType = 'CURRENT_PLAN_STEP';
+    referenceAction = 'PROJECT_REFERENCE';
+  } else if (
+    recommendation &&
+    (
+      last ||
+      hasAny('faca', 'do')
+    )
+  ) {
+    referenceType = 'LAST_RECOMMENDATION';
+    referenceAction = 'PROJECT_REFERENCE';
+  } else if (checkpoint) {
+    referenceType = 'CURRENT_CHECKPOINT';
+    referenceAction = 'PROJECT_REFERENCE';
+  } else if (patch && last) {
+    referenceType = 'LAST_PATCH';
+  } else if (
+    (
+      operation &&
+      (
+        happened ||
+        weakDeictic
+      )
+    ) ||
+    (result && last)
+  ) {
+    referenceType = 'LAST_OPERATION';
+  } else if (
+    weakDeictic &&
+    hasAny(
+      'mostre',
+      'mostrar',
+      'explique',
+      'explicar',
+      'show',
+      'explain',
+      'what',
+      'e'
+    )
+  ) {
+    referenceType = 'DEICTIC';
+  }
+
+  if (!referenceType) {
+    return null;
+  }
+
+  const operationForReference =
+    referenceType === 'CURRENT_DIFF'
+      ? 'workspace.diff'
+      : referenceAction === 'PROJECT_REFERENCE'
+        ? null
+        : 'evidence.inspect';
+
+  return Object.freeze({
+    operation:
+      operationForReference,
+    args: Object.freeze({}),
+    objective,
+    referenceType,
+    referenceAction,
+    requiresMissionContext: true,
+    readOnly:
+      ![
+        'REQUEST_MUTATION',
+        'REQUEST_PUBLICATION'
+      ].includes(referenceAction),
+    authorityExpansion: false,
+    operationalAuthority: false,
+    mutationAuthority: false,
+    publicationAuthority: false
+  });
+}
+
+function resolveNaturalGatewayIntent(value) {
+  const objective =
+    String(value || '').trim();
+
+  const referenceIntent =
+    resolveNaturalEngineeringReferenceIntent(
+      objective
+    );
+
+  if (referenceIntent) {
+    return referenceIntent;
+  }
+
+  const tokens =
+    naturalSemanticTokens(
+      objective
+    );
+
+  const hasAny = (...concepts) =>
+    concepts.some(
+      (concept) => tokens.has(concept)
+    );
+
+  const engineeringScope =
+    hasAny(
+      'projeto',
+      'project',
+      'repositorio',
+      'repository',
+      'workspace'
+    );
+
+  const statusConcept =
+    hasAny(
+      'estado',
+      'status',
+      'situacao',
+      'state'
+    );
+
+  const analyticalScope =
+    hasAny(
+      'explique',
+      'explicar',
+      'explain',
+      'identifique',
+      'identificar',
+      'identify',
+      'proximo',
+      'next',
+      'recomende',
+      'recommend'
+    );
+
+  const changedConcept =
+    hasAny(
+      'mudaram',
+      'mudou',
+      'modificados',
+      'modificadas',
+      'alterados',
+      'alteradas',
+      'changed',
+      'modified',
+      'changes'
+    );
+
+  let operation = null;
+
+  if (
+    engineeringScope &&
+    statusConcept &&
+    !analyticalScope
+  ) {
+    operation = 'workspace.status';
+  } else if (changedConcept) {
+    operation = 'workspace.diff';
+  }
+
+  if (!operation) {
+    return null;
+  }
+
+  return Object.freeze({
+    operation,
+    args: Object.freeze({}),
+    objective,
+    requiresMissionContext: false,
+    readOnly: true,
+    authorityExpansion: false,
+    operationalAuthority: false,
+    mutationAuthority: false,
+    publicationAuthority: false
+  });
+}
+
+function resolveNaturalMissionControlIntent(value) {
+  const tokens = naturalSemanticTokens(value);
+  const hasAny = (...concepts) => concepts.some((concept) => tokens.has(concept));
+  const hasAll = (...concepts) => concepts.every((concept) => tokens.has(concept));
+
+  const resume =
+    hasAny('retome', 'retomar', 'resume') &&
+    hasAny('missao', 'mission');
+  if (resume) {
+    return Object.freeze({
+      action: 'MISSION_RESUME'
+    });
+  }
+
+  const continuationAuthorityQuestion =
+    hasAny('continue', 'continuar') &&
+    hasAny('pode', 'can') &&
+    hasAny('sem', 'without') &&
+    hasAny('mim', 'me');
+  const authorityQuestion =
+    hasAny('autoridade', 'autorizacao', 'authority', 'authorization') &&
+    hasAny('que', 'qual', 'what', 'which') &&
+    hasAny('tem', 'have');
+  if (continuationAuthorityQuestion || authorityQuestion) {
+    return Object.freeze({
+      action: 'MISSION_PROJECTION',
+      projection: 'authority'
+    });
+  }
+
+  const explicitContinuation =
+    hasAny('continue', 'continuar') ||
+    hasAll('keep', 'going');
+  const boundedCompletion =
+    hasAny('faca', 'do') &&
+    hasAny('necessario', 'necessaria', 'necessary') &&
+    hasAny('concluir', 'complete');
+  const continuation =
+    (explicitContinuation || boundedCompletion) &&
+    !hasAny('nao', 'not', 'stop', 'pare', 'help', 'ajuda') &&
+    !hasAll('don', 't');
+
+  if (continuation) {
+    return Object.freeze({
+      action: 'MISSION_CONTINUE'
+    });
+  }
+
+  const activityQuestion =
+    hasAny('acontecendo', 'happening') ||
+    (
+      hasAny('acabou', 'just') &&
+      hasAny('acontecer', 'aconteceu', 'happened')
+    ) ||
+    (
+      hasAny('operacao', 'operation') &&
+      hasAny('terminou', 'terminada', 'finish', 'finished')
+    ) ||
+    (
+      hasAny('parou', 'stop', 'stopped') &&
+      hasAny('por', 'why')
+    );
+
+  if (activityQuestion) {
+    return Object.freeze({
+      action: 'MISSION_PROJECTION',
+      projection: 'activity'
+    });
+  }
+
+  const changeQuestion =
+    hasAny(
+      'mudou',
+      'mudei',
+      'alterou',
+      'modificou',
+      'change',
+      'changed',
+      'modify',
+      'modified'
+    ) &&
+    hasAny('que', 'quais', 'what', 'which') &&
+    hasAny('voce', 'you');
+
+  if (changeQuestion) {
+    return Object.freeze({
+      action: 'MISSION_PROJECTION',
+      projection: 'changes'
+    });
+  }
+
+  const failedTestQuestion =
+    hasAny('teste', 'test') &&
+    hasAny('falhou', 'falha', 'failed', 'fail') &&
+    hasAny('por', 'why');
+
+  if (failedTestQuestion) {
+    return Object.freeze({
+      action: 'MISSION_PROJECTION',
+      projection: 'tests'
+    });
+  }
+
+  const testStateQuestion =
+    hasAny('teste', 'testes', 'test', 'tests') &&
+    hasAny('estado', 'status', 'state');
+
+  if (testStateQuestion) {
+    return Object.freeze({
+      action: 'MISSION_PROJECTION',
+      projection: 'tests'
+    });
+  }
+
+  const redQuestion =
+    hasAny('vermelho', 'red') &&
+    hasAny('que', 'what');
+
+  if (redQuestion) {
+    return Object.freeze({
+      action: 'MISSION_PROJECTION',
+      projection: 'plan'
+    });
+  }
+
+  const statusQuestion =
+    (
+      hasAny('fazendo', 'doing') &&
+      hasAny('voce', 'you')
+    ) ||
+    (hasAny('objetivo', 'objective') && hasAny('atual', 'current')) ||
+    (
+      hasAny('missao', 'mission') &&
+      hasAny('estado', 'status', 'state')
+    );
+
+  if (statusQuestion) {
+    return Object.freeze({
+      action: 'MISSION_PROJECTION',
+      projection: 'status'
+    });
+  }
+
+  const planQuestion =
+    hasAny('plano', 'plan') ||
+    (hasAny('etapa', 'step') && hasAny('atual', 'current')) ||
+    hasAll('proximo', 'passo') ||
+    hasAll('next', 'step') ||
+    (
+      hasAny('next') &&
+      hasAny('what', 'qual', 'whats')
+    ) ||
+    (
+      hasAny(
+        'concluido',
+        'concluida',
+        'concluidos',
+        'concluidas',
+        'completed',
+        'remains'
+      ) &&
+      hasAny('que', 'what')
+    ) ||
+    (
+      hasAny(
+        'bloqueio',
+        'bloqueado',
+        'bloqueada',
+        'bloqueados',
+        'bloqueadas',
+        'blocked'
+      ) &&
+      hasAny(
+        'ha',
+        'algum',
+        'algo',
+        'anything',
+        'you',
+        'voce',
+        'mission',
+        'missao'
+      )
+    ) ||
+    (hasAny('falta', 'faltam') && hasAny('que', 'what'));
+
+  if (planQuestion) {
+    return Object.freeze({
+      action: 'MISSION_PROJECTION',
+      projection: 'plan'
+    });
+  }
+
+  return null;
+}
+
+function naturalHelpRequest(topic, subjects = []) {
+  return Object.freeze({
+    matched: true,
+    action: 'HELP_REQUEST',
+    topic,
+    subjects: Object.freeze([...subjects]),
+    observational: true,
+    authorityExpansion: false,
+    operationalAuthority: false,
+    mutationAuthority: false,
+    approvalAuthority: false,
+    dispatchAuthority: false,
+    publicationAuthority: false
+  });
+}
+
+function resolveNaturalHelpRequest(value) {
+  const text = normalize(value);
+  if (!text) return null;
+
+  const tokens = naturalSemanticTokens(value);
+  const hasAny = (...concepts) => concepts.some((concept) => tokens.has(concept));
+  const startsAsHelp =
+    text === 'help' ||
+    text === 'ajuda' ||
+    text.startsWith('help ') ||
+    text.startsWith('ajuda ');
+  const authority = hasAny(
+    'autoridade',
+    'autorizacao',
+    'authority',
+    'authorization',
+    'approval'
+  );
+  const subjects = [];
+  if (tokens.has('commit')) subjects.push('git.commit');
+  if (tokens.has('push')) subjects.push('git.push');
+
+  if (
+    (startsAsHelp && subjects.length > 0) ||
+    (authority && subjects.length > 0 && hasAny('permite', 'permitir', 'allow', 'allows', 'does'))
+  ) {
+    return naturalHelpRequest('AUTHORITY_SCOPE', subjects);
+  }
+
+  if (
+    authority &&
+    hasAny('por', 'porque', 'why') &&
+    hasAny('precisa', 'necessaria', 'necessario', 'need', 'needed', 'required')
+  ) {
+    return naturalHelpRequest('AUTHORITY_REASON');
+  }
+
+  const currentActions =
+    hasAny('agora', 'now') &&
+    (
+      (
+        hasAny('posso', 'pode', 'can') &&
+        hasAny('fazer', 'do')
+      ) ||
+      hasAny('disponivel', 'available')
+    );
+  if (currentActions) {
+    return naturalHelpRequest('CURRENT_ACTIONS');
+  }
+
+  const generalCapabilityQuestion =
+    startsAsHelp ||
+    includesAny(
+      text,
+      [
+        'o que voce pode fazer',
+        'o que voce consegue fazer',
+        'como voce pode me ajudar',
+        'como posso usar voce',
+        'como posso usar o surgical devops',
+        'what can you do',
+        'how can you help me',
+        'how can i use surgical devops'
+      ]
+    );
+
+  return generalCapabilityQuestion
+    ? naturalHelpRequest('GENERAL')
+    : null;
 }
 
 function isNaturalMissionCancellationRequest(value) {
@@ -133,6 +820,57 @@ function detectBoundedMutationRequest(text) {
     language: 'en',
     target: english[1],
     requestedValue: english[2]
+  });
+}
+
+function detectBoundedRepairLoopRequest(value) {
+  const text = normalize(value);
+  const tokens = naturalSemanticTokens(text);
+  const repair = [
+    'corrija', 'corrigir', 'repare', 'reparar', 'repair', 'fix'
+  ].some((item) => tokens.has(item));
+  const test = ['teste', 'testar', 'test'].some((item) => tokens.has(item));
+  const qualification = [
+    'qualifique', 'qualificacao', 'qualification', 'canonical'
+  ].some((item) => tokens.has(item));
+  if (!repair || !test || !qualification) return null;
+
+  const paths = [...text.matchAll(
+    /(?:^|\s)([a-z0-9_.-]+(?:\/[a-z0-9_.-]+)*\.js)(?=$|[\s,;])/g
+  )].map((match) => ({
+    value: match[1],
+    index: match.index + match[0].indexOf(match[1])
+  }));
+  if (paths.length < 3 || paths.length > 10) return null;
+
+  const marker = (values) => Math.max(
+    ...values.map((item) => text.lastIndexOf(item))
+  );
+  const testMarker = marker([' teste ', ' testar ', ' test ']);
+  const qualificationMarker = marker([
+    ' qualifique ', ' qualificacao ', ' qualification ', ' canonical '
+  ]);
+  if (testMarker < 0 || qualificationMarker < 0) return null;
+  const testPath = paths.find((item) => item.index > testMarker);
+  const qualificationPath = paths.find((item) => item.index > qualificationMarker);
+  if (!testPath || !qualificationPath || testPath.value === qualificationPath.value) {
+    return null;
+  }
+  const targets = paths
+    .map((item) => item.value)
+    .filter((item) => item !== testPath.value && item !== qualificationPath.value);
+  if (targets.length === 0 || new Set(targets).size !== targets.length) return null;
+
+  return Object.freeze({
+    objective: String(value || '').trim(),
+    allowedTargets: Object.freeze(targets),
+    testTarget: testPath.value,
+    qualificationTarget: qualificationPath.value,
+    attemptCeiling: Math.min(8, Math.max(2, targets.length)),
+    authorityExpansion: false,
+    operationalAuthority: false,
+    mutationAuthority: false,
+    publicationAuthority: false
   });
 }
 
@@ -245,6 +983,7 @@ function codexSetupGuide(language = 'pt-BR') {
     return (
       'Guided setup: OpenAI via API\n\n' +
       'The OpenAI Responses adapter is qualified, but it is never activated automatically.\n' +
+      'State: CONFIGURATION_REQUIRED.\n' +
       'A ChatGPT subscription and API usage are separate commercial relationships.\n\n' +
       'Before activation, Surgical DevOps must confirm current official terms, explain data exposure and costs, obtain explicit authorization, receive credentials only through the provider boundary, and verify compatibility.\n' +
       'Prices are not hardcoded. External charges are made by the provider, and Surgical DevOps receives no commission.\n\n' +
@@ -256,6 +995,7 @@ function codexSetupGuide(language = 'pt-BR') {
   return (
     'Configuração guiada: OpenAI via API\n\n' +
     'O adapter OpenAI Responses está qualificado, mas nunca é ativado automaticamente.\n' +
+    'Estado: CONFIGURATION_REQUIRED.\n' +
     'A assinatura do ChatGPT e o uso da API são relações comerciais distintas.\n\n' +
     'Para ativá-lo, seguirei estas etapas:\n' +
     '  1. confirmar explicitamente que você quer OpenAI via API;\n' +
@@ -282,15 +1022,19 @@ function formatProviderStatus(
   const english = isEnglish(language);
   if (
     discovery &&
-    discovery.available === true
+    discovery.available === true &&
+    discovery.active === true &&
+    discovery.state === 'ACTIVE'
   ) {
+    const execution = discovery.local === false ? 'remote' : 'local';
+    const state = discovery.state;
     if (english) {
       return (
         'Current cognitive assistant:\n' +
         `  Provider: ${discovery.provider}\n` +
         `  Model: ${discovery.model}\n` +
-        '  Execution: local\n' +
-        '  State: verified and available\n' +
+        `  Execution: ${execution}\n` +
+        `  State: ${state}\n` +
         '  Operational authority of the AI: none\n\n' +
         'Compatible providers may replace this model without changing governance.\n'
       );
@@ -300,11 +1044,13 @@ function formatProviderStatus(
       'Assistente cognitivo atual:\n' +
       `  Provider: ${discovery.provider}\n` +
       `  Modelo: ${discovery.model}\n` +
-      '  Execução: local\n' +
-      '  Aceleração: automática pelo Ollama (CPU/GPU)\n' +
-      '  Perfil: balanceado, contexto 4096, modelo aquecido por 10 minutos\n' +
-      '  Estado: verificado e disponível\n' +
-      '  Cobrança por chamada de API do Ollama local: não\n' +
+      `  Execução: ${execution}\n` +
+      (discovery.local === false ? '' : '  Aceleração: automática pelo Ollama (CPU/GPU)\n') +
+      (discovery.local === false ? '' : '  Perfil: balanceado, contexto 4096, modelo aquecido por 10 minutos\n') +
+      `  Estado: ${state}\n` +
+      (discovery.local === false
+        ? '  Custos: dependem dos termos atuais do provider externo\n'
+        : '  Cobrança por chamada de API do Ollama local: não\n') +
       '  Autoridade operacional da IA: nenhuma\n\n' +
       'Outros providers compatíveis podem substituir este modelo.\n' +
       'Providers externos podem cobrar diretamente conforme seus próprios planos e termos.\n' +
@@ -322,6 +1068,55 @@ function formatProviderStatus(
     'Assistente cognitivo local: indisponível ou não qualificado.\n' +
     'O modo determinístico continua disponível.\n' +
     'Nenhum provider externo será selecionado automaticamente.\n'
+      );
+}
+
+function formatProviderCatalog(states, language = 'pt-BR') {
+  if (!Array.isArray(states)) throw new Error('Provider states are required.');
+  const english = isEnglish(language);
+  const lines = states.map((item) =>
+    `  ${item.provider}/${item.model} — ${item.kind} — ${item.state}`
+  );
+  return (english ? 'Available cognitive providers:\n' : 'Providers cognitivos conhecidos:\n') +
+    lines.join('\n') + '\n' +
+    (english
+      ? 'No provider is activated from this list without physical validation.\n'
+      : 'Nenhum provider é ativado a partir desta lista sem validação física.\n');
+}
+
+function unsupportedProviderMessage(provider, language = 'pt-BR') {
+  return isEnglish(language)
+    ? `${provider} is recognized, but its adapter is not qualified. State: UNAVAILABLE. No provider was activated.\n`
+    : `${provider} é reconhecido, mas seu adapter ainda não é qualificado. Estado: UNAVAILABLE. Nenhum provider foi ativado.\n`;
+}
+
+function formatProviderAuthorityDenial(language = 'pt-BR') {
+  return isEnglish(language)
+    ? (
+        'Provider credential request denied.\n' +
+        'Surgical DevOps will not search the machine for credentials, reuse unrelated credentials, or expose credential material.\n' +
+        'Credentials may be received only through the explicit qualified provider boundary after the required authorization and configuration gates.\n' +
+        'No provider was activated and no authority was expanded.\n'
+      )
+    : (
+        'Solicitação de credencial de provider negada.\n' +
+        'O Surgical DevOps não procura credenciais na máquina, não reutiliza credenciais alheias e não expõe material de credencial.\n' +
+        'Credenciais só podem ser recebidas pelo boundary qualificado do provider após a autorização explícita e os gates de configuração obrigatórios.\n' +
+        'Nenhum provider foi ativado e nenhuma autoridade foi ampliada.\n'
+      );
+}
+
+function formatAmbiguousProviderRequest(language = 'pt-BR') {
+  return isEnglish(language)
+    ? (
+        'The provider request is ambiguous and failed closed.\n' +
+        'Specify one known provider and one action, such as "use qwen3:8b", "configure OpenAI", or "list providers".\n' +
+        'No provider was activated and no authority was expanded.\n'
+      )
+    : (
+        'A solicitação de provider é ambígua e falhou de forma segura.\n' +
+        'Informe um único provider conhecido e uma ação, por exemplo "usar qwen3:8b", "configurar OpenAI" ou "listar providers".\n' +
+        'Nenhum provider foi ativado e nenhuma autoridade foi ampliada.\n'
       );
 }
 
@@ -432,6 +1227,28 @@ function createNaturalSessionControl(
       });
     }
 
+    const naturalMissionControl =
+      resolveNaturalMissionControlIntent(input);
+
+    if (naturalMissionControl) {
+      const typedReference =
+        resolveNaturalEngineeringReferenceIntent(
+          input
+        );
+      return Object.freeze({
+        matched: true,
+        ...naturalMissionControl,
+        ...(typedReference
+          ? { intent: typedReference }
+          : {}),
+        readOnly: true,
+        authorityExpansion: false,
+        operationalAuthority: false,
+        mutationAuthority: false,
+        publicationAuthority: false
+      });
+    }
+
     if (
       text === '/resume' ||
       text === 'mission resume' ||
@@ -446,7 +1263,25 @@ function createNaturalSessionControl(
       });
     }
 
+    const helpRequest =
+      resolveNaturalHelpRequest(input);
+
+    if (helpRequest) {
+      return helpRequest;
+    }
+
     if (!pendingTask) {
+      const repairLoopRequest =
+        detectBoundedRepairLoopRequest(input);
+
+      if (repairLoopRequest) {
+        return Object.freeze({
+          matched: true,
+          action: 'REPAIR_LOOP_START',
+          request: repairLoopRequest
+        });
+      }
+
       const mutationRequest =
         detectBoundedMutationRequest(text);
 
@@ -513,6 +1348,31 @@ function createNaturalSessionControl(
         output: english
           ? 'An operation is waiting for your decision. Answer "yes" to authorize or "no" to cancel.\n'
           : 'Há uma operação aguardando sua decisão. Responda "sim" para autorizar ou "não" para cancelar.\n'
+      });
+    }
+
+    const gatewayIntent =
+      resolveNaturalGatewayIntent(
+        input
+      );
+
+    if (gatewayIntent) {
+      const referenceBoundary =
+        [
+          'REQUEST_MUTATION',
+          'REQUEST_PUBLICATION'
+        ].includes(
+          gatewayIntent.referenceAction
+        ) ||
+        gatewayIntent.operation === null;
+
+      return Object.freeze({
+        matched: true,
+        action:
+          referenceBoundary
+            ? 'REFERENCE_REQUEST'
+            : 'GATEWAY_REQUEST',
+        intent: gatewayIntent
       });
     }
 
@@ -644,31 +1504,6 @@ function createNaturalSessionControl(
     }
 
     if (
-      text === 'ajuda' ||
-      text === 'help' ||
-      includesAny(
-        text,
-        [
-          'o que voce pode fazer',
-          'como voce pode me ajudar',
-          'como posso usar voce',
-          'como posso usar o surgical devops',
-          'what can you do',
-          'how can you help me',
-          'how can i use surgical devops'
-        ]
-      )
-    ) {
-      return Object.freeze({
-        matched: true,
-        action:
-          'CONTINUE',
-        output:
-          naturalHelpMessage(language)
-      });
-    }
-
-    if (
       text === 'detalhes tecnicos' ||
       text === 'mostrar detalhes tecnicos' ||
       text === 'ver detalhes tecnicos' ||
@@ -682,121 +1517,117 @@ function createNaturalSessionControl(
       });
     }
 
-    if (
-      text === 'listar modelos' ||
-      text === 'modelos' ||
-      text === 'listar ias' ||
-      text === 'list models' ||
-      text === 'models' ||
-      text === 'list ais'
-    ) {
+    const providerIntent =
+      resolveNaturalProviderIntent(input);
+
+    if (providerIntent.matched) {
+      if (
+        providerIntent.intent ===
+          PROVIDER_INTENTS.QUERY_ACTIVE_PROVIDER
+      ) {
+        return Object.freeze({
+          matched: true,
+          action: 'PROVIDER_STATUS'
+        });
+      }
+
+      if (
+        providerIntent.intent ===
+          PROVIDER_INTENTS.LIST_PROVIDERS
+      ) {
+        return Object.freeze({
+          matched: true,
+          action: 'PROVIDER_LIST'
+        });
+      }
+
+      if (
+        providerIntent.intent ===
+          PROVIDER_INTENTS.PROVIDER_HELP
+      ) {
+        return Object.freeze({
+          matched: true,
+          action: 'CONTINUE',
+          output: providerSetupOverview(language)
+        });
+      }
+
+      if (
+        providerIntent.intent ===
+          PROVIDER_INTENTS.RETURN_TO_LOCAL ||
+        providerIntent.intent ===
+          PROVIDER_INTENTS.SELECT_LOCAL_PROVIDER
+      ) {
+        const profile =
+          PROVIDER_CATALOG[providerIntent.providerId];
+
+        return Object.freeze({
+          matched: true,
+          action: 'LOCAL_MODEL_SELECTION',
+          model: profile.model
+        });
+      }
+
+      if (
+        providerIntent.intent ===
+          PROVIDER_INTENTS.PROVIDER_AUTHORITY_DENIED
+      ) {
+        return Object.freeze({
+          matched: true,
+          action: 'CONTINUE',
+          output: formatProviderAuthorityDenial(language)
+        });
+      }
+
+      if (
+        providerIntent.intent ===
+          PROVIDER_INTENTS.AMBIGUOUS_PROVIDER_REQUEST
+      ) {
+        return Object.freeze({
+          matched: true,
+          action: 'CONTINUE',
+          output: formatAmbiguousProviderRequest(language)
+        });
+      }
+
+      if (
+        providerIntent.providerId ===
+          'openai:gpt-5.6'
+      ) {
+        return Object.freeze({
+          matched: true,
+          action: 'FRONTIER_PROVIDER_SETUP',
+          providerId: providerIntent.providerId,
+          output: codexSetupGuide(language)
+        });
+      }
+
+      if (
+        providerIntent.providerId ===
+          'anthropic:claude' ||
+        providerIntent.providerId ===
+          'google:gemini'
+      ) {
+        const profile =
+          PROVIDER_CATALOG[providerIntent.providerId];
+
+        return Object.freeze({
+          matched: true,
+          action: 'UNAVAILABLE_PROVIDER',
+          providerId: providerIntent.providerId,
+          output: unsupportedProviderMessage(
+            profile.model === 'claude'
+              ? 'Claude'
+              : 'Gemini',
+            language
+          )
+        });
+      }
+
       return Object.freeze({
         matched: true,
-        action:
-          'CONTINUE',
-        output:
-          providerSetupOverview(language)
-      });
-    }
-
-    if (
-      text === 'providers' ||
-      text === 'provedores' ||
-      includesAny(
-        text,
-        [
-          'qual ia esta ativa',
-          'qual ia esta sendo usada',
-          'qual provider esta ativo',
-          'qual provider esta sendo usado',
-          'qual e a ia atual',
-          'which ai is active',
-          'which provider is active',
-          'current ai provider'
-        ]
-      )
-    ) {
-      return Object.freeze({
-        matched: true,
-        action:
-          'PROVIDER_STATUS'
-      });
-    }
-
-    const localModelSelection =
-      text.match(
-        /^(?:usar|use|ativar|ative|selecionar|selecione) (qwen3(?::8b)?|qwen|gemma3(?::4b)?|gemma)$/
-      );
-
-    if (localModelSelection) {
-      const requested =
-        localModelSelection[1]
-          .startsWith('qwen')
-          ? 'qwen3:8b'
-          : 'gemma3:4b';
-
-      return Object.freeze({
-        matched: true,
-        action:
-          'LOCAL_MODEL_SELECTION',
-        model:
-          requested
-      });
-    }
-
-    if (
-      includesAny(
-        text,
-        [
-          'quero trocar de ia',
-          'quero trocar a ia',
-          'trocar de ia',
-          'trocar a ia',
-          'quero outra ia',
-          'conectar outra ia',
-          'usar outra ia',
-          'quais ias posso usar',
-          'quais providers posso usar',
-          'i want to switch ai providers',
-          'switch ai provider',
-          'use another ai',
-          'which providers can i use'
-        ]
-      )
-    ) {
-      return Object.freeze({
-        matched: true,
-        action:
-          'CONTINUE',
-        output:
-          providerSetupOverview(language)
-      });
-    }
-
-    if (
-      includesAny(
-        text,
-        [
-          'quero usar o codex',
-          'quero usar codex',
-          'usar o codex',
-          'usar codex',
-          'conectar codex',
-          'usar openai',
-          'quero usar openai',
-          'i want to use codex',
-          'use codex',
-          'connect codex',
-          'use openai',
-          'i want to use openai'
-        ]
-      )
-    ) {
-      return Object.freeze({
-        matched: true,
-        action: 'FRONTIER_PROVIDER_SETUP',
-        providerId: 'openai:gpt-5.6',
-        output: codexSetupGuide(language)
+        action: 'CONTINUE',
+        output: formatAmbiguousProviderRequest(language)
       });
     }
 
@@ -939,6 +1770,12 @@ module.exports =
     providerSetupOverview,
     codexSetupGuide,
     formatProviderStatus,
+    formatProviderCatalog,
     isNaturalMissionCancellationRequest,
+    resolveNaturalEngineeringReferenceIntent,
+    resolveNaturalGatewayIntent,
+    resolveNaturalMissionControlIntent,
+    resolveNaturalHelpRequest,
+    detectBoundedRepairLoopRequest,
     createNaturalSessionControl
   });

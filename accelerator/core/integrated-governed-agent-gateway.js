@@ -19,10 +19,18 @@ const {
   materializeGovernedEngineeringProposal
 } = require('./governed-engineering-proposal');
 const {
+  bootstrapManifestAuthority
+} = require('./git-manifest-cas');
+const {
+  composeAndDispatchNaturalDevelopmentPatch
+} = require('../cli/natural-development-r3-composition');
+const {
   EVENT_TYPES,
   DEFAULT_DENIED_CAPABILITIES,
   validateNaturalAgenticMission,
+  validateNaturalAgenticMissionEvent,
   transitionNaturalAgenticMission,
+  recordNaturalAgenticMissionChange,
   recordNaturalAgenticMissionTestResult,
   consumeMissionAuthorityGrant,
   projectMissionView,
@@ -35,7 +43,6 @@ const REQUEST_SCHEMA = 'sdo.integrated_governed_agent_gateway_request.v1';
 const RESULT_SCHEMA = 'sdo.integrated_governed_agent_gateway_result.v1';
 const DISPATCH_SCHEMA = 'sdo.integrated_governed_agent_gateway_dispatch.v1';
 const APPROVAL_REQUEST_SCHEMA = 'sdo.integrated_governed_agent_gateway_approval_request.v1';
-const STREAM_EVENT_SCHEMA = 'sdo.integrated_governed_agent_gateway_stream_event.v1';
 const PROTOCOL_VERSION = 'sdo.integrated_governed_agent_gateway.v1';
 
 const RESULT_CLASSES = Object.freeze([
@@ -111,8 +118,15 @@ const OPERATIONS = Object.freeze({
   'tests.runCanonical': Object.freeze({
     capability: 'tests.runCanonical',
     state: 'QUALIFYING',
-    physical: false,
-    requiresAuthority: true
+    physical: true,
+    requiresAuthority: true,
+    eventStarted: EVENT_TYPES.QUALIFICATION_STARTED,
+    eventCompleted: EVENT_TYPES.TEST_PASSED,
+    eventFailed: EVENT_TYPES.TEST_FAILED,
+    dispatch: Object.freeze({
+      capabilityType: 'PROCESS_VALIDATION',
+      selector: 'NODE_TEST_FILE'
+    })
   }),
   'mutation.propose': Object.freeze({
     capability: 'mutation.propose',
@@ -428,6 +442,31 @@ function checkCas(args, mission) {
   return 'SUCCESS';
 }
 
+function checkPhysicalTargetCas(args, mission) {
+  if (!args.targetCas) return 'SUCCESS';
+  const cas = args.targetCas;
+  if (
+    !cas ||
+    typeof cas !== 'object' ||
+    Array.isArray(cas) ||
+    typeof cas.target !== 'string' ||
+    !/^[a-f0-9]{64}$/.test(cas.beforeSha256 || '')
+  ) {
+    return 'CAS_MISMATCH';
+  }
+  try {
+    bootstrapManifestAuthority({
+      workspace: mission.binding.repositoryPath,
+      target: cas.target,
+      expectedBeforeSha256: cas.beforeSha256,
+      inspectOnly: true
+    });
+    return 'SUCCESS';
+  } catch {
+    return 'CAS_MISMATCH';
+  }
+}
+
 function capabilityAllowed(mission, operation) {
   const capability = operationCapability(operation);
   return Boolean(
@@ -436,7 +475,7 @@ function capabilityAllowed(mission, operation) {
   );
 }
 
-function activeAuthorityGrant(mission, operation, authorityRef, at) {
+function activeAuthorityGrant(mission, operation, authorityRef, at, args = {}) {
   if (!authorityRef) return null;
   const capability = operationCapability(operation);
   const grant = mission.authority.grants.find((entry) =>
@@ -444,8 +483,18 @@ function activeAuthorityGrant(mission, operation, authorityRef, at) {
     entry.capability === capability
   );
   if (!grant) return null;
+  if (grant.scope && grant.scope.brokerOnly === true) return null;
   if (mission.authority.usedAuthorityRefs.includes(authorityRef)) return null;
   if (Date.parse(at) >= Date.parse(grant.expiresAt)) return null;
+  if (
+    grant.operation &&
+    grant.operation !== operation
+  ) return null;
+  if (
+    grant.scope &&
+    JSON.stringify(canonicalize(grant.scope)) !==
+      JSON.stringify(canonicalize(args.scope || null))
+  ) return null;
   return grant;
 }
 
@@ -815,7 +864,7 @@ function performOperation({ mission, request, definition, revalidation, options 
       options
     });
   }
-  if (operation === 'tests.run') {
+  if (operation === 'tests.run' || operation === 'tests.runCanonical') {
     return normalizeTest(dispatchReadOnly({
       mission,
       intent: {
@@ -835,6 +884,76 @@ function performOperation({ mission, request, definition, revalidation, options 
     };
   }
   if (operation === 'mutation.applyConditional') {
+    if (request.args.naturalDevelopment) {
+      const binding = request.args.naturalDevelopment;
+      const artifacts = options.naturalDevelopment;
+      if (
+        !artifacts ||
+        typeof artifacts !== 'object' ||
+        !artifacts.contract ||
+        !artifacts.patchProposal ||
+        !artifacts.patchAuthorization ||
+        artifacts.contract.contractFingerprint !== binding.contractFingerprint ||
+        artifacts.patchProposal.proposalFingerprint !== binding.proposalFingerprint ||
+        artifacts.patchAuthorization.authorizationFingerprint !== binding.authorizationFingerprint ||
+        artifacts.patchProposal.target !== binding.target ||
+        artifacts.patchProposal.beforeSha256 !== binding.beforeSha256 ||
+        artifacts.patchProposal.replacementSha256 !== binding.afterSha256 ||
+        artifacts.repositoryPath !== mission.binding.repositoryPath ||
+        artifacts.physicalWorkspaceIdentity !== sha256(
+          mission.binding.repositoryPath
+        )
+      ) {
+        return {
+          classification: 'DENIED',
+          reason: 'Conditional mutation artifacts do not match the exact request binding.',
+          data: null
+        };
+      }
+      try {
+        const composition = composeAndDispatchNaturalDevelopmentPatch({
+          contract: artifacts.contract,
+          patchProposal: artifacts.patchProposal,
+          patchAuthorization: artifacts.patchAuthorization,
+          physicalWorkspaceIdentity: artifacts.physicalWorkspaceIdentity,
+          repositoryPath: artifacts.repositoryPath,
+          authorityRoot: artifacts.authorityRoot,
+          journalStorageRoot: artifacts.journalStorageRoot,
+          tenantId: artifacts.tenantId || null,
+          projectId: artifacts.projectId || null
+        });
+        return {
+          classification: 'SUCCESS',
+          reason: 'Conditional governed mutation completed through G5 and the Surgical Orchestrator.',
+          data: deepFreeze({
+            kind: 'CONDITIONAL_MUTATION',
+            target: composition.target,
+            beforeSha256: composition.beforeSha256,
+            afterSha256: composition.afterSha256,
+            transactionId: composition.transactionId,
+            journalId: composition.journalId,
+            afterManifestOid: composition.afterManifestOid,
+            managedProjection: composition.managedProjection,
+            compositionFingerprint: composition.compositionFingerprint,
+            ordinaryWorktreeAuthoritative: composition.ordinaryWorktreeAuthoritative,
+            orchestratorStatus: composition.status,
+            executionAttempted: true,
+            composition
+          })
+        };
+      } catch (error) {
+        const reason = error && error.message
+          ? error.message
+          : 'Conditional governed mutation failed closed.';
+        return {
+          classification: /\b(?:stale|mismatch|conflict)\b/i.test(reason)
+            ? 'CAS_MISMATCH'
+            : 'FAILURE',
+          reason,
+          data: null
+        };
+      }
+    }
     if (!request.args.orchestratorInput || typeof request.args.orchestratorInput !== 'object') {
       return {
         classification: 'AUTHORITY_REQUIRED',
@@ -868,6 +987,29 @@ function performOperation({ mission, request, definition, revalidation, options 
     reason: 'Gateway operation has no physical dispatcher.',
     data: null
   };
+}
+
+function notifyMissionEvents(previousMission, updatedMission, observer) {
+  if (typeof observer !== 'function') return;
+  const previous = validateNaturalAgenticMission(previousMission);
+  const updated = validateNaturalAgenticMission(updatedMission);
+  if (
+    previous.missionId !== updated.missionId ||
+    updated.events.length < previous.events.length ||
+    previous.events.some(
+      (event, index) => updated.events[index]?.eventHash !== event.eventHash
+    )
+  ) {
+    throw new Error('Observed mission event history is not an append-only continuation.');
+  }
+  for (const event of updated.events.slice(previous.events.length)) {
+    const canonicalEvent = validateNaturalAgenticMissionEvent(event);
+    try {
+      observer(canonicalEvent);
+    } catch {
+      // Presentation observers cannot affect governed execution.
+    }
+  }
 }
 
 function dispatchGatewayRequest({ request, mission, options = {} } = {}) {
@@ -926,6 +1068,30 @@ function dispatchGatewayRequest({ request, mission, options = {} } = {}) {
     });
   }
 
+  const targetCasStatus = checkPhysicalTargetCas(
+    validatedRequest.args,
+    current
+  );
+  if (targetCasStatus !== 'SUCCESS') {
+    const invalidated = transitionNaturalAgenticMission(current, {
+      type: EVENT_TYPES.STATE_INVALIDATED,
+      state: 'BLOCKED',
+      summary: 'Gateway target CAS mismatched the current physical authority state.',
+      at: requestedAt,
+      resultClass: 'CAS_MISMATCH'
+    });
+    notifyMissionEvents(current, invalidated, options.onMissionEvent);
+    return resultEnvelope({
+      request: validatedRequest,
+      mission: current,
+      updatedMission: invalidated,
+      classification: 'CAS_MISMATCH',
+      reason: 'Conditional mutation target CAS mismatched current physical state.',
+      latency: latency.snapshot(),
+      missionBeforeEventCount: eventStart
+    });
+  }
+
   if (current.state === 'CANCELLED' && !definition.localFastPath) {
     return resultEnvelope({
       request: validatedRequest,
@@ -946,6 +1112,7 @@ function dispatchGatewayRequest({ request, mission, options = {} } = {}) {
       at: requestedAt,
       resultClass: 'DENIED'
     });
+    notifyMissionEvents(current, denied, options.onMissionEvent);
     return resultEnvelope({
       request: validatedRequest,
       mission: current,
@@ -958,7 +1125,13 @@ function dispatchGatewayRequest({ request, mission, options = {} } = {}) {
   }
 
   if (definition.requiresAuthority) {
-    const grant = activeAuthorityGrant(current, operation, validatedRequest.authorityRef, requestedAt);
+    const grant = activeAuthorityGrant(
+      current,
+      operation,
+      validatedRequest.authorityRef,
+      requestedAt,
+      validatedRequest.args
+    );
     if (!grant) {
       const approvalRequest = createContextualApprovalRequest({
         mission: current,
@@ -978,6 +1151,7 @@ function dispatchGatewayRequest({ request, mission, options = {} } = {}) {
           fingerprint: approvalRequest.approvalRequestFingerprint
         }
       });
+      notifyMissionEvents(current, waiting, options.onMissionEvent);
       return resultEnvelope({
         request: validatedRequest,
         mission: current,
@@ -1002,6 +1176,7 @@ function dispatchGatewayRequest({ request, mission, options = {} } = {}) {
         revalidation,
         resumedAt: requestedAt
       });
+      notifyMissionEvents(current, projectedMission, options.onMissionEvent);
       data = projectMissionView(projectedMission, 'status');
       const resumeClassification = projectedMission.state === 'BLOCKED'
         ? 'STALE_STATE'
@@ -1041,6 +1216,7 @@ function dispatchGatewayRequest({ request, mission, options = {} } = {}) {
           fingerprint: approvalRequest.approvalRequestFingerprint
         }
       });
+      notifyMissionEvents(current, projectedMission, options.onMissionEvent);
       latency.mark('normalized');
       return resultEnvelope({
         request: validatedRequest,
@@ -1075,6 +1251,7 @@ function dispatchGatewayRequest({ request, mission, options = {} } = {}) {
     at: requestedAt,
     resultClass: 'SUCCESS'
   });
+  notifyMissionEvents(current, executing, options.onMissionEvent);
   latency.mark('firstProgress');
 
   let revalidation = null;
@@ -1088,6 +1265,7 @@ function dispatchGatewayRequest({ request, mission, options = {} } = {}) {
         at: requestedAt,
         resultClass: 'STALE_STATE'
       });
+      notifyMissionEvents(executing, invalidated, options.onMissionEvent);
       return resultEnvelope({
         request: validatedRequest,
         mission: current,
@@ -1122,6 +1300,7 @@ function dispatchGatewayRequest({ request, mission, options = {} } = {}) {
       at: requestedAt,
       resultClass: 'FAILURE'
     });
+    notifyMissionEvents(executing, failed, options.onMissionEvent);
     latency.mark('normalized');
     return resultEnvelope({
       request: validatedRequest,
@@ -1136,7 +1315,7 @@ function dispatchGatewayRequest({ request, mission, options = {} } = {}) {
   latency.mark('firstEvidence');
 
   let completed = executing;
-  if (operation === 'tests.run') {
+  if (operation === 'tests.run' || operation === 'tests.runCanonical') {
     completed = recordNaturalAgenticMissionTestResult(executing, {
       testEvidence: {
         selector: 'NODE_TEST_FILE',
@@ -1146,11 +1325,25 @@ function dispatchGatewayRequest({ request, mission, options = {} } = {}) {
         passed: normalized.data && normalized.data.passed,
         failed: normalized.data && normalized.data.failed,
         skipped: normalized.data && normalized.data.skipped,
-        canonical: false,
+        canonical: operation === 'tests.runCanonical',
         evidenceDigest: fingerprint('sdo.integrated_gateway_test_result.v1', normalized.data)
       },
       at: requestedAt,
       state: 'TESTING'
+    });
+  } else if (
+    operation === 'mutation.applyConditional' &&
+    normalized.classification === 'SUCCESS' &&
+    normalized.data &&
+    normalized.data.kind === 'CONDITIONAL_MUTATION'
+  ) {
+    completed = recordNaturalAgenticMissionChange(executing, {
+      target: normalized.data.target,
+      summary: normalized.reason,
+      beforeSha256: normalized.data.beforeSha256,
+      afterSha256: normalized.data.afterSha256,
+      authorityRef: validatedRequest.authorityRef,
+      at: requestedAt
     });
   } else {
     completed = transitionNaturalAgenticMission(executing, {
@@ -1171,12 +1364,15 @@ function dispatchGatewayRequest({ request, mission, options = {} } = {}) {
   if (
     operation === 'mutation.applyConditional' &&
     normalized.classification === 'SUCCESS' &&
+    !(normalized.data && normalized.data.kind === 'CONDITIONAL_MUTATION') &&
     validatedRequest.authorityRef
   ) {
     completed = consumeMissionAuthorityGrant(completed, validatedRequest.authorityRef, {
       at: requestedAt
     });
   }
+
+  notifyMissionEvents(executing, completed, options.onMissionEvent);
 
   latency.mark('normalized');
   return resultEnvelope({
@@ -1191,60 +1387,54 @@ function dispatchGatewayRequest({ request, mission, options = {} } = {}) {
   });
 }
 
-function createGatewayStreamEvent({ request, sequence, type, summary, classification = null, monotonicMs }) {
-  const body = {
-    schema: STREAM_EVENT_SCHEMA,
-    requestId: request.requestId,
-    missionId: request.missionId,
-    operation: request.operation,
-    sequence,
-    type: requireText(type, 'Gateway stream event type', 64),
-    summary: requireText(summary, 'Gateway stream event summary', 512),
-    classification,
-    monotonicMs,
-    contentRecorded: false,
-    presentationOnly: true,
-    operationalAuthority: false,
-    mutationAuthority: false
-  };
-  return deepFreeze({
-    ...body,
-    eventFingerprint: fingerprint(STREAM_EVENT_SCHEMA, body)
-  });
-}
-
 async function* streamGatewayRequest({ request, mission, options = {}, execute = null } = {}) {
   const validated = validateGatewayRequest(request);
-  const first = createGatewayStreamEvent({
-    request: validated,
-    sequence: 1,
-    type: 'OPERATION_STARTED',
-    summary: 'Gateway accepted operation for governed dispatch.',
-    monotonicMs: monotonicMs(options)
-  });
-  yield deepFreeze({
-    schema: 'sdo.integrated_governed_agent_gateway_stream_item.v1',
-    event: first,
-    dispatch: null,
-    done: false
-  });
+  const observedEvents = [];
+  const observedHashes = new Set();
+  const upstreamObserver = options.onMissionEvent;
+  const observe = (event) => {
+    const canonicalEvent = validateNaturalAgenticMissionEvent(event);
+    if (observedHashes.has(canonicalEvent.eventHash)) return;
+    observedHashes.add(canonicalEvent.eventHash);
+    observedEvents.push(canonicalEvent);
+    if (typeof upstreamObserver === 'function') {
+      try {
+        upstreamObserver(canonicalEvent);
+      } catch {
+        // Presentation observers cannot affect governed execution.
+      }
+    }
+  };
 
   const dispatch = await Promise.resolve(
     execute
       ? execute()
-      : dispatchGatewayRequest({ request: validated, mission, options })
+      : dispatchGatewayRequest({
+          request: validated,
+          mission,
+          options: {
+            ...options,
+            onMissionEvent: observe
+          }
+        })
   );
-  const second = createGatewayStreamEvent({
-    request: validated,
-    sequence: 2,
-    type: 'OPERATION_COMPLETED',
-    summary: dispatch.result.reason,
-    classification: dispatch.result.classification,
-    monotonicMs: monotonicMs(options)
-  });
+
+  if (dispatch?.result?.events) {
+    for (const event of dispatch.result.events) observe(event);
+  }
+
+  for (const event of observedEvents) {
+    yield deepFreeze({
+      schema: 'sdo.integrated_governed_agent_gateway_stream_item.v1',
+      event,
+      dispatch: null,
+      done: false
+    });
+  }
+
   yield deepFreeze({
     schema: 'sdo.integrated_governed_agent_gateway_stream_item.v1',
-    event: second,
+    event: null,
     dispatch,
     done: true
   });
@@ -1255,7 +1445,6 @@ module.exports = Object.freeze({
   RESULT_SCHEMA,
   DISPATCH_SCHEMA,
   APPROVAL_REQUEST_SCHEMA,
-  STREAM_EVENT_SCHEMA,
   PROTOCOL_VERSION,
   RESULT_CLASSES,
   OPERATIONS,

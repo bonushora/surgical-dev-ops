@@ -116,6 +116,7 @@ test(
     );
 
     input.end(
+      'quais arquivos mudaram?\n' +
       'cancele esta missão\n' +
       '/status\n' +
       '/resume\n' +

@@ -35,8 +35,31 @@ const {
 } = require('./natural-intent');
 
 const {
-  formatNaturalPresentation
+  formatNaturalPresentation,
+  formatNaturalGatewayEvent,
+  formatNaturalGatewayResult,
+  formatNaturalReferenceResolution,
+  formatNaturalReferenceContextProjection,
+  formatNaturalMissionContinuation
 } = require('./natural-presentation');
+
+const {
+  createGatewayRequest,
+  streamGatewayRequest,
+  OPERATIONS
+} = require(
+  '../core/integrated-governed-agent-gateway'
+);
+
+const {
+  createNaturalEngineeringReferenceContext,
+  recordNaturalEngineeringGatewayResult,
+  recordNaturalGovernedReadOnlyEvidence,
+  resolveNaturalEngineeringReference,
+  projectNaturalEngineeringReferenceContext
+} = require(
+  '../core/natural-engineering-reference-context'
+);
 
 const {
   createNaturalCognitiveSession
@@ -59,8 +82,19 @@ const {
 const {
   createNaturalSessionControl,
   formatProviderStatus,
-  isNaturalMissionCancellationRequest
+  formatProviderCatalog,
+  isNaturalMissionCancellationRequest,
+  resolveNaturalHelpRequest
 } = require('./natural-session-control');
+
+const {
+  createNaturalHelpProjection,
+  formatNaturalHelpProjection
+} = require('./natural-help-projection');
+
+const {
+  createQualifiedCommandCatalog
+} = require('../core/qualified-command-catalog');
 
 const {
   createNaturalExperienceSnapshot,
@@ -102,13 +136,40 @@ const {
 } = require('./natural-development-interactive');
 
 const {
+  createNaturalGovernedRepairLoop,
+  investigateNaturalGovernedRepairFailure,
+  authorizeNaturalGovernedRepairMission,
+  proposeNaturalGovernedRepair,
+  authorizeAndContinueNaturalGovernedRepair,
+  continueNaturalGovernedRepairWithMissionAuthority,
+  denyNaturalGovernedRepairAuthority,
+  cancelNaturalGovernedRepairLoop
+} = require('./natural-governed-repair-loop');
+
+const {
   createNaturalRunnerRuntime
 } = require('./natural-runner-runtime');
 
 const {
+  createNaturalMissionContinuityCheckpoint,
+  resumeNaturalMissionContinuity
+} = require('./natural-mission-continuity');
+
+const {
+  saveNaturalMissionContinuity,
+  loadNaturalMissionContinuity
+} = require('../adapters/natural-mission-continuity-store');
+
+const {
   createNaturalAgenticMission,
+  transitionNaturalAgenticMission,
+  updateNaturalAgenticMissionPlan,
+  updateNaturalAgenticMissionPlanStep,
+  recordNaturalAgenticMissionPlanResult,
+  selectNaturalAgenticMissionContinuation,
   projectMissionView,
   formatMissionProjection,
+  blockNaturalAgenticMission,
   cancelNaturalAgenticMission,
   resumeNaturalAgenticMission
 } = require('../core/natural-agentic-mission');
@@ -134,6 +195,38 @@ const {
 const VERSION = '2.6.0-rc.6';
 const NATURAL_WORKSPACE_HUMAN_SUBJECT =
   'surgical-cli-local-session';
+
+const NATURAL_R1_GATEWAY_ALLOWED_CAPABILITIES =
+  Object.freeze([
+    'workspace.status',
+    'workspace.diff',
+    'evidence.inspect'
+  ]);
+
+const NATURAL_R1_GATEWAY_DENIED_CAPABILITIES =
+  Object.freeze([
+    'arbitrary.shell',
+    'credential.read',
+    'network.mutate',
+    'workspace.search',
+    'workspace.read',
+    'evidence.microread',
+    'tests.run',
+    'tests.runCanonical',
+    'mutation.propose',
+    'mutation.applyConditional',
+    'git.stage',
+    'git.commit',
+    'git.push',
+    'git.merge',
+    'git.tag',
+    'release.create',
+    'npm.publish',
+    'deploy'
+  ]);
+
+const NATURAL_HELP_QUALIFIED_COMMAND_CATALOG =
+  createQualifiedCommandCatalog();
 
 function humanText(activation, portuguese, english) {
   return usesEnglish(activation)
@@ -199,10 +292,36 @@ function dispatchNaturalWorkspaceEvidence(
     typeof options.dispatchEvidence ===
       'function'
   ) {
-    return options.dispatchEvidence(
+    const dispatched = options.dispatchEvidence(
       intent,
       activation.repositoryPath
     );
+
+    // Bootstrap consumes the canonical governed result directly. The
+    // recursive loop may additionally carry its exact request provenance in
+    // a frozen two-field envelope; unwrap only that validated composition
+    // shape here and leave all other shapes fail-closed at the bootstrap
+    // contract.
+    if (
+      dispatched &&
+      typeof dispatched === 'object' &&
+      Object.isFrozen(dispatched) &&
+      Object.keys(dispatched).length === 2 &&
+      Object.prototype.hasOwnProperty.call(
+        dispatched,
+        'governedRequest'
+      ) &&
+      Object.prototype.hasOwnProperty.call(
+        dispatched,
+        'governed'
+      ) &&
+      Object.isFrozen(dispatched.governedRequest) &&
+      Object.isFrozen(dispatched.governed)
+    ) {
+      return dispatched.governed;
+    }
+
+    return dispatched;
   }
 
   return dispatchGovernedReadOnly(
@@ -906,6 +1025,26 @@ function formatCognitiveProgressMessage(
   );
 }
 
+function formatInteractiveBackpressureMessage(
+  activation
+) {
+  return humanText(
+    activation,
+    (
+      '\nEntrada adicional rejeitada enquanto a solicitação anterior ainda está em processamento.\n' +
+      'Nenhuma das linhas adicionais recebidas antes do próximo prompt será executada.\n' +
+      'Aguarde o próximo prompt "surgical>" e envie exatamente uma solicitação por vez.\n' +
+      'Ctrl+C continua encerrando a sessão CLI inteira com segurança.\n'
+    ),
+    (
+      '\nAdditional input was rejected while the previous request is still processing.\n' +
+      'None of the additional lines received before the next prompt will be executed.\n' +
+      'Wait for the next "surgical>" prompt and send exactly one request at a time.\n' +
+      'Ctrl+C continues to terminate the entire CLI session safely.\n'
+    )
+  );
+}
+
 function createInteractiveSession(
   activation,
   options = {}
@@ -919,6 +1058,32 @@ function createInteractiveSession(
 
   const output =
     options.output || process.stdout;
+
+  const continuityStateRoot =
+    typeof options.continuityStateRoot === 'string' &&
+    options.continuityStateRoot.trim()
+      ? options.continuityStateRoot
+      : null;
+
+  const continuityRecord =
+    Boolean(
+      activation.interactionMode &&
+      ['NATURAL', 'ENGINEER'].includes(activation.interactionMode.mode)
+    ) && continuityStateRoot
+      ? loadNaturalMissionContinuity({
+          stateRoot: continuityStateRoot,
+          repositoryPath: activation.repositoryPath
+        })
+      : null;
+
+  const continuityResume =
+    continuityRecord
+      ? resumeNaturalMissionContinuity({
+          checkpoint: continuityRecord,
+          repositoryPath: activation.repositoryPath,
+          resumedAt: currentCanonicalInstant(options)
+        })
+      : null;
 
   const terminal =
     options.terminal === undefined
@@ -942,7 +1107,19 @@ function createInteractiveSession(
   let interfaceClosed =
     false;
 
+  let interactiveRequestInFlight =
+    false;
+
+  let interactiveBackpressureReported =
+    false;
+
   function resumeAndPrompt() {
+    interactiveRequestInFlight =
+      false;
+
+    interactiveBackpressureReported =
+      false;
+
     if (interfaceClosed) {
       return;
     }
@@ -1013,62 +1190,1444 @@ function createInteractiveSession(
   let pendingDevelopment =
     null;
 
+  let pendingRepairLoop =
+    continuityResume
+      ? continuityResume.repairLoop
+      : null;
+
   let agenticMission =
-    null;
+    continuityResume
+      ? continuityResume.mission
+      : null;
+
+  let naturalGatewayMissionSequence =
+    continuityResume
+      ? 1
+      : 0;
+
+  let naturalEngineeringReferenceContext =
+    continuityResume
+      ? continuityResume.referenceContext
+      : null;
+
+  let projectedNaturalMissionId =
+    continuityResume
+      ? continuityResume.mission.missionId
+      : null;
+
+  let projectedNaturalMissionEventSequence =
+    continuityResume
+      ? continuityResume.historicalEventCount
+      : 0;
 
   const runnerRuntime =
     cognitiveMode
       ? createNaturalRunnerRuntime()
       : null;
 
-  if (cognitiveMode) {
-    try {
-      const missionObservedAt =
-        currentCanonicalInstant(options);
-      const missionSession =
+  function currentNaturalHelpPendingDecision() {
+    if (
+      pendingRepairLoop &&
+      pendingRepairLoop.state === 'READY_FOR_REPAIR' &&
+      pendingRepairLoop.missionAuthorityRequest &&
+      !pendingRepairLoop.missionMutationAuthority
+    ) {
+      return Object.freeze({
+        kind: 'REPAIR_MISSION',
+        state: 'HUMAN_DECISION_PENDING',
+        authorityRequestFingerprint:
+          pendingRepairLoop.missionAuthorityRequest.authorityRequestFingerprint,
+        reusableApproval: false
+      });
+    }
+
+    if (
+      pendingRepairLoop &&
+      pendingRepairLoop.state === 'AUTHORITY_REQUIRED' &&
+      pendingRepairLoop.pending &&
+      pendingRepairLoop.pending.patchProposal
+    ) {
+      return Object.freeze({
+        kind: 'REPAIR',
+        state: pendingRepairLoop.state,
+        proposalFingerprint:
+          pendingRepairLoop.pending.patchProposal.proposalFingerprint,
+        reusableApproval: false
+      });
+    }
+
+    if (
+      pendingDevelopment &&
+      pendingDevelopment.patchProposal
+    ) {
+      return Object.freeze({
+        kind: 'DEVELOPMENT',
+        state: pendingDevelopment.state,
+        proposalFingerprint:
+          pendingDevelopment.patchProposal.proposalFingerprint,
+        reusableApproval: false
+      });
+    }
+
+    const experience =
+      sessionControl
+        ? sessionControl.experienceState()
+        : null;
+
+    if (!experience || !experience.pendingAuthorization) {
+      return null;
+    }
+
+    return Object.freeze({
+      kind: experience.pendingAuthorization.kind,
+      state: 'HUMAN_DECISION_PENDING',
+      reusableApproval: false
+    });
+  }
+
+  function currentNaturalHelpRepairProjection() {
+    if (!pendingRepairLoop) return null;
+    return Object.freeze({
+      state: pendingRepairLoop.state,
+      lastTestClassification:
+        pendingRepairLoop.mission.tests.lastResult
+          ? pendingRepairLoop.mission.tests.lastResult.classification
+          : null,
+      stopReason: pendingRepairLoop.stopReason,
+      durableRestart: pendingRepairLoop.durableRestart === true,
+      missionScopedAuthorityActive:
+        pendingRepairLoop.missionMutationAuthority !== null,
+      missionAuthorityFingerprint:
+        pendingRepairLoop.missionMutationAuthority
+          ? pendingRepairLoop.missionMutationAuthority.authorityFingerprint
+          : null
+    });
+  }
+
+  function currentNaturalHelpContinuityProjection() {
+    if (!continuityResume) return null;
+    return Object.freeze({
+      classification: continuityResume.classification,
+      revalidationDecision: continuityResume.revalidation.decision,
+      continuationEligible: continuityResume.continuationEligible,
+      authorityRevalidated: continuityResume.authorityRevalidated,
+      providerMemoryUsed: continuityResume.providerMemoryUsed,
+      historicalEventCount: continuityResume.historicalEventCount
+    });
+  }
+
+  function formatCurrentNaturalHelp(helpRequest) {
+    let missionStatus = null;
+    let missionAuthority = null;
+    let continuation = null;
+
+    if (agenticMission) {
+      missionStatus =
+        projectMissionView(
+          agenticMission,
+          'status'
+        );
+      missionAuthority =
+        projectMissionView(
+          agenticMission,
+          'authority'
+        );
+      continuation =
+        selectNaturalAgenticMissionContinuation({
+          mission: agenticMission,
+          revalidation:
+            revalidateDeterministicWorkspaceSession(
+              agenticMission.session
+            )
+        });
+    }
+
+    return formatNaturalHelpProjection(
+      createNaturalHelpProjection({
+        request: helpRequest,
+        language: activation.language,
+        gatewayOperations: OPERATIONS,
+        qualifiedCommandCatalog:
+          NATURAL_HELP_QUALIFIED_COMMAND_CATALOG,
+        missionStatus,
+        missionAuthority,
+        continuation,
+        pendingDecision:
+          currentNaturalHelpPendingDecision(),
+        repair:
+          currentNaturalHelpRepairProjection(),
+        continuity:
+          currentNaturalHelpContinuityProjection(),
+        provider:
+          options.helpProviderState || null
+      })
+    );
+  }
+
+  function persistNaturalMissionContinuity(mission) {
+    if (!continuityStateRoot || !mission) return null;
+    const checkpoint = createNaturalMissionContinuityCheckpoint({
+      mission,
+      repairLoop:
+        pendingRepairLoop &&
+        pendingRepairLoop.mission.missionFingerprint === mission.missionFingerprint
+          ? pendingRepairLoop
+          : null,
+      recordedAt: currentCanonicalInstant(options)
+    });
+    return saveNaturalMissionContinuity({
+      stateRoot: continuityStateRoot,
+      checkpoint
+    });
+  }
+
+  function projectNaturalMissionEvent(
+    event,
+    {
+      mission = agenticMission,
+      operation = null,
+      stepId = null
+    } = {}
+  ) {
+    if (!event || typeof event !== 'object') {
+      return;
+    }
+    if (projectedNaturalMissionId !== event.missionId) {
+      projectedNaturalMissionId = event.missionId;
+      projectedNaturalMissionEventSequence = 0;
+    }
+    if (event.sequence <= projectedNaturalMissionEventSequence) {
+      return;
+    }
+    const presentation =
+      formatNaturalGatewayEvent(
+        event,
+        activation.language,
+        {
+          mission,
+          operation,
+          stepId
+        }
+      );
+    projectedNaturalMissionEventSequence = event.sequence;
+    if (presentation) {
+      output.write(presentation);
+    }
+  }
+
+  function projectNaturalMissionEvents(
+    mission,
+    context = {}
+  ) {
+    if (!mission || !Array.isArray(mission.events)) {
+      return;
+    }
+    persistNaturalMissionContinuity(mission);
+    for (const event of mission.events) {
+      projectNaturalMissionEvent(
+        event,
+        {
+          ...context,
+          mission
+        }
+      );
+    }
+  }
+
+  if (continuityResume) {
+    output.write(
+      humanText(
+        activation,
+        'Missão governada durável reconstruída somente a partir do registro físico e da revalidação atual. Autoridades anteriores não foram restauradas.\n',
+        'Durable governed mission reconstructed only from its physical record and current revalidation. Previous authority was not restored.\n'
+      )
+    );
+    projectNaturalMissionEvents(agenticMission);
+  }
+
+  function naturalRepairGatewayOptions() {
+    let currentMission = agenticMission;
+    let currentOperation = null;
+    return {
+      runtime: options.gatewayRuntime || {},
+      onMissionState(mission, operation) {
+        currentMission = mission;
+        currentOperation = operation;
+        projectNaturalMissionEvents(mission, { operation });
+      },
+      onMissionEvent(event) {
+        projectNaturalMissionEvent(event, {
+          mission: currentMission,
+          operation: currentOperation
+        });
+      }
+    };
+  }
+
+  function createNaturalGatewayMission(
+    intent,
+    observedAt,
+    existingSession = null
+  ) {
+    const session =
+      existingSession ||
+      createDeterministicWorkspaceSession({
+        authorizedRoot:
+          activation.repositoryPath,
+        humanSubject:
+          NATURAL_WORKSPACE_HUMAN_SUBJECT,
+        authorizedAt:
+          observedAt
+      });
+
+    naturalGatewayMissionSequence += 1;
+
+    return createNaturalAgenticMission({
+      missionId:
+        `cli-natural-r3-${session.sessionFingerprint.slice(0, 24)}-${naturalGatewayMissionSequence}`,
+      objective:
+        intent.objective,
+      session,
+      createdAt:
+        observedAt,
+      plan: [
+        {
+          stepId:
+            `gateway-${naturalGatewayMissionSequence}-01`,
+          summary:
+            `Execute ${intent.operation} through the Integrated Governed Agent Gateway.`,
+          status:
+            'PENDING',
+          operation:
+            intent.operation
+        },
+        {
+          stepId:
+            `gateway-${naturalGatewayMissionSequence}-02`,
+          summary:
+            `Inspect the governed evidence produced by ${intent.operation}.`,
+          status:
+            'PENDING',
+          operation:
+            'evidence.inspect',
+          sourceOperation:
+            intent.operation
+        }
+      ],
+      authority: {
+        allowedCapabilities:
+          NATURAL_R1_GATEWAY_ALLOWED_CAPABILITIES,
+        deniedCapabilities:
+          NATURAL_R1_GATEWAY_DENIED_CAPABILITIES,
+        grants: []
+      }
+    });
+  }
+
+  function prepareNaturalGatewayMission(
+    intent,
+    observedAt
+  ) {
+    if (intent.continuationStepId) {
+      if (!agenticMission) {
+        return null;
+      }
+      const step =
+        agenticMission.plan.find(
+          (item) =>
+            item.stepId === intent.continuationStepId &&
+            item.status === 'PENDING' &&
+            item.operation === intent.operation
+        );
+      if (!step) {
+        return null;
+      }
+      agenticMission =
+        updateNaturalAgenticMissionPlanStep(
+          agenticMission,
+          {
+            stepId:
+              step.stepId,
+            status:
+              'ACTIVE',
+            at:
+              observedAt,
+            eventSummary:
+              'Process-local continuation activated the unambiguous live-plan step.'
+          }
+        );
+      return Object.freeze({
+        mission:
+          agenticMission,
+        stepId:
+          step.stepId,
+        args:
+          intent.args,
+        sourceOperation:
+          intent.sourceOperation
+      });
+    }
+
+    if (!intent.typedReference) {
+      const mission =
+        createNaturalGatewayMission(
+          intent,
+          observedAt
+        );
+
+      const stepId =
+        mission.plan[0].stepId;
+
+      const activeMission =
+        updateNaturalAgenticMissionPlanStep(
+          mission,
+          {
+            stepId,
+            status:
+              'ACTIVE',
+            at:
+              observedAt,
+            eventSummary:
+              'The governed operation became the active live-plan step.'
+          }
+        );
+
+      naturalEngineeringReferenceContext =
+        createNaturalEngineeringReferenceContext({
+          mission:
+            activeMission,
+          createdAt:
+            observedAt
+        });
+
+      return Object.freeze({
+        mission:
+          activeMission,
+        stepId,
+        args:
+          intent.args,
+        sourceOperation:
+          intent.operation
+      });
+    }
+
+    if (!agenticMission) {
+      return null;
+    }
+
+    const pendingStep =
+      agenticMission.plan.find(
+        (step) =>
+          step.status === 'PENDING' &&
+          step.operation === intent.operation &&
+          (
+            !intent.sourceOperation ||
+            !step.sourceOperation ||
+            step.sourceOperation === intent.sourceOperation
+          )
+      );
+    const stepId =
+      pendingStep
+        ? pendingStep.stepId
+        : `gateway-${naturalGatewayMissionSequence}-${String(agenticMission.plan.length + 1).padStart(2, '0')}`;
+
+    agenticMission = pendingStep
+      ? updateNaturalAgenticMissionPlanStep(
+          agenticMission,
+          {
+            stepId,
+            status:
+              'ACTIVE',
+            at:
+              observedAt,
+            eventSummary:
+              'The bounded reference selected the existing live-plan step.'
+          }
+        )
+      : updateNaturalAgenticMissionPlan(
+          agenticMission,
+          {
+            plan: [
+              ...agenticMission.plan,
+              {
+                stepId,
+                summary:
+                  `Resolve ${intent.referenceType} and execute ${intent.operation} through the Integrated Governed Agent Gateway.`,
+                status:
+                  'ACTIVE',
+                operation:
+                  intent.operation,
+                sourceOperation:
+                  intent.sourceOperation
+              }
+            ],
+            at:
+              observedAt,
+            summary:
+              'Explicit evidence request added to the governed live plan.'
+          }
+        );
+
+    return Object.freeze({
+      mission:
+        agenticMission,
+      stepId,
+      args:
+        intent.args,
+      sourceOperation:
+        intent.sourceOperation
+    });
+  }
+
+  function resolveNaturalGatewayReferenceIntent(
+    intent,
+    observedAt
+  ) {
+    if (!intent.referenceType) {
+      return intent;
+    }
+
+    if (!agenticMission) {
+      const session =
         createDeterministicWorkspaceSession({
           authorizedRoot:
             activation.repositoryPath,
           humanSubject:
             NATURAL_WORKSPACE_HUMAN_SUBJECT,
           authorizedAt:
-            missionObservedAt
+            observedAt
         });
 
+      naturalGatewayMissionSequence += 1;
       agenticMission =
         createNaturalAgenticMission({
           missionId:
-            `cli-natural-${missionSession.sessionFingerprint.slice(0, 32)}`,
+            `cli-natural-r3-${session.sessionFingerprint.slice(0, 24)}-${naturalGatewayMissionSequence}`,
           objective:
-            'Interactive NATURAL governed engineering session.',
-          session:
-            missionSession,
+            intent.objective,
+          session,
           createdAt:
-            missionObservedAt,
-          plan: [
-            {
-              stepId:
-                'session-ready',
-              summary:
-                'Maintain governed conversational session state.',
-              status:
-                'ACTIVE'
-            }
-          ]
+            observedAt,
+          plan: [],
+          authority: {
+            allowedCapabilities:
+              NATURAL_R1_GATEWAY_ALLOWED_CAPABILITIES,
+            deniedCapabilities:
+              NATURAL_R1_GATEWAY_DENIED_CAPABILITIES,
+            grants: []
+          }
         });
-    } catch {
+      naturalEngineeringReferenceContext =
+        createNaturalEngineeringReferenceContext({
+          mission:
+            agenticMission,
+          createdAt:
+            observedAt
+        });
+    }
+
+    if (!naturalEngineeringReferenceContext) {
+      throw new Error(
+        'Bounded engineering reference context is unavailable.'
+      );
+    }
+
+    const revalidation =
+      revalidateDeterministicWorkspaceSession(
+        agenticMission.session
+      );
+    const resolution =
+      resolveNaturalEngineeringReference({
+        context:
+          naturalEngineeringReferenceContext,
+        mission:
+          agenticMission,
+        requestedType:
+          intent.referenceType,
+        requestedAction:
+          intent.referenceAction,
+        revalidation
+      });
+
+    output.write(
+      formatNaturalReferenceResolution(
+        resolution,
+        activation.language,
+        intent.referenceAction
+      )
+    );
+
+    if (
+      resolution.classification !==
+        'RESOLVED'
+    ) {
+      const resultClasses = {
+        NO_REFERENT:
+          'INCOMPLETE_EVIDENCE',
+        AMBIGUOUS_REFERENT:
+          'INCOMPLETE_EVIDENCE',
+        STALE_REFERENT:
+          'STALE_STATE',
+        UNSUPPORTED_REFERENT:
+          'UNSUPPORTED'
+      };
+      const stepId =
+        `reference-${naturalGatewayMissionSequence}-${String(agenticMission.plan.length + 1).padStart(2, '0')}`;
       agenticMission =
-        null;
+        updateNaturalAgenticMissionPlan(
+          agenticMission,
+          {
+            plan: [
+              ...agenticMission.plan,
+              {
+                stepId,
+                summary:
+                  `Resolve the bounded ${intent.referenceType} engineering reference.`,
+                status:
+                  'BLOCKED',
+                ...(intent.operation
+                  ? { operation: intent.operation }
+                  : {}),
+                resultClass:
+                  resultClasses[resolution.classification],
+                blocker:
+                  resolution.reason
+              }
+            ],
+            at:
+              observedAt,
+            summary:
+              'Bounded engineering reference failed closed.'
+          }
+        );
+      if (
+        resolution.classification ===
+          'STALE_REFERENT'
+      ) {
+        agenticMission =
+          transitionNaturalAgenticMission(
+            agenticMission,
+            {
+              type:
+                'STATE_INVALIDATED',
+              state:
+                'BLOCKED',
+              summary:
+                resolution.reason,
+              at:
+                observedAt,
+              resultClass:
+                'STALE_STATE'
+            }
+          );
+      }
+      if (agenticMission.state !== 'BLOCKED') {
+        agenticMission =
+          blockNaturalAgenticMission(
+            agenticMission,
+            {
+              reason:
+                resolution.reason,
+              at:
+                observedAt
+            }
+          );
+      }
+      return null;
+    }
+
+    if (
+      intent.referenceAction === 'REQUEST_MUTATION' &&
+      pendingRepairLoop &&
+      pendingRepairLoop.state === 'READY_FOR_REPAIR'
+    ) {
+      return Object.freeze({
+        ...intent,
+        operation: null,
+        r5RepairRequest: true,
+        typedReference: resolution.reference,
+        referenceResolution: resolution,
+        authorityExpansion: false,
+        operationalAuthority: false,
+        mutationAuthority: false,
+        publicationAuthority: false
+      });
+    }
+
+    if (
+      [
+        'REQUEST_MUTATION',
+        'REQUEST_PUBLICATION',
+        'PROJECT_REFERENCE'
+      ].includes(
+        intent.referenceAction
+      )
+    ) {
+      if (
+        [
+          'REQUEST_MUTATION',
+          'REQUEST_PUBLICATION'
+        ].includes(intent.referenceAction)
+      ) {
+        const publication =
+          intent.referenceAction === 'REQUEST_PUBLICATION';
+        const stepId =
+          `authority-${naturalGatewayMissionSequence}-${String(agenticMission.plan.length + 1).padStart(2, '0')}`;
+        const blocker = publication
+          ? 'An exact governed publication proposal and independent human authority are required.'
+          : 'An exact governed mutation proposal and independent human authority are required.';
+        agenticMission =
+          updateNaturalAgenticMissionPlan(
+            agenticMission,
+            {
+              plan: [
+                ...agenticMission.plan,
+                {
+                  stepId,
+                  summary: publication
+                    ? 'Request bounded publication authority for the resolved referent.'
+                    : 'Request bounded mutation authority for the resolved referent.',
+                  status:
+                    'BLOCKED',
+                  operation: publication
+                    ? 'npm.publish'
+                    : 'mutation.applyConditional',
+                  sourceOperation:
+                    resolution.reference.operation,
+                  resultClass:
+                    'AUTHORITY_REQUIRED',
+                  blocker
+                }
+              ],
+              at:
+                observedAt,
+              summary:
+                'Reference resolution recorded an independent authority boundary.'
+            }
+          );
+        agenticMission =
+          transitionNaturalAgenticMission(
+            agenticMission,
+            {
+              type:
+                'AUTHORITY_REQUIRED',
+              state:
+                agenticMission.state,
+              summary:
+                blocker,
+              at:
+                observedAt,
+              resultClass:
+                'AUTHORITY_REQUIRED'
+            }
+          );
+        if (agenticMission.state !== 'BLOCKED') {
+          agenticMission =
+            blockNaturalAgenticMission(
+              agenticMission,
+              {
+                reason:
+                  blocker,
+                at:
+                  observedAt
+              }
+            );
+        }
+      }
+      return null;
+    }
+
+    const reference =
+      resolution.reference;
+    const repeat =
+      intent.referenceAction ===
+        'REPEAT_OPERATION';
+
+    return Object.freeze({
+      ...intent,
+      operation:
+        repeat
+          ? reference.operation
+          : 'evidence.inspect',
+      args:
+        repeat
+          ? Object.freeze({})
+          : Object.freeze({
+              operation:
+                reference.operation
+            }),
+      sourceOperation:
+        reference.operation,
+      typedReference:
+        reference,
+      referenceResolution:
+        resolution,
+      requiresMissionContext:
+        true,
+      authorityExpansion:
+        false,
+      operationalAuthority:
+        false,
+      mutationAuthority:
+        false,
+      publicationAuthority:
+        false
+    });
+  }
+
+  async function prepareNaturalGovernedRepair(observedAt) {
+    if (
+      !pendingRepairLoop ||
+      pendingRepairLoop.state !== 'READY_FOR_REPAIR' ||
+      !cognitiveSession
+    ) {
+      throw new Error(
+        'A bounded R5 repair loop and qualified proposal provider are required.'
+      );
+    }
+    const attempted = new Set(
+      pendingRepairLoop.attempts.map((attempt) => attempt.target)
+    );
+    const selectedTarget = pendingRepairLoop.allowedTargets.find(
+      (candidate) => !attempted.has(candidate)
+    );
+    if (!selectedTarget) {
+      throw new Error('No unattempted bounded repair target remains.');
+    }
+    const pending = await prepareInteractiveNaturalDevelopment({
+      request: {
+        objective: pendingRepairLoop.objective,
+        target: selectedTarget
+      },
+      activation,
+      cognitiveSession,
+      dispatchEvidence: options.dispatchEvidence,
+      workMode: sessionControl.currentWorkMode(),
+      patchAttempt: pendingRepairLoop.attempts.length + 1
+    });
+    pendingRepairLoop = proposeNaturalGovernedRepair(
+      pendingRepairLoop,
+      {
+        pending,
+        at: observedAt,
+        gatewayOptions: naturalRepairGatewayOptions()
+      }
+    );
+    agenticMission = pendingRepairLoop.mission;
+    projectNaturalMissionEvents(agenticMission, {
+      operation: 'mutation.applyConditional'
+    });
+    const proposal = pendingRepairLoop.pending.patchProposal;
+    const missionAuthorized =
+      pendingRepairLoop.state === 'MISSION_AUTHORITY_READY';
+    output.write(
+      formatNaturalGatewayResult(
+        pendingRepairLoop.lastDispatch,
+        activation.language
+      ) +
+      humanText(
+        activation,
+        'Proposta mínima delimitada pronta. Nenhuma mutação ocorreu.\n',
+        'Bounded minimal repair proposal is ready. No mutation occurred.\n'
+      ) +
+      `Target: ${proposal.target}\n` +
+      `BEFORE SHA256: ${proposal.beforeSha256}\n` +
+      `AFTER SHA256: ${proposal.replacementSha256}\n` +
+      `Proposal: ${proposal.proposalFingerprint}\n` +
+      humanText(
+        activation,
+        missionAuthorized
+          ? 'O envelope humano delimitado será revalidado antes desta mutação; nenhuma nova aprovação humana é necessária.\n'
+          : `Para autorizar somente este reparo: aprovar reparo ${proposal.proposalFingerprint}\n`,
+        missionAuthorized
+          ? 'The bounded human envelope will be revalidated before this mutation; no new human approval is required.\n'
+          : `To authorize only this repair: approve repair ${proposal.proposalFingerprint}\n`
+      )
+    );
+    if (missionAuthorized) {
+      const patchOptions = options.patchOptions || patchOptionsFromEnvironment();
+      pendingRepairLoop =
+        continueNaturalGovernedRepairWithMissionAuthority(
+          pendingRepairLoop,
+          {
+            ...patchOptions,
+            at: currentCanonicalInstant(options),
+            gatewayOptions: naturalRepairGatewayOptions()
+          }
+        );
+      agenticMission = pendingRepairLoop.mission;
+      projectNaturalMissionEvents(agenticMission);
+      if (
+        naturalEngineeringReferenceContext &&
+        pendingRepairLoop.lastDispatch &&
+        pendingRepairLoop.lastDispatch.result
+      ) {
+        naturalEngineeringReferenceContext =
+          recordNaturalEngineeringGatewayResult(
+            naturalEngineeringReferenceContext,
+            {
+              mission: agenticMission,
+              gatewayOperation: pendingRepairLoop.lastDispatch.result.operation,
+              sourceOperation: 'tests.run',
+              result: pendingRepairLoop.lastDispatch.result,
+              createdAt: agenticMission.updatedAt
+            }
+          );
+      }
+      output.write(
+        formatNaturalGatewayResult(
+          pendingRepairLoop.lastDispatch,
+          activation.language
+        )
+      );
+      if (pendingRepairLoop.state === 'READY_FOR_REPAIR') {
+        output.write(
+          humanText(
+            activation,
+            'O teste físico continua RED. O próximo reparo delimitado será investigado dentro do mesmo envelope.\n',
+            'The physical test remains RED. The next bounded repair will be investigated inside the same envelope.\n'
+          )
+        );
+      } else if (pendingRepairLoop.state === 'GREEN') {
+        output.write(
+          humanText(
+            activation,
+            'O teste focal e a qualificação delimitada estão GREEN. A autoridade de missão expirou e nenhuma autoridade Git foi concedida.\n',
+            'The focused test and bounded qualification are GREEN. Mission authority expired and no Git authority was granted.\n'
+          )
+        );
+      }
     }
   }
 
+  async function dispatchNaturalGatewayIntent(
+    intent
+  ) {
+    const observedAt =
+      currentCanonicalInstant(
+        options
+      );
+
+    const resolvedIntent =
+      resolveNaturalGatewayReferenceIntent(
+        intent,
+        observedAt
+      );
+
+    if (!resolvedIntent) {
+      projectNaturalMissionEvents(
+        agenticMission
+      );
+      return;
+    }
+
+    if (resolvedIntent.r5RepairRequest) {
+      await prepareNaturalGovernedRepair(observedAt);
+      return;
+    }
+
+    const prepared =
+      prepareNaturalGatewayMission(
+        resolvedIntent,
+        observedAt
+      );
+
+    if (!prepared) {
+      throw new Error(
+        'Task-specific mission is unavailable for the governed reference.'
+      );
+    }
+
+    agenticMission =
+      prepared.mission;
+
+    projectNaturalMissionEvents(
+      agenticMission,
+      {
+        operation:
+          resolvedIntent.operation,
+        stepId:
+          prepared.stepId
+      }
+    );
+
+    const requestSequence =
+      agenticMission.events.length + 1;
+
+    const request =
+      createGatewayRequest({
+        requestId:
+          `${agenticMission.missionId}-request-${requestSequence}`,
+        mission:
+          agenticMission,
+        operation:
+          resolvedIntent.operation,
+        args:
+          prepared.args,
+        requestedAt:
+          observedAt
+      });
+
+    let dispatch =
+      null;
+
+    for await (
+      const item of streamGatewayRequest({
+        request,
+        mission:
+          agenticMission,
+        options: {
+          now:
+            () => observedAt,
+          runtime:
+            options.gatewayRuntime || {},
+          onMissionEvent:
+            (event) =>
+              projectNaturalMissionEvent(
+                event,
+                {
+                  mission:
+                    agenticMission,
+                  operation:
+                    resolvedIntent.operation,
+                  stepId:
+                    prepared.stepId
+                }
+              )
+        }
+      })
+    ) {
+      if (item.event) {
+        projectNaturalMissionEvent(
+          item.event,
+          {
+            mission:
+              agenticMission,
+            operation:
+              resolvedIntent.operation,
+            stepId:
+              prepared.stepId
+          }
+        );
+      }
+
+      if (item.done) {
+        dispatch =
+          item.dispatch;
+      }
+    }
+
+    if (!dispatch || !dispatch.result) {
+      throw new Error(
+        'Integrated Gateway returned no structured dispatch.'
+      );
+    }
+
+    agenticMission =
+      dispatch.mission;
+    agenticMission =
+      recordNaturalAgenticMissionPlanResult(
+        agenticMission,
+        {
+          stepId:
+            prepared.stepId,
+          result:
+            dispatch.result,
+          at:
+            observedAt
+        }
+      );
+
+    projectNaturalMissionEvents(
+      agenticMission,
+      {
+        operation:
+          resolvedIntent.operation,
+        stepId:
+          prepared.stepId
+      }
+    );
+
+    naturalEngineeringReferenceContext =
+      recordNaturalEngineeringGatewayResult(
+        naturalEngineeringReferenceContext,
+        {
+          mission:
+            agenticMission,
+          gatewayOperation:
+            resolvedIntent.operation,
+          sourceOperation:
+            prepared.sourceOperation,
+          result:
+            dispatch.result,
+          createdAt:
+            observedAt
+        }
+      );
+
+    output.write(
+      formatNaturalGatewayResult(
+        dispatch,
+        activation.language
+      )
+    );
+  }
+
+  async function continueNaturalAgenticMission() {
+    if (!agenticMission) {
+      output.write(
+        'Continuation: NO_MISSION\n' +
+        humanText(
+          activation,
+          'Motivo: nenhuma missão governada existe no processo atual.\nAutoridade da continuação: nenhuma\n',
+          'Reason: no governed mission exists in the current process.\nContinuation authority: none\n'
+        )
+      );
+      return;
+    }
+
+    const observedAt =
+      currentCanonicalInstant(options);
+    const revalidation =
+      revalidateDeterministicWorkspaceSession(
+        agenticMission.session
+      );
+    const continuation =
+      selectNaturalAgenticMissionContinuation({
+        mission:
+          agenticMission,
+        revalidation
+      });
+
+    output.write(
+      formatNaturalMissionContinuation(
+        continuation,
+        activation.language
+      )
+    );
+
+    if (continuation.classification === 'STALE_STATE') {
+      const pending =
+        agenticMission.plan.filter(
+          (step) => step.status === 'PENDING'
+        );
+      if (pending.length === 1) {
+        agenticMission =
+          updateNaturalAgenticMissionPlanStep(
+            agenticMission,
+            {
+              stepId:
+                pending[0].stepId,
+              status:
+                'BLOCKED',
+              resultClass:
+                'STALE_STATE',
+              blocker:
+                continuation.reason,
+              at:
+                observedAt,
+              eventSummary:
+                'Process-local continuation invalidated the stale live-plan step.'
+            }
+          );
+      }
+      if (agenticMission.state !== 'BLOCKED') {
+        agenticMission =
+          transitionNaturalAgenticMission(
+            agenticMission,
+            {
+              type:
+                'STATE_INVALIDATED',
+              state:
+                'BLOCKED',
+              summary:
+                continuation.reason,
+              at:
+                observedAt,
+              resultClass:
+                'STALE_STATE'
+            }
+          );
+      }
+      projectNaturalMissionEvents(
+        agenticMission
+      );
+      return;
+    }
+
+    if (continuation.classification !== 'ELIGIBLE') {
+      return;
+    }
+
+    const step =
+      continuation.step;
+    await dispatchNaturalGatewayIntent(
+      Object.freeze({
+        operation:
+          step.operation,
+        args:
+          step.operation === 'evidence.inspect'
+            ? Object.freeze({
+                operation:
+                  step.sourceOperation
+              })
+            : Object.freeze({}),
+        objective:
+          agenticMission.objective,
+        sourceOperation:
+          step.sourceOperation || step.operation,
+        continuationStepId:
+          step.stepId,
+        requiresMissionContext:
+          true,
+        readOnly:
+          true,
+        authorityExpansion:
+          false,
+        operationalAuthority:
+          false,
+        mutationAuthority:
+          false,
+        publicationAuthority:
+          false
+      })
+    );
+  }
+
   rl.on('line', (line) => {
-    rl.pause();
+    if (
+      terminal &&
+      interactiveRequestInFlight
+    ) {
+      if (!interactiveBackpressureReported) {
+        interactiveBackpressureReported =
+          true;
+
+        output.write(
+          formatInteractiveBackpressureMessage(
+            activation
+          )
+        );
+      }
+
+      return;
+    }
+
+    if (terminal) {
+      interactiveRequestInFlight =
+        true;
+    } else {
+      rl.pause();
+    }
 
     processing =
       processing
         .then(async () => {
           const normalizedLine = String(line || '').trim();
+
+          const pendingHelpRequest =
+            (
+              pendingDevelopment ||
+              (
+                pendingRepairLoop &&
+                (
+                  pendingRepairLoop.state === 'AUTHORITY_REQUIRED' ||
+                  (
+                    pendingRepairLoop.state === 'READY_FOR_REPAIR' &&
+                    pendingRepairLoop.missionAuthorityRequest &&
+                    !pendingRepairLoop.missionMutationAuthority
+                  )
+                )
+              )
+            )
+              ? resolveNaturalHelpRequest(line)
+              : null;
+
+          if (pendingHelpRequest) {
+            output.write(
+              formatCurrentNaturalHelp(
+                pendingHelpRequest
+              )
+            );
+            resumeAndPrompt();
+            return;
+          }
+
+          if (
+            pendingRepairLoop &&
+            pendingRepairLoop.state === 'READY_FOR_REPAIR' &&
+            pendingRepairLoop.missionAuthorityRequest &&
+            !pendingRepairLoop.missionMutationAuthority &&
+            /^(?:autorizar|authorize) (?:miss[aã]o|mission)\b/i.test(normalizedLine)
+          ) {
+            const request = pendingRepairLoop.missionAuthorityRequest;
+            const approval = normalizedLine.match(
+              /^(?:autorizar|authorize) (?:miss[aã]o|mission) ([a-f0-9]{64})$/i
+            );
+            if (
+              !approval ||
+              approval[1].toLowerCase() !== request.authorityRequestFingerprint
+            ) {
+              output.write(
+                humanText(
+                  activation,
+                  `A autoridade delimitada não corresponde ao envelope físico atual. Use "autorizar missão ${request.authorityRequestFingerprint}".\n`,
+                  `The bounded authority does not match the current physical envelope. Use "authorize mission ${request.authorityRequestFingerprint}".\n`
+                )
+              );
+              resumeAndPrompt();
+              return;
+            }
+            try {
+              const patchOptions = options.patchOptions || patchOptionsFromEnvironment();
+              pendingRepairLoop = authorizeNaturalGovernedRepairMission(
+                pendingRepairLoop,
+                {
+                  approvedAuthorityRequestFingerprint:
+                    request.authorityRequestFingerprint,
+                  ...patchOptions,
+                  at: currentCanonicalInstant(options)
+                }
+              );
+              agenticMission = pendingRepairLoop.mission;
+              projectNaturalMissionEvents(agenticMission, {
+                operation: 'authority.inspect'
+              });
+              output.write(
+                humanText(
+                  activation,
+                  'Autoridade humana process-local delimitada à missão foi verificada. Cada mutação continuará sujeita ao envelope, G4 exato, Gateway e CAS.\n',
+                  'Process-local human authority bounded to the mission was verified. Every mutation remains subject to the envelope, exact G4, Gateway, and CAS.\n'
+                )
+              );
+              while (pendingRepairLoop.state === 'READY_FOR_REPAIR') {
+                await prepareNaturalGovernedRepair(
+                  currentCanonicalInstant(options)
+                );
+              }
+            } catch (error) {
+              output.write(
+                humanText(
+                  activation,
+                  `A missão delimitada parou de forma segura: ${error && error.message ? error.message : 'falha de ambiente'}. Nenhuma autoridade foi ampliada.\n`,
+                  `The bounded mission stopped safely: ${error && error.message ? error.message : 'environment failure'}. No authority was widened.\n`
+                )
+              );
+            }
+            resumeAndPrompt();
+            return;
+          }
+
+          if (
+            pendingRepairLoop &&
+            pendingRepairLoop.state === 'AUTHORITY_REQUIRED' &&
+            !/^(?:exit|quit)$/i.test(normalizedLine) &&
+            !isNaturalMissionCancellationRequest(normalizedLine)
+          ) {
+            const proposal = pendingRepairLoop.pending.patchProposal;
+            const approval = normalizedLine.match(
+              /^(?:aprovar|approve) (?:reparo|repair) ([a-f0-9]{64})$/i
+            );
+            if (
+              approval &&
+              approval[1].toLowerCase() === proposal.proposalFingerprint
+            ) {
+              try {
+                const patchOptions =
+                  options.patchOptions || patchOptionsFromEnvironment();
+                pendingRepairLoop =
+                  authorizeAndContinueNaturalGovernedRepair(
+                    pendingRepairLoop,
+                    {
+                      approvedProposalFingerprint:
+                        proposal.proposalFingerprint,
+                      ...patchOptions,
+                      at: currentCanonicalInstant(options),
+                      gatewayOptions: naturalRepairGatewayOptions()
+                    }
+                  );
+                agenticMission = pendingRepairLoop.mission;
+                projectNaturalMissionEvents(agenticMission);
+                if (
+                  naturalEngineeringReferenceContext &&
+                  pendingRepairLoop.lastDispatch &&
+                  pendingRepairLoop.lastDispatch.result
+                ) {
+                  naturalEngineeringReferenceContext =
+                    recordNaturalEngineeringGatewayResult(
+                      naturalEngineeringReferenceContext,
+                      {
+                        mission: agenticMission,
+                        gatewayOperation:
+                          pendingRepairLoop.lastDispatch.result.operation,
+                        sourceOperation: 'tests.run',
+                        result: pendingRepairLoop.lastDispatch.result,
+                        createdAt: agenticMission.updatedAt
+                      }
+                    );
+                }
+                output.write(
+                  formatNaturalGatewayResult(
+                    pendingRepairLoop.lastDispatch,
+                    activation.language
+                  )
+                );
+                if (pendingRepairLoop.state === 'READY_FOR_REPAIR') {
+                  output.write(
+                    humanText(
+                      activation,
+                      'O teste físico continua RED. A nova evidência foi registrada; diga "corrija isso" para preparar o próximo reparo mínimo.\n',
+                      'The physical test remains RED. New evidence was recorded; say "fix this" to prepare the next minimal repair.\n'
+                    )
+                  );
+                } else if (pendingRepairLoop.state === 'GREEN') {
+                  output.write(
+                    humanText(
+                      activation,
+                      'O teste focal e a qualificação delimitada estão GREEN. A missão está GREEN; nenhuma autoridade Git foi concedida.\n',
+                      'The focused test and bounded qualification are GREEN. The mission is GREEN; no Git authority was granted.\n'
+                    )
+                  );
+                }
+              } catch (error) {
+                output.write(
+                  humanText(
+                    activation,
+                    `O reparo governado falhou de forma segura: ${error && error.message ? error.message : 'falha de ambiente'}. Nenhuma autoridade reutilizável foi criada.\n`,
+                    `The governed repair failed closed: ${error && error.message ? error.message : 'environment failure'}. No reusable authority was created.\n`
+                  )
+                );
+              }
+              resumeAndPrompt();
+              return;
+            }
+            if (/^(?:nao|não|no|negar|deny)$/i.test(normalizedLine)) {
+              pendingRepairLoop = denyNaturalGovernedRepairAuthority(
+                pendingRepairLoop,
+                { at: currentCanonicalInstant(options) }
+              );
+              agenticMission = pendingRepairLoop.mission;
+              projectNaturalMissionEvents(agenticMission);
+              output.write(
+                humanText(
+                  activation,
+                  'Autoridade de reparo negada. O alvo permaneceu inalterado, nenhum teste posterior foi alegado e a missão não está GREEN.\n',
+                  'Repair authority denied. The target remained unchanged, no later test was claimed, and the mission is not GREEN.\n'
+                )
+              );
+              resumeAndPrompt();
+              return;
+            }
+            output.write(
+              humanText(
+                activation,
+                `Um reparo exato aguarda decisão. Use "aprovar reparo ${proposal.proposalFingerprint}" ou "negar".\n`,
+                `An exact repair awaits a decision. Use "approve repair ${proposal.proposalFingerprint}" or "deny".\n`
+              )
+            );
+            resumeAndPrompt();
+            return;
+          }
 
           if (
             pendingDevelopment &&
@@ -1177,7 +2736,123 @@ function createInteractiveSession(
               );
 
             if (controlled.matched) {
-              if (controlled.action === 'MISSION_PROJECTION') {
+              if (controlled.action === 'HELP_REQUEST') {
+                output.write(
+                  formatCurrentNaturalHelp(
+                    controlled
+                  )
+                );
+              } else if (controlled.action === 'REPAIR_LOOP_START') {
+                try {
+                  const observedAt = currentCanonicalInstant(options);
+                  const session = createDeterministicWorkspaceSession({
+                    authorizedRoot: activation.repositoryPath,
+                    humanSubject: NATURAL_WORKSPACE_HUMAN_SUBJECT,
+                    authorizedAt: observedAt
+                  });
+                  pendingRepairLoop = createNaturalGovernedRepairLoop({
+                    ...controlled.request,
+                    session,
+                    createdAt: observedAt
+                  });
+                  agenticMission = pendingRepairLoop.mission;
+                  naturalGatewayMissionSequence += 1;
+                  naturalEngineeringReferenceContext =
+                    createNaturalEngineeringReferenceContext({
+                      mission: agenticMission,
+                      createdAt: observedAt
+                    });
+                  pendingRepairLoop =
+                    investigateNaturalGovernedRepairFailure(
+                      pendingRepairLoop,
+                      {
+                        at: observedAt,
+                        gatewayOptions: naturalRepairGatewayOptions()
+                      }
+                    );
+                  agenticMission = pendingRepairLoop.mission;
+                  projectNaturalMissionEvents(agenticMission, {
+                    operation: 'tests.run'
+                  });
+                  naturalEngineeringReferenceContext =
+                    recordNaturalEngineeringGatewayResult(
+                      naturalEngineeringReferenceContext,
+                      {
+                        mission: agenticMission,
+                        gatewayOperation: 'tests.run',
+                        sourceOperation: 'tests.run',
+                        result: pendingRepairLoop.lastDispatch.result,
+                        createdAt: agenticMission.updatedAt
+                      }
+                    );
+                  output.write(
+                    formatNaturalGatewayResult(
+                      pendingRepairLoop.lastDispatch,
+                      activation.language
+                    ) +
+                    (
+                      pendingRepairLoop.state === 'READY_FOR_REPAIR'
+                        ? humanText(
+                            activation,
+                            `Falha física delimitada e registrada. Para autorizar o loop inteiro somente neste envelope: autorizar missão ${pendingRepairLoop.missionAuthorityRequest.authorityRequestFingerprint}\nComo alternativa, diga "corrija isso" para manter aprovação exata por reparo.\n`,
+                            `A bounded physical failure was recorded. To authorize the whole loop only inside this envelope: authorize mission ${pendingRepairLoop.missionAuthorityRequest.authorityRequestFingerprint}\nAlternatively, say "fix this" to keep exact per-repair approval.\n`
+                          )
+                        : humanText(
+                            activation,
+                            'Nenhuma falha física justificou reparo; a missão parou de forma segura.\n',
+                            'No physical failure justified a repair; the mission stopped safely.\n'
+                          )
+                    )
+                  );
+                } catch (error) {
+                  pendingRepairLoop = null;
+                  output.write(
+                    humanText(
+                      activation,
+                      `O loop R5 não pôde ser estabelecido: ${error && error.message ? error.message : 'falha de ambiente'}. Nenhuma mutação foi executada.\n`,
+                      `The R5 loop could not be established: ${error && error.message ? error.message : 'environment failure'}. No mutation was executed.\n`
+                    )
+                  );
+                }
+              } else if (
+                controlled.action === 'GATEWAY_REQUEST' ||
+                controlled.action === 'REFERENCE_REQUEST'
+              ) {
+                try {
+                  await dispatchNaturalGatewayIntent(
+                    controlled.intent
+                  );
+                } catch (error) {
+                  output.write(
+                    humanText(
+                      activation,
+                      `A operação governada falhou de forma segura antes de produzir evidência válida. Motivo: ${error && error.message ? error.message : 'falha de ambiente'}. Nenhuma autoridade foi concedida.\n`,
+                      `The governed operation failed closed before producing valid evidence. Reason: ${error && error.message ? error.message : 'environment failure'}. No authority was granted.\n`
+                    )
+                  );
+                }
+              } else if (controlled.action === 'MISSION_CONTINUE') {
+                try {
+                  if (
+                    pendingRepairLoop &&
+                    pendingRepairLoop.state === 'READY_FOR_REPAIR'
+                  ) {
+                    await prepareNaturalGovernedRepair(
+                      currentCanonicalInstant(options)
+                    );
+                  } else {
+                    await continueNaturalAgenticMission();
+                  }
+                } catch (error) {
+                  output.write(
+                    humanText(
+                      activation,
+                      `A continuação falhou de forma segura. Motivo: ${error && error.message ? error.message : 'falha de ambiente'}. Nenhuma autoridade foi concedida.\n`,
+                      `Continuation failed closed. Reason: ${error && error.message ? error.message : 'environment failure'}. No authority was granted.\n`
+                    )
+                  );
+                }
+              } else if (controlled.action === 'MISSION_PROJECTION') {
                 if (!agenticMission) {
                   output.write(
                     humanText(
@@ -1187,17 +2862,98 @@ function createInteractiveSession(
                     )
                   );
                 } else {
+                  const revalidation =
+                    revalidateDeterministicWorkspaceSession(
+                      agenticMission.session
+                    );
+                  if (
+                    revalidation.decision !== 'VALID' &&
+                    agenticMission.events.at(-1).type !==
+                      'STATE_INVALIDATED'
+                  ) {
+                    const observedAt =
+                      currentCanonicalInstant(options);
+                    const pending =
+                      agenticMission.plan.filter(
+                        (step) => step.status === 'PENDING'
+                      );
+                    if (pending.length === 1) {
+                      agenticMission =
+                        updateNaturalAgenticMissionPlanStep(
+                          agenticMission,
+                          {
+                            stepId:
+                              pending[0].stepId,
+                            status:
+                              'BLOCKED',
+                            resultClass:
+                              'STALE_STATE',
+                            blocker:
+                              'Mission projection detected stale physical workspace state.',
+                            at:
+                              observedAt,
+                            eventSummary:
+                              'Mission projection invalidated the stale live-plan step.'
+                          }
+                        );
+                    }
+                    agenticMission =
+                      transitionNaturalAgenticMission(
+                        agenticMission,
+                        {
+                          type:
+                            'STATE_INVALIDATED',
+                          state:
+                            'BLOCKED',
+                          summary:
+                            'Mission projection failed closed because physical workspace state changed.',
+                          at:
+                            observedAt,
+                          resultClass:
+                            'STALE_STATE'
+                        }
+                      );
+                  }
+                  projectNaturalMissionEvents(
+                    agenticMission
+                  );
                   output.write(
                     formatMissionProjection(
                       projectMissionView(
                         agenticMission,
                         controlled.projection
-                      )
+                      ),
+                      activation.language
+                    ) +
+                    (
+                      controlled.projection === 'status' &&
+                      naturalEngineeringReferenceContext
+                        ? formatNaturalReferenceContextProjection(
+                            projectNaturalEngineeringReferenceContext(
+                              naturalEngineeringReferenceContext
+                            ),
+                            activation.language
+                          )
+                        : ''
                     )
                   );
                 }
               } else if (controlled.action === 'MISSION_CANCEL') {
                 pendingDevelopment = null;
+
+                if (
+                  pendingRepairLoop &&
+                  !['GREEN', 'CANCELLED'].includes(pendingRepairLoop.state)
+                ) {
+                  pendingRepairLoop = cancelNaturalGovernedRepairLoop(
+                    pendingRepairLoop,
+                    {
+                      at: currentCanonicalInstant(options),
+                      reason: 'Human cancelled the active R5 repair loop through NATURAL.'
+                    }
+                  );
+                  agenticMission = pendingRepairLoop.mission;
+                }
 
                 if (runnerRuntime) {
                   runnerRuntime.cancelPending();
@@ -1230,6 +2986,10 @@ function createInteractiveSession(
                       );
                   }
 
+                  projectNaturalMissionEvents(
+                    agenticMission
+                  );
+
                   output.write(
                     humanText(
                       activation,
@@ -1240,7 +3000,8 @@ function createInteractiveSession(
                       projectMissionView(
                         agenticMission,
                         'status'
-                      )
+                      ),
+                      activation.language
                     )
                   );
                 }
@@ -1267,7 +3028,8 @@ function createInteractiveSession(
                       projectMissionView(
                         agenticMission,
                         'status'
-                      )
+                      ),
+                      activation.language
                     )
                   );
                 } else {
@@ -1283,12 +3045,16 @@ function createInteractiveSession(
                       resumedAt:
                         currentCanonicalInstant(options)
                     });
+                  projectNaturalMissionEvents(
+                    agenticMission
+                  );
                   output.write(
                     formatMissionProjection(
                       projectMissionView(
                         agenticMission,
                         'status'
-                      )
+                      ),
+                      activation.language
                     )
                   );
                 }
@@ -1459,6 +3225,27 @@ function createInteractiveSession(
                           activation,
                           options
                         );
+
+                      if (!agenticMission) {
+                        agenticMission =
+                          createNaturalGatewayMission(
+                            Object.freeze({
+                              objective:
+                                task.objective,
+                              operation:
+                                'evidence.inspect'
+                            }),
+                            workspaceContext.observedAt,
+                            workspaceContext.experience.session
+                          );
+                        naturalEngineeringReferenceContext =
+                          createNaturalEngineeringReferenceContext({
+                            mission:
+                              agenticMission,
+                            createdAt:
+                              workspaceContext.observedAt
+                          });
+                      }
                     } catch {
                       output.write(
                         humanText(
@@ -1481,6 +3268,37 @@ function createInteractiveSession(
                         cognitiveSession,
                         dispatchEvidence:
                           options.dispatchEvidence,
+                        onGovernedEvidence(
+                          governedEvidence
+                        ) {
+                          if (
+                            !agenticMission ||
+                            !naturalEngineeringReferenceContext
+                          ) {
+                            throw new Error(
+                              'Governed evidence cannot be recorded without the current bounded mission context.'
+                            );
+                          }
+
+                          naturalEngineeringReferenceContext =
+                            recordNaturalGovernedReadOnlyEvidence(
+                              naturalEngineeringReferenceContext,
+                              {
+                                mission:
+                                  agenticMission,
+                                governedRequest:
+                                  governedEvidence
+                                    .governedRequest,
+                                governed:
+                                  governedEvidence
+                                    .governed,
+                                createdAt:
+                                  currentCanonicalInstant(
+                                    options
+                                  )
+                              }
+                            );
+                        },
                         sensitiveContentPolicy:
                           workspaceContext
                             .experience
@@ -1817,6 +3635,26 @@ function createInteractiveSession(
                 }
               } else if (
                 controlled.action ===
+                  'PROVIDER_LIST'
+              ) {
+                if (!cognitiveSession || typeof cognitiveSession.describeProviders !== 'function') {
+                  output.write(
+                    humanText(
+                      activation,
+                      'A lista de providers está indisponível. Nenhuma alteração foi realizada.\n',
+                      'The provider list is unavailable. No change was made.\n'
+                    )
+                  );
+                } else {
+                  output.write(
+                    formatProviderCatalog(
+                      await cognitiveSession.describeProviders(),
+                      activation.language
+                    )
+                  );
+                }
+              } else if (
+                controlled.action ===
                   'LOCAL_MODEL_SELECTION'
               ) {
                 if (
@@ -1849,8 +3687,8 @@ function createInteractiveSession(
                     output.write(
                       humanText(
                         activation,
-                        `Não foi possível ativar ${controlled.model}: ${selected.reason}\nO modelo anterior e a governança foram preservados.\n`,
-                        `Could not activate ${controlled.model}: ${selected.reason}\nThe previous model and governance were preserved.\n`
+                        `Não foi possível ativar ${controlled.model}.\nEstado: ${selected.state || 'UNAVAILABLE'}.\nMotivo: ${selected.reason}\nO modelo anterior e a governança foram preservados.\n`,
+                        `Could not activate ${controlled.model}.\nState: ${selected.state || 'UNAVAILABLE'}.\nReason: ${selected.reason}\nThe previous model and governance were preserved.\n`
                       )
                     );
                   }
@@ -2054,6 +3892,9 @@ function createInteractiveSession(
     interfaceClosed =
       true;
 
+    interactiveRequestInFlight =
+      false;
+
     if (terminal) {
       output.write('\n');
     }
@@ -2232,6 +4073,10 @@ async function main(
     {
       input,
       output,
+      continuityStateRoot:
+        options.continuityStateRoot ||
+        process.env.SDO_NATURAL_MISSION_STATE_ROOT ||
+        null,
       patchOptions:
         patchOptionsFromEnvironment()
     }

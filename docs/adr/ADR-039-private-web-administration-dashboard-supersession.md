@@ -180,6 +180,31 @@ address, hardware serial, hostname, username, filesystem or repository
 fingerprint, machine fingerprint, or secret material. Telemetry MUST NOT
 silently evolve into fingerprinting.
 
+## 6A. User telemetry consent and control
+
+Collection and transmission of adoption telemetry SHALL be transparent and
+under explicit user control.
+
+A distributed Surgical client MUST NOT transmit adoption telemetry until an
+affirmative opt-in has been recorded. Absence of a recorded choice SHALL be
+treated as telemetry disabled, not as implied consent.
+
+The user SHALL be able to disable future telemetry transmission without losing
+or degrading any Surgical DevOps operational capability. Refusal, absence or
+withdrawal of telemetry consent MUST NOT grant, deny, broaden, reduce or weaken
+deterministic operational authority.
+
+Consent state MUST NOT itself become operational authority, mutation authority,
+provider authority, billing authority or a prerequisite for local operation.
+
+Telemetry consent MUST NOT authorize collection of fields prohibited elsewhere
+in this ADR. Opt-in changes whether qualified telemetry may be transmitted; it
+does not widen the qualified telemetry schema.
+
+Future implementation qualification MUST prove that telemetry remains disabled
+before affirmative opt-in, can be disabled subsequently, and that refusal or
+disablement leaves deterministic Surgical operation and authority unchanged.
+
 ## 7. Metrics semantics
 
 Qualified private metrics MAY include:
