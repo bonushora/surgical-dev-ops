@@ -38,7 +38,7 @@ Whenever documentation is modified:
 
 - `README.md` is the canonical English public entry point.
 - `README_PT-BR.md` is the equivalent Portuguese public entry point.
-- `README_EN.md` is retained only as a compatibility path.
+- `README_EN.md` is a full English mirror of `README.md`, retained as a compatibility path.
 - English and Portuguese public claims must remain semantically equivalent.
 - The original Portuguese protocol RAW artifacts must remain unchanged.
 - Future protocol versions must use new versioned paths.
