@@ -26,7 +26,7 @@ operational system around the model explicit, bounded, auditable, and fail-close
 | Published native CI predecessor | [`56da715284704f227675961d476e19acce6e9fa3`](https://github.com/bonushora/surgical-dev-ops/commit/56da715284704f227675961d476e19acce6e9fa3), [Accelerator Conformance #33286652480](https://github.com/bonushora/surgical-dev-ops/actions/runs/33286652480) |
 | Published predecessor matrix | Ubuntu, macOS, and Windows: **PASS** |
 | Local canonical suite | 1212 tests discovered; 1207 passed; 0 failures; 5 platform-specific skips |
-| Normative protocols | BH-SEP/BH-SDP v2.2 preserved; BH-SEP/BH-SDP v2.3 current |
+| Normative protocols | BH-SEP v2.2 + BH-SDP v2.2 |
 
 The complete trail, including failed runs that preceded the green baseline, is
 documented in [Engineering Evidence](./docs/ENGINEERING_EVIDENCE.md).
@@ -173,25 +173,24 @@ npm test
 
 ## Normative protocols and immutable RAW artifacts
 
-The original Portuguese BH-SEP v2.2 and BH-SDP v2.2 artifacts are frozen at
-stable paths. They are not replaced by this international README or by English
-translations.
-
-### v2.2 — historical and preserved
+### v2.2 — histórica e preservada
 
 - [BH-SEP v2.2 — original RAW](https://raw.githubusercontent.com/bonushora/surgical-dev-ops/main/protocols/BH-SEP.md)
 - [BH-SDP v2.2 — original RAW](https://raw.githubusercontent.com/bonushora/surgical-dev-ops/main/protocols/BH-SDP.md)
 - [BH-SEP v2.2 — English translation](./protocols/BH-SEP_EN.md)
 - [BH-SDP v2.2 — English translation](./protocols/BH-SDP_EN.md)
 
-### v2.3 — current
+### v2.3 — atual
 
-- [BH-SEP v2.3 — PT-BR](https://raw.githubusercontent.com/bonushora/surgical-dev-ops/main/protocols/v2.3/BH-SEP.md)
-- [BH-SDP v2.3 — PT-BR](https://raw.githubusercontent.com/bonushora/surgical-dev-ops/main/protocols/v2.3/BH-SDP.md)
-- [BH-SEP v2.3 — EN](https://raw.githubusercontent.com/bonushora/surgical-dev-ops/main/protocols/v2.3/BH-SEP_EN.md)
-- [BH-SDP v2.3 — EN](https://raw.githubusercontent.com/bonushora/surgical-dev-ops/main/protocols/v2.3/BH-SDP_EN.md)
-- [Copy both protocols — EN](https://raw.githubusercontent.com/bonushora/surgical-dev-ops/main/protocols/v2.3/BH-PROTOCOLS_EN.md)
-- [Copiar os dois protocolos — PT-BR](https://raw.githubusercontent.com/bonushora/surgical-dev-ops/main/protocols/v2.3/BH-PROTOCOLS.md)
+- [BH-SEP v2.3 — RAW original](./protocols/v2.3/BH-SEP.md)
+- [BH-SDP v2.3 — RAW original](./protocols/v2.3/BH-SDP.md)
+- [BH-SEP v2.3 — tradução inglesa](./protocols/v2.3/BH-SEP_EN.md)
+- [BH-SDP v2.3 — tradução inglesa](./protocols/v2.3/BH-SDP_EN.md)
+
+#### Cópia conjunta da v2.3
+
+- [Copiar BH-SEP + BH-SDP v2.3 — RAW original](./protocols/v2.3/BH-PROTOCOLS.md)
+- [Copiar BH-SEP + BH-SDP v2.3 — tradução inglesa](./protocols/v2.3/BH-PROTOCOLS_EN.md)
 
 Future protocol versions must use new versioned paths. They must not overwrite or
 repurpose the original v2.2 RAW URLs. See

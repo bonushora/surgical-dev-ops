@@ -26,7 +26,7 @@ sistema operacional ao redor do modelo explícito, limitado, auditável e fail-c
 | Predecessor publicado com CI nativo | [`56da715284704f227675961d476e19acce6e9fa3`](https://github.com/bonushora/surgical-dev-ops/commit/56da715284704f227675961d476e19acce6e9fa3), [Accelerator Conformance #33286652480](https://github.com/bonushora/surgical-dev-ops/actions/runs/33286652480) |
 | Matriz publicada do predecessor | Ubuntu, macOS e Windows: **PASS** |
 | Suíte canônica local | 1212 testes descobertos; 1207 aprovados; 0 falhas; 5 skips específicos de plataforma |
-| Protocolos normativos | BH-SEP/BH-SDP v2.2 preservados; BH-SEP/BH-SDP v2.3 atuais |
+| Protocolos normativos | BH-SEP v2.2 + BH-SDP v2.2 |
 
 A trilha completa, incluindo os runs que falharam antes do baseline verde, está em
 [Evidências de Engenharia](./docs/ENGINEERING_EVIDENCE.md).
@@ -158,10 +158,6 @@ npm test
 
 ## Protocolos normativos e RAW imutáveis
 
-Os artefatos originais em português BH-SEP v2.2 e BH-SDP v2.2 estão congelados em
-caminhos estáveis. Eles não são substituídos pelo README internacional nem pelas
-traduções inglesas.
-
 ### v2.2 — histórica e preservada
 
 - [BH-SEP v2.2 — RAW original](https://raw.githubusercontent.com/bonushora/surgical-dev-ops/main/protocols/BH-SEP.md)
@@ -171,12 +167,15 @@ traduções inglesas.
 
 ### v2.3 — atual
 
-- [BH-SEP v2.3 — PT-BR](https://raw.githubusercontent.com/bonushora/surgical-dev-ops/main/protocols/v2.3/BH-SEP.md)
-- [BH-SDP v2.3 — PT-BR](https://raw.githubusercontent.com/bonushora/surgical-dev-ops/main/protocols/v2.3/BH-SDP.md)
-- [BH-SEP v2.3 — EN](https://raw.githubusercontent.com/bonushora/surgical-dev-ops/main/protocols/v2.3/BH-SEP_EN.md)
-- [BH-SDP v2.3 — EN](https://raw.githubusercontent.com/bonushora/surgical-dev-ops/main/protocols/v2.3/BH-SDP_EN.md)
-- [Copiar os dois protocolos — PT-BR](https://raw.githubusercontent.com/bonushora/surgical-dev-ops/main/protocols/v2.3/BH-PROTOCOLS.md)
-- [Copiar os dois protocolos — EN](https://raw.githubusercontent.com/bonushora/surgical-dev-ops/main/protocols/v2.3/BH-PROTOCOLS_EN.md)
+- [BH-SEP v2.3 — RAW original](./protocols/v2.3/BH-SEP.md)
+- [BH-SDP v2.3 — RAW original](./protocols/v2.3/BH-SDP.md)
+- [BH-SEP v2.3 — tradução inglesa](./protocols/v2.3/BH-SEP_EN.md)
+- [BH-SDP v2.3 — tradução inglesa](./protocols/v2.3/BH-SDP_EN.md)
+
+#### Cópia conjunta da v2.3
+
+- [Copiar BH-SEP + BH-SDP v2.3 — RAW original](./protocols/v2.3/BH-PROTOCOLS.md)
+- [Copiar BH-SEP + BH-SDP v2.3 — tradução inglesa](./protocols/v2.3/BH-PROTOCOLS_EN.md)
 
 Versões futuras devem usar novos caminhos versionados e não podem sobrescrever ou
 redirecionar os RAW originais. Consulte [Preservação dos Protocolos](./protocols/README.md)

@@ -30,26 +30,24 @@ normative Portuguese text.
 
 ## Protocol sequence
 
-- **v2.2 — historical, frozen, and immutable:** the stable PT-BR originals and
-  separate EN translations remain unchanged.
-- **v2.3 — current update:** the versioned PT-BR and EN protocols are the current
-  presentation.
+### v2.2 — histórica e preservada
 
-### v2.2 — preserved
+- [BH-SEP v2.2 — PT-BR original](./BH-SEP.md)
+- [BH-SDP v2.2 — PT-BR original](./BH-SDP.md)
+- [BH-SEP v2.2 — EN translation](./BH-SEP_EN.md)
+- [BH-SDP v2.2 — EN translation](./BH-SDP_EN.md)
 
-- [BH-SEP v2.2 — PT-BR](./BH-SEP.md)
-- [BH-SDP v2.2 — PT-BR](./BH-SDP.md)
-- [BH-SEP v2.2 — EN](./BH-SEP_EN.md)
-- [BH-SDP v2.2 — EN](./BH-SDP_EN.md)
+### v2.3 — atual
 
-### v2.3 — current
+- [BH-SEP v2.3 — RAW original](./v2.3/BH-SEP.md)
+- [BH-SDP v2.3 — RAW original](./v2.3/BH-SDP.md)
+- [BH-SEP v2.3 — tradução inglesa](./v2.3/BH-SEP_EN.md)
+- [BH-SDP v2.3 — tradução inglesa](./v2.3/BH-SDP_EN.md)
 
-- [BH-SEP v2.3 — PT-BR](https://raw.githubusercontent.com/bonushora/surgical-dev-ops/main/protocols/v2.3/BH-SEP.md)
-- [BH-SDP v2.3 — PT-BR](https://raw.githubusercontent.com/bonushora/surgical-dev-ops/main/protocols/v2.3/BH-SDP.md)
-- [BH-SEP v2.3 — EN](https://raw.githubusercontent.com/bonushora/surgical-dev-ops/main/protocols/v2.3/BH-SEP_EN.md)
-- [BH-SDP v2.3 — EN](https://raw.githubusercontent.com/bonushora/surgical-dev-ops/main/protocols/v2.3/BH-SDP_EN.md)
-- [Copiar os dois protocolos — PT-BR](https://raw.githubusercontent.com/bonushora/surgical-dev-ops/main/protocols/v2.3/BH-PROTOCOLS.md)
-- [Copy both protocols — EN](https://raw.githubusercontent.com/bonushora/surgical-dev-ops/main/protocols/v2.3/BH-PROTOCOLS_EN.md)
+#### Cópia conjunta da v2.3
+
+- [Copiar BH-SEP + BH-SDP v2.3 — RAW original](./v2.3/BH-PROTOCOLS.md)
+- [Copiar BH-SEP + BH-SDP v2.3 — tradução inglesa](./v2.3/BH-PROTOCOLS_EN.md)
 
 ## Future protocol versions
 
