@@ -68,6 +68,26 @@ int fail(const wchar_t* reason) {
   return 2;
 }
 
+struct InternalFailure {
+  const wchar_t* stage;
+  DWORD win32Error;
+  long internalCode;
+};
+
+int failRunNode(const InternalFailure& failure) {
+  std::wcerr << L"SDO_WIN32_NODE_TEST_INTERNAL"
+             << L" stage=" << failure.stage
+             << L" win32Error=" << failure.win32Error
+             << L" internalCode=" << failure.internalCode << L"\n";
+  return -1;
+}
+
+void recordFailure(InternalFailure* failure, const wchar_t* stage,
+                   DWORD win32Error, long internalCode = 0) {
+  if (failure == nullptr) return;
+  *failure = {stage, win32Error, internalCode};
+}
+
 bool safeText(const std::wstring& value) {
   if (value.empty()) return false;
   for (wchar_t character : value) {
@@ -109,23 +129,38 @@ std::wstring join(const std::wstring& parent, const std::wstring& child) {
   return (fs::path(parent) / fs::path(child)).wstring();
 }
 
-bool copyTree(const fs::path& source, const fs::path& destination) {
+bool copyTree(const fs::path& source, const fs::path& destination,
+              long* internalCode) {
   std::error_code error;
-  if (!fs::is_directory(source, error) || error) return false;
+  if (!fs::is_directory(source, error) || error) {
+    *internalCode = error ? error.value() : ERROR_DIRECTORY;
+    return false;
+  }
   fs::create_directories(destination, error);
-  if (error) return false;
+  if (error) {
+    *internalCode = error.value();
+    return false;
+  }
   for (const fs::directory_entry& entry : fs::directory_iterator(source, error)) {
-    if (error || entry.is_symlink(error) || entry.is_other(error) || error) return false;
+    if (error || entry.is_symlink(error) || entry.is_other(error) || error) {
+      *internalCode = error ? error.value() : ERROR_INVALID_DATA;
+      return false;
+    }
     const fs::path target = destination / entry.path().filename();
     if (entry.is_directory(error)) {
-      if (error || !copyTree(entry.path(), target)) return false;
+      if (error || !copyTree(entry.path(), target, internalCode)) {
+        if (error) *internalCode = error.value();
+        return false;
+      }
     } else if (entry.is_regular_file(error)) {
       if (error || !fs::copy_file(entry.path(), target,
                                   fs::copy_options::overwrite_existing, error) || error) {
+        *internalCode = error ? error.value() : ERROR_CANNOT_MAKE;
         return false;
       }
       if (!SetFileAttributesW(target.c_str(), FILE_ATTRIBUTE_READONLY)) return false;
     } else {
+      *internalCode = error ? error.value() : ERROR_INVALID_DATA;
       return false;
     }
   }
@@ -144,12 +179,15 @@ bool createAppContainer(const std::wstring& fingerprint, PSID* sid,
 
 bool grantReadOnlyAppContainer(const std::wstring& root, PSID sid,
                                PSECURITY_DESCRIPTOR* oldDescriptor,
-                               PACL* oldDacl) {
+                               PACL* oldDacl, InternalFailure* failure) {
   DWORD result = GetNamedSecurityInfoW(
     const_cast<LPWSTR>(root.c_str()), SE_FILE_OBJECT, DACL_SECURITY_INFORMATION,
     nullptr, nullptr, oldDacl, nullptr, oldDescriptor
   );
-  if (result != ERROR_SUCCESS) return false;
+  if (result != ERROR_SUCCESS) {
+    recordFailure(failure, L"dacl-read", GetLastError(), result);
+    return false;
+  }
 
   EXPLICIT_ACCESSW entries[2]{};
   entries[0].grfAccessPermissions = GENERIC_READ | GENERIC_EXECUTE;
@@ -163,21 +201,36 @@ bool grantReadOnlyAppContainer(const std::wstring& root, PSID sid,
 
   PACL updated = nullptr;
   result = SetEntriesInAclW(2, entries, *oldDacl, &updated);
-  if (result != ERROR_SUCCESS) return false;
+  if (result != ERROR_SUCCESS) {
+    recordFailure(failure, L"dacl-compose", GetLastError(), result);
+    return false;
+  }
   result = SetNamedSecurityInfoW(
     const_cast<LPWSTR>(root.c_str()), SE_FILE_OBJECT, DACL_SECURITY_INFORMATION,
     nullptr, nullptr, updated, nullptr
   );
+  const DWORD win32Error = result == ERROR_SUCCESS ? ERROR_SUCCESS : GetLastError();
   if (updated != nullptr) LocalFree(updated);
+  if (result != ERROR_SUCCESS) {
+    recordFailure(failure, L"dacl-apply", win32Error, result);
+  }
   return result == ERROR_SUCCESS;
 }
 
-bool restoreDacl(const std::wstring& root, PSECURITY_DESCRIPTOR descriptor, PACL dacl) {
-  if (descriptor == nullptr) return false;
-  return SetNamedSecurityInfoW(
+bool restoreDacl(const std::wstring& root, PSECURITY_DESCRIPTOR descriptor, PACL dacl,
+                 InternalFailure* failure = nullptr) {
+  if (descriptor == nullptr) {
+    recordFailure(failure, L"dacl-restore", GetLastError(), ERROR_INVALID_DATA);
+    return false;
+  }
+  const DWORD result = SetNamedSecurityInfoW(
     const_cast<LPWSTR>(root.c_str()), SE_FILE_OBJECT, DACL_SECURITY_INFORMATION,
     nullptr, nullptr, dacl, nullptr
-  ) == ERROR_SUCCESS;
+  );
+  if (result != ERROR_SUCCESS) {
+    recordFailure(failure, L"dacl-restore", GetLastError(), result);
+  }
+  return result == ERROR_SUCCESS;
 }
 
 struct Capture {
@@ -246,26 +299,45 @@ int runNode(const std::wstring& operationId, const std::wstring& requirementFing
   const std::wstring stagedWorkspace = join(stageRoot, L"workspace");
   const std::wstring stagedNodeDirectory = join(stageRoot, L"node");
   const std::wstring stagedNode = join(stagedNodeDirectory, fs::path(nodePath).filename().wstring());
-  if (!copyTree(fs::path(workspace), fs::path(stagedWorkspace)) ||
-      !copyTree(fs::path(nodePath).parent_path(), fs::path(stagedNodeDirectory)) ||
-      !fs::is_regular_file(stagedNode)) return -1;
+  long internalCode = 0;
+  if (!copyTree(fs::path(workspace), fs::path(stagedWorkspace), &internalCode)) {
+    return failRunNode({L"staging-workspace", GetLastError(), internalCode});
+  }
+  if (!copyTree(fs::path(nodePath).parent_path(), fs::path(stagedNodeDirectory),
+                &internalCode)) {
+    return failRunNode({L"staging-node", GetLastError(), internalCode});
+  }
+  if (!fs::is_regular_file(stagedNode)) {
+    return failRunNode({L"staging-node-check", GetLastError(), 0});
+  }
 
   PSECURITY_DESCRIPTOR oldDescriptor = nullptr;
   PACL oldDacl = nullptr;
-  if (!grantReadOnlyAppContainer(stageRoot, sid, &oldDescriptor, &oldDacl)) return -1;
+  InternalFailure failure{};
+  if (!grantReadOnlyAppContainer(
+      stageRoot, sid, &oldDescriptor, &oldDacl, &failure)) return failRunNode(failure);
 
   SECURITY_ATTRIBUTES pipeSecurity{};
   pipeSecurity.nLength = sizeof(pipeSecurity);
   pipeSecurity.bInheritHandle = TRUE;
   HANDLE stdoutRead = nullptr, stdoutWrite = nullptr;
   HANDLE stderrRead = nullptr, stderrWrite = nullptr;
-  if (!CreatePipe(&stdoutRead, &stdoutWrite, &pipeSecurity, 0) ||
-      !CreatePipe(&stderrRead, &stderrWrite, &pipeSecurity, 0) ||
-      !SetHandleInformation(stdoutRead, HANDLE_FLAG_INHERIT, 0) ||
-      !SetHandleInformation(stderrRead, HANDLE_FLAG_INHERIT, 0)) {
+  bool pipesReady = false;
+  if (!CreatePipe(&stdoutRead, &stdoutWrite, &pipeSecurity, 0)) {
+    recordFailure(&failure, L"stdout-pipe-create", GetLastError());
+  } else if (!CreatePipe(&stderrRead, &stderrWrite, &pipeSecurity, 0)) {
+    recordFailure(&failure, L"stderr-pipe-create", GetLastError());
+  } else if (!SetHandleInformation(stdoutRead, HANDLE_FLAG_INHERIT, 0)) {
+    recordFailure(&failure, L"stdout-pipe-inheritance", GetLastError());
+  } else if (!SetHandleInformation(stderrRead, HANDLE_FLAG_INHERIT, 0)) {
+    recordFailure(&failure, L"stderr-pipe-inheritance", GetLastError());
+  } else {
+    pipesReady = true;
+  }
+  if (!pipesReady) {
     restoreDacl(stageRoot, oldDescriptor, oldDacl);
     if (oldDescriptor) LocalFree(oldDescriptor);
-    return -1;
+    return failRunNode(failure);
   }
 
   HANDLE job = CreateJobObjectW(nullptr, nullptr);
@@ -273,14 +345,22 @@ int runNode(const std::wstring& operationId, const std::wstring& requirementFing
   limits.BasicLimitInformation.LimitFlags =
     JOB_OBJECT_LIMIT_KILL_ON_JOB_CLOSE | JOB_OBJECT_LIMIT_ACTIVE_PROCESS;
   limits.BasicLimitInformation.ActiveProcessLimit = 1;
-  if (job == nullptr || !SetInformationJobObject(
+  bool jobReady = false;
+  if (job == nullptr) {
+    recordFailure(&failure, L"job-create", GetLastError());
+  } else if (!SetInformationJobObject(
       job, JobObjectExtendedLimitInformation, &limits, sizeof(limits))) {
+    recordFailure(&failure, L"job-limit", GetLastError());
+  } else {
+    jobReady = true;
+  }
+  if (!jobReady) {
     CloseHandle(stdoutRead); CloseHandle(stdoutWrite);
     CloseHandle(stderrRead); CloseHandle(stderrWrite);
     if (job) CloseHandle(job);
     restoreDacl(stageRoot, oldDescriptor, oldDacl);
     if (oldDescriptor) LocalFree(oldDescriptor);
-    return -1;
+    return failRunNode(failure);
   }
 
   SECURITY_CAPABILITIES capabilities{};
@@ -291,16 +371,26 @@ int runNode(const std::wstring& operationId, const std::wstring& requirementFing
   InitializeProcThreadAttributeList(nullptr, 1, 0, &attributeSize);
   auto* attributes = reinterpret_cast<LPPROC_THREAD_ATTRIBUTE_LIST>(
     HeapAlloc(GetProcessHeap(), HEAP_ZERO_MEMORY, attributeSize));
-  if (attributes == nullptr || InitializeProcThreadAttributeList(
-      attributes, 1, 0, &attributeSize) != TRUE ||
-      UpdateProcThreadAttribute(attributes, 0, PROC_THREAD_ATTRIBUTE_SECURITY_CAPABILITIES,
-                                &capabilities, sizeof(capabilities), nullptr, nullptr) != TRUE) {
+  bool attributesReady = false;
+  if (attributes == nullptr) {
+    recordFailure(&failure, L"attribute-list-allocate", GetLastError(), ERROR_NOT_ENOUGH_MEMORY);
+  } else if (InitializeProcThreadAttributeList(
+      attributes, 1, 0, &attributeSize) != TRUE) {
+    recordFailure(&failure, L"attribute-list-initialize", GetLastError());
+  } else if (UpdateProcThreadAttribute(
+      attributes, 0, PROC_THREAD_ATTRIBUTE_SECURITY_CAPABILITIES,
+      &capabilities, sizeof(capabilities), nullptr, nullptr) != TRUE) {
+    recordFailure(&failure, L"security-capabilities", GetLastError());
+  } else {
+    attributesReady = true;
+  }
+  if (!attributesReady) {
     if (attributes) HeapFree(GetProcessHeap(), 0, attributes);
     CloseHandle(job); CloseHandle(stdoutRead); CloseHandle(stdoutWrite);
     CloseHandle(stderrRead); CloseHandle(stderrWrite);
     restoreDacl(stageRoot, oldDescriptor, oldDacl);
     if (oldDescriptor) LocalFree(oldDescriptor);
-    return -1;
+    return failRunNode(failure);
   }
 
   const std::wstring targetPath = join(stagedWorkspace, target);
@@ -311,13 +401,14 @@ int runNode(const std::wstring& operationId, const std::wstring& requirementFing
   commandLine.push_back(L'\0');
   std::vector<wchar_t> env = environment(stagedNodeDirectory, stagedWorkspace);
   if (env.empty()) {
+    recordFailure(&failure, L"environment", GetLastError());
     DeleteProcThreadAttributeList(attributes);
     HeapFree(GetProcessHeap(), 0, attributes);
     CloseHandle(job); CloseHandle(stdoutRead); CloseHandle(stdoutWrite);
     CloseHandle(stderrRead); CloseHandle(stderrWrite);
     restoreDacl(stageRoot, oldDescriptor, oldDacl);
     if (oldDescriptor) LocalFree(oldDescriptor);
-    return -1;
+    return failRunNode(failure);
   }
 
   STARTUPINFOEXW startup{};
@@ -332,17 +423,27 @@ int runNode(const std::wstring& operationId, const std::wstring& requirementFing
     CREATE_SUSPENDED | CREATE_UNICODE_ENVIRONMENT | EXTENDED_STARTUPINFO_PRESENT,
     env.data(), stagedWorkspace.c_str(), &startup.StartupInfo, &process
   );
+  const DWORD createError = created ? ERROR_SUCCESS : GetLastError();
   CloseHandle(stdoutWrite); CloseHandle(stderrWrite);
   DeleteProcThreadAttributeList(attributes);
   HeapFree(GetProcessHeap(), 0, attributes);
-  if (!created || !AssignProcessToJobObject(job, process.hProcess) ||
-      ResumeThread(process.hThread) == static_cast<DWORD>(-1)) {
+  bool processReady = false;
+  if (!created) {
+    recordFailure(&failure, L"process-create", createError);
+  } else if (!AssignProcessToJobObject(job, process.hProcess)) {
+    recordFailure(&failure, L"job-assign", GetLastError());
+  } else if (ResumeThread(process.hThread) == static_cast<DWORD>(-1)) {
+    recordFailure(&failure, L"process-resume", GetLastError());
+  } else {
+    processReady = true;
+  }
+  if (!processReady) {
     if (created) TerminateProcess(process.hProcess, ERROR_ACCESS_DENIED);
     if (created) { CloseHandle(process.hThread); CloseHandle(process.hProcess); }
     CloseHandle(job); CloseHandle(stdoutRead); CloseHandle(stderrRead);
     restoreDacl(stageRoot, oldDescriptor, oldDacl);
     if (oldDescriptor) LocalFree(oldDescriptor);
-    return -1;
+    return failRunNode(failure);
   }
 
   Capture stdoutCapture, stderrCapture;
@@ -361,9 +462,15 @@ int runNode(const std::wstring& operationId, const std::wstring& requirementFing
   stdoutReader.join(); stderrReader.join();
   CloseHandle(job);
 
-  const bool restored = restoreDacl(stageRoot, oldDescriptor, oldDacl);
+  const bool restored = restoreDacl(stageRoot, oldDescriptor, oldDacl, &failure);
   if (oldDescriptor) LocalFree(oldDescriptor);
-  if (!restored || stdoutCapture.overflow || stderrCapture.overflow) return -1;
+  if (!restored) return failRunNode(failure);
+  if (stdoutCapture.overflow) {
+    return failRunNode({L"stdout-overflow", GetLastError(), kOutputLimit});
+  }
+  if (stderrCapture.overflow) {
+    return failRunNode({L"stderr-overflow", GetLastError(), kOutputLimit});
+  }
   std::cout << stdoutCapture.value;
   std::cerr << stderrCapture.value;
   std::cout << '\n' << kEvidenceMarker;
