@@ -71,6 +71,36 @@ test(
 );
 
 test(
+  'Ubuntu installs and attests qualified Bubblewrap before conformance',
+  () => {
+    const workflow = source();
+    const bubblewrapStep = workflow.indexOf(
+      '- name: Install and attest qualified Linux Bubblewrap'
+    );
+    const conformanceStep = workflow.indexOf(
+      '- name: Run canonical conformance suite'
+    );
+
+    assert.notEqual(bubblewrapStep, -1);
+    assert.ok(bubblewrapStep < conformanceStep);
+
+    const step = workflow.slice(bubblewrapStep, conformanceStep);
+    assert.match(step, /if: matrix\.os == 'ubuntu-latest'/);
+    assert.match(step, /set -euo pipefail/);
+    assert.match(step, /sudo apt-get update/);
+    assert.match(
+      step,
+      /sudo apt-get install --yes --no-install-recommends bubblewrap/
+    );
+    assert.match(step, /bwrap_path="\$\(command -v bwrap\)"/);
+    assert.match(step, /test "\$bwrap_path" = "\/usr\/bin\/bwrap"/);
+    assert.match(step, /test -x "\$bwrap_path"/);
+    assert.match(step, /"\$bwrap_path" --version/);
+    assert.doesNotMatch(step, /continue-on-error/);
+  }
+);
+
+test(
   'diagnostic continuation cannot hide canonical conformance failure',
   () => {
     const workflow = source();

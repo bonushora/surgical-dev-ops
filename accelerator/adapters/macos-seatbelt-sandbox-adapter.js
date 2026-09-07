@@ -224,6 +224,7 @@ function executeMacosSeatbeltNodeTest({
     expiresAt: expiry
   });
   const sandboxedArguments = [
+    '--jitless',
     '--permission',
     `--allow-fs-read=${workspace}`,
     '--test-isolation=none',

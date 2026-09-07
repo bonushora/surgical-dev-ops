@@ -130,6 +130,7 @@ static int execute_node_test(
   if (length < 0 || (size_t) length >= sizeof(allow_read)) return 1;
   char *const arguments[] = {
     (char *) node,
+    (char *) "--jitless",
     (char *) "--permission",
     allow_read,
     (char *) "--test-isolation=none",

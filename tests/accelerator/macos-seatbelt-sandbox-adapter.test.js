@@ -181,8 +181,10 @@ test('Seatbelt profile is deny-default operation-bound and network-silent', () =
   const nodeProfile = createNodeTestProfile('/qualified/workspace', '/qualified/node');
   assert.match(nodeProfile, /allow process-exec \(literal "\/qualified\/node"\)/);
   assert.doesNotMatch(nodeProfile, /allow process-exec[^\n]*\/bin\/sh/);
+  assert.doesNotMatch(nodeProfile, /dynamic-code-generation/);
   assert.match(source, /process\.execPath/);
   assert.match(source, /executeMacosSeatbeltNodeTest/);
+  assert.match(source, /const sandboxedArguments = \[\s*'--jitless'/);
   assert.match(source, /--permission/);
   assert.match(source, /--test-isolation=none/);
   assert.throws(() => createProfile('/unsafe\nworkspace'), /path literal is unsafe/);
@@ -198,6 +200,10 @@ test('Seatbelt profile is deny-default operation-bound and network-silent', () =
   assert.match(probeSource, /read_is_denied\("\/etc\/passwd", false\)/);
   assert.match(probeSource, /strcmp\(argv\[5\], "bootstrap"\)/);
   assert.match(probeSource, /sandbox_init\(profile, 0, &error\)/);
+  assert.match(
+    probeSource,
+    /\(char \*\) "--jitless",\s*\(char \*\) "--permission"/
+  );
   assert.match(probeSource, /execve\(node, arguments, environ\)/);
   assert.match(probeSource, /safe_relative_target/);
   assert.doesNotMatch(probeSource, /system\(|popen\(|posix_spawn/);

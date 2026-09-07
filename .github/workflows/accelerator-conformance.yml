@@ -94,6 +94,18 @@ jobs:
         run: |
           node -e "console.log(JSON.stringify({ platform: process.platform, arch: process.arch, node: process.version }))"
 
+      - name: Install and attest qualified Linux Bubblewrap
+        if: matrix.os == 'ubuntu-latest'
+        shell: bash
+        run: |
+          set -euo pipefail
+          sudo apt-get update
+          sudo apt-get install --yes --no-install-recommends bubblewrap
+          bwrap_path="$(command -v bwrap)"
+          test "$bwrap_path" = "/usr/bin/bwrap"
+          test -x "$bwrap_path"
+          "$bwrap_path" --version
+
       - name: Build qualified Windows native durability helper
         if: matrix.os == 'windows-latest'
         shell: cmd
