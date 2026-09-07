@@ -10,6 +10,7 @@
 #include <userenv.h>
 
 #include <atomic>
+#include <cwchar>
 #include <filesystem>
 #include <iostream>
 #include <string>
@@ -391,7 +392,8 @@ int runNode(const std::wstring& operationId, const std::wstring& requirementFing
 }  // namespace
 
 int wmain(int argc, wchar_t* argv[]) {
-  if (argc != 7 || !safeText(argv[1]) || argv[1].size() > 128 ||
+  if (argc != 7 || argv[1] == nullptr || !safeText(argv[1]) ||
+      std::wcslen(argv[1]) > 128 ||
       !validFingerprint(argv[2]) || !safeText(argv[3]) || !safeRelativeTarget(argv[4]) ||
       !safeText(argv[5])) return fail(L"invalid arguments");
   wchar_t* end = nullptr;

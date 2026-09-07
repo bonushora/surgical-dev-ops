@@ -24,6 +24,21 @@ const NOW = '2099-01-01T00:00:00.000Z';
 const OBSERVED = '2099-01-01T00:01:00.000Z';
 const EXPIRES = '2099-01-01T00:05:00.000Z';
 
+function nodeTestFailureDiagnostic(execution) {
+  const result = execution.result;
+  return JSON.stringify({
+    executable: execution.executable,
+    arguments: execution.arguments,
+    sandboxedExecutable: execution.sandboxedExecutable,
+    sandboxedArguments: execution.sandboxedArguments,
+    errorCode: result.error && result.error.code || null,
+    signal: result.signal || null,
+    status: Number.isInteger(result.status) ? result.status : null,
+    stdout: String(result.stdout || '').slice(0, 4096),
+    stderr: String(result.stderr || '').slice(0, 4096)
+  });
+}
+
 function freeze(value) {
   if (value && typeof value === 'object' && !Object.isFrozen(value)) {
     for (const child of Object.values(value)) freeze(child);
@@ -137,9 +152,10 @@ test('macOS Seatbelt physically executes a Node test with adversarial effects de
   } finally {
     delete process.env.SDO_VALIDATION_SECRET_MARKER;
   }
-  assert.equal(execution.result.error, undefined);
-  assert.equal(execution.result.signal, null);
-  assert.equal(execution.result.status, 0, execution.result.stderr);
+  const failureDiagnostic = nodeTestFailureDiagnostic(execution);
+  assert.equal(execution.result.error, undefined, failureDiagnostic);
+  assert.equal(execution.result.signal, null, failureDiagnostic);
+  assert.equal(execution.result.status, 0, failureDiagnostic);
   assert.equal(execution.adapterEvidence.requirementFingerprint, requirement.fingerprint);
   assert.equal(execution.adapterEvidence.controls.workspaceReadOnly, true);
   assert.equal(fs.existsSync(forbidden), false);

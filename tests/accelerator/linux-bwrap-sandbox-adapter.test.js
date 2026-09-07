@@ -3,6 +3,7 @@
 const test = require('node:test');
 const assert = require('node:assert/strict');
 const fs = require('node:fs');
+const childProcess = require('node:child_process');
 const {
   createMachineAccessRequest,
   createMachineAccessAuthority,
@@ -77,13 +78,43 @@ test('adapter rejects malformed requirement and invalid evidence lifetime', () =
   }
 });
 
+test('adapter fails closed without the qualified network namespace launcher', {
+  skip: process.platform !== 'linux'
+}, (context) => {
+  const originalExists = fs.existsSync.bind(fs);
+  context.mock.method(fs, 'existsSync', (candidate) =>
+    candidate === '/usr/bin/unshare' ? false : originalExists(candidate));
+  const requirement = createSandboxRequirement({
+    requirementId: 'bwrap-requirement', operation: operation(), platform: 'linux', requiredAt: NOW
+  });
+  assert.throws(() => attestLinuxBwrapSandbox({
+    requirement, observedAt: OBSERVED, expiresAt: EXPIRES
+  }), /network namespace launcher is unavailable/);
+});
+
+test('network namespace initialization failure blocks the operation', {
+  skip: process.platform !== 'linux' || !fs.existsSync('/usr/bin/bwrap')
+}, (context) => {
+  context.mock.method(childProcess, 'spawnSync', () => ({
+    status: 1, signal: null, stdout: '', stderr: 'namespace initialization denied\n'
+  }));
+  const requirement = createSandboxRequirement({
+    requirementId: 'bwrap-requirement', operation: operation(), platform: 'linux', requiredAt: NOW
+  });
+  assert.throws(() => attestLinuxBwrapSandbox({
+    requirement, observedAt: OBSERVED, expiresAt: EXPIRES
+  }), /attestation failed closed/);
+});
+
 test('adapter fixes executable arguments environment and disables shell', () => {
   const source = fs.readFileSync(
     require.resolve('../../accelerator/adapters/linux-bwrap-sandbox-adapter'), 'utf8'
   );
   assert.match(source, /const BWRAP = '\/usr\/bin\/bwrap'/);
+  assert.match(source, /const NETWORK_NAMESPACE_LAUNCHER = '\/usr\/bin\/unshare'/);
   assert.match(source, /shell: false/);
-  assert.match(source, /--unshare-net/);
+  assert.match(source, /'--user', '--map-current-user', '--net', '--', BWRAP/);
+  assert.doesNotMatch(source, /--unshare-net/);
   assert.match(source, /--ro-bind/);
   assert.match(source, /--permission/);
   assert.match(source, /--test-isolation=none/);
