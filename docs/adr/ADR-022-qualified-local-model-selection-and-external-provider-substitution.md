@@ -18,7 +18,7 @@ NATURAL has a closed registry with exactly two natively supported local cognitiv
 
 `llama3:latest` is not a default, alternative or automatic fallback. Historical evidence and the deterministic defenses learned during its qualification remain preserved.
 
-Local models are not bundled and are never downloaded automatically. A model must already exist in the bounded Ollama inventory before session activation. Selection is explicit, session-scoped and non-persistent. A successful selection rebuilds the cognitive composition and clears temporary conversational memory and decision cache. A missing or unqualified model preserves the previous provider and fails closed.
+Local models are not bundled and are never downloaded automatically. A model must already exist in the bounded Ollama inventory before session activation. The qualified default Ollama profile may be auto-discovered and activated only through the canonical loopback transport when no conflicting explicit human preference or external selection is pending; all external providers remain explicit opt-in. Manual selection is session-scoped and non-persistent. A successful selection rebuilds the cognitive composition and clears temporary conversational memory and decision cache. A missing or unqualified model preserves the previous provider and fails closed.
 
 External free or paid providers may replace the local profiles only through individually qualified adapters. An adapter must bind endpoint, identity, credential boundary, cognitive capabilities, context and output limits, timeout, privacy disclosure, commercial disclosure and failure semantics. No arbitrary endpoint, model name or credential-bearing configuration becomes trusted provider authority.
 

@@ -1,6 +1,16 @@
 'use strict';
 
+const crypto = require('node:crypto');
+
 const RUNNER_INTENT = 'AUTONOMOUS_UNTIL_GREEN';
+const AUTHORIZED_TASK_REUSE_SCHEMA =
+  'sdo.natural_authorized_governed_task_reuse.v1';
+const TASK_RISK = Object.freeze({
+  WORKSPACE_LIST: 'R0',
+  READ_FILE: 'R1',
+  READ_AND_EXPLAIN_FILE: 'R1',
+  PROJECT_ANALYSIS: 'R1'
+});
 
 const {
   WORK_MODES
@@ -28,6 +38,80 @@ const {
   normalizeHumanLanguage,
   isEnglish
 } = require('./human-language');
+const {
+  requireProviderLocationMetadata
+} = require('./natural-provider-location-contract');
+
+function deepFreeze(value) {
+  if (!value || typeof value !== 'object' || Object.isFrozen(value)) return value;
+  for (const child of Object.values(value)) deepFreeze(child);
+  return Object.freeze(value);
+}
+
+function canonicalInstant(value) {
+  if (
+    typeof value !== 'string' ||
+    !Number.isFinite(Date.parse(value)) ||
+    new Date(Date.parse(value)).toISOString() !== value
+  ) {
+    throw new Error('Canonical authorized-task reuse time is required.');
+  }
+  return value;
+}
+
+function canonicalSha(value) {
+  if (typeof value !== 'string' || !/^[a-f0-9]{64}$/.test(value)) {
+    throw new Error('Canonical authorized-task reuse fingerprint is required.');
+  }
+  return value;
+}
+
+function naturalGovernedTaskFingerprint(task) {
+  if (
+    !task ||
+    task.schema !== 'sdo.natural_governed_task.v1' ||
+    !Object.isFrozen(task) ||
+    typeof task.kind !== 'string' ||
+    typeof task.objective !== 'string' ||
+    !Array.isArray(task.operations)
+  ) {
+    throw new Error('Immutable governed task is required for reuse binding.');
+  }
+  return crypto
+    .createHash('sha256')
+    .update(JSON.stringify(task), 'utf8')
+    .digest('hex');
+}
+
+function naturalAuthorizedTaskReuseFingerprint(provenance) {
+  if (!provenance || typeof provenance !== 'object') {
+    throw new Error('Authorized-task reuse provenance is required.');
+  }
+  const binding = {
+    schema: provenance.schema,
+    authorizationFingerprint: provenance.authorizationFingerprint,
+    sessionFingerprint: provenance.sessionFingerprint,
+    taskFingerprint: provenance.taskFingerprint,
+    envelopeFingerprint: provenance.envelopeFingerprint,
+    scopeFingerprint: provenance.scopeFingerprint,
+    workspace: provenance.workspace,
+    objective: provenance.objective,
+    taskKind: provenance.taskKind,
+    risk: provenance.risk,
+    validFrom: provenance.validFrom,
+    authorizedAt: provenance.authorizedAt,
+    reusedAt: provenance.reusedAt,
+    expiresAt: provenance.expiresAt,
+    physicalWorkspaceIdentity: provenance.physicalWorkspaceIdentity,
+    environmentFingerprint: provenance.environmentFingerprint,
+    newHumanDecision: provenance.newHumanDecision,
+    authorityExpanded: provenance.authorityExpanded
+  };
+  return crypto
+    .createHash('sha256')
+    .update(JSON.stringify(binding), 'utf8')
+    .digest('hex');
+}
 
 const {
   PROVIDER_INTENTS,
@@ -73,6 +157,7 @@ function isWeakNaturalEngineeringDeictic(tokens) {
     concepts.some(
       (concept) => tokens.has(concept)
     );
+
   const deictic =
     hasAny(
       'isso',
@@ -121,6 +206,17 @@ function resolveNaturalEngineeringReferenceIntent(value) {
   const hasAny = (...concepts) =>
     concepts.some(
       (concept) => tokens.has(concept)
+    );
+
+  const combinedRepositoryStateQuestion =
+    hasAny('branch', 'ramo') &&
+    hasAny(
+      'mudancas',
+      'alteracoes',
+      'modificados',
+      'alterados',
+      'changes',
+      'modified'
     );
 
   const evidence =
@@ -262,7 +358,7 @@ function resolveNaturalEngineeringReferenceIntent(value) {
     referenceAction = 'REQUEST_PUBLICATION';
   } else if (evidence) {
     referenceType = 'LAST_EVIDENCE';
-  } else if (changes && contextual) {
+  } else if (changes && contextual && !combinedRepositoryStateQuestion) {
     referenceType = 'CURRENT_DIFF';
     referenceAction = 'REPEAT_OPERATION';
   } else if (repeat) {
@@ -988,7 +1084,7 @@ function codexSetupGuide(language = 'pt-BR') {
       'Before activation, Surgical DevOps must confirm current official terms, explain data exposure and costs, obtain explicit authorization, receive credentials only through the provider boundary, and verify compatibility.\n' +
       'Prices are not hardcoded. External charges are made by the provider, and Surgical DevOps receives no commission.\n\n' +
       'CURRENT BOUNDARY: confirm current commercial information and your explicit choice before receiving any credential.\n' +
-      'No change was made.\n'
+      'The external preference is recorded for this session; the provider remains inactive until qualification.\n'
     );
   }
 
@@ -1011,7 +1107,7 @@ function codexSetupGuide(language = 'pt-BR') {
     'Cobranças externas são feitas pelo próprio provider.\n' +
     'O Surgical DevOps não recebe nem retém comissão desse consumo.\n\n' +
     'FRONTEIRA ATUAL: confirmar informações comerciais atuais e sua escolha explícita antes de receber qualquer credencial.\n' +
-    'Nenhuma alteração foi realizada.\n'
+    'A preferência externa fica registrada nesta sessão; o provider permanece inativo até a qualificação.\n'
   );
 }
 
@@ -1020,20 +1116,110 @@ function formatProviderStatus(
   language = 'pt-BR'
 ) {
   const english = isEnglish(language);
+  requireProviderLocationMetadata(discovery);
+
+  if (discovery.providerKind === 'NONE') {
+    return english
+      ? (
+          'Cognitive provider: disabled for this session.\n' +
+          'Deterministic mode remains active. No provider will be selected until you explicitly choose a qualified local model or restart with an explicit external selection.\n' +
+          'Operational authority of the AI: none\n'
+        )
+      : (
+          'Provider cognitivo: desativado nesta sessão.\n' +
+          'O modo determinístico permanece ativo. Nenhum provider será selecionado até você escolher explicitamente um modelo local qualificado ou reiniciar com uma seleção externa explícita.\n' +
+          'Autoridade operacional da IA: nenhuma\n'
+        );
+  }
+
+  if (discovery.providerKind === 'CODEX') {
+    const englishQualification =
+      discovery.networkCompatibility === 'BLOCKED_BY_CONTAINMENT_NETWORK'
+        ? 'blocked because the current cognitive containment denies the external-service network path'
+        : discovery.networkCompatibility === 'QUALIFIED'
+          ? 'external-service network path qualified'
+          : 'physical separation from agent-tool network authority is not qualified';
+    const portugueseQualification =
+      discovery.networkCompatibility === 'BLOCKED_BY_CONTAINMENT_NETWORK'
+        ? 'bloqueado porque a contenção cognitiva atual nega a rede do serviço externo'
+        : discovery.networkCompatibility === 'QUALIFIED'
+          ? 'rede do serviço externo qualificada'
+          : 'a separação física da autoridade de rede das ferramentas do agente não está qualificada';
+    if (english) {
+      return (
+        'Configured cognitive provider:\n' +
+        `  Provider: ${discovery.provider}\n` +
+        `  Model: ${discovery.model}\n` +
+        '  Cognition: external cognitive service\n' +
+        '  Transport: local SDK subprocess; this does not make cognition local\n' +
+        '  Usage/billing: unknown or subject to the configured account/plan\n' +
+        '  Evidence: mediated and sanitized before the provider boundary\n' +
+        '  Network: external-service connectivity is required; agent-tool network authority remains denied\n' +
+        `  State: ${discovery.state}\n` +
+        `  Qualification: ${englishQualification}\n` +
+        '  Operational authority of the AI: none\n'
+      );
+    }
+    return (
+      'Provider cognitivo configurado:\n' +
+      `  Provider: ${discovery.provider}\n` +
+      `  Modelo: ${discovery.model}\n` +
+      '  Cognição: serviço cognitivo externo\n' +
+      '  Transporte: subprocesso SDK local; isso não torna a cognição local\n' +
+      '  Uso/cobrança: desconhecido ou sujeito à conta/plano configurado\n' +
+      '  Evidências: mediadas e sanitizadas antes do boundary do provider\n' +
+      '  Rede: conectividade ao serviço externo é necessária; a autoridade de rede das ferramentas do agente permanece negada\n' +
+      `  Estado: ${discovery.state}\n` +
+      `  Qualificação: ${portugueseQualification}\n` +
+      '  Autoridade operacional da IA: nenhuma\n'
+    );
+  }
+
   if (
     discovery &&
     discovery.available === true &&
     discovery.active === true &&
     discovery.state === 'ACTIVE'
   ) {
-    const execution = discovery.local === false ? 'remote' : 'local';
     const state = discovery.state;
+    if (discovery.providerKind === 'OLLAMA') {
+      if (english) {
+        return (
+          'Current cognitive assistant:\n' +
+          `  Provider: ${discovery.provider}\n` +
+          `  Model: ${discovery.model}\n` +
+          '  Cognition: local model\n' +
+          '  Transport: local Ollama process over loopback\n' +
+          '  Acceleration: selected automatically by Ollama (CPU/GPU)\n' +
+          '  Profile: balanced, context 4096, model kept warm for 10 minutes\n' +
+          '  Usage/billing: no local Ollama provider API call charge; local resources and licenses apply\n' +
+          `  State: ${state}\n` +
+          '  Operational authority of the AI: none\n' +
+          '  Surgical DevOps does not receive, intermediate, or retain provider fees or commissions.\n'
+        );
+      }
+      return (
+        'Assistente cognitivo atual:\n' +
+        `  Provider: ${discovery.provider}\n` +
+        `  Modelo: ${discovery.model}\n` +
+        '  Cognição: modelo local\n' +
+        '  Transporte: processo Ollama local via loopback\n' +
+        '  Aceleração: automática pelo Ollama (CPU/GPU)\n' +
+        '  Perfil: balanceado, contexto 4096, modelo aquecido por 10 minutos\n' +
+        '  Uso/cobrança: sem cobrança por chamada de API do provider Ollama local; recursos e licenças locais se aplicam\n' +
+        `  Estado: ${state}\n` +
+        '  Autoridade operacional da IA: nenhuma\n' +
+        '  O Surgical DevOps não recebe, intermedeia ou retém taxas ou comissões de provider.\n'
+      );
+    }
     if (english) {
       return (
         'Current cognitive assistant:\n' +
         `  Provider: ${discovery.provider}\n` +
         `  Model: ${discovery.model}\n` +
-        `  Execution: ${execution}\n` +
+        '  Cognition: external cognitive service\n' +
+        '  Transport: direct remote transport\n' +
+        '  Usage/billing: unknown or subject to the configured account/plan\n' +
         `  State: ${state}\n` +
         '  Operational authority of the AI: none\n\n' +
         'Compatible providers may replace this model without changing governance.\n'
@@ -1044,13 +1230,10 @@ function formatProviderStatus(
       'Assistente cognitivo atual:\n' +
       `  Provider: ${discovery.provider}\n` +
       `  Modelo: ${discovery.model}\n` +
-      `  Execução: ${execution}\n` +
-      (discovery.local === false ? '' : '  Aceleração: automática pelo Ollama (CPU/GPU)\n') +
-      (discovery.local === false ? '' : '  Perfil: balanceado, contexto 4096, modelo aquecido por 10 minutos\n') +
+      '  Cognição: serviço cognitivo externo\n' +
+      '  Transporte: transporte remoto direto\n' +
       `  Estado: ${state}\n` +
-      (discovery.local === false
-        ? '  Custos: dependem dos termos atuais do provider externo\n'
-        : '  Cobrança por chamada de API do Ollama local: não\n') +
+      '  Uso/cobrança: desconhecido ou sujeito à conta/plano configurado\n' +
       '  Autoridade operacional da IA: nenhuma\n\n' +
       'Outros providers compatíveis podem substituir este modelo.\n' +
       'Providers externos podem cobrar diretamente conforme seus próprios planos e termos.\n' +
@@ -1060,12 +1243,16 @@ function formatProviderStatus(
 
   return english
     ? (
-        'Local cognitive assistant: unavailable or unqualified.\n' +
+        (discovery.providerKind === 'OLLAMA'
+          ? 'Local Ollama cognitive model: unavailable or unqualified.\n'
+          : 'External cognitive service: unavailable or unqualified.\n') +
         'Deterministic mode remains available.\n' +
         'No external provider will be selected automatically.\n'
       )
     : (
-    'Assistente cognitivo local: indisponível ou não qualificado.\n' +
+    (discovery.providerKind === 'OLLAMA'
+      ? 'Modelo cognitivo local via Ollama: indisponível ou não qualificado.\n'
+      : 'Serviço cognitivo externo: indisponível ou não qualificado.\n') +
     'O modo determinístico continua disponível.\n' +
     'Nenhum provider externo será selecionado automaticamente.\n'
       );
@@ -1138,11 +1325,81 @@ function createNaturalSessionControl(
       ? options.workspace.trim()
       : 'current-project';
 
+  const workspaceRoot =
+    typeof options.workspaceRoot === 'string' && options.workspaceRoot.trim()
+      ? options.workspaceRoot.trim()
+      : workspace;
+
   let pendingTask =
     null;
 
   function currentWorkMode() {
     return workMode;
+  }
+
+  function reuseAuthorizedGovernedTask(provenance) {
+    if (!pendingTask) {
+      throw new Error('No governed task is pending authorized reuse.');
+    }
+    const taskFingerprint = naturalGovernedTaskFingerprint(pendingTask);
+    const validFrom = provenance && canonicalInstant(provenance.validFrom);
+    const authorizedAt = provenance && canonicalInstant(provenance.authorizedAt);
+    const reusedAt = provenance && canonicalInstant(provenance.reusedAt);
+    const expiresAt = provenance && canonicalInstant(provenance.expiresAt);
+    const valid = Boolean(
+      provenance &&
+      Object.isFrozen(provenance) &&
+      provenance.schema === AUTHORIZED_TASK_REUSE_SCHEMA &&
+      canonicalSha(provenance.authorizationFingerprint) &&
+      canonicalSha(provenance.sessionFingerprint) &&
+      canonicalSha(provenance.taskFingerprint) === taskFingerprint &&
+      canonicalSha(provenance.envelopeFingerprint) &&
+      canonicalSha(provenance.scopeFingerprint) === taskFingerprint &&
+      canonicalSha(provenance.physicalWorkspaceIdentity) &&
+      canonicalSha(provenance.environmentFingerprint) &&
+      canonicalSha(provenance.reuseFingerprint) ===
+        naturalAuthorizedTaskReuseFingerprint(provenance) &&
+      provenance.workspace === workspaceRoot &&
+      provenance.objective === pendingTask.objective &&
+      provenance.taskKind === pendingTask.kind &&
+      provenance.risk === TASK_RISK[pendingTask.kind] &&
+      provenance.newHumanDecision === false &&
+      provenance.authorityExpanded === false &&
+      Date.parse(authorizedAt) >= Date.parse(validFrom) &&
+      Date.parse(reusedAt) >= Date.parse(authorizedAt) &&
+      Date.parse(reusedAt) < Date.parse(expiresAt)
+    );
+    if (!valid) {
+      throw new Error('Authorized governed-task reuse provenance is divergent.');
+    }
+
+    const reusedTask = pendingTask;
+    pendingTask = null;
+    return deepFreeze({
+      matched: true,
+      action: 'REUSE_AUTHORIZED_GOVERNED_TASK',
+      task: reusedTask,
+      authorizationFingerprint: provenance.authorizationFingerprint,
+      sessionFingerprint: provenance.sessionFingerprint,
+      taskFingerprint,
+      envelopeFingerprint: provenance.envelopeFingerprint,
+      scopeFingerprint: provenance.scopeFingerprint,
+      workspace: provenance.workspace,
+      objective: provenance.objective,
+      risk: provenance.risk,
+      validFrom,
+      authorizedAt,
+      reusedAt,
+      expiresAt,
+      physicalWorkspaceIdentity: provenance.physicalWorkspaceIdentity,
+      environmentFingerprint: provenance.environmentFingerprint,
+      reuseFingerprint: provenance.reuseFingerprint,
+      humanDecision: null,
+      authorizationEvent: null,
+      authorityExpanded: false,
+      operationalAuthority: false,
+      mutationAuthority: false
+    });
   }
 
   function handle(input) {
@@ -1351,6 +1608,19 @@ function createNaturalSessionControl(
       });
     }
 
+    if (
+      isAffirmative(input) ||
+      isNegative(input)
+    ) {
+      return Object.freeze({
+        matched: true,
+        action: 'CONTINUE',
+        output: english
+          ? 'There is no pending authorization.\n'
+          : 'Não há autorização pendente.\n'
+      });
+    }
+
     const gatewayIntent =
       resolveNaturalGatewayIntent(
         input
@@ -1554,6 +1824,16 @@ function createNaturalSessionControl(
 
       if (
         providerIntent.intent ===
+          PROVIDER_INTENTS.DISABLE_PROVIDER
+      ) {
+        return Object.freeze({
+          matched: true,
+          action: 'PROVIDER_DISABLE'
+        });
+      }
+
+      if (
+        providerIntent.intent ===
           PROVIDER_INTENTS.RETURN_TO_LOCAL ||
         providerIntent.intent ===
           PROVIDER_INTENTS.SELECT_LOCAL_PROVIDER
@@ -1741,6 +2021,7 @@ function createNaturalSessionControl(
       'sdo.natural_session_control.v1',
 
     handle,
+    reuseAuthorizedGovernedTask,
     currentWorkMode,
 
     experienceState() {
@@ -1777,5 +2058,8 @@ module.exports =
     resolveNaturalMissionControlIntent,
     resolveNaturalHelpRequest,
     detectBoundedRepairLoopRequest,
+    AUTHORIZED_TASK_REUSE_SCHEMA,
+    naturalGovernedTaskFingerprint,
+    naturalAuthorizedTaskReuseFingerprint,
     createNaturalSessionControl
   });

@@ -42,6 +42,19 @@ test('worktree and HEAD changes invalidate stale session authority', (context) =
   assert.equal(dirty.sameWorktree, false);
 });
 
+test('worktree fingerprint invalidates when modified content changes from M to M', (context) => {
+  const root = repository();
+  context.after(() => fs.rmSync(root, { recursive: true, force: true }));
+  fs.writeFileSync(path.join(root, 'README.md'), 'content A\n');
+  const session = createDeterministicWorkspaceSession({ authorizedRoot: root, humanSubject: 'human:test', authorizedAt: '2026-08-30T12:00:00.000Z' });
+  fs.writeFileSync(path.join(root, 'README.md'), 'content B\n');
+  const result = revalidateDeterministicWorkspaceSession(session);
+  assert.equal(result.decision, 'INVALIDATED');
+  assert.equal(result.sameRepository, true);
+  assert.equal(result.sameWorktree, false);
+  assert.notEqual(result.current.worktreeFingerprint, session.worktreeFingerprint);
+});
+
 test('repository-root symlink alias and nested root cannot redefine a session', (context) => {
   const root = repository();
   const physicalRoot = fs.realpathSync(root);

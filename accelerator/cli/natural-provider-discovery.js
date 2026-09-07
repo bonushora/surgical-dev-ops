@@ -38,6 +38,11 @@ const {
 } = require(
   './natural-local-inference-profile'
 );
+const {
+  providerLocationMetadata
+} = require('./natural-provider-location-contract');
+
+const OLLAMA_LOCATION = providerLocationMetadata('OLLAMA');
 
 const DISCOVERY_TIMEOUT_MS =
   1500;
@@ -63,7 +68,8 @@ function deepFreeze(value) {
 
 function unavailable(
   reason,
-  profile = DEFAULT_MODEL_PROFILE
+  profile = DEFAULT_MODEL_PROFILE,
+  qualification = {}
 ) {
   return deepFreeze({
     schema:
@@ -84,6 +90,24 @@ function unavailable(
     local:
       true,
 
+    ...OLLAMA_LOCATION,
+
+    endpoint:
+      qualification.endpoint || OLLAMA_TAGS_ENDPOINT,
+
+    endpointLoopback:
+      qualification.endpointLoopback === false
+        ? false
+        : isCanonicalLoopbackOllamaEndpoint(
+            qualification.endpoint || OLLAMA_TAGS_ENDPOINT
+          ),
+
+    transportQualified:
+      false,
+
+    modelInstalled:
+      false,
+
     available:
       false,
 
@@ -98,6 +122,24 @@ function unavailable(
 
     reason
   });
+}
+
+function isCanonicalLoopbackOllamaEndpoint(value) {
+  if (value !== OLLAMA_TAGS_ENDPOINT) return false;
+
+  try {
+    const endpoint = new URL(value);
+    return (
+      endpoint.protocol === 'http:' &&
+      endpoint.hostname === '127.0.0.1' &&
+      endpoint.port === '11434' &&
+      endpoint.pathname === '/api/tags' &&
+      endpoint.search === '' &&
+      endpoint.hash === ''
+    );
+  } catch {
+    return false;
+  }
 }
 
 async function readBoundedResponse(response) {
@@ -218,6 +260,17 @@ function parseModels(text) {
 async function discoverNaturalDefaultProvider(
   input = {}
 ) {
+  const endpoint =
+    input.endpoint || OLLAMA_TAGS_ENDPOINT;
+
+  if (!isCanonicalLoopbackOllamaEndpoint(endpoint)) {
+    return unavailable(
+      'Local Ollama discovery endpoint is not the qualified loopback endpoint.',
+      DEFAULT_MODEL_PROFILE,
+      { endpoint, endpointLoopback: false }
+    );
+  }
+
   let profile;
 
   try {
@@ -261,7 +314,7 @@ async function discoverNaturalDefaultProvider(
   try {
     response =
       await fetchImplementation(
-        OLLAMA_TAGS_ENDPOINT,
+        endpoint,
         {
           method: 'GET',
           signal: controller.signal
@@ -330,6 +383,19 @@ async function discoverNaturalDefaultProvider(
     local:
       true,
 
+    ...OLLAMA_LOCATION,
+
+    endpoint,
+
+    endpointLoopback:
+      true,
+
+    transportQualified:
+      true,
+
+    modelInstalled:
+      true,
+
     available:
       true,
 
@@ -352,5 +418,6 @@ module.exports = Object.freeze({
   DEFAULT_PROVIDER_ID,
   DEFAULT_MODEL,
   QUALIFIED_LOCAL_MODELS,
+  isCanonicalLoopbackOllamaEndpoint,
   discoverNaturalDefaultProvider
 });

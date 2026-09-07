@@ -26,7 +26,7 @@ sistema operacional ao redor do modelo explícito, limitado, auditável e fail-c
 | Predecessor publicado com CI nativo | [`56da715284704f227675961d476e19acce6e9fa3`](https://github.com/bonushora/surgical-dev-ops/commit/56da715284704f227675961d476e19acce6e9fa3), [Accelerator Conformance #33286652480](https://github.com/bonushora/surgical-dev-ops/actions/runs/33286652480) |
 | Matriz publicada do predecessor | Ubuntu, macOS e Windows: **PASS** |
 | Suíte canônica local | 1212 testes descobertos; 1207 aprovados; 0 falhas; 5 skips específicos de plataforma |
-| Protocolos normativos | BH-SEP v2.2 + BH-SDP v2.2 |
+| Protocolos normativos ativos | BH-SEP v2.3 + BH-SDP v2.3 |
 
 A trilha completa, incluindo os runs que falharam antes do baseline verde, está em
 [Evidências de Engenharia](./docs/ENGINEERING_EVIDENCE.md).
@@ -90,8 +90,12 @@ nativas diferentes avaliadas contra contratos limitados em comum. Consulte
 - **ENGINEER:** linguagem natural com evidências técnicas relevantes.
 - **EXPERT:** controle determinístico orientado a comandos.
 
-O provider local de referência é o Ollama quando disponível. Providers são
-substituíveis e permanecem fora da autoridade operacional. Análises amplas no modo
+NATURAL pode descobrir e ativar automaticamente somente um modelo Ollama local
+qualificado, já instalado e atrás do transporte canônico de loopback; nenhum
+modelo é baixado. Providers externos são somente opt-in explícito, e uma seleção
+humana explícita nunca é substituída silenciosamente. Nenhuma seleção concede
+autoridade operacional. Providers são substituíveis e permanecem fora da
+autoridade operacional. Análises amplas no modo
 NATURAL atravessam autorização humana, vinculam uma sessão física determinística
 do workspace, abrem um índice de descoberta governado, aplicam inspeção de
 conteúdo sensível antes de exposição ao provider, avaliam microleituras contra um
@@ -169,10 +173,16 @@ npm test
 
 ## Protocolos normativos e RAW imutáveis
 
+As versões dos protocolos são independentes da release do software Surgical
+DevOps: `v2.6.0-rc.6` identifica o software, enquanto BH-SEP e BH-SDP v2.3
+governam o runtime atual.
+
 ### v2.2 — histórica e preservada
 
 - [BH-SEP v2.2 — RAW original](https://raw.githubusercontent.com/bonushora/surgical-dev-ops/main/protocols/BH-SEP.md)
 - [BH-SDP v2.2 — RAW original](https://raw.githubusercontent.com/bonushora/surgical-dev-ops/main/protocols/BH-SDP.md)
+- [BH-SEP v2.2 — caminho estável no repositório](./protocols/BH-SEP.md)
+- [BH-SDP v2.2 — caminho estável no repositório](./protocols/BH-SDP.md)
 - [BH-SEP v2.2 — tradução inglesa](./protocols/BH-SEP_EN.md)
 - [BH-SDP v2.2 — tradução inglesa](./protocols/BH-SDP_EN.md)
 
@@ -183,10 +193,10 @@ npm test
 - [BH-SEP v2.3 — tradução inglesa](./protocols/v2.3/BH-SEP_EN.md)
 - [BH-SDP v2.3 — tradução inglesa](./protocols/v2.3/BH-SDP_EN.md)
 
-#### Cópia conjunta da v2.3
+#### Cópia conjunta derivada da v2.3
 
-- [Copiar BH-SEP + BH-SDP v2.3 — RAW original](./protocols/v2.3/BH-PROTOCOLS.md)
-- [Copiar BH-SEP + BH-SDP v2.3 — tradução inglesa](./protocols/v2.3/BH-PROTOCOLS_EN.md)
+- [BH-SEP + BH-SDP v2.3 — cópia combinada PT-BR](./protocols/v2.3/BH-PROTOCOLS.md)
+- [BH-SEP + BH-SDP v2.3 — tradução inglesa combinada](./protocols/v2.3/BH-PROTOCOLS_EN.md)
 
 Versões futuras devem usar novos caminhos versionados e não podem sobrescrever ou
 redirecionar os RAW originais. Consulte [Preservação dos Protocolos](./protocols/README.md)

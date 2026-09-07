@@ -234,8 +234,6 @@ function formatNaturalProviderInstruction(
     '- você pode analisar essas evidências cognitivamente sem ganhar autoridade sobre o filesystem;',
     '- outro diretório exige solicitação explícita do usuário e nova governança;',
     '',
-    `Workspace autorizado: ${context.workspace.workspaceName}`,
-    `Raiz autorizada: ${context.workspace.repositoryPath}`,
     `Modo de trabalho: ${workMode}`,
     '',
     'Regras obrigatórias:',

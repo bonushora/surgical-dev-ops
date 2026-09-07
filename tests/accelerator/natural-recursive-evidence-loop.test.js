@@ -841,6 +841,98 @@ test(
 );
 
 test(
+  'malformed governed evidence is never offered for cache admission or reported as reused',
+  async () => {
+    let cacheAdmissions = 0;
+    const progress = [];
+    const result = await runNaturalRecursiveEvidenceLoop({
+      task: projectTask(),
+      activation: activation(),
+      cognitiveSession: {
+        async decideEvidence() {
+          throw new Error('malformed evidence must stop before cognition');
+        }
+      },
+      dispatchEvidence() {
+        return deepFreeze({
+          governedRequest: {
+            schema: 'sdo.test_governed_request.v1'
+          },
+          governed: {
+            orchestration: {
+              status: 'COMPLETED'
+            },
+            execution: {
+              schema: 'sdo.git_read_result.v1',
+              selector: 'WORKSPACE_FILES',
+              result: {}
+            }
+          }
+        });
+      },
+      onGovernedEvidence() {
+        cacheAdmissions += 1;
+      },
+      onProgress(event) {
+        progress.push(event.stage);
+      }
+    });
+
+    assert.equal(result.status, 'FAILED');
+    assert.equal(cacheAdmissions, 0);
+    assert.equal(progress.includes('GOVERNED_EVIDENCE_REUSED'), false);
+  }
+);
+
+test(
+  'incomplete read is not offered for cache admission after qualified inventory',
+  async () => {
+    const admitted = [];
+    const result = await runNaturalRecursiveEvidenceLoop({
+      task: projectTask(),
+      activation: activation(),
+      cognitiveSession: {
+        async decideEvidence() {
+          throw new Error('incomplete evidence must stop before cognition');
+        }
+      },
+      dispatchEvidence(intent) {
+        const governed = intent.capabilityType === 'GIT_READ'
+          ? gitEvidence(['README.md'])
+          : deepFreeze({
+              orchestration: {
+                status: 'COMPLETED'
+              },
+              execution: {
+                schema: 'sdo.filesystem_read_result.v1',
+                target: {
+                  requested: 'README.md'
+                },
+                evidence: {
+                  content: '# Incomplete\n'
+                }
+              }
+            });
+        return deepFreeze({
+          governedRequest: {
+            schema: 'sdo.test_governed_request.v1'
+          },
+          governed
+        });
+      },
+      onGovernedEvidence(_dispatch, qualifiedEvidence) {
+        admitted.push(qualifiedEvidence);
+      }
+    });
+
+    assert.equal(result.status, 'FAILED');
+    assert.equal(admitted.length, 1);
+    assert.equal(admitted[0].kind, 'WORKSPACE_FILES');
+    assert.equal(Object.isFrozen(admitted[0]), true);
+  }
+);
+
+test(
   'cognitive planner exception fails closed with zero operational continuation',
   async () => {
     let dispatches = 0;

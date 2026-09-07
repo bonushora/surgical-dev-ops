@@ -588,7 +588,7 @@ test('production NATURAL session visibly completes the two-attempt governed R5 e
       Object.freeze({
         repositoryPath: state.repository,
         workspace: 'r5-production-fixture',
-        protocols: Object.freeze({ bhSep: '2.2', bhSdp: '2.2' }),
+        protocols: Object.freeze({ bhSep: '2.3', bhSdp: '2.3' }),
         interactionMode: Object.freeze({ mode: 'NATURAL' }),
         language: 'pt-BR'
       }),

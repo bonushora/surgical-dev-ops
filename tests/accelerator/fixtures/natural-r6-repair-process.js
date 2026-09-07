@@ -90,7 +90,7 @@ async function main() {
     Object.freeze({
       repositoryPath: repository,
       workspace: 'r6-real-restart-repair',
-      protocols: Object.freeze({ bhSep: '2.2', bhSdp: '2.2' }),
+      protocols: Object.freeze({ bhSep: '2.3', bhSdp: '2.3' }),
       interactionMode: Object.freeze({ mode: 'NATURAL' }),
       language: 'pt-BR'
     }),

@@ -132,6 +132,7 @@ test(
   'NATURAL free language crosses Ollama only as governed cognitive EXPLAIN',
   async () => {
     let chatBody = null;
+    const requestedUrls = [];
 
     const session =
       createNaturalCognitiveSession({
@@ -140,6 +141,7 @@ test(
             url,
             options
           ) => {
+            requestedUrls.push(url);
             if (
               url.endsWith(
                 '/api/tags'
@@ -192,6 +194,18 @@ test(
 
     assert.ok(chatBody);
 
+    assert.deepEqual(requestedUrls, [
+      'http://127.0.0.1:11434/api/tags',
+      'http://127.0.0.1:11434/api/chat'
+    ]);
+
+    const discovery = await session.describe();
+    assert.equal(discovery.state, 'ACTIVE');
+    assert.equal(discovery.selectionMode, 'AUTO_LOCAL');
+    assert.equal(discovery.providerKind, 'OLLAMA');
+    assert.equal(discovery.cognitionLocation, 'LOCAL_MODEL');
+    assert.equal(discovery.operationalAuthority, false);
+
     assert.equal(
       chatBody.model,
       'qwen3:8b'
@@ -216,6 +230,65 @@ test(
       output,
       /Resposta cognitiva do Qwen 3 8B via Ollama/
     );
+  }
+);
+
+test(
+  'explicit disablement suppresses auto-discovery until a local model is selected',
+  async () => {
+    let requests = 0;
+    const session = createNaturalCognitiveSession({
+      providerPreference: 'DISABLED',
+      fetchImplementation: async () => {
+        requests += 1;
+        return response({ models: [{ name: 'qwen3:8b' }] });
+      }
+    });
+
+    const disabled = await session.describe();
+    assert.equal(disabled.providerKind, 'NONE');
+    assert.equal(disabled.state, 'DISABLED');
+    assert.equal(disabled.operationalAuthority, false);
+    assert.equal(requests, 0);
+
+    const output = await session.ask('Explique.', activation());
+    assert.match(output, /Nenhum provider cognitivo está selecionado/i);
+    assert.equal(requests, 0);
+
+    const selected = await session.selectLocalModel('qwen3:8b');
+    assert.equal(selected.state, 'ACTIVE');
+    assert.equal(selected.selectionMode, 'EXPLICIT_LOCAL');
+    assert.equal(requests, 1);
+  }
+);
+
+test(
+  'explicit external preference remains pending and never falls back to Ollama',
+  async () => {
+    let ollamaRequests = 0;
+    const session = createNaturalCognitiveSession({
+      fetchImplementation: async () => {
+        ollamaRequests += 1;
+        throw new Error('Ollama must not be selected');
+      }
+    });
+
+    const pending = await session.selectExternalProvider('openai:gpt-5.6');
+    assert.equal(pending.state, 'CONFIGURATION_REQUIRED');
+    assert.equal(pending.selectionMode, 'EXPLICIT_EXTERNAL');
+    assert.equal(pending.cognitionLocation, 'EXTERNAL_SERVICE');
+    assert.equal(pending.operationalAuthority, false);
+
+    session.resetConversation();
+    const afterReset = await session.describe();
+    assert.equal(afterReset.state, 'CONFIGURATION_REQUIRED');
+    assert.equal(afterReset.providerKind, 'OPENAI_RESPONSES');
+    assert.equal(ollamaRequests, 0);
+
+    const output = await session.ask('Explique.', activation());
+    assert.match(output, /serviço cognitivo externo configurado/i);
+    assert.doesNotMatch(output, /Ollama|modelo cognitivo local/i);
+    assert.equal(ollamaRequests, 0);
   }
 );
 
@@ -853,5 +926,10 @@ test(
       (await session.describe()).model,
       'gemma3:4b'
     );
+
+    session.resetConversation();
+    const afterReset = await session.describe();
+    assert.equal(afterReset.model, 'gemma3:4b');
+    assert.equal(afterReset.selectionMode, 'EXPLICIT_LOCAL');
   }
 );

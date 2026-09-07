@@ -32,10 +32,14 @@ tarefas, limites, plataformas e fronteiras governadas.
 | Claude Code, agentes baseados em Gemini e outros agentes de engenharia | Futuras integrações alternativas | Permitidos arquiteturalmente, mas ainda não qualificados pela suíte canônica de integração |
 | Outros providers compatíveis com OpenAI | Cognição remota substituível futura | Exigem adapter explícito, divulgação comercial/de privacidade e qualificação |
 
-Nenhum provider é selecionado automaticamente. O usuário deve fazer uma escolha
-explícita, e a ativação também exige adapter correspondente, credenciais,
-disponibilidade, divulgação de privacidade e custos, verificação de conexão e
-qualificação verde.
+Descoberta e ativação padrão automáticas são permitidas somente para um modelo
+Ollama local qualificado: o endpoint deve ser o endpoint canônico de loopback, o
+transporte local deve estar qualificado e o modelo permitido deve já estar
+instalado no inventário verificado. Nenhum modelo é baixado automaticamente.
+Providers externos, inclusive Codex, são somente opt-in explícito e nunca são
+fallback automático. Uma seleção humana explícita nunca é substituída
+silenciosamente. Nenhuma seleção de provider concede autoridade operacional nem
+autoriza filesystem, shell, Git, mutação, rede externa ou qualquer outra operação.
 
 ## A autoridade permanece idêntica para todas as opções
 
@@ -55,6 +59,41 @@ fronteira. Os perfis locais via Ollama permanecem o caminho recomendado quando
 operação offline, privacidade ou ausência de custo por chamada de API são a
 prioridade.
 
+`@openai/codex-sdk` é uma dependência npm opcional. Uma instalação básica
+offline usa `--omit=optional`; `NATURAL`, `ENGINEER` e `EXPERT` permanecem
+instalados e utilizáveis sem o SDK. Codex continua opt-in explícito e usa um
+serviço cognitivo externo sujeito à conta/plano configurado. Se o SDK estiver
+ausente, Codex é informado como indisponível ou com configuração necessária e
+falha fechado: não é ativado, nenhum provider é substituído silenciosamente e
+nada é baixado automaticamente. Uma instalação completa só pode resolver o SDK
+por um mecanismo npm explicitamente autorizado pelo humano. Isso não é uma
+alegação de que Codex esteja instalado ou qualificado.
+
+A integração com o Codex SDK aplica essa fronteira fisicamente. O SDK recebe
+somente o caminho virtual `/cognitive/workspace` e inicia um launcher gerado em
+uma sessão efêmera restrita. Em hosts Linux qualificados, o Bubblewrap expõe
+somente o executável Codex, bibliotecas indispensáveis e essa sessão cognitiva
+vazia; repositório original, `.git`, diretórios pessoais, segredos do host,
+escritas externas e rede ficam fora do namespace. Conteúdo do repositório só
+alcança o request cognitivo após aquisição pelo broker e qualificação de conteúdo
+sensível. O launcher preserva stream JSONL e semântica de saída do SDK, e a
+sessão é removida em reset, encerramento e falha.
+
+Codex usa um subprocesso SDK local, mas sua cognição é um serviço externo. A
+contenção atual nega o caminho de rede desse serviço externo; por isso o Codex
+real permanece `BLOCKED` mesmo quando selecionado explicitamente. Essa
+conectividade tem finalidade distinta da autoridade de rede das ferramentas do
+agente; este repositório não alega que exista separação física qualificada entre
+elas.
+
+Não existe fallback read-only. Se a contenção nativa estiver ausente ou ainda
+não tiver qualificação física, o Codex permanece indisponível com
+`CODEX_CONTAINMENT_UNAVAILABLE`. Bubblewrap no Linux está fisicamente
+qualificado pelos testes atuais. Seatbelt no macOS e AppContainer no Windows
+preservam suas fronteiras de adapters nativos, mas os launchers Codex com
+streaming estão `NOT_EXECUTED` e indisponíveis até validação física nessas
+plataformas.
+
 ## Limitação atual explícita
 
 Codex é o alvo avançado recomendado, mas o repositório ainda não alega que sua
@@ -62,3 +101,6 @@ experiência NATURAL completa de execução ponta a ponta esteja qualificada. G1
 do ciclo governado de desenvolvimento estão implementados. Anti-replay durável
 e recuperação (G7), experiência NATURAL bilíngue completa (G8) e qualificação
 adversarial/nativa final precisam ficar verdes antes dessa alegação.
+O executável Codex real dependente de rede não é exercitado pela suíte offline
+de contenção; ela usa um executável local compatível com o protocolo para validar
+isolamento de processo e streaming sem credenciais ou acesso à rede.

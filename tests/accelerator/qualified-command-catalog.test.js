@@ -12,11 +12,14 @@ test('catalog admits exact Node syntax validation and test-file bindings', () =>
   assert.equal(result.command.timeoutMs, 2000);
   assert.ok(Object.isFrozen(result));
 
-  const testFile = admitQualifiedCommand(catalog, { selector: 'NODE_TEST_FILE', workspace: '/project', target: 'tests/app.test.js', environmentKeys: ['LANG'] });
+  const testFile = admitQualifiedCommand(catalog, { selector: 'NODE_TEST_FILE', workspace: '/project', target: 'tests/app.test.js', environmentKeys: [] });
   assert.equal(testFile.admitted, true);
   assert.equal(testFile.shell, false);
   assert.equal(testFile.command.timeoutMs, 30000);
   assert.equal(testFile.network, false);
+  assert.equal(testFile.command.executable, 'NATIVE_SANDBOX');
+  assert.equal(testFile.command.sandboxRequired, true);
+  assert.deepEqual(testFile.command.environmentKeys, []);
 });
 
 test('arbitrary shell arguments environments targets and selectors fail closed', () => {

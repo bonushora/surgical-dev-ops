@@ -3,7 +3,10 @@
 const assert = require('node:assert/strict');
 const fs = require('node:fs');
 const path = require('node:path');
+const { PassThrough } = require('node:stream');
 const test = require('node:test');
+
+const cli = require('../../accelerator/cli/surgical');
 
 const {
   createNaturalSessionControl
@@ -27,21 +30,55 @@ test('RUNNER_START changes the same work-mode seam consumed by the runtime', () 
   assert.equal(started.workMode, control.currentWorkMode());
 });
 
-test('surgical.js consumes currentWorkMode at cognition and governed development boundaries', () => {
+test('surgical.js routes human input through session control and consumes its current work mode', async () => {
   const source = fs.readFileSync(
     path.join(root, 'accelerator/cli/surgical.js'),
     'utf8'
   );
+  const input = new PassThrough();
+  const output = new PassThrough();
+  const handledLines = [];
+  const control = createNaturalSessionControl({
+    workspace: 'surgical-dev-ops',
+    workspaceRoot: root,
+    language: 'pt-BR'
+  });
+  const sessionControl = Object.freeze({
+    ...control,
+    handle(line) {
+      handledLines.push(line);
+      return control.handle(line);
+    }
+  });
+  const session = cli.createInteractiveSession(
+    Object.freeze({
+      repositoryPath: root,
+      workspace: 'surgical-dev-ops',
+      language: 'pt-BR',
+      protocols: Object.freeze({
+        bhSep: '2.3',
+        bhSdp: '2.3'
+      }),
+      interactionMode: Object.freeze({ mode: 'NATURAL' })
+    }),
+    {
+      input,
+      output,
+      terminal: false,
+      sessionControl
+    }
+  );
+  const closed = new Promise((resolve) => session.once('close', resolve));
+
+  input.end('runner status\n');
+  await closed;
 
   assert.match(
     source,
     /getWorkMode:\s*\(\)\s*=>\s*sessionControl\.currentWorkMode\(\)/m
   );
 
-  assert.match(
-    source,
-    /const\s+controlled\s*=\s*sessionControl\.handle\(\s*line\s*\)/m
-  );
+  assert.deepEqual(handledLines, ['runner status']);
 
   assert.match(
     source,

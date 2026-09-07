@@ -6,12 +6,54 @@ const test =
 const assert =
   require('node:assert/strict');
 
+const fs =
+  require('node:fs');
+
 const {
   createNaturalSessionControl,
+  AUTHORIZED_TASK_REUSE_SCHEMA,
+  naturalGovernedTaskFingerprint,
+  naturalAuthorizedTaskReuseFingerprint,
   formatProviderStatus
 } = require(
   '../../accelerator/cli/natural-session-control'
 );
+
+const {
+  detectNaturalGovernedTask
+} = require(
+  '../../accelerator/cli/natural-governed-task'
+);
+
+function authorizedReuse(task, overrides = {}) {
+  const taskFingerprint = naturalGovernedTaskFingerprint(task);
+  const binding = {
+    schema: AUTHORIZED_TASK_REUSE_SCHEMA,
+    authorizationFingerprint: 'a'.repeat(64),
+    sessionFingerprint: 'b'.repeat(64),
+    taskFingerprint,
+    envelopeFingerprint: 'c'.repeat(64),
+    scopeFingerprint: taskFingerprint,
+    workspace: '/tmp/example-project',
+    objective: task.objective,
+    taskKind: task.kind,
+    risk: 'R1',
+    validFrom: '2026-09-06T12:00:00.000Z',
+    authorizedAt: '2026-09-06T12:00:01.000Z',
+    reusedAt: '2026-09-06T12:01:00.000Z',
+    expiresAt: '2026-09-06T12:10:00.000Z',
+    physicalWorkspaceIdentity: 'd'.repeat(64),
+    environmentFingerprint: 'e'.repeat(64),
+    newHumanDecision: false,
+    authorityExpanded: false,
+    ...overrides
+  };
+  return Object.freeze({
+    ...binding,
+    reuseFingerprint:
+      naturalAuthorizedTaskReuseFingerprint(binding)
+  });
+}
 
 test(
   'NATURAL defaults to supervised microtasks',
@@ -210,25 +252,25 @@ test(
 test(
   'verified local provider reports zero operational authority',
   () => {
+    const discovery =
+      Object.freeze({
+        available: true,
+        active: true,
+        state: 'ACTIVE',
+        provider: 'Ollama',
+        model: 'qwen3:8b',
+        providerKind: 'OLLAMA',
+        cognitionLocation: 'LOCAL_MODEL',
+        transportLocation: 'LOCAL_PROCESS',
+        billing: 'LOCAL_RESOURCES_AND_LICENSES_APPLY',
+        networkRequirement: 'LOOPBACK_SERVICE_ONLY',
+        operationalAuthority: false
+      });
     const output =
       formatProviderStatus(
-        Object.freeze({
-          available:
-            true,
-
-          active:
-            true,
-
-          state:
-            'ACTIVE',
-
-          provider:
-            'Ollama',
-
-          model:
-            'qwen3:8b'
-        })
+        discovery
       );
+    const english = formatProviderStatus(discovery, 'en');
 
     assert.match(
       output,
@@ -254,8 +296,59 @@ test(
       output,
       /não recebe, intermedeia ou retém/i
     );
+    assert.match(english, /Cognition: local model/i);
+    assert.match(english, /context 4096.*10 minutes/i);
   }
 );
+
+test('Codex status distinguishes local subprocess from external cognition in PT-BR and EN', () => {
+  const discovery = Object.freeze({
+    provider: 'OpenAI Codex SDK',
+    model: 'configured-default',
+    providerKind: 'CODEX',
+    cognitionLocation: 'EXTERNAL_SERVICE',
+    transportLocation: 'LOCAL_PROCESS',
+    billing: 'UNKNOWN_OR_ACCOUNT_PLAN',
+    networkRequirement: 'EXTERNAL_SERVICE_REQUIRED',
+    networkCompatibility: 'BLOCKED_BY_CONTAINMENT_NETWORK',
+    available: false,
+    active: false,
+    state: 'BLOCKED',
+    reason: 'External cognitive service network is denied.',
+    operationalAuthority: false
+  });
+  const portuguese = formatProviderStatus(discovery, 'pt-BR');
+  const english = formatProviderStatus(discovery, 'en');
+
+  for (const output of [portuguese, english]) {
+    assert.doesNotMatch(output, /Ollama/i);
+    assert.doesNotMatch(output, /provider cognitivo local/i);
+    assert.doesNotMatch(output, /4096|10 minutos|10 minutes/i);
+    assert.doesNotMatch(output, /sem cobrança|no charge|free/i);
+    assert.match(output, /extern|external/i);
+    assert.match(output, /subprocess/i);
+    assert.match(output, /conta\/plano|account\/plan/i);
+    assert.match(output, /mediad|sanitiz/i);
+    assert.match(output, /rede|network/i);
+  }
+  assert.match(portuguese, /isso não torna a cognição local/i);
+  assert.match(english, /does not make cognition local/i);
+  assert.match(portuguese, /Autoridade operacional da IA: nenhuma/i);
+  assert.match(english, /Operational authority of the AI: none/i);
+});
+
+test('provider status fails closed when mandatory location metadata is absent', () => {
+  assert.throws(
+    () => formatProviderStatus(Object.freeze({
+      provider: 'OpenAI Codex SDK',
+      model: 'configured-default',
+      available: true,
+      active: true,
+      state: 'ACTIVE'
+    })),
+    /location metadata/i
+  );
+});
 
 test(
   'session control exports no execution or filesystem authority',
@@ -435,7 +528,116 @@ test(
 );
 
 test(
-  'authorization without pending governed task does not grant authority',
+  'identical task uses explicit authorized reuse without affirmative parsing or a new human decision',
+  () => {
+    const task = detectNaturalGovernedTask(
+      'Explique este projeto para mim.'
+    );
+    const control = createNaturalSessionControl({
+      workspace: 'example-project',
+      workspaceRoot: '/tmp/example-project'
+    });
+
+    control.handle('Explique este projeto para mim.');
+    const provenance = authorizedReuse(task);
+    const reused = control.reuseAuthorizedGovernedTask(provenance);
+
+    assert.equal(reused.action, 'REUSE_AUTHORIZED_GOVERNED_TASK');
+    assert.doesNotMatch(
+      control.reuseAuthorizedGovernedTask.toString(),
+      /isAffirmative/
+    );
+    assert.equal(reused.authorizationFingerprint, provenance.authorizationFingerprint);
+    assert.equal(reused.sessionFingerprint, provenance.sessionFingerprint);
+    assert.equal(reused.taskFingerprint, provenance.taskFingerprint);
+    assert.equal(reused.envelopeFingerprint, provenance.envelopeFingerprint);
+    assert.equal(reused.validFrom, provenance.validFrom);
+    assert.equal(reused.authorizedAt, provenance.authorizedAt);
+    assert.equal(reused.expiresAt, provenance.expiresAt);
+    assert.equal(reused.humanDecision, null);
+    assert.equal(reused.authorizationEvent, null);
+    assert.equal(reused.authorityExpanded, false);
+    assert.equal(control.hasPendingAuthorization(), false);
+  }
+);
+
+test(
+  'objective scope risk session environment and expiry divergence block authorized reuse',
+  () => {
+    const task = detectNaturalGovernedTask(
+      'Explique este projeto para mim.'
+    );
+    const valid = authorizedReuse(task);
+    const divergences = [
+      { objective: 'Outro objetivo.' },
+      { scopeFingerprint: 'f'.repeat(64) },
+      { risk: 'R2' },
+      { sessionFingerprint: '1'.repeat(64) },
+      { environmentFingerprint: '2'.repeat(64) },
+      {
+        reusedAt: valid.expiresAt,
+        reuseFingerprint: null
+      }
+    ];
+
+    for (const divergence of divergences) {
+      const control = createNaturalSessionControl({
+        workspace: 'example-project',
+        workspaceRoot: '/tmp/example-project'
+      });
+      control.handle('Explique este projeto para mim.');
+      const candidate = divergence.reuseFingerprint === null
+        ? authorizedReuse(task, {
+            reusedAt: divergence.reusedAt
+          })
+        : Object.freeze({
+            ...valid,
+            ...divergence
+          });
+
+      assert.throws(
+        () => control.reuseAuthorizedGovernedTask(candidate),
+        /reuse|divergent/i
+      );
+      assert.equal(
+        control.hasPendingAuthorization(),
+        true,
+        'a divergent reuse leaves the real human decision pending'
+      );
+    }
+  }
+);
+
+test(
+  'real typed confirmation still uses the affirmative parser and no artificial sim call remains',
+  () => {
+    const observedInputs = [];
+    const control = createNaturalSessionControl({
+      workspace: 'example-project'
+    });
+    const originalHandle = control.handle;
+    const handle = (input) => {
+      observedInputs.push(input);
+      return originalHandle(input);
+    };
+    handle('Explique este projeto para mim.');
+    const approval = handle('sim');
+
+    assert.equal(approval.action, 'AUTHORIZED_GOVERNED_TASK');
+    assert.equal(observedInputs.at(-1), 'sim');
+    const source = fs.readFileSync(
+      require.resolve('../../accelerator/cli/surgical'),
+      'utf8'
+    );
+    assert.doesNotMatch(
+      source,
+      /sessionControl\.handle\(\s*['"]sim['"]\s*\)/
+    );
+  }
+);
+
+test(
+  'confirmation without pending governed task is handled deterministically',
   () => {
     const control =
       createNaturalSessionControl({
@@ -448,10 +650,10 @@ test(
         'eu autorizo'
       );
 
-    assert.equal(
-      result.matched,
-      false
-    );
+    assert.equal(result.matched, true);
+    assert.equal(result.action, 'CONTINUE');
+    assert.equal(result.output, 'Não há autorização pendente.\n');
+    assert.equal(control.hasPendingAuthorization(), false);
   }
 );
 

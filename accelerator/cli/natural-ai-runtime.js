@@ -60,6 +60,12 @@ const {
 } = require(
   './natural-local-inference-profile'
 );
+const {
+  providerLocationMetadata,
+  requireProviderLocationMetadata
+} = require('./natural-provider-location-contract');
+
+const OPENAI_LOCATION = providerLocationMetadata('OPENAI_RESPONSES');
 
 function requireDiscovery(discovery) {
   let profile = null;
@@ -86,6 +92,18 @@ function requireDiscovery(discovery) {
       profile.profile ||
     discovery.available !== true ||
     discovery.local !== true ||
+    discovery.endpoint !== 'http://127.0.0.1:11434/api/tags' ||
+    discovery.endpointLoopback !== true ||
+    discovery.transportQualified !== true ||
+    discovery.modelInstalled !== true ||
+    (() => {
+      try {
+        requireProviderLocationMetadata(discovery, 'OLLAMA');
+        return false;
+      } catch {
+        return true;
+      }
+    })() ||
     discovery.operationalAuthority !== false
   ) {
     throw new Error(
@@ -193,6 +211,8 @@ function createNaturalLocalAIComposition(
     local:
       true,
 
+    ...providerLocationMetadata('OLLAMA'),
+
     inferenceProfile:
       NATURAL_LOCAL_INFERENCE_PROFILE,
 
@@ -248,6 +268,7 @@ function createNaturalOpenAIComposition(input = {}) {
     provider: OPENAI_FRONTIER_PROFILE.provider,
     model: OPENAI_FRONTIER_PROFILE.model,
     local: false,
+    ...OPENAI_LOCATION,
     configured: true,
     operationalAuthority: false,
     mutationAuthority: false,
@@ -256,7 +277,12 @@ function createNaturalOpenAIComposition(input = {}) {
 }
 
 function createNaturalCodexComposition(input = {}) {
-  const adapter = createCodexSDKAIProviderAdapter(input);
+  const {
+    workingDirectory: _forbiddenOriginalWorkspace,
+    ...containedInput
+  } = input;
+  const adapter = createCodexSDKAIProviderAdapter(containedInput);
+  requireProviderLocationMetadata(adapter, 'CODEX');
   const providerId = CODEX_SDK_PROVIDER_ID;
   const providerPort = createAIProviderPort({
     providerId,
@@ -285,13 +311,24 @@ function createNaturalCodexComposition(input = {}) {
     providerId,
     provider: 'OpenAI Codex SDK',
     model: adapter.model,
-    local: true,
+    ...providerLocationMetadata('CODEX'),
     configured: true,
     operationalAuthority: false,
     mutationAuthority: false,
     publicationAuthority: false,
+    containment: adapter.containment,
+    networkCompatibility:
+      adapter.containment && adapter.containment.controls &&
+      adapter.containment.controls.networkDenied === true
+        ? 'BLOCKED_BY_CONTAINMENT_NETWORK'
+        : adapter.containment && adapter.containment.controls &&
+          adapter.containment.controls.cognitiveServiceNetworkQualified === true
+          ? 'QUALIFIED'
+          : 'UNQUALIFIED_NETWORK_SEPARATION',
     runtime,
-    currentThreadId: adapter.currentThreadId
+    currentThreadId: adapter.currentThreadId,
+    dispose: adapter.dispose,
+    isDisposed: adapter.isDisposed
   });
 }
 
@@ -309,6 +346,14 @@ async function invokeNaturalCognitive(
     !Object.isFrozen(composition) ||
     composition.operationalAuthority !==
       false ||
+    (() => {
+      try {
+        requireProviderLocationMetadata(composition);
+        return false;
+      } catch {
+        return true;
+      }
+    })() ||
     !composition.runtime ||
     composition.runtime.schema !==
       'sdo.governed_ai_runtime.v1'

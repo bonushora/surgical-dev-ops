@@ -140,6 +140,19 @@ test('only a semantically bounded local-change question uses the Git status fast
   }
 });
 
+test('combined branch and local-change questions use complete physical repository status', () => {
+  const result = interpretNaturalIntent(
+    'Em que branch estou e tenho alterações locais?'
+  );
+  assert.equal(result.matched, true);
+  assert.deepEqual(result.intent, {
+    capabilityType: 'GIT_READ',
+    target: 'status',
+    includeBranch: true
+  });
+  assert.equal(result.presentation, 'REPOSITORY_STATUS');
+});
+
 test('project state and next-work synthesis receives governed project, state, and planning evidence', async () => {
   const task = detectNaturalGovernedTask(OBJECTIVE_PT);
   const progress = [];

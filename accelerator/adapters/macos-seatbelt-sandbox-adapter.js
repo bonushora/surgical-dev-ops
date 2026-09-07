@@ -8,6 +8,7 @@ const { canonicalizeAuthorizedRoot } = require('../core/workspace-boundary');
 
 const TIMEOUT_MS = 5000;
 const MAX_OUTPUT_BYTES = 32 * 1024;
+const HELPER = path.resolve(__dirname, '../native/macos/sdo-seatbelt-probe');
 
 function deepFreeze(value) {
   if (!value || typeof value !== 'object' || Object.isFrozen(value)) return value;
@@ -25,6 +26,9 @@ function timestamp(value, name) {
 }
 
 function seatbeltLiteral(value) {
+  if (typeof value !== 'string' || !value || /[\u0000-\u001f\u007f]/.test(value)) {
+    throw new Error('Seatbelt path literal is unsafe.');
+  }
   return value.replace(/\\/g, '\\\\').replace(/"/g, '\\"');
 }
 
@@ -61,6 +65,36 @@ function createProfile(workspace) {
     ...executableMappings,
     ...rules
   ].join('\n');
+}
+
+function createNodeTestProfile(workspace, node) {
+  return [
+    createProfile(workspace),
+    `(allow file-read* (literal "${seatbeltLiteral(node)}"))`,
+    `(allow file-map-executable (literal "${seatbeltLiteral(node)}"))`,
+    `(allow process-exec (literal "${seatbeltLiteral(node)}"))`
+  ].join('\n');
+}
+
+function qualifiedRuntime(requirement) {
+  if (process.platform !== 'darwin') throw new Error('macOS Seatbelt sandbox is unavailable.');
+  if (!requirement || !Object.isFrozen(requirement) ||
+      requirement.schema !== 'sdo.sandbox_requirement.v1' || requirement.platform !== 'darwin') {
+    throw new Error('Immutable macOS sandbox requirement is required.');
+  }
+  const workspace = canonicalizeAuthorizedRoot(requirement.workspace);
+  const node = fs.realpathSync(process.execPath);
+  if (!fs.existsSync(HELPER) || !fs.statSync(HELPER).isFile() ||
+      !fs.statSync(node).isFile()) {
+    throw new Error('Qualified native macOS Seatbelt runtime is unavailable.');
+  }
+  return { workspace, helper: HELPER, node };
+}
+
+function profileFor(requirement, workspace, node) {
+  return requirement.operationType === 'RUN_NODE_TEST'
+    ? createNodeTestProfile(workspace, node)
+    : createProfile(workspace);
 }
 
 function boundedFailure(result, { workspace, helper, probe }) {
@@ -109,22 +143,13 @@ function cleanNativeProbeResult(result, enforcementSignalAllowed) {
 }
 
 function attestMacosSeatbeltSandbox({ requirement, observedAt, expiresAt }) {
-  if (process.platform !== 'darwin') throw new Error('macOS Seatbelt sandbox is unavailable.');
-  if (!requirement || !Object.isFrozen(requirement) ||
-      requirement.schema !== 'sdo.sandbox_requirement.v1' || requirement.platform !== 'darwin') {
-    throw new Error('Immutable macOS sandbox requirement is required.');
-  }
-  const workspace = canonicalizeAuthorizedRoot(requirement.workspace);
-  const helper = path.join(workspace, 'accelerator/native/macos/sdo-seatbelt-probe');
-  if (!fs.existsSync(helper) || !fs.statSync(helper).isFile()) {
-    throw new Error('Qualified native macOS Seatbelt helper is unavailable.');
-  }
+  const { workspace, helper, node } = qualifiedRuntime(requirement);
   const observation = timestamp(observedAt, 'observedAt');
   const expiry = timestamp(expiresAt, 'expiresAt');
   if (Date.parse(expiry) <= Date.parse(observation)) {
     throw new Error('Sandbox evidence expiry is invalid.');
   }
-  const profile = createProfile(workspace);
+  const profile = profileFor(requirement, workspace, node);
   const hostEscapeProbe = path.join(os.homedir(), '.ssh', 'id_rsa');
   const bootstrap = runNativeProbe({
     profile, helper, requirement, workspace, hostEscapeProbe, probe: 'bootstrap'
@@ -172,4 +197,82 @@ function attestMacosSeatbeltSandbox({ requirement, observedAt, expiresAt }) {
   });
 }
 
-module.exports = deepFreeze({ attestMacosSeatbeltSandbox, createProfile });
+function executeMacosSeatbeltNodeTest({
+  requirement,
+  target,
+  observedAt,
+  expiresAt,
+  timeoutMs,
+  maxOutputBytes
+}) {
+  const { workspace, helper, node } = qualifiedRuntime(requirement);
+  if (requirement.operationType !== 'RUN_NODE_TEST' ||
+      requirement.target !== target || typeof target !== 'string' || !target) {
+    throw new Error('Seatbelt Node test target is not operation-bound.');
+  }
+  const canonicalTarget = fs.realpathSync(path.resolve(workspace, target));
+  const relativeTarget = path.relative(workspace, canonicalTarget);
+  if (!relativeTarget || relativeTarget.startsWith(`..${path.sep}`) ||
+      path.isAbsolute(relativeTarget) || !fs.statSync(canonicalTarget).isFile()) {
+    throw new Error('Seatbelt Node test target is outside the workspace.');
+  }
+  const observation = timestamp(observedAt, 'observedAt');
+  const expiry = timestamp(expiresAt, 'expiresAt');
+  const adapterEvidence = attestMacosSeatbeltSandbox({
+    requirement,
+    observedAt: observation,
+    expiresAt: expiry
+  });
+  const sandboxedArguments = [
+    '--permission',
+    `--allow-fs-read=${workspace}`,
+    '--test-isolation=none',
+    '--test',
+    relativeTarget
+  ];
+  const profile = createNodeTestProfile(workspace, node);
+  const arguments_ = [
+    requirement.operationId,
+    requirement.fingerprint,
+    workspace,
+    path.join(os.homedir(), '.ssh', 'id_rsa'),
+    'node-test',
+    profile,
+    node,
+    relativeTarget
+  ];
+  const result = childProcess.spawnSync(helper, arguments_, {
+    cwd: workspace,
+    shell: false,
+    encoding: 'utf8',
+    timeout: timeoutMs,
+    maxBuffer: maxOutputBytes,
+    windowsHide: true,
+    env: { PATH: '/usr/bin:/bin', HOME: '/nonexistent' }
+  });
+  return {
+    adapterEvidence,
+    executable: helper,
+    arguments: arguments_,
+    sandboxedExecutable: node,
+    sandboxedArguments,
+    result
+  };
+}
+
+function createMacosCodexCognitiveLaunchSpec() {
+  const reason = process.platform !== 'darwin'
+    ? 'macOS Seatbelt physical qualification was not executed on this platform.'
+    : 'macOS Seatbelt Codex streaming helper is not physically qualified.';
+  const error = new Error(`CODEX_CONTAINMENT_UNAVAILABLE: ${reason}`);
+  error.code = 'CODEX_CONTAINMENT_UNAVAILABLE';
+  throw error;
+}
+
+module.exports = deepFreeze({
+  attestMacosSeatbeltSandbox,
+  executeMacosSeatbeltNodeTest,
+  createProfile,
+  createNodeTestProfile,
+  createMacosCodexCognitiveLaunchSpec
+});

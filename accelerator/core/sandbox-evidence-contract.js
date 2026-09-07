@@ -69,6 +69,7 @@ function createSandboxRequirement({ requirementId, operation, platform, required
     operationId: bound.operationId,
     workspace: bound.workspace,
     operationType: bound.operationType,
+    target: bound.target,
     operationFingerprint: bound.fingerprint,
     platform,
     requiredControls: Object.fromEntries(CONTROLS.map((control) => [control, true])),

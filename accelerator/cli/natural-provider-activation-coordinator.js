@@ -15,6 +15,7 @@ const PROVIDER_INTENTS = Object.freeze({
   SELECT_REMOTE_PROVIDER: 'SELECT_REMOTE_PROVIDER',
   CONFIGURE_PROVIDER: 'CONFIGURE_PROVIDER',
   RETURN_TO_LOCAL: 'RETURN_TO_LOCAL',
+  DISABLE_PROVIDER: 'DISABLE_PROVIDER',
   PROVIDER_AUTHORITY_DENIED: 'PROVIDER_AUTHORITY_DENIED',
   AMBIGUOUS_PROVIDER_REQUEST: 'AMBIGUOUS_PROVIDER_REQUEST'
 });
@@ -131,6 +132,9 @@ const AVAILABLE_CONCEPT =
 const RETURN_TO_LOCAL =
   /^(?:volte|voltar|retorne|return|switch back)(?: para| to)? (?:a |the )?(?:ia local|ai local|local ai|provider local|local provider|modelo local|local model)$/;
 
+const DISABLE_PROVIDER =
+  /^(?:desative|desativar|disable|turn off|pare de usar|stop using)(?: a| o| the)? (?:ia|ai|provider|provedor|modelo cognitivo|cognitive model)(?: cognitiva| cognitive)?$/;
+
 const CREDENTIAL_CONCEPT =
   /(?:^| )(?:credencial|credenciais|credential|credentials|chave de api|chaves de api|api key|api keys)(?: |$)/;
 
@@ -246,6 +250,13 @@ function resolveNaturalProviderIntent(input) {
       PROVIDER_INTENTS.RETURN_TO_LOCAL,
       text,
       'ollama:qwen3:8b'
+    );
+  }
+
+  if (DISABLE_PROVIDER.test(text)) {
+    return resolvedIntent(
+      PROVIDER_INTENTS.DISABLE_PROVIDER,
+      text
     );
   }
 

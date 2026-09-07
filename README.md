@@ -26,7 +26,7 @@ operational system around the model explicit, bounded, auditable, and fail-close
 | Published predecessor with native CI | [`56da715284704f227675961d476e19acce6e9fa3`](https://github.com/bonushora/surgical-dev-ops/commit/56da715284704f227675961d476e19acce6e9fa3), [Accelerator Conformance #33286652480](https://github.com/bonushora/surgical-dev-ops/actions/runs/33286652480) |
 | Published predecessor matrix | Ubuntu, macOS, and Windows: **PASS** |
 | Canonical local suite | 1212 tests discovered; 1207 passed; 0 failures; 5 platform-specific skips |
-| Normative protocols | BH-SEP v2.2 + BH-SDP v2.2 |
+| Active normative protocols | BH-SEP v2.3 + BH-SDP v2.3 |
 
 The complete trail, including runs that failed before the green baseline, is in
 [Engineering Evidence](./docs/ENGINEERING_EVIDENCE.md).
@@ -89,8 +89,12 @@ native implementations evaluated against common bounded contracts. See
 - **ENGINEER:** natural language with relevant technical evidence.
 - **EXPERT:** deterministic command-oriented control.
 
-The reference local AI provider is Ollama when available. Providers are
-replaceable and remain outside operational authority. Broad analyses in NATURAL
+NATURAL may automatically discover and activate only a qualified local Ollama
+model already installed behind the canonical loopback transport; it never
+downloads a model. External providers are explicit opt-in only, and an explicit
+human selection is never silently replaced. No selection grants operational
+authority. Providers are replaceable and remain outside operational authority.
+Broad analyses in NATURAL
 mode cross human authorization, bind a deterministic physical workspace session,
 open a governed discovery index, inspect sensitive content before provider
 exposure, evaluate micro-reads against a bounded task envelope, and record an
@@ -167,10 +171,16 @@ npm test
 
 ## Normative protocols and immutable RAW artifacts
 
+Protocol versions are independent from the Surgical DevOps software release;
+`v2.6.0-rc.6` identifies the software, while BH-SEP and BH-SDP v2.3 govern the
+current runtime.
+
 ### v2.2 — historical and preserved
 
 - [BH-SEP v2.2 — original RAW](https://raw.githubusercontent.com/bonushora/surgical-dev-ops/main/protocols/BH-SEP.md)
 - [BH-SDP v2.2 — original RAW](https://raw.githubusercontent.com/bonushora/surgical-dev-ops/main/protocols/BH-SDP.md)
+- [BH-SEP v2.2 — stable repository path](./protocols/BH-SEP.md)
+- [BH-SDP v2.2 — stable repository path](./protocols/BH-SDP.md)
 - [BH-SEP v2.2 — English translation](./protocols/BH-SEP_EN.md)
 - [BH-SDP v2.2 — English translation](./protocols/BH-SDP_EN.md)
 
@@ -181,10 +191,10 @@ npm test
 - [BH-SEP v2.3 — English translation](./protocols/v2.3/BH-SEP_EN.md)
 - [BH-SDP v2.3 — English translation](./protocols/v2.3/BH-SDP_EN.md)
 
-#### Joint copy of v2.3
+#### Derived joint copy of v2.3
 
-- [Copy BH-SEP + BH-SDP v2.3 — original RAW](./protocols/v2.3/BH-PROTOCOLS.md)
-- [Copy BH-SEP + BH-SDP v2.3 — English translation](./protocols/v2.3/BH-PROTOCOLS_EN.md)
+- [BH-SEP + BH-SDP v2.3 — combined PT-BR copy](./protocols/v2.3/BH-PROTOCOLS.md)
+- [BH-SEP + BH-SDP v2.3 — combined English translation](./protocols/v2.3/BH-PROTOCOLS_EN.md)
 
 Future versions must use new versioned paths and must not overwrite or redirect
 the original RAW artifacts. See [Protocol Preservation](./protocols/README.md)

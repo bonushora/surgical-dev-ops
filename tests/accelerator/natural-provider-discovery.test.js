@@ -10,6 +10,7 @@ const {
   OLLAMA_TAGS_ENDPOINT,
   DEFAULT_PROVIDER_ID,
   DEFAULT_MODEL,
+  isCanonicalLoopbackOllamaEndpoint,
   discoverNaturalDefaultProvider
 } = require(
   '../../accelerator/cli/natural-provider-discovery'
@@ -109,6 +110,15 @@ test(
       true
     );
 
+    assert.equal(result.providerKind, 'OLLAMA');
+    assert.equal(result.cognitionLocation, 'LOCAL_MODEL');
+    assert.equal(result.transportLocation, 'LOCAL_PROCESS');
+    assert.equal(result.networkRequirement, 'LOOPBACK_SERVICE_ONLY');
+    assert.equal(result.endpoint, OLLAMA_TAGS_ENDPOINT);
+    assert.equal(result.endpointLoopback, true);
+    assert.equal(result.transportQualified, true);
+    assert.equal(result.modelInstalled, true);
+
     assert.equal(
       result.cognitiveAuthority,
       true
@@ -143,6 +153,30 @@ test(
     assert.ok(
       Object.isFrozen(result)
     );
+  }
+);
+
+test(
+  'NATURAL rejects non-loopback Ollama discovery without dispatching network',
+  async () => {
+    let dispatches = 0;
+    const result = await discoverNaturalDefaultProvider({
+      endpoint: 'https://ollama.example.invalid/api/tags',
+      fetchImplementation: async () => {
+        dispatches += 1;
+        throw new Error('must not dispatch');
+      }
+    });
+
+    assert.equal(isCanonicalLoopbackOllamaEndpoint(OLLAMA_TAGS_ENDPOINT), true);
+    assert.equal(isCanonicalLoopbackOllamaEndpoint('http://localhost:11434/api/tags'), false);
+    assert.equal(result.available, false);
+    assert.equal(result.endpointLoopback, false);
+    assert.equal(result.transportQualified, false);
+    assert.equal(result.modelInstalled, false);
+    assert.equal(result.operationalAuthority, false);
+    assert.equal(dispatches, 0);
+    assert.match(result.reason, /loopback/i);
   }
 );
 

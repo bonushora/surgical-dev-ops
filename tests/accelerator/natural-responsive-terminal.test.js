@@ -87,17 +87,29 @@ test(
   () => {
     const portuguese =
       formatCognitiveProgressMessage(
-        'explique esta arquitetura'
+        'explique esta arquitetura',
+        'pt-BR',
+        Object.freeze({
+          providerKind: 'OLLAMA', cognitionLocation: 'LOCAL_MODEL',
+          transportLocation: 'LOCAL_PROCESS', billing: 'LOCAL_RESOURCES_AND_LICENSES_APPLY',
+          networkRequirement: 'LOOPBACK_SERVICE_ONLY', state: 'ACTIVE', active: true
+        })
       );
 
     const english =
       formatCognitiveProgressMessage(
-        'explain this architecture in English'
+        'explain this architecture in English',
+        'en',
+        Object.freeze({
+          providerKind: 'OLLAMA', cognitionLocation: 'LOCAL_MODEL',
+          transportLocation: 'LOCAL_PROCESS', billing: 'LOCAL_RESOURCES_AND_LICENSES_APPLY',
+          networkRequirement: 'LOOPBACK_SERVICE_ONLY', state: 'ACTIVE', active: true
+        })
       );
 
     assert.match(
       portuguese,
-      /Processando com o provider cognitivo local/
+      /Processando com o modelo cognitivo local via Ollama/
     );
     assert.match(
       portuguese,
@@ -110,7 +122,7 @@ test(
 
     assert.match(
       english,
-      /Processing with the local cognitive provider/
+      /Processing with the local Ollama cognitive model/
     );
     assert.match(
       english,
@@ -122,3 +134,21 @@ test(
     );
   }
 );
+
+test('Codex progress states external cognition and current network block equivalently', () => {
+  const discovery = Object.freeze({
+    providerKind: 'CODEX', cognitionLocation: 'EXTERNAL_SERVICE',
+    transportLocation: 'LOCAL_PROCESS', billing: 'UNKNOWN_OR_ACCOUNT_PLAN',
+    networkRequirement: 'EXTERNAL_SERVICE_REQUIRED', state: 'BLOCKED', active: false
+  });
+  const portuguese = formatCognitiveProgressMessage('explique', 'pt-BR', discovery);
+  const english = formatCognitiveProgressMessage('explain', 'en', discovery);
+  for (const output of [portuguese, english]) {
+    assert.match(output, /extern|external/i);
+    assert.match(output, /subprocess/i);
+    assert.match(output, /rede|network/i);
+    assert.doesNotMatch(output, /Ollama|4096|10 minutos|10 minutes|sem cobrança|no charge/i);
+  }
+  assert.match(portuguese, /nenhuma solicitação Codex foi enviada/i);
+  assert.match(english, /no Codex request was sent/i);
+});

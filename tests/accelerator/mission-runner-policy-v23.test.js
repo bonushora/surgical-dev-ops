@@ -80,6 +80,9 @@ test('evidence reuse requires exact workspace target SHA and environment identit
   assert.equal(canReuseEvidence(identity, { ...identity }), true);
   assert.equal(canReuseEvidence(identity, { ...identity, sha256: 'b'.repeat(64) }), false);
   assert.equal(canReuseEvidence(identity, { ...identity, environment: 'Preview' }), false);
+  assert.equal(canReuseEvidence(identity, { ...identity, target: './README.md' }), true);
+  assert.equal(canReuseEvidence(identity, { ...identity, sha256: null }), false);
+  assert.equal(canReuseEvidence(identity, { ...identity, sha256: 'malformed' }), false);
   const reused = evaluateMissionRunnerStep(step({
     previousEvidence: identity,
     currentEvidence: { ...identity }

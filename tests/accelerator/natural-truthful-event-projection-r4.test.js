@@ -35,6 +35,7 @@ const {
 
 const CLI = require.resolve('../../accelerator/cli/surgical');
 const NOW = '2099-01-01T00:00:00.000Z';
+const R4_STDOUT_MARKER = 'SDO_R4_GOVERNED_TEST_COMPLETED';
 
 function missionFor(repository, operation, overrides = {}) {
   const session = createDeterministicWorkspaceSession({
@@ -161,18 +162,20 @@ test('canonical start is observed before the governed operation produces its phy
   const fixture = createHermeticGitRepository();
   try {
     const target = 'r4-event-order.test.js';
-    const marker = path.join(
-      path.dirname(fixture.repository),
-      'r4-operation-completed.marker'
-    );
+    const containedFixture = [
+      "'use strict';",
+      "const test = require('node:test');",
+      "const assert = require('node:assert/strict');",
+      `const marker = ${JSON.stringify(R4_STDOUT_MARKER)};`,
+      "test('physical stdout completion marker', () => {",
+      "  assert.equal(process.stdout.write(marker + '\\n'), true);",
+      '});',
+      ''
+    ].join('\n');
+    assert.doesNotMatch(containedFixture, /node:fs|writeFileSync/);
     fs.writeFileSync(
       path.join(fixture.repository, target),
-      "'use strict';\n" +
-        "const test = require('node:test');\n" +
-        "const fs = require('node:fs');\n" +
-        "test('physical completion marker', () => {\n" +
-        `  fs.writeFileSync(${JSON.stringify(marker)}, 'completed\\n');\n` +
-        "});\n"
+      containedFixture
     );
     for (const args of [
       ['add', target],
@@ -186,16 +189,16 @@ test('canonical start is observed before the governed operation produces its phy
     }
     const mission = missionFor(fixture.repository, 'tests.run');
     const observed = [];
+    let normalizedStdoutEvidence = null;
     const dispatch = dispatchGatewayRequest({
       mission,
       request: requestFor(mission, 'tests.run', { target }),
       options: {
         now: () => NOW,
-        onMissionEvent: (event) => {
-          observed.push(event.type);
-          if (event.type === 'TEST_STARTED') assert.equal(fs.existsSync(marker), false);
-          if (event.type === 'TEST_PASSED') assert.equal(fs.existsSync(marker), true);
-        }
+        onMissionEvent: (event) => observed.push({
+          type: event.type,
+          normalizedStdoutEvidence
+        })
       }
     });
 
@@ -204,7 +207,24 @@ test('canonical start is observed before the governed operation produces its phy
       'SUCCESS',
       JSON.stringify(dispatch.result)
     );
-    assert.deepEqual(observed, ['TEST_STARTED', 'TEST_PASSED']);
+    normalizedStdoutEvidence = dispatch.result.data.stdoutSha256;
+    assert.deepEqual(observed, [
+      { type: 'TEST_STARTED', normalizedStdoutEvidence: null },
+      { type: 'TEST_PASSED', normalizedStdoutEvidence: null }
+    ]);
+    assert.equal(dispatch.result.data.status, 'PASSED');
+    assert.equal(dispatch.result.data.testsDiscovered, 1);
+    assert.equal(dispatch.result.data.passed, 1);
+    assert.equal(dispatch.result.data.failed, 0);
+    assert.match(normalizedStdoutEvidence, /^[a-f0-9]{64}$/);
+    assert.equal(dispatch.result.data.rawOutputOmittedFromCognition, true);
+    assert.equal(JSON.stringify(dispatch.result).includes(R4_STDOUT_MARKER), false);
+    const worktree = spawnSync('git', ['status', '--short'], {
+      cwd: fixture.repository,
+      encoding: 'utf8'
+    });
+    assert.equal(worktree.status, 0, worktree.stderr);
+    assert.equal(worktree.stdout, '');
   } finally {
     fixture.cleanup();
   }

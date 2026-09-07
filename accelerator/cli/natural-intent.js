@@ -58,6 +58,7 @@ function interpretNaturalIntent(input) {
         'existem alteracoes no repositorio',
         'ha alteracoes locais',
         'tem alteracoes locais',
+        'tenho alteracoes locais',
         'existem alteracoes locais',
         'arquivos alterados',
         'alteracoes pendentes',
@@ -83,7 +84,10 @@ function interpretNaturalIntent(input) {
       matched: true,
       intent: Object.freeze({
         capabilityType: 'GIT_READ',
-        target: 'status'
+        target: 'status',
+        ...(text.includes('branch') || text.includes('ramo')
+          ? { includeBranch: true }
+          : {})
       }),
       presentation: 'REPOSITORY_STATUS'
     });
@@ -97,6 +101,8 @@ function interpretNaturalIntent(input) {
         'qual branch',
         'branch atual',
         'em qual branch',
+        'em que branch estou',
+        'em qual branch estou',
         'ramo atual',
         'what is the current branch',
         'which branch am i on',

@@ -397,6 +397,98 @@ test('governed process validation FAILED cannot complete successfully', (context
   assert.equal(result.governed.operationRecord.finalization.successfulCompletionEligible, false);
 }));
 
+test('NODE_TEST_FILE without bound native sandbox evidence fails closed', (context) =>
+  withFixture((repo) => {
+    const scope = { selectors: ['NODE_TEST_FILE'], paths: ['target.js'] };
+    const grantEvaluation = issue(repo, 'PROCESS_VALIDATION', 'target.js', {
+      request: { action: 'NODE_TEST_FILE', scope },
+      authority: { action: 'NODE_TEST_FILE', scope }
+    });
+    const request = execution(repo, 'PROCESS_VALIDATION', {
+      action: 'NODE_TEST_FILE',
+      grantEvaluation
+    });
+    context.mock.method(processValidationAdapter, 'validateJavaScriptWithGrant', () => frozen({
+      schema: 'sdo.process_validation_result.v1',
+      operationId: 'op-1',
+      workspace: repo,
+      selector: 'NODE_TEST_FILE',
+      observedAt: NOW,
+      validation: {
+        status: 'PASSED',
+        successfulCompletionEligible: true
+      },
+      execution: {}
+    }));
+    const result = orchestrate(input(repo, request));
+    assert.equal(result.orchestration.status, 'FAILED');
+    assert.match(result.execution.reason, /bound native sandbox evidence/);
+    assert.equal(result.governed.lifecycle.status, 'FAILED');
+  }));
+
+test('NODE_TEST_FILE with divergent native sandbox evidence fails closed', (context) =>
+  withFixture((repo) => {
+    const scope = { selectors: ['NODE_TEST_FILE'], paths: ['target.js'] };
+    const grantEvaluation = issue(repo, 'PROCESS_VALIDATION', 'target.js', {
+      request: { action: 'NODE_TEST_FILE', scope },
+      authority: { action: 'NODE_TEST_FILE', scope }
+    });
+    const request = execution(repo, 'PROCESS_VALIDATION', {
+      action: 'NODE_TEST_FILE',
+      grantEvaluation
+    });
+    const controls = frozen({
+      workspaceReadOnly: true,
+      workspaceBound: true,
+      networkDenied: true,
+      genericProcessDenied: true,
+      secretAccessDenied: true
+    });
+    const nativeIdentity = process.platform === 'darwin'
+      ? ['macos-seatbelt-deny-default', 'sdo.macos_seatbelt.v1']
+      : ['linux-bubblewrap-user-namespace', 'sdo.linux_bwrap.v1'];
+    const adapterEvidence = frozen({
+      schema: 'sdo.sandbox_adapter_evidence.v1',
+      decision: 'ENFORCED',
+      sandboxKind: nativeIdentity[0],
+      adapterId: nativeIdentity[1],
+      operationId: 'op-1',
+      workspace: `${repo}-divergent`,
+      platform: process.platform,
+      requirementFingerprint: 'b'.repeat(64),
+      controls,
+      observedAt: NOW,
+      expiresAt: EXPIRY
+    });
+    context.mock.method(processValidationAdapter, 'validateJavaScriptWithGrant', () => frozen({
+      schema: 'sdo.process_validation_result.v1',
+      operationId: 'op-1',
+      workspace: repo,
+      selector: 'NODE_TEST_FILE',
+      observedAt: NOW,
+      validation: { status: 'PASSED', successfulCompletionEligible: true },
+      execution: {
+        sandboxEvidence: {
+          schema: 'sdo.sandbox_evidence.v1',
+          fingerprint: 'a'.repeat(64),
+          operationId: 'op-1',
+          operationFingerprint: 'c'.repeat(64),
+          workspace: repo,
+          platform: process.platform,
+          sandboxKind: nativeIdentity[0],
+          adapterId: nativeIdentity[1],
+          requirementFingerprint: 'b'.repeat(64),
+          controls,
+          adapterEvidence
+        }
+      }
+    }));
+    const result = orchestrate(input(repo, request));
+    assert.equal(result.orchestration.status, 'FAILED');
+    assert.match(result.execution.reason, /bound native sandbox evidence/);
+    assert.equal(result.governed.lifecycle.status, 'FAILED');
+  }));
+
 test('missing grant prevents dispatch', (context) => withFixture((repo) => {
   assertNoDispatch(context, repo, execution(repo, 'FILESYSTEM_READ', { grantEvaluation: null }),
     /capability context/);

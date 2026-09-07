@@ -29,8 +29,12 @@ function digest(value, label) {
 
 function canonicalExperienceTarget(value) {
   if (typeof value !== 'string' || !value.trim()) throw new Error('Canonical workspace evidence target is required.');
-  const target = value.trim().replace(/\\/g, '/');
-  if (target.startsWith('/') || target.split('/').some((part) => !part || part === '.' || part === '..')) {
+  const lexical = value.trim().replace(/\\/g, '/');
+  if (lexical.startsWith('/') || lexical.split('/').some((part) => part === '..')) {
+    throw new Error('Workspace evidence target must remain canonical and relative.');
+  }
+  const target = require('node:path').posix.normalize(lexical).replace(/^\.\//, '');
+  if (!target || target === '.' || target.startsWith('../') || target.includes('/../')) {
     throw new Error('Workspace evidence target must remain canonical and relative.');
   }
   return target;
@@ -213,6 +217,7 @@ module.exports = Object.freeze({
   EXPERIENCE_SCHEMA,
   MICROREAD_SCHEMA,
   MUTATION_REVIEW_SCHEMA,
+  canonicalExperienceTarget,
   openNaturalGovernedWorkspaceExperience,
   searchNaturalGovernedWorkspace,
   planNaturalGovernedWorkspaceMicroread,

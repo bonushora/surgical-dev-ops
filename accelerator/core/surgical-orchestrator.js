@@ -684,6 +684,34 @@ function validateAdapterResult(request, result) {
         result.validation.successfulCompletionEligible !== false))) {
     throw new Error('Controlled validation evidence is inconsistent.');
   }
+  if (request.adapter === 'PROCESS_VALIDATION' && request.action === 'NODE_TEST_FILE') {
+    const sandbox = result.execution && result.execution.sandboxEvidence;
+    const controls = sandbox && sandbox.controls;
+    const adapter = sandbox && sandbox.adapterEvidence;
+    const nativeIdentity = {
+      linux: ['linux-bubblewrap-user-namespace', 'sdo.linux_bwrap.v1'],
+      darwin: ['macos-seatbelt-deny-default', 'sdo.macos_seatbelt.v1'],
+      win32: ['windows-appcontainer-job-node', 'sdo.windows_appcontainer_job.v1']
+    }[process.platform];
+    if (!sandbox || sandbox.schema !== 'sdo.sandbox_evidence.v1' ||
+        sandbox.operationId !== request.operationId ||
+        sandbox.workspace !== request.workspace ||
+        sandbox.platform !== process.platform || !nativeIdentity ||
+        sandbox.sandboxKind !== nativeIdentity[0] || sandbox.adapterId !== nativeIdentity[1] ||
+        !/^[a-f0-9]{64}$/.test(sandbox.fingerprint || '') ||
+        !/^[a-f0-9]{64}$/.test(sandbox.operationFingerprint || '') ||
+        !adapter || adapter.schema !== 'sdo.sandbox_adapter_evidence.v1' ||
+        adapter.decision !== 'ENFORCED' || adapter.operationId !== sandbox.operationId ||
+        adapter.workspace !== sandbox.workspace || adapter.platform !== sandbox.platform ||
+        adapter.sandboxKind !== sandbox.sandboxKind || adapter.adapterId !== sandbox.adapterId ||
+        sandbox.requirementFingerprint !== adapter.requirementFingerprint ||
+        adapter.controls !== controls ||
+        !controls || !controls.workspaceReadOnly || !controls.workspaceBound ||
+        !controls.networkDenied || !controls.genericProcessDenied ||
+        !controls.secretAccessDenied) {
+      throw new Error('Controlled Node test requires bound native sandbox evidence.');
+    }
+  }
   return result;
 }
 

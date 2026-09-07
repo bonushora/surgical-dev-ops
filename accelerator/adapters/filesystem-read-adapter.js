@@ -2,6 +2,7 @@
 
 const crypto = require('crypto');
 const fs = require('fs');
+const path = require('path');
 const { openVerifiedRegularRead } = require('./filesystem-safe-read-adapter');
 const {
   createPathIdentityAuthority,
@@ -125,4 +126,26 @@ function readFileWithGrant({
   });
 }
 
-module.exports = { readFileWithGrant };
+function observeFileEvidenceIdentity({ workspace, target } = {}) {
+  const canonicalWorkspace = canonicalizeAuthorizedRoot(workspace);
+  const resolved = resolveInspectedFile(canonicalWorkspace, requireText(target, 'target'));
+  let opened;
+  let content;
+  try {
+    opened = openVerifiedRegularRead(resolved.canonicalTarget);
+    content = fs.readFileSync(opened.descriptor);
+  } catch {
+    throw new Error('Physical filesystem evidence identity is unavailable.');
+  } finally {
+    if (opened) fs.closeSync(opened.descriptor);
+  }
+  const canonicalTarget = path.relative(canonicalWorkspace, resolved.canonicalTarget)
+    .split(path.sep).join('/');
+  return deepFreeze({
+    workspace: canonicalWorkspace,
+    target: canonicalTarget,
+    sha256: crypto.createHash('sha256').update(content).digest('hex')
+  });
+}
+
+module.exports = { readFileWithGrant, observeFileEvidenceIdentity };

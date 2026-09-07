@@ -66,12 +66,32 @@ const {
 const {
   OPENAI_FRONTIER_PROFILE
 } = require('./natural-frontier-provider-registry');
+const {
+  providerLocationMetadata,
+  requireProviderLocationMetadata
+} = require('./natural-provider-location-contract');
 
 const MAX_PRESENTED_TEXT =
   6000;
 
 const MAX_EVIDENCE_HISTORY_CHARS =
   3200;
+
+const PROVIDER_PREFERENCES = Object.freeze({
+  AUTO_LOCAL: 'AUTO_LOCAL',
+  EXPLICIT_LOCAL: 'EXPLICIT_LOCAL',
+  EXPLICIT_EXTERNAL: 'EXPLICIT_EXTERNAL',
+  DISABLED: 'DISABLED'
+});
+
+function cognitiveWorkspaceLabel(value) {
+  if (typeof value !== 'string' || !value.trim() || value.includes('\0')) {
+    return 'authorized-workspace';
+  }
+  const components = value.trim().split(/[\\/]+/).filter(Boolean);
+  const label = components.at(-1) || 'authorized-workspace';
+  return label.slice(0, 128);
+}
 
 function formatBoundedEvidenceHistory(
   evidenceHistory
@@ -219,14 +239,14 @@ function formatCognitiveResult(result) {
       'sdo.ai_cognitive_result.v1'
   ) {
     return (
-      'A IA local respondeu de forma inválida. ' +
+      'O provider cognitivo respondeu de forma inválida. ' +
       'Nenhuma alteração foi realizada.\n'
     );
   }
 
   if (result.status !== 'COMPLETED') {
     return (
-      'A IA local não conseguiu concluir esta resposta. ' +
+      'O provider cognitivo não conseguiu concluir esta resposta. ' +
       'Nenhuma alteração foi realizada.\n'
     );
   }
@@ -238,7 +258,7 @@ function formatCognitiveResult(result) {
 
   if (!extracted) {
     return (
-      'A IA local respondeu, mas não produziu uma explicação ' +
+      'O provider cognitivo respondeu, mas não produziu uma explicação ' +
       'que eu possa apresentar com segurança. ' +
       'Nenhuma alteração foi realizada.\n'
     );
@@ -266,10 +286,26 @@ function fallbackMessage(discovery) {
     discovery &&
     typeof discovery.reason === 'string'
       ? discovery.reason
-      : 'Provider cognitivo local indisponível.';
+      : 'Provider cognitivo configurado indisponível.';
+
+  let providerDescription = 'O assistente cognitivo configurado não está disponível agora.';
+  if (discovery && typeof discovery === 'object' && discovery.providerKind) {
+    try {
+      requireProviderLocationMetadata(discovery);
+      providerDescription = discovery.providerKind === 'NONE'
+        ? 'Nenhum provider cognitivo está selecionado nesta sessão.'
+        : discovery.providerKind === 'OLLAMA'
+        ? 'O modelo cognitivo local via Ollama não está disponível agora.'
+        : discovery.providerKind === 'CODEX'
+          ? 'O serviço cognitivo externo Codex não está disponível ou qualificado agora.'
+          : 'O serviço cognitivo externo configurado não está disponível agora.';
+    } catch {
+      providerDescription = 'O provider cognitivo não pôde ser qualificado com segurança.';
+    }
+  }
 
   return (
-    'O assistente cognitivo local não está disponível agora.\n' +
+    `${providerDescription}\n` +
     `${reason}\n` +
     'O modo determinístico continua ativo.\n' +
     'Nenhuma alteração foi realizada.\n'
@@ -283,32 +319,64 @@ function remoteDiscovery(state, reason, available = false) {
     provider: OPENAI_FRONTIER_PROFILE.provider,
     model: OPENAI_FRONTIER_PROFILE.model,
     local: false,
+    ...providerLocationMetadata('OPENAI_RESPONSES'),
     available,
     active: state === 'ACTIVE',
     cognitiveAuthority: true,
     operationalAuthority: false,
+    selectionMode: PROVIDER_PREFERENCES.EXPLICIT_EXTERNAL,
     state,
     reason
   });
 }
 
-function codexDiscovery(state, reason, available = false, model = null) {
+function codexDiscovery(
+  state,
+  reason,
+  available = false,
+  model = null,
+  networkCompatibility = 'UNQUALIFIED_NETWORK_SEPARATION'
+) {
   return Object.freeze({
     schema: 'sdo.natural_provider_discovery.v1',
     providerId: 'openai:codex-sdk',
     provider: 'OpenAI Codex SDK',
     model: model || 'configured-default',
-    local: true,
+    ...providerLocationMetadata('CODEX'),
     available,
     active: state === 'ACTIVE',
     cognitiveAuthority: true,
     operationalAuthority: false,
+    selectionMode: PROVIDER_PREFERENCES.EXPLICIT_EXTERNAL,
+    networkCompatibility,
     state,
     reason
   });
 }
 
-function projectLocalDiscovery(discovery, selected = false) {
+function noProviderDiscovery(reason) {
+  return Object.freeze({
+    schema: 'sdo.natural_provider_discovery.v1',
+    providerId: null,
+    provider: null,
+    model: null,
+    local: null,
+    ...providerLocationMetadata('NONE'),
+    available: false,
+    active: false,
+    cognitiveAuthority: false,
+    operationalAuthority: false,
+    selectionMode: PROVIDER_PREFERENCES.DISABLED,
+    state: 'DISABLED',
+    reason
+  });
+}
+
+function projectLocalDiscovery(
+  discovery,
+  selected = false,
+  selectionMode = PROVIDER_PREFERENCES.AUTO_LOCAL
+) {
   const providerState =
     deriveProviderState(
       discovery.providerId,
@@ -328,8 +396,49 @@ function projectLocalDiscovery(discovery, selected = false) {
     state:
       providerState.state,
     active:
-      providerState.active
+      providerState.active,
+    selectionMode
   });
+}
+
+function requireProviderPreference(value, codexEnabled) {
+  const preference = value || (
+    codexEnabled
+      ? PROVIDER_PREFERENCES.EXPLICIT_EXTERNAL
+      : PROVIDER_PREFERENCES.AUTO_LOCAL
+  );
+  if (!Object.values(PROVIDER_PREFERENCES).includes(preference)) {
+    throw new Error('Canonical cognitive provider preference is required.');
+  }
+  if (
+    codexEnabled &&
+    preference !== PROVIDER_PREFERENCES.EXPLICIT_EXTERNAL
+  ) {
+    throw new Error('Explicit Codex selection conflicts with provider preference.');
+  }
+  return preference;
+}
+
+function qualifiesAutomaticLocalSelection(discovery, preference) {
+  if (preference !== PROVIDER_PREFERENCES.AUTO_LOCAL) return false;
+  try {
+    requireProviderLocationMetadata(discovery, 'OLLAMA');
+  } catch {
+    return false;
+  }
+  const profile = PROVIDER_CATALOG[discovery.providerId];
+  return Boolean(
+    profile &&
+    profile.kind === 'LOCAL' &&
+    profile.qualified === true &&
+    profile.model === discovery.model &&
+    discovery.available === true &&
+    discovery.endpoint === 'http://127.0.0.1:11434/api/tags' &&
+    discovery.endpointLoopback === true &&
+    discovery.transportQualified === true &&
+    discovery.modelInstalled === true &&
+    discovery.operationalAuthority === false
+  );
 }
 
 function createNaturalCognitiveSession(
@@ -371,31 +480,107 @@ function createNaturalCognitiveSession(
       ? input.initialModel
       : undefined;
 
+  let providerPreference =
+    requireProviderPreference(
+      input.providerPreference || (
+        selectedModel
+          ? PROVIDER_PREFERENCES.EXPLICIT_LOCAL
+          : null
+      ),
+      Boolean(input.codex && input.codex.enabled === true)
+    );
+
   let statePromise = null;
+  let activeComposition = null;
+  let closed = false;
+
+  const onPresentationEvent =
+    typeof input.onPresentationEvent === 'function'
+      ? input.onPresentationEvent
+      : null;
+
+  function disposeActiveComposition() {
+    if (activeComposition && typeof activeComposition.dispose === 'function') {
+      activeComposition.dispose();
+    }
+    activeComposition = null;
+  }
 
   async function initialize() {
-    if (input.codex && input.codex.enabled === true) {
+    if (providerPreference === PROVIDER_PREFERENCES.DISABLED) {
+      return Object.freeze({
+        discovery: noProviderDiscovery(
+          'Cognitive provider use was disabled explicitly for this session.'
+        ),
+        composition: null
+      });
+    }
+
+    if (
+      providerPreference === PROVIDER_PREFERENCES.EXPLICIT_EXTERNAL &&
+      input.codex &&
+      input.codex.enabled === true
+    ) {
       try {
-        const composition = createNaturalCodexComposition(input.codex);
+        const composition = createNaturalCodexComposition({
+          ...input.codex,
+          ...(onPresentationEvent ? { onPresentationEvent } : {})
+        });
+        if (composition.networkCompatibility !== 'QUALIFIED') {
+          composition.dispose();
+          return Object.freeze({
+            discovery: codexDiscovery(
+              'BLOCKED',
+              composition.networkCompatibility === 'BLOCKED_BY_CONTAINMENT_NETWORK'
+                ? 'Codex requires an external cognitive service, but the current cognitive containment denies the required network path. No Codex request was sent.'
+                : 'Codex requires external-service connectivity, and physical separation from agent-tool network authority is not qualified. No Codex request was sent.',
+              false,
+              composition.model,
+              composition.networkCompatibility
+            ),
+            composition: null
+          });
+        }
+        activeComposition = composition;
         return Object.freeze({
           discovery: codexDiscovery(
             'ACTIVE',
             'Codex SDK is selected behind the governed cognitive boundary.',
             true,
-            composition.model
+            composition.model,
+            composition.networkCompatibility
           ),
           composition
         });
-      } catch {
+      } catch (error) {
+        const containmentUnavailable = error && [
+          'CODEX_CONTAINMENT_UNAVAILABLE',
+          'CODEX_CONTAINMENT_CLEANUP_FAILED'
+        ].includes(error.code);
         return Object.freeze({
           discovery: codexDiscovery(
-            'CONFIGURATION_REQUIRED',
-            'Codex SDK configuration is unavailable.'
+            containmentUnavailable
+              ? 'CODEX_CONTAINMENT_UNAVAILABLE'
+              : 'CONFIGURATION_REQUIRED',
+            containmentUnavailable
+              ? 'Codex native cognitive containment is unavailable.'
+              : 'Codex SDK configuration is unavailable.'
           ),
           composition: null
         });
       }
     }
+
+    if (providerPreference === PROVIDER_PREFERENCES.EXPLICIT_EXTERNAL) {
+      return Object.freeze({
+        discovery: remoteDiscovery(
+          'CONFIGURATION_REQUIRED',
+          'The explicit external provider selection is preserved and requires qualified configuration.'
+        ),
+        composition: null
+      });
+    }
+
     const discovered =
       await discoverNaturalDefaultProvider({
         fetchImplementation,
@@ -406,10 +591,16 @@ function createNaturalCognitiveSession(
     const discovery =
       projectLocalDiscovery(
         discovered,
-        discovered.available === true
+        providerPreference === PROVIDER_PREFERENCES.EXPLICIT_LOCAL
+          ? discovered.available === true
+          : qualifiesAutomaticLocalSelection(
+              discovered,
+              providerPreference
+            ),
+        providerPreference
       );
 
-    if (!discovery.available) {
+    if (!discovery.available || !discovery.active) {
       return Object.freeze({
         discovery,
         composition:
@@ -422,6 +613,7 @@ function createNaturalCognitiveSession(
         discovery,
         fetchImplementation
       });
+    activeComposition = composition;
 
     return Object.freeze({
       discovery,
@@ -430,6 +622,9 @@ function createNaturalCognitiveSession(
   }
 
   function state() {
+    if (closed) {
+      throw new Error('NATURAL cognitive session is closed.');
+    }
     if (!statePromise) {
       statePromise =
         initialize();
@@ -443,6 +638,7 @@ function createNaturalCognitiveSession(
     activation,
     governedEvidence = null
   ) {
+    if (closed) throw new Error('NATURAL cognitive session is closed.');
     if (
       typeof userInput !== 'string' ||
       !userInput.trim()
@@ -557,7 +753,7 @@ function createNaturalCognitiveSession(
                 activation.interactionMode.mode,
 
               workspace:
-                activation.workspace
+                cognitiveWorkspaceLabel(activation.workspace)
             }
           }
         );
@@ -589,7 +785,7 @@ function createNaturalCognitiveSession(
       return formatted;
     } catch {
       return (
-        'A IA local não conseguiu responder com segurança.\n' +
+        'O provider cognitivo não conseguiu responder com segurança.\n' +
         'O modo determinístico continua ativo.\n' +
         'Nenhuma alteração foi realizada.\n'
       );
@@ -763,7 +959,7 @@ function createNaturalCognitiveSession(
               activation.interactionMode.mode,
 
             workspace:
-              activation.workspace,
+              cognitiveWorkspaceLabel(activation.workspace),
 
             qualifiedGovernedEvidence:
               qualifiedEvidence
@@ -848,7 +1044,7 @@ function createNaturalCognitiveSession(
               activation.interactionMode.mode,
 
             workspace:
-              activation.workspace
+              cognitiveWorkspaceLabel(activation.workspace)
           }
         }
       );
@@ -958,7 +1154,8 @@ function createNaturalCognitiveSession(
     const discovery =
       projectLocalDiscovery(
         discovered,
-        discovered.available === true
+        discovered.available === true,
+        PROVIDER_PREFERENCES.EXPLICIT_LOCAL
       );
 
     if (!discovery.available) {
@@ -986,6 +1183,11 @@ function createNaturalCognitiveSession(
 
     selectedModel =
       discovery.model;
+
+    providerPreference =
+      PROVIDER_PREFERENCES.EXPLICIT_LOCAL;
+
+    disposeActiveComposition();
 
     statePromise =
       Promise.resolve(
@@ -1064,6 +1266,9 @@ function createNaturalCognitiveSession(
       }
     }
 
+    disposeActiveComposition();
+    providerPreference =
+      PROVIDER_PREFERENCES.EXPLICIT_EXTERNAL;
     statePromise = Promise.resolve(Object.freeze({
       discovery: remoteDiscovery(
         'ACTIVE',
@@ -1072,9 +1277,34 @@ function createNaturalCognitiveSession(
       ),
       composition
     }));
+    activeComposition = composition;
     conversationalRuntime.reset();
     const discovery = (await state()).discovery;
     return mission ? Object.freeze({ ...discovery, mission }) : discovery;
+  }
+
+  function selectExternalProvider(providerId) {
+    const profile = PROVIDER_CATALOG[providerId];
+    if (
+      !profile ||
+      profile.kind !== 'REMOTE' ||
+      profile.qualified !== true ||
+      providerId !== OPENAI_FRONTIER_PROFILE.providerId
+    ) {
+      throw new Error('Qualified explicit external provider selection is required.');
+    }
+    providerPreference =
+      PROVIDER_PREFERENCES.EXPLICIT_EXTERNAL;
+    disposeActiveComposition();
+    statePromise = Promise.resolve(Object.freeze({
+      discovery: remoteDiscovery(
+        'CONFIGURATION_REQUIRED',
+        'The explicit external provider selection is preserved and requires qualified configuration.'
+      ),
+      composition: null
+    }));
+    conversationalRuntime.reset();
+    return statePromise.then((current) => current.discovery);
   }
 
   function rememberExchange(user, assistant) {
@@ -1089,7 +1319,31 @@ function createNaturalCognitiveSession(
   }
 
   function resetConversation() {
+    disposeActiveComposition();
+    statePromise = null;
     return conversationalRuntime.reset();
+  }
+
+  function disableCognitiveProvider() {
+    providerPreference =
+      PROVIDER_PREFERENCES.DISABLED;
+    disposeActiveComposition();
+    statePromise = Promise.resolve(Object.freeze({
+      discovery: noProviderDiscovery(
+        'Cognitive provider use was disabled explicitly for this session.'
+      ),
+      composition: null
+    }));
+    conversationalRuntime.reset();
+    return statePromise.then((current) => current.discovery);
+  }
+
+  function close() {
+    if (closed) return;
+    disposeActiveComposition();
+    statePromise = null;
+    conversationalRuntime.reset();
+    closed = true;
   }
 
   return Object.freeze({
@@ -1103,13 +1357,18 @@ function createNaturalCognitiveSession(
     describeProviders,
     selectLocalModel,
     activateOpenAIProvider,
+    selectExternalProvider,
+    disableCognitiveProvider,
     rememberExchange,
     conversationState,
-    resetConversation
+    resetConversation,
+    close
   });
 }
 
 module.exports = Object.freeze({
+  PROVIDER_PREFERENCES,
+  qualifiesAutomaticLocalSelection,
   extractText,
   formatCognitiveResult,
   createNaturalCognitiveSession

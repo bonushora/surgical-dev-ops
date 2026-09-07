@@ -1,6 +1,7 @@
 #!/usr/bin/env node
 'use strict';
 
+const crypto = require('node:crypto');
 const readline = require('node:readline');
 
 const {
@@ -16,9 +17,14 @@ const {
 } = require('../core/interaction-mode');
 
 const {
+  createGovernedReadOnlyRequest,
   dispatchGovernedReadOnly,
   formatGovernedReadOnlyResult
 } = require('./governed-readonly-dispatch');
+
+const {
+  executeGovernedMachineAccess
+} = require('../core/machine-access-governed-composition');
 
 const {
   dispatchGovernedPatch,
@@ -78,9 +84,15 @@ const {
 } = require(
   './natural-local-inference-profile'
 );
+const {
+  requireProviderLocationMetadata
+} = require('./natural-provider-location-contract');
 
 const {
   createNaturalSessionControl,
+  AUTHORIZED_TASK_REUSE_SCHEMA,
+  naturalGovernedTaskFingerprint,
+  naturalAuthorizedTaskReuseFingerprint,
   formatProviderStatus,
   formatProviderCatalog,
   isNaturalMissionCancellationRequest,
@@ -109,10 +121,21 @@ const {
 const {
   openNaturalGovernedWorkspaceExperience,
   planNaturalGovernedWorkspaceMicroread,
+  canonicalExperienceTarget,
   qualifyNaturalWorkspaceFileEvidenceForCognition
 } = require('./natural-governed-workspace-experience');
 
 const {
+  observeFileEvidenceIdentity
+} = require('../adapters/filesystem-read-adapter');
+
+const {
+  evidenceIdentity,
+  canReuseEvidence
+} = require('../core/mission-runner-policy');
+
+const {
+  detectNaturalGovernedTask,
   formatWorkspaceFiles,
   extractFilesystemEvidence,
   formatFileReadEvidence
@@ -282,6 +305,22 @@ function currentCanonicalInstant(
   );
 }
 
+function naturalEvidenceEnvironmentFingerprint() {
+  return crypto
+    .createHash('sha256')
+    .update(JSON.stringify(Object.entries(process.env).sort()), 'utf8')
+    .digest('hex');
+}
+
+function sameNaturalWorkspaceBinding(left, right) {
+  return Boolean(
+    left && right &&
+    left.physicalWorkspaceIdentity === right.physicalWorkspaceIdentity &&
+    left.repositoryHead === right.repositoryHead &&
+    left.worktreeFingerprint === right.worktreeFingerprint
+  );
+}
+
 function dispatchNaturalWorkspaceEvidence(
   intent,
   activation,
@@ -334,51 +373,62 @@ function dispatchNaturalWorkspaceEvidence(
 function createAuthorizedNaturalWorkspaceContext(
   task,
   activation,
-  options = {}
+  options = {},
+  reusableContext = null
 ) {
   const observedAt =
     currentCanonicalInstant(
       options
     );
+  const environmentFingerprint = naturalEvidenceEnvironmentFingerprint();
 
-  const session =
-    createDeterministicWorkspaceSession({
-      authorizedRoot:
-        activation.repositoryPath,
-      humanSubject:
-        NATURAL_WORKSPACE_HUMAN_SUBJECT,
-      authorizedAt:
-        observedAt
+  let session;
+  let revalidation;
+  let experience;
+
+  if (
+    reusableContext &&
+    reusableContext.environmentFingerprint === environmentFingerprint
+  ) {
+    session = reusableContext.experience.session;
+    revalidation = revalidateDeterministicWorkspaceSession(session);
+    if (revalidation.decision === 'VALID') {
+      const authorizationStillValid =
+        Date.parse(observedAt) < Date.parse(reusableContext.taskAuthorization.proposal.expiresAt);
+      if (
+        authorizationStillValid &&
+        reusableContext.taskKind === task.kind &&
+        reusableContext.objective === task.objective
+      ) {
+        return reusableContext;
+      }
+      experience = reusableContext.experience;
+    }
+  }
+
+  if (!experience) {
+    session = createDeterministicWorkspaceSession({
+      authorizedRoot: activation.repositoryPath,
+      humanSubject: NATURAL_WORKSPACE_HUMAN_SUBJECT,
+      authorizedAt: observedAt
     });
 
-  const revalidation =
-    revalidateDeterministicWorkspaceSession(
-      session
-    );
+    revalidation = revalidateDeterministicWorkspaceSession(session);
 
-  const governedInventory =
-    dispatchNaturalWorkspaceEvidence(
-      Object.freeze({
-        capabilityType:
-          'GIT_READ',
-        target:
-          'workspace-files'
-      }),
+    const governedInventory = dispatchNaturalWorkspaceEvidence(
+      Object.freeze({ capabilityType: 'GIT_READ', target: 'workspace-files' }),
       activation,
       options,
-      {
-        now:
-          () => observedAt
-      }
+      { now: () => observedAt }
     );
 
-  const experience =
-    openNaturalGovernedWorkspaceExperience({
+    experience = openNaturalGovernedWorkspaceExperience({
       session,
       revalidation,
       governedInventory,
       observedAt
     });
+  }
 
   const expiresAt =
     new Date(
@@ -421,8 +471,113 @@ function createAuthorizedNaturalWorkspaceContext(
   return Object.freeze({
     experience,
     taskAuthorization,
-    observedAt
+    observedAt,
+    taskKind: task.kind,
+    objective: task.objective,
+    taskFingerprint:
+      naturalGovernedTaskFingerprint(task),
+    environmentFingerprint
   });
+}
+
+function createAuthorizedNaturalTaskReuse(
+  task,
+  activation,
+  context,
+  options = {}
+) {
+  if (
+    !task ||
+    !Object.isFrozen(task) ||
+    !activation ||
+    !context ||
+    !Object.isFrozen(context)
+  ) return null;
+
+  try {
+    const observedAt = currentCanonicalInstant(options);
+    const taskFingerprint = naturalGovernedTaskFingerprint(task);
+    const authorization = context.taskAuthorization;
+    const proposal = authorization && authorization.proposal;
+    const experience = context.experience;
+    const binding = experience && experience.binding;
+    const session = experience && experience.session;
+    const revalidation = session &&
+      revalidateDeterministicWorkspaceSession(session);
+    const environmentFingerprint = naturalEvidenceEnvironmentFingerprint();
+    const risk = task.kind === 'WORKSPACE_LIST' ? 'R0' : 'R1';
+
+    if (
+      !authorization ||
+      !proposal ||
+      !binding ||
+      !session ||
+      !revalidation ||
+      revalidation.decision !== 'VALID' ||
+      revalidation.samePhysical !== true ||
+      revalidation.sameRepository !== true ||
+      revalidation.sameWorktree !== true ||
+      authorization.active !== true ||
+      context.taskKind !== task.kind ||
+      context.objective !== task.objective ||
+      context.taskFingerprint !== taskFingerprint ||
+      proposal.objective !== task.objective ||
+      proposal.taskKind !== task.kind ||
+      proposal.workspaceRoot !== activation.repositoryPath ||
+      proposal.physicalWorkspaceIdentity !== binding.physicalWorkspaceIdentity ||
+      proposal.riskCeiling !== risk ||
+      context.environmentFingerprint !== environmentFingerprint ||
+      Date.parse(observedAt) < Date.parse(proposal.validFrom) ||
+      Date.parse(observedAt) < Date.parse(authorization.authorizedAt) ||
+      Date.parse(observedAt) >= Date.parse(proposal.expiresAt)
+    ) return null;
+
+    const provenance = {
+      schema:
+        AUTHORIZED_TASK_REUSE_SCHEMA,
+      authorizationFingerprint:
+        authorization.authorizationFingerprint,
+      sessionFingerprint:
+        session.sessionFingerprint,
+      taskFingerprint,
+      envelopeFingerprint:
+        proposal.proposalFingerprint,
+      scopeFingerprint:
+        taskFingerprint,
+      workspace:
+        proposal.workspaceRoot,
+      objective:
+        proposal.objective,
+      taskKind:
+        proposal.taskKind,
+      risk:
+        proposal.riskCeiling,
+      validFrom:
+        proposal.validFrom,
+      authorizedAt:
+        authorization.authorizedAt,
+      reusedAt:
+        observedAt,
+      expiresAt:
+        proposal.expiresAt,
+      physicalWorkspaceIdentity:
+        proposal.physicalWorkspaceIdentity,
+      environmentFingerprint,
+      newHumanDecision:
+        false,
+      authorityExpanded:
+        false
+    };
+    return Object.freeze({
+      ...provenance,
+      reuseFingerprint:
+        naturalAuthorizedTaskReuseFingerprint(
+          provenance
+        )
+    });
+  } catch {
+    return null;
+  }
 }
 
 function evaluateNaturalWorkspaceMicroread(
@@ -466,6 +621,11 @@ function formatQualifiedFileEvidenceForCognition(
   evidence,
   language = 'pt-BR'
 ) {
+  if (!evidence || !Object.isFrozen(evidence) ||
+      evidence.schema !== 'sdo.natural_governed_workspace_provider_file_evidence.v1' ||
+      evidence.providerSafe !== true || typeof evidence.content !== 'string') {
+    throw new Error('Qualified provider-safe file evidence is required for cognition.');
+  }
   return (
     `${language === 'en' ? 'File' : 'Arquivo'}: ${evidence.target}\n` +
     `SHA256: ${evidence.sha256}\n` +
@@ -530,8 +690,8 @@ function createInteractiveActivation(
         ? 'auto-discovery'
         : 'none',
     protocols: {
-      bhSep: '2.2',
-      bhSdp: '2.2'
+      bhSep: '2.3',
+      bhSdp: '2.3'
     }
   };
 }
@@ -945,6 +1105,10 @@ function patchOptionsFromEnvironment(
   });
 }
 
+function createCodexCredentialProvider(environment = process.env) {
+  return () => environment.OPENAI_API_KEY;
+}
+
 function dispatchInteractiveIntent(
   intent,
   activation,
@@ -993,6 +1157,32 @@ function dispatchInteractiveIntent(
       activation.repositoryPath
     );
 
+  if (
+    intent.capabilityType === 'GIT_READ' &&
+    intent.target === 'status' &&
+    intent.includeBranch === true
+  ) {
+    const branchGoverned = dispatchGovernedReadOnly(
+      Object.freeze({
+        capabilityType: 'GIT_READ',
+        target: 'branch'
+      }),
+      activation.repositoryPath
+    );
+    return formatNaturalPresentation(
+      'REPOSITORY_STATUS',
+      formatGovernedReadOnlyResult(governed),
+      activation.language
+    ) + formatNaturalPresentation(
+      'CURRENT_BRANCH',
+      formatGovernedReadOnlyResult(branchGoverned),
+      activation.language,
+      Object.freeze({
+        includeNoChange: false
+      })
+    );
+  }
+
   return formatGovernedReadOnlyResult(
     governed
   );
@@ -1000,28 +1190,47 @@ function dispatchInteractiveIntent(
 
 function formatCognitiveProgressMessage(
   input,
-  preferredLanguage = null
+  preferredLanguage = null,
+  discovery = null
 ) {
   const timeoutSeconds =
     NATURAL_LOCAL_INFERENCE_PROFILE
       .timeoutMs /
     1000;
 
-  if (
-    normalizeHumanLanguage(
+  const english = normalizeHumanLanguage(
       preferredLanguage,
       detectNaturalResponseLanguage(input)
-    ) ===
-      'en'
-  ) {
+    ) === 'en';
+
+  if (discovery !== null) requireProviderLocationMetadata(discovery);
+
+  if (discovery && discovery.providerKind === 'CODEX') {
+    if (discovery.state !== 'ACTIVE' || discovery.active !== true) {
+      return english
+        ? 'Codex external cognitive service is not qualified for this session. The local SDK subprocess cannot use the external-service network path under the current containment; no Codex request was sent, and AI operational authority remains none.\n'
+        : 'O serviço cognitivo externo Codex não está qualificado nesta sessão. O subprocesso SDK local não pode usar a rede do serviço externo sob a contenção atual; nenhuma solicitação Codex foi enviada e a autoridade operacional da IA permanece inexistente.\n';
+    }
+    return english
+      ? `Processing with the Codex external cognitive service through a local SDK subprocess; the cognition is not local. Governed evidence is mediated and sanitized, usage is subject to the configured account/plan, and AI operational authority remains none. This attempt is limited to ${timeoutSeconds} seconds.\n`
+      : `Processando com o serviço cognitivo externo Codex por um subprocesso SDK local; a cognição não é local. Evidências governadas são mediadas e sanitizadas, o uso está sujeito à conta/plano configurado e a autoridade operacional da IA permanece inexistente. Esta tentativa está limitada a ${timeoutSeconds} segundos.\n`;
+  }
+
+  if (discovery && discovery.providerKind === 'OLLAMA') {
+    return english
+      ? `Processing with the local Ollama cognitive model. This attempt is limited to ${timeoutSeconds} seconds; on failure, deterministic governance remains active.\n`
+      : `Processando com o modelo cognitivo local via Ollama. Esta tentativa está limitada a ${timeoutSeconds} segundos; em caso de falha, a governança determinística permanece ativa.\n`;
+  }
+
+  if (english) {
     return (
-      'Processing with the local cognitive provider. ' +
+      'Processing with the configured cognitive provider. ' +
       `This attempt is limited to ${timeoutSeconds} seconds; on failure, deterministic governance remains active.\n`
     );
   }
 
   return (
-    'Processando com o provider cognitivo local. ' +
+    'Processando com o provider cognitivo configurado. ' +
     `Esta tentativa está limitada a ${timeoutSeconds} segundos; em caso de falha, a governança determinística permanece ativa.\n`
   );
 }
@@ -1155,6 +1364,26 @@ function createInteractiveSession(
         )
       : null;
 
+  const onPresentationEvent =
+    cognitiveMode && options.codex === true
+      ? (event) => {
+          if (!event || !['THREAD_STARTED', 'TURN_STARTED'].includes(event.type)) {
+            return;
+          }
+          output.write(
+            humanText(
+              activation,
+              event.type === 'THREAD_STARTED'
+                ? 'Sessão cognitiva Codex pronta; processando o turno.\n'
+                : 'Turno cognitivo Codex iniciado.\n',
+              event.type === 'THREAD_STARTED'
+                ? 'Codex cognitive session ready; processing the turn.\n'
+                : 'Codex cognitive turn started.\n'
+            )
+          );
+        }
+      : null;
+
   const sessionControl =
     cognitiveMode
       ? (
@@ -1162,6 +1391,8 @@ function createInteractiveSession(
           createNaturalSessionControl({
             workspace:
               activation.workspace,
+            workspaceRoot:
+              activation.repositoryPath,
             language:
               activation.language
           })
@@ -1180,10 +1411,14 @@ function createInteractiveSession(
               options.codex === true
                 ? {
                     enabled: true,
-                    workingDirectory: activation.repositoryPath,
-                    ...(options.codexOptions || {})
+                    ...(options.codexOptions || {}),
+                    credentialProvider:
+                      options.codexCredentialProvider
                   }
                 : null,
+
+            onPresentationEvent:
+              onPresentationEvent,
 
             assistanceContext,
 
@@ -1219,6 +1454,327 @@ function createInteractiveSession(
     continuityResume
       ? continuityResume.referenceContext
       : null;
+
+  let naturalWorkspaceContextCache = null;
+  const naturalEvidenceCache = [];
+  let pendingNaturalEvidenceReuse = null;
+
+  function canonicalNaturalEvidenceTarget(capabilityType, target) {
+    if (capabilityType === 'GIT_READ') {
+      const selector = String(target || '').trim().toLowerCase().replace(/_/g, '-');
+      if (selector !== 'workspace-files') throw new Error('Cached Git evidence target is unsupported.');
+      return selector;
+    }
+    if (capabilityType !== 'FILESYSTEM_READ') {
+      throw new Error('Cached evidence capability is unsupported.');
+    }
+    return canonicalExperienceTarget(target);
+  }
+
+  function currentNaturalEvidenceIdentity(capabilityType, target, binding, environmentFingerprint) {
+    const canonicalTarget = canonicalNaturalEvidenceTarget(capabilityType, target);
+    const observed = capabilityType === 'FILESYSTEM_READ'
+      ? observeFileEvidenceIdentity({
+          workspace: activation.repositoryPath,
+          target: canonicalTarget
+        })
+      : { sha256: binding && binding.worktreeFingerprint };
+    return evidenceIdentity({
+      workspace: activation.repositoryPath,
+      target: canonicalTarget,
+      sha256: observed.sha256,
+      environment: environmentFingerprint
+    });
+  }
+
+  function pruneNaturalEvidenceCache(observedAt) {
+    const observedMilliseconds = Date.parse(observedAt);
+    const context = naturalWorkspaceContextCache;
+    const authorizationFingerprint = context &&
+      context.taskAuthorization &&
+      context.taskAuthorization.authorizationFingerprint;
+    const session = context && context.experience && context.experience.session;
+
+    for (let index = naturalEvidenceCache.length - 1; index >= 0; index -= 1) {
+      const entry = naturalEvidenceCache[index];
+      if (
+        !Number.isFinite(Date.parse(entry.observedAt)) ||
+        !Number.isFinite(Date.parse(entry.expiresAt)) ||
+        observedMilliseconds < Date.parse(entry.observedAt) ||
+        observedMilliseconds >= Date.parse(entry.expiresAt) ||
+        entry.authorizationFingerprint !== authorizationFingerprint ||
+        !session ||
+        entry.sessionFingerprint !== session.sessionFingerprint
+      ) {
+        naturalEvidenceCache.splice(index, 1);
+      }
+    }
+  }
+
+  function reusableNaturalEvidenceEntry(capabilityType, target) {
+    const observedAt = currentCanonicalInstant(options);
+    pruneNaturalEvidenceCache(observedAt);
+    const binding = naturalWorkspaceContextCache &&
+      naturalWorkspaceContextCache.experience.binding;
+    const session = naturalWorkspaceContextCache &&
+      naturalWorkspaceContextCache.experience.session;
+    const environmentFingerprint = naturalEvidenceEnvironmentFingerprint();
+    if (
+      !binding ||
+      !session ||
+      revalidateDeterministicWorkspaceSession(session).decision !== 'VALID'
+    ) return null;
+    let current;
+    try {
+      current = currentNaturalEvidenceIdentity(
+        capabilityType, target, binding, environmentFingerprint
+      );
+    } catch {
+      return null;
+    }
+    for (let index = naturalEvidenceCache.length - 1; index >= 0; index -= 1) {
+      const entry = naturalEvidenceCache[index];
+      if (
+        entry.environmentFingerprint !== environmentFingerprint ||
+        !sameNaturalWorkspaceBinding(entry.binding, binding) ||
+        entry.capabilityType !== capabilityType
+      ) continue;
+      if (!entry.identity || entry.identity.target !== current.target) {
+        naturalEvidenceCache.splice(index, 1);
+        continue;
+      }
+      if (canReuseEvidence(entry.identity, current)) return entry;
+      naturalEvidenceCache.splice(index, 1);
+    }
+    return null;
+  }
+
+  function cacheNaturalEvidence(
+    capabilityType,
+    target,
+    governedRequest,
+    governed,
+    qualifiedEvidence
+  ) {
+    const context = naturalWorkspaceContextCache;
+    const binding = context && context.experience.binding;
+    const session = context && context.experience.session;
+    const taskAuthorization = context && context.taskAuthorization;
+    const environmentFingerprint = naturalEvidenceEnvironmentFingerprint();
+    const requestExecution = governedRequest && governedRequest.execution;
+    const grant = requestExecution && requestExecution.grantEvaluation &&
+      requestExecution.grantEvaluation.grant;
+    const evidenceExecution = governed && governed.execution;
+    let canonicalTarget;
+    let sessionIsValid = false;
+    try {
+      canonicalTarget = canonicalNaturalEvidenceTarget(capabilityType, target);
+      sessionIsValid = Boolean(
+        session &&
+        revalidateDeterministicWorkspaceSession(session).decision === 'VALID'
+      );
+    } catch {
+      return;
+    }
+    const exactGitEvidence = capabilityType === 'GIT_READ' &&
+      canonicalTarget === 'workspace-files' &&
+      evidenceExecution &&
+      evidenceExecution.schema === 'sdo.git_read_result.v1' &&
+      evidenceExecution.selector === 'WORKSPACE_FILES' &&
+      evidenceExecution.result &&
+      Object.isFrozen(evidenceExecution.result) &&
+      Array.isArray(evidenceExecution.result.files) &&
+      Object.isFrozen(evidenceExecution.result.files) &&
+      qualifiedEvidence &&
+      qualifiedEvidence.schema === 'sdo.natural_recursive_evidence.v1' &&
+      qualifiedEvidence.kind === 'WORKSPACE_FILES' &&
+      qualifiedEvidence.target === null &&
+      Array.isArray(qualifiedEvidence.files) &&
+      JSON.stringify(qualifiedEvidence.files) ===
+        JSON.stringify(evidenceExecution.result.files);
+    const exactFilesystemEvidence = capabilityType === 'FILESYSTEM_READ' &&
+      evidenceExecution &&
+      evidenceExecution.schema === 'sdo.filesystem_read_result.v1' &&
+      evidenceExecution.target &&
+      Object.isFrozen(evidenceExecution.target) &&
+      evidenceExecution.target.requested === canonicalTarget &&
+      evidenceExecution.evidence &&
+      Object.isFrozen(evidenceExecution.evidence) &&
+      typeof evidenceExecution.evidence.content === 'string' &&
+      Number.isInteger(evidenceExecution.evidence.bytes) &&
+      evidenceExecution.evidence.bytes === Buffer.byteLength(
+        evidenceExecution.evidence.content,
+        'utf8'
+      ) &&
+      /^[a-f0-9]{64}$/.test(evidenceExecution.evidence.sha256) &&
+      qualifiedEvidence &&
+      qualifiedEvidence.schema === 'sdo.natural_recursive_evidence.v1' &&
+      qualifiedEvidence.kind === 'READ_FILE' &&
+      qualifiedEvidence.target === canonicalTarget &&
+      qualifiedEvidence.sha256 === evidenceExecution.evidence.sha256 &&
+      qualifiedEvidence.bytes === evidenceExecution.evidence.bytes;
+    if (
+      !binding ||
+      !session ||
+      !taskAuthorization ||
+      !Object.isFrozen(binding) ||
+      !Object.isFrozen(session) ||
+      !Object.isFrozen(taskAuthorization) ||
+      !sessionIsValid ||
+      !Object.isFrozen(governedRequest) ||
+      !Object.isFrozen(governed) ||
+      !requestExecution ||
+      !grant ||
+      !evidenceExecution ||
+      !governed.orchestration ||
+      !qualifiedEvidence ||
+      !Object.isFrozen(governed.orchestration) ||
+      !Object.isFrozen(requestExecution) ||
+      !Object.isFrozen(requestExecution.grantEvaluation) ||
+      !Object.isFrozen(grant) ||
+      !Object.isFrozen(evidenceExecution) ||
+      !Object.isFrozen(qualifiedEvidence) ||
+      (!exactGitEvidence && !exactFilesystemEvidence) ||
+      governed.orchestration.status !== 'COMPLETED' ||
+      requestExecution.grantEvaluation.decision !== 'ALLOWED' ||
+      grant.operationId !== requestExecution.operationId ||
+      requestExecution.operationId !== evidenceExecution.operationId ||
+      requestExecution.observedAt !== evidenceExecution.observedAt
+    ) return;
+
+    let observedAt;
+    let evidenceIssuedAt;
+    let evidenceExpiresAt;
+    let authorizationExpiresAt;
+    try {
+      observedAt = canonicalInstant(evidenceExecution.observedAt);
+      evidenceIssuedAt = canonicalInstant(grant.issuedAt);
+      evidenceExpiresAt = canonicalInstant(grant.expiresAt);
+      authorizationExpiresAt = canonicalInstant(
+        taskAuthorization.proposal.expiresAt
+      );
+    } catch {
+      return;
+    }
+    const expiresAt = new Date(Math.min(
+      Date.parse(evidenceExpiresAt),
+      Date.parse(authorizationExpiresAt)
+    )).toISOString();
+    if (
+      Date.parse(observedAt) < Date.parse(evidenceIssuedAt) ||
+      Date.parse(observedAt) < Date.parse(taskAuthorization.proposal.validFrom) ||
+      Date.parse(observedAt) < Date.parse(taskAuthorization.authorizedAt) ||
+      Date.parse(observedAt) < Date.parse(session.authorizedAt) ||
+      Date.parse(observedAt) >= Date.parse(expiresAt)
+    ) return;
+
+    let identity;
+    try {
+      identity = currentNaturalEvidenceIdentity(
+        capabilityType, target, binding, environmentFingerprint
+      );
+    } catch {
+      return;
+    }
+    const governedSha = capabilityType === 'FILESYSTEM_READ'
+      ? evidenceExecution.evidence.sha256
+      : identity.sha256;
+    if (governedSha !== identity.sha256) return;
+    naturalEvidenceCache.push(Object.freeze({
+      binding,
+      environmentFingerprint,
+      capabilityType,
+      identity,
+      observedAt,
+      expiresAt,
+      evidenceIssuedAt,
+      evidenceExpiresAt,
+      authorizationExpiresAt,
+      authorizationFingerprint:
+        taskAuthorization.authorizationFingerprint,
+      sessionFingerprint:
+        session.sessionFingerprint,
+      governed
+    }));
+    while (naturalEvidenceCache.length > 32) naturalEvidenceCache.shift();
+  }
+
+  function dispatchFreshNaturalEvidence(intent) {
+    if (typeof options.dispatchEvidence === 'function') {
+      return options.dispatchEvidence(intent, activation.repositoryPath);
+    }
+    const governedRequest = createGovernedReadOnlyRequest(
+      {
+        repositoryPath: activation.repositoryPath,
+        capabilityType: intent.capabilityType,
+        target: intent.target
+      },
+      { now: () => currentCanonicalInstant(options) }
+    );
+    return Object.freeze({
+      governedRequest,
+      governed: executeGovernedMachineAccess(governedRequest)
+    });
+  }
+
+  function dispatchCachedNaturalEvidence(intent) {
+    let canonicalTarget = null;
+    try {
+      canonicalTarget = canonicalNaturalEvidenceTarget(intent.capabilityType, intent.target);
+    } catch {}
+    const pending = pendingNaturalEvidenceReuse;
+    pendingNaturalEvidenceReuse = null;
+    const pendingMatches = pending &&
+      pending.capabilityType === intent.capabilityType &&
+      pending.target === canonicalTarget;
+    const cached = pendingMatches
+      ? reusableNaturalEvidenceEntry(intent.capabilityType, intent.target)
+      : null;
+
+    if (cached) return cached.governed;
+    return dispatchFreshNaturalEvidence(intent);
+  }
+
+  function isReusableNaturalEvidence(request) {
+    const capabilityType = request.kind === 'WORKSPACE_FILES'
+      ? 'GIT_READ'
+      : 'FILESYSTEM_READ';
+    const target = request.kind === 'WORKSPACE_FILES' ? 'workspace-files' : request.target;
+    const entry = reusableNaturalEvidenceEntry(
+      capabilityType,
+      target
+    );
+    pendingNaturalEvidenceReuse = entry
+      ? {
+          capabilityType,
+          target: entry.identity.target
+        }
+      : null;
+    return Boolean(entry);
+  }
+
+  function rememberNaturalGovernedEvidence(
+    governedDispatch,
+    qualifiedEvidence
+  ) {
+    const request = governedDispatch && governedDispatch.governedRequest;
+    const governed = governedDispatch && governedDispatch.governed;
+    if (!request || !governed) return;
+    const capabilityType = governed.execution &&
+      governed.execution.schema === 'sdo.git_read_result.v1'
+        ? 'GIT_READ'
+        : 'FILESYSTEM_READ';
+    const target = capabilityType === 'GIT_READ'
+      ? String(governed.execution.selector || '').toLowerCase().replace('_', '-')
+      : governed.execution && governed.execution.target && governed.execution.target.requested;
+    cacheNaturalEvidence(
+      capabilityType,
+      target,
+      request,
+      governed,
+      qualifiedEvidence
+    );
+  }
 
   let projectedNaturalMissionId =
     continuityResume
@@ -2740,10 +3296,38 @@ function createInteractiveSession(
           }
 
           if (sessionControl) {
-            const controlled =
+            let controlled =
               sessionControl.handle(
                 line
               );
+
+            const repeatedGovernedTask =
+              detectNaturalGovernedTask(line);
+
+            const authorizedReuse =
+              controlled.action === 'CONTINUE' &&
+              sessionControl.hasPendingAuthorization() &&
+              typeof sessionControl.reuseAuthorizedGovernedTask === 'function'
+                ? createAuthorizedNaturalTaskReuse(
+                    repeatedGovernedTask,
+                    activation,
+                    naturalWorkspaceContextCache,
+                    options
+                  )
+                : null;
+
+            if (
+              authorizedReuse
+            ) {
+              try {
+                controlled =
+                  sessionControl.reuseAuthorizedGovernedTask(
+                    authorizedReuse
+                  );
+              } catch {
+                /* The real pending human decision remains fail-closed. */
+              }
+            }
 
             if (controlled.matched) {
               if (controlled.action === 'HELP_REQUEST') {
@@ -3143,8 +3727,12 @@ function createInteractiveSession(
                   );
                 }
               } else if (
-                controlled.action ===
-                  'AUTHORIZED_GOVERNED_TASK'
+                [
+                  'AUTHORIZED_GOVERNED_TASK',
+                  'REUSE_AUTHORIZED_GOVERNED_TASK'
+                ].includes(
+                  controlled.action
+                )
               ) {
                 try {
                   const task =
@@ -3221,8 +3809,8 @@ function createInteractiveSession(
                     output.write(
                       humanText(
                         activation,
-                        'Consultando evidências governadas e processando a resposta local...\n',
-                        'Consulting governed evidence and processing the local response...\n'
+                        'Consultando evidências governadas e processando a resposta cognitiva...\n',
+                        'Consulting governed evidence and processing the cognitive response...\n'
                       )
                     );
 
@@ -3233,8 +3821,10 @@ function createInteractiveSession(
                         createAuthorizedNaturalWorkspaceContext(
                           task,
                           activation,
-                          options
+                          options,
+                          naturalWorkspaceContextCache
                         );
+                      naturalWorkspaceContextCache = workspaceContext;
 
                       if (!agenticMission) {
                         agenticMission =
@@ -3270,17 +3860,31 @@ function createInteractiveSession(
 
                     const analysisStartedAt =
                       Date.now();
+                    const reusedEvidenceSteps = new Set();
+                    const analysisProvider =
+                      typeof cognitiveSession.describe === 'function'
+                        ? await cognitiveSession.describe()
+                        : null;
 
-                    const recursive =
-                      await runNaturalRecursiveEvidenceLoop({
-                        task,
-                        activation,
-                        cognitiveSession,
-                        dispatchEvidence:
-                          options.dispatchEvidence,
+                      const recursive =
+                        await runNaturalRecursiveEvidenceLoop({
+                          task,
+                          activation,
+                          cognitiveSession,
+                          dispatchEvidence:
+                            naturalEvidenceCache.length > 0
+                              ? dispatchCachedNaturalEvidence
+                              : dispatchFreshNaturalEvidence,
+                          isEvidenceReusable:
+                            (request) => isReusableNaturalEvidence(request),
                         onGovernedEvidence(
-                          governedEvidence
+                          governedEvidence,
+                          qualifiedEvidence
                         ) {
+                          rememberNaturalGovernedEvidence(
+                            governedEvidence,
+                            qualifiedEvidence
+                          );
                           if (
                             !agenticMission ||
                             !naturalEngineeringReferenceContext
@@ -3328,6 +3932,18 @@ function createInteractiveSession(
                         onProgress(progress) {
                           if (
                             progress.stage ===
+                              'GOVERNED_EVIDENCE_REUSED'
+                          ) {
+                            reusedEvidenceSteps.add(progress.step);
+                            output.write(
+                              humanText(
+                                activation,
+                                `Etapa ${progress.step}: evidência governada reutilizada (${progress.detail}); identidade física verificada sem nova operação governada de leitura.\n`,
+                                `Step ${progress.step}: governed evidence reused (${progress.detail}); physical identity verified without a new governed read operation.\n`
+                              )
+                            );
+                          } else if (
+                            progress.stage ===
                               'GOVERNED_EVIDENCE_STARTED'
                           ) {
                             output.write(
@@ -3342,7 +3958,13 @@ function createInteractiveSession(
                               'EVIDENCE_OBTAINED'
                           ) {
                             const evidenceLabel =
-                              progress.detail === 'WORKSPACE_FILES'
+                              reusedEvidenceSteps.has(progress.step)
+                                ? humanText(
+                                    activation,
+                                    'evidência governada reutilizada',
+                                    'governed evidence reused'
+                                  )
+                                : progress.detail === 'WORKSPACE_FILES'
                                 ? humanText(
                                     activation,
                                     'estrutura do projeto obtida',
@@ -3371,11 +3993,15 @@ function createInteractiveSession(
                             progress.stage ===
                               'PROVIDER_COGNITION_STARTED'
                           ) {
+                            const externalCognition =
+                              analysisProvider &&
+                              analysisProvider.cognitionLocation ===
+                                'EXTERNAL_SERVICE';
                             output.write(
                               humanText(
                                 activation,
-                                `Evidências governadas disponíveis; aguardando a análise cognitiva do provider. A tentativa local permanece limitada a ${NATURAL_LOCAL_INFERENCE_PROFILE.timeoutMs / 1000} segundos e nenhuma conclusão será afirmada antes da resposta validada.\n`,
-                                `Governed evidence is available; awaiting provider cognition. The local attempt remains limited to ${NATURAL_LOCAL_INFERENCE_PROFILE.timeoutMs / 1000} seconds, and no conclusion will be claimed before a validated response.\n`
+                                `Evidências governadas disponíveis; aguardando a análise cognitiva do provider. A tentativa ${externalCognition ? 'externa' : 'local'} permanece limitada a ${NATURAL_LOCAL_INFERENCE_PROFILE.timeoutMs / 1000} segundos e nenhuma conclusão será afirmada antes da resposta validada.\n`,
+                                `Governed evidence is available; awaiting provider cognition. The ${externalCognition ? 'external-service' : 'local'} attempt remains limited to ${NATURAL_LOCAL_INFERENCE_PROFILE.timeoutMs / 1000} seconds, and no conclusion will be claimed before a validated response.\n`
                               )
                             );
                           } else if (
@@ -3489,9 +4115,11 @@ function createInteractiveSession(
                       ? createAuthorizedNaturalWorkspaceContext(
                           task,
                           activation,
-                          options
+                          options,
+                          naturalWorkspaceContextCache
                         )
                       : null;
+                  if (workspaceContext) naturalWorkspaceContextCache = workspaceContext;
 
                   if (
                     task.kind ===
@@ -3553,24 +4181,32 @@ function createInteractiveSession(
                         const explanationStartedAt =
                           Date.now();
 
+                        if (!workspaceContext) {
+                          throw new Error(
+                            'Governed workspace qualification is required before cognition.'
+                          );
+                        }
                         const providerEvidence =
-                          workspaceContext
-                            ? qualifyNaturalWorkspaceFileEvidenceForCognition(
-                                workspaceContext
-                                  .experience,
-                                evidence
-                              )
-                            : {
-                                ...evidence,
-                                sensitiveDecision:
-                                  'NOT_APPLIED'
-                              };
+                          qualifyNaturalWorkspaceFileEvidenceForCognition(
+                            workspaceContext.experience,
+                            evidence
+                          );
+
+                        const explanationProvider =
+                          typeof cognitiveSession.describe === 'function'
+                            ? await cognitiveSession.describe()
+                            : null;
 
                         output.write(
                           humanText(
                             activation,
-                            'Arquivo lido. Processando a explicação no modelo local...\n',
-                            'File read. Processing the explanation with the local model...\n'
+                            'Arquivo lido. ',
+                            'File read. '
+                          ) +
+                          formatCognitiveProgressMessage(
+                            task.objective,
+                            activation.language,
+                            explanationProvider
                           )
                         );
 
@@ -3665,6 +4301,31 @@ function createInteractiveSession(
                 }
               } else if (
                 controlled.action ===
+                  'PROVIDER_DISABLE'
+              ) {
+                if (
+                  !cognitiveSession ||
+                  typeof cognitiveSession.disableCognitiveProvider !== 'function'
+                ) {
+                  output.write(
+                    humanText(
+                      activation,
+                      'A desativação do provider está indisponível. Nenhuma alteração foi realizada.\n',
+                      'Provider disablement is unavailable. No change was made.\n'
+                    )
+                  );
+                } else {
+                  await cognitiveSession.disableCognitiveProvider();
+                  output.write(
+                    humanText(
+                      activation,
+                      'Provider cognitivo desativado nesta sessão. Use "usar qwen3:8b" para selecionar novamente um modelo local qualificado. A autoridade operacional permanece inexistente.\n',
+                      'Cognitive provider disabled for this session. Use "use qwen3:8b" to select a qualified local model again. Operational authority remains none.\n'
+                    )
+                  );
+                }
+              } else if (
+                controlled.action ===
                   'LOCAL_MODEL_SELECTION'
               ) {
                 if (
@@ -3702,6 +4363,27 @@ function createInteractiveSession(
                       )
                     );
                   }
+                }
+              } else if (
+                controlled.action ===
+                  'FRONTIER_PROVIDER_SETUP'
+              ) {
+                if (
+                  !cognitiveSession ||
+                  typeof cognitiveSession.selectExternalProvider !== 'function'
+                ) {
+                  output.write(
+                    humanText(
+                      activation,
+                      'A preferência externa não pôde ser registrada com segurança. Nenhum provider foi ativado.\n',
+                      'The external preference could not be recorded safely. No provider was activated.\n'
+                    )
+                  );
+                } else {
+                  await cognitiveSession.selectExternalProvider(
+                    controlled.providerId
+                  );
+                  output.write(controlled.output);
                 }
               } else if (
                 controlled.action ===
@@ -3856,10 +4538,15 @@ function createInteractiveSession(
                 )
               );
             } else {
+              const progressDiscovery =
+                typeof cognitiveSession.describe === 'function'
+                  ? await cognitiveSession.describe()
+                  : null;
               output.write(
                 formatCognitiveProgressMessage(
                   result.cognitiveInput,
-                  activation.language
+                  activation.language,
+                  progressDiscovery
                 )
               );
 
@@ -3904,6 +4591,16 @@ function createInteractiveSession(
 
     interactiveRequestInFlight =
       false;
+
+    if (cognitiveSession && typeof cognitiveSession.close === 'function') {
+      try {
+        cognitiveSession.close();
+      } catch {
+        output.write(
+          'CODEX_CONTAINMENT_CLEANUP_FAILED: cognitive session cleanup failed closed.\n'
+        );
+      }
+    }
 
     if (terminal) {
       output.write('\n');
@@ -4094,7 +4791,9 @@ async function main(
         null,
       patchOptions:
         patchOptionsFromEnvironment(),
-      codex
+      codex,
+      codexCredentialProvider:
+        codex ? createCodexCredentialProvider() : null
     }
   );
 }
@@ -4118,5 +4817,6 @@ module.exports = {
   handleInteractiveCommand,
   createInteractiveSession,
   dispatchInteractiveIntent,
-  patchOptionsFromEnvironment
+  patchOptionsFromEnvironment,
+  createCodexCredentialProvider
 };

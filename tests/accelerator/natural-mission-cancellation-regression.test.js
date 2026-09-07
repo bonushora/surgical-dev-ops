@@ -27,8 +27,8 @@ function naturalActivation() {
     repositoryPath: ROOT,
     workspace: 'surgical-dev-ops',
     protocols: Object.freeze({
-      bhSep: '2.2',
-      bhSdp: '2.2'
+      bhSep: '2.3',
+      bhSdp: '2.3'
     }),
     interactionMode: Object.freeze({
       mode: 'NATURAL'

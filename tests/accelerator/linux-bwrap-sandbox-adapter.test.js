@@ -85,5 +85,8 @@ test('adapter fixes executable arguments environment and disables shell', () => 
   assert.match(source, /shell: false/);
   assert.match(source, /--unshare-net/);
   assert.match(source, /--ro-bind/);
+  assert.match(source, /--permission/);
+  assert.match(source, /--test-isolation=none/);
+  assert.match(source, /executeLinuxBwrapNodeTest/);
   assert.doesNotMatch(source, /execSync|https?|node:net|FILESYSTEM_PATCH|writeFileSync/);
 });

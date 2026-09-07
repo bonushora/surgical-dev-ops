@@ -7,6 +7,7 @@ const path = require('node:path');
 const test = require('node:test');
 const {
   openNaturalGovernedWorkspaceExperience,
+  canonicalExperienceTarget,
   searchNaturalGovernedWorkspace,
   planNaturalGovernedWorkspaceMicroread,
   projectNaturalWorkspaceMutationReview,
@@ -28,6 +29,13 @@ function fixtures() {
 function experience() {
   return openNaturalGovernedWorkspaceExperience({ ...fixtures(), observedAt: '2026-08-30T12:00:00.000Z' });
 }
+
+test('equivalent workspace targets canonicalize to one identity', () => {
+  assert.equal(canonicalExperienceTarget('README.md'), 'README.md');
+  assert.equal(canonicalExperienceTarget('./README.md'), 'README.md');
+  assert.equal(canonicalExperienceTarget('docs//guide.md'), 'docs/guide.md');
+  assert.throws(() => canonicalExperienceTarget('../outside'), /canonical and relative/i);
+});
 
 test('NATURAL experience opens only from fresh session and governed inventory evidence', () => {
   const result = experience();

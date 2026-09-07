@@ -257,7 +257,14 @@ function extractRecursiveEvidence(
         intent.target ||
       !execution.evidence ||
       typeof execution.evidence.content !==
-        'string'
+        'string' ||
+      !Number.isInteger(
+        execution.evidence.bytes
+      ) ||
+      execution.evidence.bytes < 0 ||
+      !/^[a-f0-9]{64}$/.test(
+        execution.evidence.sha256
+      )
     ) {
       throw new Error(
         'Governed filesystem evidence is malformed.'
@@ -621,6 +628,7 @@ async function runNaturalRecursiveEvidenceLoop(
     dispatchEvidence =
       dispatchGovernedMachineEvidence,
     onProgress = null,
+    isEvidenceReusable = null,
     onGovernedEvidence = null,
     evaluateEvidenceIntent = null,
     deterministicProjectGrounding = true,
@@ -684,6 +692,15 @@ async function runNaturalRecursiveEvidenceLoop(
   ) {
     throw new Error(
       'Optional NATURAL progress observer must be a function.'
+    );
+  }
+
+  if (
+    isEvidenceReusable !== null &&
+    typeof isEvidenceReusable !== 'function'
+  ) {
+    throw new Error(
+      'Optional evidence-reuse observer must be a function.'
     );
   }
 
@@ -1002,14 +1019,21 @@ async function runNaturalRecursiveEvidenceLoop(
       }
     }
 
+    const evidenceReused = isEvidenceReusable
+      ? Boolean(isEvidenceReusable(decision.evidenceRequest))
+      : false;
+
     report(
-      'GOVERNED_EVIDENCE_STARTED',
+      evidenceReused
+        ? 'GOVERNED_EVIDENCE_REUSED'
+        : 'GOVERNED_EVIDENCE_STARTED',
       step + 1,
       decision.evidenceRequest.kind
     );
 
     let governed;
     let governedDispatch;
+    let hasGovernedProvenance = false;
 
     try {
       governedDispatch =
@@ -1018,7 +1042,7 @@ async function runNaturalRecursiveEvidenceLoop(
           activation.repositoryPath
         );
 
-      const hasGovernedProvenance =
+      hasGovernedProvenance =
         Boolean(
           governedDispatch &&
           typeof governedDispatch === 'object' &&
@@ -1030,15 +1054,6 @@ async function runNaturalRecursiveEvidenceLoop(
         hasGovernedProvenance
           ? governedDispatch.governed
           : governedDispatch;
-
-      if (
-        hasGovernedProvenance &&
-        onGovernedEvidence
-      ) {
-        onGovernedEvidence(
-          governedDispatch
-        );
-      }
     } catch {
       return finalResult({
         status:
@@ -1080,6 +1095,33 @@ async function runNaturalRecursiveEvidenceLoop(
         reason:
           'Governed evidence could not be qualified for cognition.'
       });
+    }
+
+    if (
+      hasGovernedProvenance &&
+      onGovernedEvidence
+    ) {
+      try {
+        onGovernedEvidence(
+          governedDispatch,
+          observed
+        );
+      } catch {
+        return finalResult({
+          status:
+            'FAILED',
+
+          envelope,
+
+          steps:
+            step + 1,
+
+          evidence,
+
+          reason:
+            'Qualified governed evidence could not be recorded safely.'
+        });
+      }
     }
 
     evidence.push(

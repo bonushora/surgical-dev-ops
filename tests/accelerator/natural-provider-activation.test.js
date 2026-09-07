@@ -238,6 +238,8 @@ test('NATURAL provider intents are bilingual and truthful for qualified and unqu
   assert.match(claude.output, /UNAVAILABLE|não.*qualificado/i);
   assert.match(gemini.output, /UNAVAILABLE|not qualified/i);
   assert.equal(pt.handle('Volte para a IA local.').model, 'qwen3:8b');
+  assert.equal(pt.handle('Desative a IA.').action, 'PROVIDER_DISABLE');
+  assert.equal(en.handle('Disable AI.').action, 'PROVIDER_DISABLE');
 });
 
 test('manual-acceptance provider phrases never escape deterministic session routing', () => {
@@ -274,6 +276,8 @@ test('manual-acceptance provider phrases never escape deterministic session rout
     ['Use gemma3:4b.', 'LOCAL_MODEL_SELECTION'],
     ['Switch to Qwen.', 'LOCAL_MODEL_SELECTION'],
     ['Switch to Gemma.', 'LOCAL_MODEL_SELECTION'],
+    ['Desative o provider.', 'PROVIDER_DISABLE'],
+    ['Disable AI.', 'PROVIDER_DISABLE'],
     ['Ativar Claude.', 'UNAVAILABLE_PROVIDER'],
     ['Quero configurar Claude.', 'UNAVAILABLE_PROVIDER'],
     ['Ativar Gemini.', 'UNAVAILABLE_PROVIDER'],
@@ -351,10 +355,26 @@ test('adversarial provider authority requests remain governed and fail closed', 
 
 test('provider status presents remote ACTIVE without falsely calling it local', () => {
   const output = formatProviderStatus(Object.freeze({
-    provider: 'OpenAI', model: 'gpt-5.6', local: false, available: true,
+    provider: 'OpenAI', model: 'gpt-5.6', local: false,
+    providerKind: 'OPENAI_RESPONSES', cognitionLocation: 'EXTERNAL_SERVICE',
+    transportLocation: 'DIRECT_REMOTE_TRANSPORT', billing: 'UNKNOWN_OR_ACCOUNT_PLAN',
+    networkRequirement: 'EXTERNAL_SERVICE_REQUIRED', available: true,
     active: true, state: 'ACTIVE', operationalAuthority: false
   }), 'en');
-  assert.match(output, /Execution: remote/);
+  assert.match(output, /Cognition: external cognitive service/);
   assert.match(output, /State: ACTIVE/);
-  assert.doesNotMatch(output, /Execution: local/);
+  assert.doesNotMatch(output, /Cognition: local/);
+});
+
+test('disabled provider status is explicit, authority-free and does not imply fallback', () => {
+  const output = formatProviderStatus(Object.freeze({
+    providerKind: 'NONE', cognitionLocation: 'NONE',
+    transportLocation: 'NONE', billing: 'NONE', networkRequirement: 'NONE',
+    available: false, active: false, state: 'DISABLED',
+    operationalAuthority: false
+  }), 'en');
+  assert.match(output, /disabled for this session/i);
+  assert.match(output, /until you explicitly choose/i);
+  assert.match(output, /Operational authority.*none/i);
+  assert.doesNotMatch(output, /automatically select|external cognitive service/i);
 });

@@ -1,6 +1,7 @@
 'use strict';
 
 const crypto = require('node:crypto');
+const path = require('node:path');
 
 const SCHEMA = 'sdo.mission_runner_policy.v1';
 const ENVELOPE_SCHEMA = 'sdo.mission_execution_envelope.v1';
@@ -134,11 +135,17 @@ function validateMissionExecutionEnvelope(value) {
 }
 
 function evidenceIdentity({ workspace, target, sha256, environment } = {}) {
+  const lexicalTarget = requireText(target, 'Evidence target', 1024).replace(/\\/g, '/');
+  if (lexicalTarget.startsWith('/') || lexicalTarget.split('/').includes('..')) {
+    throw new Error('Evidence target is malformed.');
+  }
+  const canonicalTarget = path.posix.normalize(lexicalTarget).replace(/^\.\//, '');
+  if (!canonicalTarget || canonicalTarget === '.') throw new Error('Evidence target is malformed.');
   const identity = {
     workspace: requireText(workspace, 'Evidence workspace', 1024),
-    target: requireText(target, 'Evidence target', 1024),
+    target: canonicalTarget,
     sha256: requireText(sha256, 'Evidence SHA-256', 64),
-    environment: requireText(environment, 'Evidence environment', 32)
+    environment: requireText(environment, 'Evidence environment', 64)
   };
   if (!/^[a-f0-9]{64}$/.test(identity.sha256)) {
     throw new Error('Evidence SHA-256 is malformed.');

@@ -37,12 +37,13 @@ function npm(arguments_, options) {
   );
 }
 
-test('one npm installation exposes all three interaction experiences', context => {
+test('one npm installation exposes all three interaction experiences', async context => {
   const fixture = createHermeticGitRepository();
   context.after(() => fixture.cleanup());
   const temporary = fs.mkdtempSync(
     path.join(os.tmpdir(), 'sdo-unified-install-')
   );
+  context.after(() => fs.rmSync(temporary, { recursive: true, force: true }));
   const packOutput = JSON.parse(
     npm(
       [
@@ -70,6 +71,7 @@ test('one npm installation exposes all three interaction experiences', context =
       '--global',
       '--ignore-scripts',
       '--offline',
+      '--omit=optional',
       '--prefix',
       prefix,
       tarball
@@ -84,8 +86,31 @@ test('one npm installation exposes all three interaction experiences', context =
     process.platform === 'win32'
       ? path.join(prefix, 'surgical.cmd')
       : path.join(prefix, 'bin', 'surgical');
+  const globalNodeModules =
+    process.platform === 'win32'
+      ? path.join(prefix, 'node_modules')
+      : path.join(prefix, 'lib', 'node_modules');
+  const installedPackage = path.join(
+    globalNodeModules,
+    'surgical-dev-ops'
+  );
+  const installedDefinition = JSON.parse(
+    fs.readFileSync(path.join(installedPackage, 'package.json'), 'utf8')
+  );
 
   assert.equal(fs.existsSync(executable), true);
+  assert.equal(
+    installedDefinition.optionalDependencies['@openai/codex-sdk'],
+    '0.153.4'
+  );
+  assert.equal(
+    installedDefinition.dependencies?.['@openai/codex-sdk'],
+    undefined
+  );
+  assert.equal(
+    fs.existsSync(path.join(globalNodeModules, '@openai', 'codex-sdk')),
+    false
+  );
 
   for (const mode of [
     'NATURAL',
@@ -118,4 +143,49 @@ test('one npm installation exposes all three interaction experiences', context =
       );
     }
   }
+
+  let localFallbackRequests = 0;
+  let credentialRequests = 0;
+  const {
+    createNaturalCognitiveSession
+  } = require(path.join(
+    installedPackage,
+    'accelerator/cli/natural-cognitive-session.js'
+  ));
+  const codexSession = createNaturalCognitiveSession({
+    fetchImplementation: async () => {
+      localFallbackRequests += 1;
+      throw new Error('Explicit Codex selection must not fall back locally.');
+    },
+    codex: {
+      enabled: true,
+      credentialProvider: async () => {
+        credentialRequests += 1;
+        throw new Error('Missing optional SDK must block before credentials.');
+      }
+    }
+  });
+  context.after(() => codexSession.close());
+
+  const discovery = await codexSession.describe();
+  assert.equal(discovery.providerId, 'openai:codex-sdk');
+  assert.equal(discovery.providerKind, 'CODEX');
+  assert.equal(discovery.state, 'CODEX_CONTAINMENT_UNAVAILABLE');
+  assert.equal(discovery.selectionMode, 'EXPLICIT_EXTERNAL');
+  assert.equal(discovery.available, false);
+  assert.equal(discovery.active, false);
+  assert.equal(discovery.operationalAuthority, false);
+  assert.match(discovery.reason, /Codex native cognitive containment is unavailable/);
+
+  const unavailableOutput = await codexSession.ask(
+    'Explique o próximo passo.',
+    {
+      workspace: fixture.repository,
+      interactionMode: { mode: 'NATURAL' }
+    }
+  );
+  assert.match(unavailableOutput, /serviço cognitivo externo Codex não está disponível/i);
+  assert.doesNotMatch(unavailableOutput, /Ollama|provider cognitivo local/i);
+  assert.equal(localFallbackRequests, 0);
+  assert.equal(credentialRequests, 0);
 });

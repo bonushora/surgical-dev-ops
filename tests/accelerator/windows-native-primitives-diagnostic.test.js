@@ -1,6 +1,7 @@
 'use strict';
 
 const test = require('node:test');
+const assert = require('node:assert/strict');
 const fs = require('node:fs');
 const os = require('node:os');
 const path = require('node:path');
@@ -8,6 +9,21 @@ const childProcess = require('node:child_process');
 const {
   createWindowsNativeDurabilityBridge
 } = require('../../accelerator/adapters/windows-native-durability-bridge');
+const { executeWindowsNodeTest } =
+  require('../../accelerator/adapters/windows-node-test-sandbox-adapter');
+const {
+  createMachineAccessRequest,
+  createMachineAccessAuthority,
+  createMachineAccessOperation
+} = require('../../accelerator/core/machine-access-contract');
+const { createSandboxRequirement } =
+  require('../../accelerator/core/sandbox-evidence-contract');
+
+function deepFreeze(value) {
+  if (!value || typeof value !== 'object' || Object.isFrozen(value)) return value;
+  for (const child of Object.values(value)) deepFreeze(child);
+  return Object.freeze(value);
+}
 
 function outcome(run) {
   try {
@@ -92,4 +108,105 @@ test('Windows native filesystem and Git primitives are observable without changi
   };
 
   console.log(`SDO_WINDOWS_NATIVE_PROBE ${JSON.stringify(evidence)}`);
+});
+
+test('existing Win32 helper is not misrepresented as NODE_TEST_FILE containment', () => {
+  const helper = fs.readFileSync(require.resolve(
+    '../../accelerator/native/windows/sdo-fs-durability.cpp'), 'utf8');
+  const bridge = fs.readFileSync(require.resolve(
+    '../../accelerator/adapters/windows-native-durability-bridge'), 'utf8');
+  const validation = fs.readFileSync(require.resolve(
+    '../../accelerator/adapters/process-validation-adapter'), 'utf8');
+  const nodeSandbox = fs.readFileSync(require.resolve(
+    '../../accelerator/native/windows/sdo-node-test-sandbox.cpp'), 'utf8');
+  const nodeAdapter = fs.readFileSync(require.resolve(
+    '../../accelerator/adapters/windows-node-test-sandbox-adapter'), 'utf8');
+  const build = fs.readFileSync(require.resolve(
+    '../../accelerator/native/windows/build-helper.cmd'), 'utf8');
+  assert.match(helper, /CreateFileW/);
+  assert.match(helper, /FlushFileBuffers/);
+  assert.doesNotMatch(helper, /AppContainer|CreateRestrictedToken|CreateJobObject|Windows Filtering Platform/);
+  assert.doesNotMatch(bridge, /NODE_TEST_FILE|SandboxEvidence/);
+  assert.match(validation, /win32: executeWindowsNodeTest/);
+  assert.match(nodeSandbox, /CreateAppContainerProfile/);
+  assert.match(nodeSandbox, /CapabilityCount = 0/);
+  assert.match(nodeSandbox, /JOB_OBJECT_LIMIT_KILL_ON_JOB_CLOSE/);
+  assert.match(nodeSandbox, /JOB_OBJECT_LIMIT_ACTIVE_PROCESS/);
+  assert.match(nodeSandbox, /SetEntriesInAclW/);
+  assert.match(nodeSandbox, /CREATE_SUSPENDED/);
+  assert.match(nodeSandbox, /AssignProcessToJobObject/);
+  assert.match(nodeSandbox, /WaitForSingleObject/);
+  assert.match(nodeSandbox, /TerminateJobObject/);
+  assert.match(nodeSandbox, /JOB_OBJECT_LIMIT_KILL_ON_JOB_CLOSE/);
+  assert.match(nodeSandbox, /--permission/);
+  assert.match(nodeSandbox, /--test-isolation=none/);
+  assert.match(nodeAdapter, /sdo-node-test-sandbox\.exe/);
+  assert.match(nodeAdapter, /native Node test helper evidence is absent/);
+  assert.match(build, /sdo-node-test-sandbox\.cpp/);
+  assert.match(build, /sdo-node-test-sandbox\.exe/);
+});
+
+test('Windows Job Object timeout terminates the native test tree', {
+  skip: process.platform !== 'win32'
+}, () => {
+  const workspace = fs.realpathSync(fs.mkdtempSync(path.join(os.tmpdir(), 'sdo-win-node-timeout-')));
+  const target = 'timeout.test.js';
+  fs.writeFileSync(path.join(workspace, target), [
+    "const test = require('node:test');",
+    "test('never completes', () => new Promise(() => {}));",
+    ''
+  ].join('\n'));
+  const observedAt = '2099-01-01T00:01:00.000Z';
+  const expiresAt = '2099-01-01T00:05:00.000Z';
+  const request = createMachineAccessRequest({
+    requestId: 'win-timeout-request',
+    operationId: 'win-timeout-operation',
+    workspace,
+    operationType: 'RUN_NODE_TEST',
+    target,
+    purpose: 'Qualify Windows process-tree timeout.',
+    requestedAt: observedAt
+  });
+  const grantEvaluation = deepFreeze({
+    schema: 'sdo.capability_grant_evaluation.v1',
+    decision: 'ALLOWED',
+    grant: {
+      operationId: request.operationId,
+      workspace: request.workspace,
+      capabilityType: request.capabilityType,
+      action: request.action,
+      riskLevel: request.riskLevel,
+      policyDecision: 'ALLOWED',
+      lifecycleState: 'PENDING',
+      fingerprint: 'a'.repeat(64)
+    }
+  });
+  const authority = createMachineAccessAuthority({
+    authorityId: 'win-timeout-authority',
+    request,
+    grantEvaluation,
+    issuedAt: observedAt,
+    expiresAt
+  });
+  const requirement = createSandboxRequirement({
+    requirementId: 'win-timeout-requirement',
+    operation: createMachineAccessOperation({ request, authority }),
+    platform: 'win32',
+    requiredAt: observedAt
+  });
+  try {
+    const execution = executeWindowsNodeTest({
+      requirement,
+      target,
+      observedAt,
+      expiresAt,
+      timeoutMs: 100,
+      maxOutputBytes: 64 * 1024
+    });
+    assert.equal(execution.result.status, 124);
+    assert.equal(execution.adapterEvidence.controls.genericProcessDenied, true);
+    assert.equal(execution.adapterEvidence.controls.networkDenied, true);
+  } finally {
+    fs.rmSync(workspace, { recursive: true, force: true });
+  }
 });

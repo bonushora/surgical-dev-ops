@@ -14,6 +14,24 @@ const {
   createQualifiedCommandCatalog,
   admitQualifiedCommand
 } = require('../core/qualified-command-catalog');
+const {
+  createMachineAccessRequest,
+  createMachineAccessAuthority,
+  createMachineAccessOperation
+} = require('../core/machine-access-contract');
+const {
+  createSandboxRequirement,
+  createSandboxEvidence
+} = require('../core/sandbox-evidence-contract');
+const {
+  executeLinuxBwrapNodeTest
+} = require('./linux-bwrap-sandbox-adapter');
+const {
+  executeMacosSeatbeltNodeTest
+} = require('./macos-seatbelt-sandbox-adapter');
+const {
+  executeWindowsNodeTest
+} = require('./windows-node-test-sandbox-adapter');
 
 const MAX_INPUT_BYTES = 1024 * 1024;
 const REQUEST_KEYS = new Set([
@@ -40,7 +58,13 @@ const SELECTOR_PROFILES = Object.freeze({
     timeoutMs: 30000,
     maxOutputBytes: 256 * 1024,
     arguments(target) {
-      return ['--test', target];
+      return [
+        '--permission',
+        '--allow-fs-read=/workspace',
+        '--test-isolation=none',
+        '--test',
+        target
+      ];
     },
     stdin() {
       return Buffer.alloc(0);
@@ -189,11 +213,22 @@ function authorizeJavaScriptValidation(request, allowedKeys = REQUEST_KEYS) {
       selector,
       workspace,
       target,
-      environmentKeys: Object.keys(sanitizedEnvironment())
+      environmentKeys: selector === 'NODE_TEST_FILE'
+        ? []
+        : Object.keys(sanitizedEnvironment())
     }
   );
 
-  return { operationId, workspace, observedAt, selector, target, resolved, commandAdmission };
+  return {
+    operationId,
+    workspace,
+    observedAt,
+    selector,
+    target,
+    resolved,
+    grantEvaluation: request.grantEvaluation,
+    commandAdmission
+  };
 }
 
 function parseNodeTestSummary(output) {
@@ -217,8 +252,67 @@ function parseNodeTestSummary(output) {
     : deepFreeze(summary);
 }
 
+function createNodeTestSandboxOperation(binding) {
+  const grant = binding.grantEvaluation.grant;
+  const request = createMachineAccessRequest({
+    requestId: `sandbox-request-${binding.operationId}`,
+    operationId: binding.operationId,
+    workspace: binding.workspace,
+    operationType: 'RUN_NODE_TEST',
+    target: binding.target,
+    purpose: `Execute qualified Node.js test file: ${binding.target}`,
+    requestedAt: binding.observedAt
+  });
+  const authority = createMachineAccessAuthority({
+    authorityId: `sandbox-authority-${sha256(`${request.fingerprint}\0${grant.fingerprint}`)}`,
+    request,
+    grantEvaluation: binding.grantEvaluation,
+    issuedAt: grant.issuedAt,
+    expiresAt: grant.expiresAt
+  });
+  return createMachineAccessOperation({ request, authority });
+}
+
+function executeSandboxedNodeTest(binding, profile) {
+  const operation = createNodeTestSandboxOperation(binding);
+  const requirement = createSandboxRequirement({
+    requirementId: `sandbox-requirement-${operation.fingerprint}`,
+    operation,
+    platform: process.platform,
+    requiredAt: binding.observedAt
+  });
+  const executors = {
+    linux: executeLinuxBwrapNodeTest,
+    darwin: executeMacosSeatbeltNodeTest,
+    win32: executeWindowsNodeTest
+  };
+  const executor = executors[process.platform];
+  if (!executor) {
+    throw new Error(
+      'Qualified native NODE_TEST_FILE sandbox is unavailable for this platform.'
+    );
+  }
+  const execution = executor({
+    requirement,
+    target: binding.target,
+    observedAt: binding.observedAt,
+    expiresAt: binding.grantEvaluation.grant.expiresAt,
+    timeoutMs: profile.timeoutMs,
+    maxOutputBytes: profile.maxOutputBytes
+  });
+  const sandboxEvidence = createSandboxEvidence({
+    requirement,
+    adapterEvidence: execution.adapterEvidence,
+    observedAt: binding.observedAt
+  });
+  return { ...execution, sandboxEvidence, profile };
+}
+
 function executeNodeProcess(binding, source) {
   const profile = selectorProfile(binding.selector);
+  if (binding.selector === 'NODE_TEST_FILE') {
+    return executeSandboxedNodeTest(binding, profile);
+  }
   const args = profile.arguments(binding.target);
   const result = childProcess.spawnSync(process.execPath, args, {
     cwd: binding.workspace,
@@ -244,12 +338,34 @@ function executeNodeProcess(binding, source) {
     throw new Error('Validation output exceeded limit.');
   }
 
-  return { args, result, stdout, stderr, profile };
+  return {
+    executable: process.execPath,
+    arguments: args,
+    sandboxedExecutable: null,
+    sandboxedArguments: null,
+    sandboxEvidence: null,
+    result,
+    stdout,
+    stderr,
+    profile
+  };
 }
 
 function validationResult(binding, source, projection = null) {
-  const { args, result, stdout, stderr, profile } =
-    executeNodeProcess(binding, source);
+  const execution = executeNodeProcess(binding, source);
+  const { result, profile } = execution;
+  if (result.error) {
+    if (result.error.code === 'ETIMEDOUT') throw new Error('Validation process timed out.');
+    if (result.error.code === 'ENOBUFS') throw new Error('Validation output exceeded limit.');
+    throw new Error('Validation process failed closed.');
+  }
+  if (result.signal) throw new Error(`Validation process terminated by signal: ${result.signal}`);
+  if (!Number.isInteger(result.status)) throw new Error('Validation process returned malformed status.');
+  const stdout = typeof result.stdout === 'string' ? result.stdout : '';
+  const stderr = typeof result.stderr === 'string' ? result.stderr : '';
+  if (Buffer.byteLength(stdout) > profile.maxOutputBytes || Buffer.byteLength(stderr) > profile.maxOutputBytes) {
+    throw new Error('Validation output exceeded limit.');
+  }
   const passed = result.status === 0;
   const combinedOutput = `${stdout}\n${stderr}`;
   const testSummary = binding.selector === 'NODE_TEST_FILE'
@@ -276,8 +392,8 @@ function validationResult(binding, source, projection = null) {
       testSummary
     },
     execution: {
-      executable: process.execPath,
-      arguments: [...args],
+      executable: execution.executable,
+      arguments: [...execution.arguments],
       shell: false,
       cwd: binding.workspace,
       qualifiedCommandAdmissionFingerprint:
@@ -285,7 +401,16 @@ function validationResult(binding, source, projection = null) {
       timeoutMs: profile.timeoutMs,
       maxInputBytes: MAX_INPUT_BYTES,
       maxOutputBytes: profile.maxOutputBytes,
-      environmentKeys: Object.keys(sanitizedEnvironment()).sort()
+      environmentKeys: binding.selector === 'NODE_TEST_FILE'
+        ? []
+        : Object.keys(sanitizedEnvironment()).sort(),
+      ...(execution.sandboxEvidence
+        ? {
+            sandboxedExecutable: execution.sandboxedExecutable,
+            sandboxedArguments: [...execution.sandboxedArguments],
+            sandboxEvidence: execution.sandboxEvidence
+          }
+        : {})
     }
   });
 }

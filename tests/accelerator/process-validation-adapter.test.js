@@ -26,6 +26,35 @@ fs.writeFileSync(
     "const assert = require('node:assert/strict');\n" +
     "test('adapter fixture passes', () => assert.equal(1, 1));\n"
 );
+fs.writeFileSync(
+  path.join(workspace, 'sandbox-adversarial.test.js'),
+  "'use strict';\n" +
+    "const test = require('node:test');\n" +
+    "const assert = require('node:assert/strict');\n" +
+    "const childProcess = require('node:child_process');\n" +
+    "const fs = require('node:fs');\n" +
+    "const net = require('node:net');\n" +
+    "const os = require('node:os');\n" +
+    "const path = require('node:path');\n" +
+    "test('native isolation is physically enforced', async () => {\n" +
+    "  assert.match(fs.readFileSync(__filename, 'utf8'), /physically enforced/);\n" +
+    "  assert.equal(process.env.SDO_VALIDATION_SECRET_MARKER, undefined);\n" +
+    "  for (const target of [path.join(process.cwd(), 'forbidden-write'), path.join(os.tmpdir(), 'forbidden-write')]) {\n" +
+    "    assert.throws(() => fs.writeFileSync(target, 'forbidden'), /permission|access|denied/i);\n" +
+    "  }\n" +
+    "  let child;\n" +
+    "  try { child = childProcess.spawnSync(process.execPath, ['-e', 'process.exit(0)']); }\n" +
+    "  catch (error) { child = { error }; }\n" +
+    "  assert.ok(child.error || child.status !== 0);\n" +
+    "  const network = await new Promise((resolve) => {\n" +
+    "    const socket = net.createConnection({ host: '1.1.1.1', port: 53 });\n" +
+    "    const timer = setTimeout(() => { socket.destroy(); resolve('DENIED'); }, 500);\n" +
+    "    socket.once('connect', () => { clearTimeout(timer); socket.destroy(); resolve('CONNECTED'); });\n" +
+    "    socket.once('error', () => { clearTimeout(timer); resolve('DENIED'); });\n" +
+    "  });\n" +
+    "  assert.equal(network, 'DENIED');\n" +
+    "});\n"
+);
 fs.writeFileSync(path.join(sibling, 'secret.js'), 'const secret = true;\n');
 test.after(() => fs.rmSync(root, { recursive: true, force: true }));
 
@@ -34,7 +63,7 @@ const EXPIRY = '2026-08-20T13:00:00.000Z';
 
 function issue(paths = ['valid.js'], overrides = {}) {
   const common = {
-    operationId: 'op-1', workspace, policyDecision: 'ALLOWED', riskLevel: 'R0',
+    operationId: 'op-1', workspace, policyDecision: 'ALLOWED', riskLevel: 'R1',
     lifecycleState: 'PENDING', capabilityType: 'PROCESS_VALIDATION',
     scope: { selectors: ['NODE_SYNTAX_CHECK'], paths }, idempotency: 'IDEMPOTENT'
   };
@@ -85,8 +114,14 @@ test('fixed Node test-file selector returns normalized PASSED evidence', () => {
     selector: 'NODE_TEST_FILE',
     target: 'sample.test.js',
     grantEvaluation: issue(['sample.test.js'], {
-      request: { scope: { selectors: ['NODE_TEST_FILE'], paths: ['sample.test.js'] } },
-      authority: { scope: { selectors: ['NODE_TEST_FILE'], paths: ['sample.test.js'] } }
+      request: {
+        action: 'NODE_TEST_FILE',
+        scope: { selectors: ['NODE_TEST_FILE'], paths: ['sample.test.js'] }
+      },
+      authority: {
+        action: 'NODE_TEST_FILE',
+        scope: { selectors: ['NODE_TEST_FILE'], paths: ['sample.test.js'] }
+      }
     })
   });
   assert.equal(result.validation.status, 'PASSED');
@@ -95,6 +130,111 @@ test('fixed Node test-file selector returns normalized PASSED evidence', () => {
   assert.equal(result.execution.timeoutMs, 30000);
   assert.equal(result.validation.testSummary.tests, 1);
   assert.equal(result.validation.testSummary.failed, 0);
+  if (process.platform === 'linux') {
+    assert.equal(result.execution.executable, '/usr/bin/bwrap');
+  } else if (process.platform === 'darwin') {
+    assert.match(result.execution.executable, /sdo-seatbelt-probe$/);
+  } else {
+    assert.match(result.execution.executable, /sdo-node-test-sandbox\.exe$/i);
+  }
+  assert.equal(result.execution.environmentKeys.length, 0);
+  assert.equal(result.execution.sandboxEvidence.operationId, 'op-1');
+  assert.equal(result.execution.sandboxEvidence.workspace, workspace);
+  assert.equal(result.execution.sandboxEvidence.controls.workspaceReadOnly, true);
+  assert.equal(result.execution.sandboxEvidence.controls.networkDenied, true);
+  assert.equal(result.execution.sandboxEvidence.controls.genericProcessDenied, true);
+  assert.equal(result.execution.sandboxEvidence.controls.secretAccessDenied, true);
+});
+
+test('physical native sandbox denies writes secrets network and unauthorized subprocesses', () => {
+  process.env.SDO_VALIDATION_SECRET_MARKER = 'parent-only-marker';
+  try {
+    const result = validate({
+      selector: 'NODE_TEST_FILE',
+      target: 'sandbox-adversarial.test.js',
+      grantEvaluation: issue(['sandbox-adversarial.test.js'], {
+        request: {
+          action: 'NODE_TEST_FILE',
+          scope: {
+            selectors: ['NODE_TEST_FILE'],
+            paths: ['sandbox-adversarial.test.js']
+          }
+        },
+        authority: {
+          action: 'NODE_TEST_FILE',
+          scope: {
+            selectors: ['NODE_TEST_FILE'],
+            paths: ['sandbox-adversarial.test.js']
+          }
+        }
+      })
+    });
+    assert.equal(result.validation.status, 'PASSED', result.validation.stderr);
+    assert.equal(result.validation.testSummary.failed, 0);
+    assert.equal(result.execution.sandboxEvidence.sandboxKind,
+      process.platform === 'linux'
+        ? 'linux-bubblewrap-user-namespace'
+        : process.platform === 'darwin'
+          ? 'macos-seatbelt-deny-default'
+          : 'windows-appcontainer-job-node');
+  } finally {
+    delete process.env.SDO_VALIDATION_SECRET_MARKER;
+  }
+});
+
+test('unavailable native sandbox fails closed without direct-process fallback', (context) => {
+  if (!['linux', 'darwin'].includes(process.platform)) return;
+  const originalExists = fs.existsSync.bind(fs);
+  context.mock.method(fs, 'existsSync', (candidate) =>
+    (process.platform === 'linux' && candidate === '/usr/bin/bwrap') ||
+    (process.platform === 'darwin' && /sdo-seatbelt-probe$/.test(candidate))
+      ? false
+      : originalExists(candidate));
+  assert.throws(() => validate({
+    selector: 'NODE_TEST_FILE',
+    target: 'sample.test.js',
+    grantEvaluation: issue(['sample.test.js'], {
+      request: {
+        action: 'NODE_TEST_FILE',
+        scope: { selectors: ['NODE_TEST_FILE'], paths: ['sample.test.js'] }
+      },
+      authority: {
+        action: 'NODE_TEST_FILE',
+        scope: { selectors: ['NODE_TEST_FILE'], paths: ['sample.test.js'] }
+      }
+    })
+  }), /Bubblewrap executable is unavailable|Seatbelt runtime is unavailable/);
+});
+
+test('Win32 NODE_TEST_FILE uses only the dedicated native containment adapter', () => {
+  const source = fs.readFileSync(require.resolve(
+    '../../accelerator/adapters/process-validation-adapter'), 'utf8');
+  const windowsAdapter = fs.readFileSync(require.resolve(
+    '../../accelerator/adapters/windows-node-test-sandbox-adapter'), 'utf8');
+  assert.match(source, /win32: executeWindowsNodeTest/);
+  assert.match(windowsAdapter, /Qualified native Win32 Node test helper is unavailable/);
+  assert.doesNotMatch(source, /win32[\s\S]{0,160}spawnSync\(process\.execPath/);
+});
+
+test('Win32 helper unavailable blocks NODE_TEST_FILE before execution', {
+  skip: process.platform !== 'win32'
+}, () => {
+  const helper = path.resolve(__dirname, '../../accelerator/native/windows/sdo-node-test-sandbox.exe');
+  if (fs.existsSync(helper)) return;
+  assert.throws(() => validate({
+    selector: 'NODE_TEST_FILE',
+    target: 'sandbox-adversarial.test.js',
+    grantEvaluation: issue(['sandbox-adversarial.test.js'], {
+      request: {
+        action: 'NODE_TEST_FILE',
+        scope: { selectors: ['NODE_TEST_FILE'], paths: ['sandbox-adversarial.test.js'] }
+      },
+      authority: {
+        action: 'NODE_TEST_FILE',
+        scope: { selectors: ['NODE_TEST_FILE'], paths: ['sandbox-adversarial.test.js'] }
+      }
+    })
+  }), /Qualified Win32 NODE_TEST_FILE sandbox is unavailable/);
 });
 
 test('missing grant fails closed', () => {

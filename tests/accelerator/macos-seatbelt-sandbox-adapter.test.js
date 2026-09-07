@@ -3,6 +3,8 @@
 const test = require('node:test');
 const assert = require('node:assert/strict');
 const fs = require('node:fs');
+const os = require('node:os');
+const path = require('node:path');
 const {
   createMachineAccessRequest,
   createMachineAccessAuthority,
@@ -10,7 +12,12 @@ const {
 } = require('../../accelerator/core/machine-access-contract');
 const { createSandboxRequirement, createSandboxEvidence } =
   require('../../accelerator/core/sandbox-evidence-contract');
-const { attestMacosSeatbeltSandbox, createProfile } =
+const {
+  attestMacosSeatbeltSandbox,
+  executeMacosSeatbeltNodeTest,
+  createProfile,
+  createNodeTestProfile
+} =
   require('../../accelerator/adapters/macos-seatbelt-sandbox-adapter');
 
 const NOW = '2099-01-01T00:00:00.000Z';
@@ -25,10 +32,14 @@ function freeze(value) {
   return value;
 }
 
-function operation() {
+function operation({
+  workspace = process.cwd(),
+  operationType = 'READ_FILE',
+  target = 'package.json'
+} = {}) {
   const request = createMachineAccessRequest({
-    requestId: 'seatbelt-request', operationId: 'seatbelt-operation', workspace: process.cwd(),
-    operationType: 'READ_FILE', target: 'package.json', purpose: 'Qualify containment.',
+    requestId: 'seatbelt-request', operationId: 'seatbelt-operation', workspace,
+    operationType, target, purpose: 'Qualify containment.',
     requestedAt: NOW
   });
   const grantEvaluation = freeze({
@@ -65,6 +76,75 @@ test('macOS Seatbelt emits contract-consumable native evidence', {
   assert.equal(fs.existsSync('.sdo-seatbelt-probe'), false);
 });
 
+test('macOS Seatbelt physically executes a Node test with adversarial effects denied', {
+  skip: process.platform !== 'darwin'
+}, (context) => {
+  const root = fs.realpathSync(fs.mkdtempSync(path.join(os.tmpdir(), 'sdo-seatbelt-test-')));
+  const workspace = path.join(root, 'workspace');
+  fs.mkdirSync(workspace);
+  const target = 'adversarial.test.js';
+  const forbidden = path.join(root, 'outside-workspace');
+  const source = [
+    "'use strict';",
+    "const test = require('node:test');",
+    "const assert = require('node:assert/strict');",
+    "const childProcess = require('node:child_process');",
+    "const fs = require('node:fs');",
+    "const net = require('node:net');",
+    "const path = require('node:path');",
+    `const forbidden = ${JSON.stringify(forbidden)};`,
+    "test('Seatbelt and Node permissions enforce containment', async () => {",
+    "  assert.match(fs.readFileSync(__filename, 'utf8'), /enforce containment/);",
+    "  assert.equal(process.env.SDO_VALIDATION_SECRET_MARKER, undefined);",
+    "  for (const candidate of [path.join(process.cwd(), 'write-denied'), forbidden]) {",
+    "    assert.throws(() => fs.writeFileSync(candidate, 'denied'), /permission|access|denied/i);",
+    "  }",
+    "  let child;",
+    "  try { child = childProcess.spawnSync(process.execPath, ['-e', 'process.exit(0)']); }",
+    "  catch (error) { child = { error }; }",
+    "  assert.ok(child.error || child.status !== 0);",
+    "  const network = await new Promise((resolve) => {",
+    "    const socket = net.createConnection({ host: '1.1.1.1', port: 53 });",
+    "    const timer = setTimeout(() => { socket.destroy(); resolve('DENIED'); }, 500);",
+    "    socket.once('connect', () => { clearTimeout(timer); socket.destroy(); resolve('CONNECTED'); });",
+    "    socket.once('error', () => { clearTimeout(timer); resolve('DENIED'); });",
+    "  });",
+    "  assert.equal(network, 'DENIED');",
+    "});",
+    ''
+  ].join('\n');
+  fs.writeFileSync(path.join(workspace, target), source);
+  context.after(() => {
+    fs.rmSync(root, { recursive: true, force: true });
+  });
+  const requirement = createSandboxRequirement({
+    requirementId: 'seatbelt-node-test-requirement',
+    operation: operation({ workspace, operationType: 'RUN_NODE_TEST', target }),
+    platform: 'darwin',
+    requiredAt: NOW
+  });
+  process.env.SDO_VALIDATION_SECRET_MARKER = 'parent-only-marker';
+  let execution;
+  try {
+    execution = executeMacosSeatbeltNodeTest({
+      requirement,
+      target,
+      observedAt: OBSERVED,
+      expiresAt: EXPIRES,
+      timeoutMs: 10000,
+      maxOutputBytes: 128 * 1024
+    });
+  } finally {
+    delete process.env.SDO_VALIDATION_SECRET_MARKER;
+  }
+  assert.equal(execution.result.error, undefined);
+  assert.equal(execution.result.signal, null);
+  assert.equal(execution.result.status, 0, execution.result.stderr);
+  assert.equal(execution.adapterEvidence.requirementFingerprint, requirement.fingerprint);
+  assert.equal(execution.adapterEvidence.controls.workspaceReadOnly, true);
+  assert.equal(fs.existsSync(forbidden), false);
+});
+
 test('macOS adapter rejects malformed requirement and invalid evidence lifetime', () => {
   assert.throws(() => attestMacosSeatbeltSandbox({
     requirement: {}, observedAt: OBSERVED, expiresAt: EXPIRES
@@ -98,7 +178,14 @@ test('Seatbelt profile is deny-default operation-bound and network-silent', () =
   assert.match(source, /'network'/);
   assert.match(source, /'generic-process'/);
   assert.match(source, /\['SIGABRT', 'SIGKILL', 'SIGSYS'\]/);
-  assert.doesNotMatch(source, /process\.execPath|--jitless|dynamic-code-generation/);
+  const nodeProfile = createNodeTestProfile('/qualified/workspace', '/qualified/node');
+  assert.match(nodeProfile, /allow process-exec \(literal "\/qualified\/node"\)/);
+  assert.doesNotMatch(nodeProfile, /allow process-exec[^\n]*\/bin\/sh/);
+  assert.match(source, /process\.execPath/);
+  assert.match(source, /executeMacosSeatbeltNodeTest/);
+  assert.match(source, /--permission/);
+  assert.match(source, /--test-isolation=none/);
+  assert.throws(() => createProfile('/unsafe\nworkspace'), /path literal is unsafe/);
   assert.doesNotMatch(source, /sandbox-exec/);
   assert.doesNotMatch(source, /execSync|https?|FILESYSTEM_PATCH|writeFileSync/);
 
@@ -111,6 +198,8 @@ test('Seatbelt profile is deny-default operation-bound and network-silent', () =
   assert.match(probeSource, /read_is_denied\("\/etc\/passwd", false\)/);
   assert.match(probeSource, /strcmp\(argv\[5\], "bootstrap"\)/);
   assert.match(probeSource, /sandbox_init\(profile, 0, &error\)/);
+  assert.match(probeSource, /execve\(node, arguments, environ\)/);
+  assert.match(probeSource, /safe_relative_target/);
   assert.doesNotMatch(probeSource, /system\(|popen\(|posix_spawn/);
 
   const buildSource = fs.readFileSync(

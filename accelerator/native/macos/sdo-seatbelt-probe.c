@@ -106,13 +106,54 @@ static bool generic_process_is_denied(void) {
   return denied(errno);
 }
 
+static bool safe_relative_target(const char *target) {
+  if (target == NULL || target[0] == '\0' || target[0] == '/') return false;
+  const char *component = target;
+  for (const char *cursor = target; ; cursor += 1) {
+    if (*cursor == '/' || *cursor == '\0') {
+      const size_t length = (size_t) (cursor - component);
+      if (length == 0 || (length == 1 && component[0] == '.') ||
+          (length == 2 && component[0] == '.' && component[1] == '.')) return false;
+      if (*cursor == '\0') return true;
+      component = cursor + 1;
+    }
+  }
+}
+
+static int execute_node_test(
+    const char *node, const char *workspace, const char *target) {
+  if (node == NULL || node[0] != '/' || !safe_relative_target(target)) return 1;
+  char allow_read[PATH_MAX + 32];
+  const int length = snprintf(
+    allow_read, sizeof(allow_read), "--allow-fs-read=%s", workspace
+  );
+  if (length < 0 || (size_t) length >= sizeof(allow_read)) return 1;
+  char *const arguments[] = {
+    (char *) node,
+    (char *) "--permission",
+    allow_read,
+    (char *) "--test-isolation=none",
+    (char *) "--test",
+    (char *) target,
+    NULL
+  };
+  execve(node, arguments, environ);
+  return 1;
+}
+
 int main(int argc, char **argv) {
-  if (argc != 7 || argv[1][0] == '\0' || !valid_fingerprint(argv[2]) ||
+  if ((argc != 7 && argc != 9) || argv[1][0] == '\0' ||
+      !valid_fingerprint(argv[2]) ||
       argv[3][0] == '\0' || argv[4][0] == '\0' || argv[5][0] == '\0' ||
       argv[6][0] == '\0' || !minimal_environment()) return 1;
   char current[PATH_MAX];
   if (getcwd(current, sizeof(current)) == NULL || strcmp(current, argv[3]) != 0 ||
       !apply_seatbelt(argv[6])) return 1;
+  if (strcmp(argv[5], "node-test") == 0) {
+    if (argc != 9 || argv[7][0] == '\0' || argv[8][0] == '\0') return 1;
+    return execute_node_test(argv[7], argv[3], argv[8]);
+  }
+  if (argc != 7) return 1;
   if (strcmp(argv[5], "bootstrap") == 0) return 0;
   if (strcmp(argv[5], "workspace-write") == 0)
     return workspace_write_is_denied(argv[3]) ? 0 : 1;

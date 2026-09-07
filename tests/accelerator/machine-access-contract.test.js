@@ -175,6 +175,12 @@ test(
         'package.json',
         'PROCESS_VALIDATION',
         'NODE_SYNTAX_CHECK'
+      ],
+      [
+        'RUN_NODE_TEST',
+        'package.json',
+        'PROCESS_VALIDATION',
+        'NODE_TEST_FILE'
       ]
     ];
 

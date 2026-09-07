@@ -165,12 +165,12 @@ test('interactive activation identifies the canonical protocols', () => {
 
   assert.equal(
     activation.protocols.bhSep,
-    '2.2'
+    '2.3'
   );
 
   assert.equal(
     activation.protocols.bhSdp,
-    '2.2'
+    '2.3'
   );
 });
 
@@ -195,7 +195,7 @@ test('interactive activation formatter exposes the stable human surface', () => 
 
   assert.match(
     output,
-    /BH-SEP v2\.2 E BH-SDP v2\.2 ATIVADOS/
+    /BH-SEP v2\.3 E BH-SDP v2\.3 ATIVADOS/
   );
 
   assert.match(

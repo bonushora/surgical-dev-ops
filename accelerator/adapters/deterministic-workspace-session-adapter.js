@@ -2,8 +2,10 @@
 
 const crypto = require('node:crypto');
 const fs = require('node:fs');
+const path = require('node:path');
 const { canonicalizeAuthorizedRoot } = require('../core/workspace-boundary');
 const { runTrustedGitRead } = require('./git-read-adapter');
+const { observeFileEvidenceIdentity } = require('./filesystem-read-adapter');
 
 const SESSION_SCHEMA = 'sdo.deterministic_workspace_session.v1';
 const REVALIDATION_SCHEMA = 'sdo.deterministic_workspace_session_revalidation.v1';
@@ -21,6 +23,49 @@ function timestamp(value) {
   return value;
 }
 
+function worktreeTarget(entry) {
+  if (typeof entry !== 'string' || !entry) return null;
+  const candidate = entry.length >= 3 && entry[2] === ' ' ? entry.slice(3) : entry;
+  if (!candidate || path.isAbsolute(candidate) || candidate.split(/[\\/]+/).includes('..')) return null;
+  return candidate.replace(/\\/g, '/');
+}
+
+function contentSensitiveWorktreeFingerprint(root, worktree) {
+  if (!Array.isArray(worktree)) throw new Error('Canonical Git worktree status is required.');
+  const observations = worktree.map((entry) => {
+    const target = worktreeTarget(entry);
+    if (!target) throw new Error('Git worktree target is malformed.');
+    try {
+      const observed = observeFileEvidenceIdentity({ workspace: root, target });
+      return { entry, target: observed.target, sha256: observed.sha256 };
+    } catch {
+      const lexical = path.resolve(root, target);
+      const relative = path.relative(root, lexical);
+      if (!relative || relative === '..' || relative.startsWith(`..${path.sep}`) || path.isAbsolute(relative)) {
+        throw new Error('Git worktree target escapes the physical workspace.');
+      }
+      let stat;
+      try {
+        stat = fs.lstatSync(lexical);
+      } catch (error) {
+        if (error && error.code === 'ENOENT') return { entry, target, sha256: null };
+        throw new Error('Git worktree evidence identity is unavailable.');
+      }
+      if (stat.isSymbolicLink()) {
+        return {
+          entry,
+          target,
+          sha256: crypto.createHash('sha256').update(fs.readlinkSync(lexical)).digest('hex')
+        };
+      }
+      throw new Error('Git worktree evidence identity is unavailable.');
+    }
+  });
+  return crypto.createHash('sha256')
+    .update(JSON.stringify({ worktree, observations }))
+    .digest('hex');
+}
+
 function observe(rootInput) {
   const root = canonicalizeAuthorizedRoot(rootInput);
   const lexical = fs.lstatSync(root);
@@ -32,7 +77,7 @@ function observe(rootInput) {
   const worktree = runTrustedGitRead(root, 'WORKTREE_STATUS').result;
   const physical = { root, device: String(stat.dev), inode: String(stat.ino), birthtimeNs: String(stat.birthtimeNs), ctimeNs: String(stat.ctimeNs) };
   const physicalWorkspaceIdentity = crypto.createHash('sha256').update(JSON.stringify(physical)).digest('hex');
-  const worktreeFingerprint = crypto.createHash('sha256').update(JSON.stringify(worktree)).digest('hex');
+  const worktreeFingerprint = contentSensitiveWorktreeFingerprint(root, worktree);
   return deepFreeze({ physical, physicalWorkspaceIdentity, repositoryHead, worktreeFingerprint });
 }
 
@@ -56,4 +101,9 @@ function revalidateDeterministicWorkspaceSession(session) {
   return deepFreeze({ schema: REVALIDATION_SCHEMA, decision: valid ? 'VALID' : 'INVALIDATED', reason: valid ? null : 'Workspace physical or repository state changed.', sessionFingerprint: session.sessionFingerprint, current, samePhysical, sameRepository, sameWorktree, operationalAuthority: false, mutationAuthority: false });
 }
 
-module.exports = Object.freeze({ SESSION_SCHEMA, REVALIDATION_SCHEMA, createDeterministicWorkspaceSession, revalidateDeterministicWorkspaceSession });
+module.exports = Object.freeze({
+  SESSION_SCHEMA,
+  REVALIDATION_SCHEMA,
+  createDeterministicWorkspaceSession,
+  revalidateDeterministicWorkspaceSession
+});

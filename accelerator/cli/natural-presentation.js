@@ -181,7 +181,8 @@ function formatRepositoryStatus(payload, language = 'pt-BR') {
 function formatNaturalPresentation(
   presentation,
   governedOutput,
-  language = 'pt-BR'
+  language = 'pt-BR',
+  options = {}
 ) {
   const evidence =
     extractGovernedPayload(
@@ -219,11 +220,15 @@ function formatNaturalPresentation(
     return language === 'en'
       ? (
           `You are working on branch "${branch}".\n` +
-          'No change was made.\n'
+          (options.includeNoChange === false
+            ? ''
+            : 'No change was made.\n')
         )
       : (
       `Você está trabalhando na branch "${branch}".\n` +
-      'Nenhuma alteração foi realizada.\n'
+      (options.includeNoChange === false
+        ? ''
+        : 'Nenhuma alteração foi realizada.\n')
         );
   }
 

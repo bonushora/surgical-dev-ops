@@ -72,6 +72,17 @@ const OPERATION_PROFILES =
         'R1',
       targetRequired:
         true
+    },
+
+    RUN_NODE_TEST: {
+      capabilityType:
+        'PROCESS_VALIDATION',
+      action:
+        'NODE_TEST_FILE',
+      riskLevel:
+        'R1',
+      targetRequired:
+        true
     }
   });
 

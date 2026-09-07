@@ -37,10 +37,10 @@ function activation() {
     protocols:
       Object.freeze({
         bhSep:
-          '2.2',
+          '2.3',
 
         bhSdp:
-          '2.2'
+          '2.3'
       })
   });
 }
@@ -266,6 +266,16 @@ test(
     assert.match(
       instruction,
       /conversar normalmente/i
+    );
+
+    assert.equal(
+      instruction.includes(context.workspace.repositoryPath),
+      false
+    );
+
+    assert.doesNotMatch(
+      instruction,
+      /Raiz autorizada:/i
     );
   }
 );

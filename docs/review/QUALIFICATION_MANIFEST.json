@@ -112,6 +112,40 @@
     "runtimeMutationDuringFinalEvidenceRecording": false,
     "manualAcceptance": "GREEN"
   },
+  "postSdoAud013Qualification": {
+    "anchor": {
+      "branch": "feature/v2.3-mission-runner",
+      "commit": "d2049d9f0e64dda7fc2bb41d8b38e86908cd2734"
+    },
+    "sdoAud011": {
+      "classification": "GREEN_TARGETED_DETERMINISTIC_CORE"
+    },
+    "sandboxSubtests": {
+      "executed": 30,
+      "passed": 29,
+      "divergent": 1
+    },
+    "installedCodexSdkIntegration": {
+      "test": "installed Codex SDK launches the local wrapper once for each runStreamed turn",
+      "onlyDivergentSubtest": true,
+      "insideSandbox": {
+        "classification": "BLOCKED_NOT_QUALIFIED",
+        "threadStartedReachedSdk": false,
+        "threadIdPromoted": false,
+        "secondExecutionEmittedResume": false
+      },
+      "outsideSandbox": {
+        "result": "PASS"
+      },
+      "provenDefects": {
+        "adapter": false,
+        "wrapper": false,
+        "fixture": false,
+        "installedSdk": false
+      },
+      "expectationRelaxed": false
+    }
+  },
   "currentAdr038ReviewTarget": {
     "architectureDecision": "ADR-038",
     "runtimeCompletion": {

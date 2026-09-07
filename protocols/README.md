@@ -1,9 +1,9 @@
 # Protocol Preservation and Versioning
 
-## Frozen original RAW artifacts
+## Immutable normative RAW artifacts
 
-The following Portuguese artifacts are the original normative BH-SEP v2.2 and
-BH-SDP v2.2 documents. Their repository paths and RAW URLs are frozen:
+The Portuguese v2.2 artifacts are the historical normative originals. Their
+repository paths, RAW URLs, LF termination and SHA-256 values remain frozen:
 
 | Artifact | Stable path | SHA-256 |
 | --- | --- | --- |
@@ -18,12 +18,31 @@ Stable RAW URLs:
 Internationalization does not authorize modifying, translating in place,
 renaming, deleting, or repurposing those artifacts.
 
-## English translations
+The Portuguese v2.3 artifacts are the active normative originals. They use
+versioned stable paths and the same byte-level SHA-256 and LF gate:
 
-The English files remain separate:
+| Artifact | Stable path | SHA-256 |
+| --- | --- | --- |
+| BH-SEP v2.3 | `protocols/v2.3/BH-SEP.md` | `0360b145b4f1ba8cb211ffdb16cf5d70d47c7dc55a11395bd2afb9d5241eb4ee` |
+| BH-SDP v2.3 | `protocols/v2.3/BH-SDP.md` | `413b3613c75ce89defae4d49ad0b21d92f56519c14f5b32c8e8e152997887f47` |
 
-- `protocols/BH-SEP_EN.md`
-- `protocols/BH-SDP_EN.md`
+Stable versioned RAW URLs:
+
+- `https://raw.githubusercontent.com/bonushora/surgical-dev-ops/main/protocols/v2.3/BH-SEP.md`
+- `https://raw.githubusercontent.com/bonushora/surgical-dev-ops/main/protocols/v2.3/BH-SDP.md`
+
+## Translations and combined artifacts
+
+Translations and combined copies remain separate derived artifacts. Their
+hashes and composition are verified, but they are not described as original
+normative RAW documents:
+
+| Artifact | Kind | SHA-256 |
+| --- | --- | --- |
+| `protocols/v2.3/BH-SEP_EN.md` | English translation | `64bc602ea0556eb1819daf5ebd6aa07ff36c00f8a3443205f9035a93b02fdc13` |
+| `protocols/v2.3/BH-SDP_EN.md` | English translation | `49f5ba8a8be6d075f41b299b69ebffa1cf6a3018f1d93bf373c4c2d0ec9ae222` |
+| `protocols/v2.3/BH-PROTOCOLS.md` | Combined PT-BR copy | `d877a7bd876ee37df2378476150827e20a7e2437b8e8ee313f06b7992396f1bb` |
+| `protocols/v2.3/BH-PROTOCOLS_EN.md` | Combined English translation | `fdfa13cc39eb36a7f07129398d8600887babf6535d0292bc561e960d0792055e` |
 
 Translations improve accessibility but do not silently redefine the original
 normative Portuguese text.
@@ -44,10 +63,10 @@ normative Portuguese text.
 - [BH-SEP v2.3 — tradução inglesa](./v2.3/BH-SEP_EN.md)
 - [BH-SDP v2.3 — tradução inglesa](./v2.3/BH-SDP_EN.md)
 
-#### Cópia conjunta da v2.3
+#### Cópia conjunta derivada da v2.3
 
-- [Copiar BH-SEP + BH-SDP v2.3 — RAW original](./v2.3/BH-PROTOCOLS.md)
-- [Copiar BH-SEP + BH-SDP v2.3 — tradução inglesa](./v2.3/BH-PROTOCOLS_EN.md)
+- [BH-SEP + BH-SDP v2.3 — cópia combinada PT-BR](./v2.3/BH-PROTOCOLS.md)
+- [BH-SEP + BH-SDP v2.3 — tradução inglesa combinada](./v2.3/BH-PROTOCOLS_EN.md)
 
 ## Future protocol versions
 
@@ -60,8 +79,8 @@ protocols/v2.3/BH-SEP_EN.md
 protocols/v2.3/BH-SDP_EN.md
 ```
 
-A future index may identify the currently recommended version. It must not make
-an old RAW URL serve different normative content.
+A future index may identify a later active version. It must not make an old RAW
+URL serve different normative content.
 
 This policy is approved and frozen by
 [ADR-018](../docs/adr/ADR-018-immutable-protocol-raw-and-international-documentation.md).

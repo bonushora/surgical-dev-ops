@@ -35,6 +35,33 @@ function discovery(
     local:
       true,
 
+    providerKind:
+      'OLLAMA',
+
+    cognitionLocation:
+      'LOCAL_MODEL',
+
+    transportLocation:
+      'LOCAL_PROCESS',
+
+    billing:
+      'LOCAL_RESOURCES_AND_LICENSES_APPLY',
+
+    networkRequirement:
+      'LOOPBACK_SERVICE_ONLY',
+
+    endpoint:
+      'http://127.0.0.1:11434/api/tags',
+
+    endpointLoopback:
+      true,
+
+    transportQualified:
+      true,
+
+    modelInstalled:
+      true,
+
     available:
       true,
 
@@ -114,6 +141,9 @@ test(
       false
     );
 
+    assert.equal(composition.providerKind, 'OLLAMA');
+    assert.equal(composition.cognitionLocation, 'LOCAL_MODEL');
+
     assert.equal(
       composition.inferenceProfile.profileId,
       'ollama-cpu-bounded-v3'
@@ -122,6 +152,44 @@ test(
     assert.ok(
       Object.isFrozen(composition)
     );
+  }
+);
+
+test(
+  'NATURAL local composition fails closed without explicit location metadata',
+  () => {
+    const incomplete = { ...discovery() };
+    delete incomplete.cognitionLocation;
+    assert.throws(
+      () => createNaturalLocalAIComposition({
+        discovery: Object.freeze(incomplete),
+        fetchImplementation: async () => {}
+      }),
+      /location|discovery|required|verified/i
+    );
+  }
+);
+
+test(
+  'NATURAL local composition fails closed without automatic-selection qualification evidence',
+  () => {
+    for (const field of [
+      'endpoint',
+      'endpointLoopback',
+      'transportQualified',
+      'modelInstalled'
+    ]) {
+      const incomplete = { ...discovery() };
+      delete incomplete[field];
+      assert.throws(
+        () => createNaturalLocalAIComposition({
+          discovery: Object.freeze(incomplete),
+          fetchImplementation: async () => {}
+        }),
+        /discovery|required|verified/i,
+        field
+      );
+    }
   }
 );
 
