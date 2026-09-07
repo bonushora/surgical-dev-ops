@@ -424,10 +424,20 @@ int wmain(int argc, wchar_t* argv[]) {
   );
   fs::remove_all(stage, error);
   const bool stageRemoved = !error;
-  const bool profileDeleted = DeleteAppContainerProfile(profileName.c_str()) == S_OK;
+  const int stageCleanupCode = error.value();
+  const HRESULT profileCleanupResult = DeleteAppContainerProfile(profileName.c_str());
+  const bool profileDeleted = profileCleanupResult == S_OK;
   FreeSid(sid);
   if (result < 0 || !stageRemoved || !profileDeleted) {
-    return fail(L"native containment cleanup failed");
+    std::wcerr << L"SDO_WIN32_NODE_TEST_FAILED"
+               << L" runNode=" << (result >= 0 ? L"PASS" : L"FAIL")
+               << L" runNodeCode=" << result
+               << L" stagingCleanup=" << (stageRemoved ? L"PASS" : L"FAIL")
+               << L" stagingCleanupCode=" << stageCleanupCode
+               << L" profileCleanup=" << (profileDeleted ? L"PASS" : L"FAIL")
+               << L" profileCleanupHresult=" << static_cast<long>(profileCleanupResult)
+               << L"\n";
+    return 2;
   }
   return result;
 }

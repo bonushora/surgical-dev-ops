@@ -156,7 +156,7 @@ test('Win32 Node test failures retain bounded sanitized execution diagnostics', 
   ]) {
     assert.match(adapter, new RegExp(`${field}:`));
   }
-  assert.match(adapter, /\n    phase\n/);
+  assert.match(adapter, /\r?\n    phase\r?\n/);
   assert.match(adapter, /\[OPERATION_ID\]/);
   assert.match(adapter, /\[REQUIREMENT_FINGERPRINT\]/);
   assert.match(adapter, /\[WORKSPACE\]/);
