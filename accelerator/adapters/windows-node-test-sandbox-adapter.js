@@ -7,6 +7,7 @@ const { canonicalizeAuthorizedRoot } = require('../core/workspace-boundary');
 
 const HELPER = path.resolve(__dirname, '../native/windows/sdo-node-test-sandbox.exe');
 const MARKER = 'SDO_WIN32_NODE_TEST_EVIDENCE ';
+const DIAGNOSTIC_OUTPUT_LIMIT = 4096;
 
 function deepFreeze(value) {
   if (!value || typeof value !== 'object' || Object.isFrozen(value)) return value;
@@ -21,6 +22,53 @@ function timestamp(value, name) {
     throw new Error(`${name} must be canonical.`);
   }
   return value;
+}
+
+function diagnosticText(value, sensitiveValues) {
+  let text = typeof value === 'string' ? value : '';
+  for (const [sensitive, replacement] of sensitiveValues) {
+    if (sensitive) text = text.split(sensitive).join(replacement);
+  }
+  text = text
+    .replace(/[A-Z]:\\Users\\[^\\\r\n]+/gi, '[USER_HOME]')
+    .replace(
+      /((?:authorization|cookie|password|passwd|secret|token|api[-_]?key)\s*[:=]\s*)[^\r\n,;]+/gi,
+      '$1[REDACTED]'
+    );
+  return text.slice(0, DIAGNOSTIC_OUTPUT_LIMIT);
+}
+
+function windowsNodeTestFailure(message, result, context, phase) {
+  const error = result && result.error;
+  const sensitiveValues = [
+    [HELPER, '[HELPER]'],
+    [context.workspace, '[WORKSPACE]'],
+    [context.node, '[NODE_EXECUTABLE]']
+  ];
+  const diagnostic = deepFreeze({
+    executable: path.basename(HELPER),
+    arguments: [
+      '[OPERATION_ID]',
+      '[REQUIREMENT_FINGERPRINT]',
+      '[WORKSPACE]',
+      '[TARGET]',
+      '[NODE_EXECUTABLE]',
+      String(context.timeoutMs)
+    ],
+    status: Number.isInteger(result && result.status) ? result.status : null,
+    signal: typeof (result && result.signal) === 'string' ? result.signal : null,
+    errorCode: error && error.code ? String(error.code).slice(0, 128) : null,
+    errorMessage: diagnosticText(error && error.message, sensitiveValues),
+    stdout: diagnosticText(result && result.stdout, sensitiveValues),
+    stderr: diagnosticText(result && result.stderr, sensitiveValues),
+    markerPresent: typeof (result && result.stdout) === 'string' &&
+      result.stdout.includes(MARKER),
+    phase
+  });
+  const failure = new Error(`${message} ${JSON.stringify(diagnostic)}`);
+  failure.code = 'WIN32_NODE_TEST_EXECUTION_FAILED';
+  failure.diagnostic = diagnostic;
+  return failure;
 }
 
 function executeWindowsNodeTest({
@@ -70,19 +118,28 @@ function executeWindowsNodeTest({
     windowsHide: true,
     env: {}
   });
+  const failure = (message, phase) => windowsNodeTestFailure(
+    message, result, { workspace, node, timeoutMs }, phase
+  );
   if (result.error || typeof result.stdout !== 'string') {
-    throw new Error('Win32 native Node test helper failed closed.');
+    const spawnCodes = new Set(['ENOENT', 'EACCES', 'EPERM']);
+    const phase = result.error && result.error.code === 'ETIMEDOUT'
+      ? 'timeout'
+      : result.error && spawnCodes.has(result.error.code)
+        ? 'spawn'
+        : 'execution';
+    throw failure('Win32 native Node test helper failed closed.', phase);
   }
   const markerIndex = result.stdout.lastIndexOf(`\n${MARKER}`);
   if (markerIndex < 0 || result.stdout.indexOf(`\n${MARKER}`) !== markerIndex) {
-    throw new Error('Win32 native Node test helper evidence is absent.');
+    throw failure('Win32 native Node test helper evidence is absent.', 'evidence-parse');
   }
   const stdout = result.stdout.slice(0, markerIndex);
   let native;
   try {
     native = JSON.parse(result.stdout.slice(markerIndex + 1 + MARKER.length).trim());
   } catch {
-    throw new Error('Win32 native Node test helper evidence is malformed.');
+    throw failure('Win32 native Node test helper evidence is malformed.', 'evidence-parse');
   }
   const controls = {
     workspaceReadOnly: native.workspaceReadOnly,
@@ -100,7 +157,9 @@ function executeWindowsNodeTest({
       typeof native.stagedNode !== 'string' || !native.stagedNode ||
       typeof native.stagedTarget !== 'string' || !native.stagedTarget ||
       Object.values(controls).some((value) => value !== true)) {
-    throw new Error('Win32 native Node test helper evidence is invalid or divergent.');
+    throw failure(
+      'Win32 native Node test helper evidence is invalid or divergent.', 'evidence-parse'
+    );
   }
   return {
     adapterEvidence: deepFreeze({

@@ -146,6 +146,27 @@ test('existing Win32 helper is not misrepresented as NODE_TEST_FILE containment'
   assert.match(build, /sdo-node-test-sandbox\.exe/);
 });
 
+test('Win32 Node test failures retain bounded sanitized execution diagnostics', () => {
+  const adapter = fs.readFileSync(require.resolve(
+    '../../accelerator/adapters/windows-node-test-sandbox-adapter'), 'utf8');
+  assert.match(adapter, /const DIAGNOSTIC_OUTPUT_LIMIT = 4096/);
+  for (const field of [
+    'executable', 'arguments', 'status', 'signal', 'errorCode', 'errorMessage',
+    'stdout', 'stderr', 'markerPresent'
+  ]) {
+    assert.match(adapter, new RegExp(`${field}:`));
+  }
+  assert.match(adapter, /\n    phase\n/);
+  assert.match(adapter, /\[OPERATION_ID\]/);
+  assert.match(adapter, /\[REQUIREMENT_FINGERPRINT\]/);
+  assert.match(adapter, /\[WORKSPACE\]/);
+  assert.match(adapter, /\[NODE_EXECUTABLE\]/);
+  assert.match(adapter, /\[REDACTED\]/);
+  assert.match(adapter, /'evidence-parse'/);
+  assert.match(adapter, /env: \{\}/);
+  assert.doesNotMatch(adapter, /process\.env/);
+});
+
 test('Windows Job Object timeout terminates the native test tree', {
   skip: process.platform !== 'win32'
 }, () => {
