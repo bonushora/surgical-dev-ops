@@ -247,10 +247,10 @@ test('Windows AppContainer environment comparison is isolated, sanitized and str
   assert.match(diagnostic, /L"LOCALAPPDATA"/);
   assert.match(diagnostic, /profileTempPath/);
   assert.match(diagnostic, /kNodeDiagnosticArgument\[\] = L"--node-startup-diagnostic"/);
-  assert.match(diagnostic, /attempt\("N1", \{L"--version"\}, 0\)/);
-  assert.match(diagnostic, /attempt\("N2", \{L"-e", L"process\.exit\(37\)"\}, 37\)/);
-  assert.match(diagnostic, /attempt\("N3", \{[\s\S]+L"--permission"[\s\S]+allowRead/);
-  assert.match(diagnostic, /attempt\("N4", \{[\s\S]+L"--test-isolation=none"[\s\S]+L"--test"/);
+  assert.match(diagnostic, /state=CONTROL_N1/);
+  assert.match(diagnostic, /state=TEST_TEMP_ONLY/);
+  assert.match(diagnostic, /state=TEST_TMP_ONLY/);
+  assert.match(diagnostic, /environmentVariant/);
   assert.match(diagnostic, /JOB_OBJECT_LIMIT_ACTIVE_PROCESS/);
   assert.match(diagnostic, /CapabilityCount = 0/);
   assert.match(diagnostic, /firstNativeFrame=/);

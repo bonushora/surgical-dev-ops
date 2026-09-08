@@ -184,6 +184,17 @@ Environment profileEnvironment(const Environment& base, const std::wstring& prof
   return serialize(std::move(entries));
 }
 
+Environment environmentVariant(const Environment& base, const std::wstring& value,
+                                bool tempOnly, bool tmpOnly) {
+  std::vector<Entry> entries = base.entries;
+  setEntry(&entries, L"TEMP", tempOnly ? value : L"");
+  setEntry(&entries, L"TMP", tmpOnly ? value : L"");
+  entries.erase(std::remove_if(entries.begin(), entries.end(), [](const Entry& e) {
+    return e.value.empty();
+  }), entries.end());
+  return serialize(std::move(entries));
+}
+
 bool environmentSorted(const Environment& environment) {
   return std::is_sorted(
     environment.entries.begin(), environment.entries.end(), lessName
@@ -1183,15 +1194,40 @@ int runNodeStartupDiagnostic(const std::wstring& requestedNode) {
       results.emplace_back(result, result.expected);
       return result.expected;
     };
-    if (!attempt("N1", {L"--version"}, 0)) return results;
-    if (!attempt("N2", {L"-e", L"process.exit(37)"}, 37)) return results;
-    if (!attempt("N3", {
-          L"--permission", allowRead, minimalScript.wstring()
-        }, 37)) return results;
-    attempt("N4", {
-      L"--permission", allowRead, L"--test-isolation=none", L"--test",
-      minimalTest.wstring()
-    }, 0);
+    auto control = runNodeStep("N1", stagedNode.wstring(), {L"--version"}, 0,
+      environment, stagedWorkspace.wstring(), sid);
+    results.emplace_back(control, control.expected);
+    std::cout << "state=CONTROL_N1 evidence=" << (control.expected ? "PASS" : "EXIT_134")
+      << " nextState=" << (control.expected ? "BLOCKED" : "TEST_TEMP_ONLY")
+      << " equivalentAttempts=1 breakerDecision=" << (control.expected ? "CONTROL_NOT_REPRODUCED" : "CONTINUE") << '\n';
+    if (control.expected) return results;
+    const fs::path tempDir = stage / L"temp-variant";
+    fs::create_directories(tempDir, filesystemError);
+    Environment tempEnvironment = environmentVariant(environment, tempDir.wstring(), true, false);
+    auto temp = runNodeStep("N1", stagedNode.wstring(), {L"--version"}, 0,
+      tempEnvironment, stagedWorkspace.wstring(), sid);
+    results.emplace_back(temp, temp.expected);
+    std::cout << "state=TEST_TEMP_ONLY evidence=" << (temp.expected ? "PASS" : "EXIT_134")
+      << " nextState=" << (temp.expected ? "VERIFY_TEMP_CONTROL" : "TEST_TMP_ONLY")
+      << " equivalentAttempts=2 breakerDecision=" << (temp.expected ? "VERIFY_CONTROL" : "CONTINUE") << '\n';
+    if (temp.expected) {
+      auto verify = runNodeStep("N1", stagedNode.wstring(), {L"--version"}, 0,
+        environment, stagedWorkspace.wstring(), sid);
+      results.emplace_back(verify, verify.expected);
+      std::cout << "state=VERIFY_TEMP_CONTROL evidence=" << (verify.expected ? "PASS" : "EXIT_134")
+        << " nextState=COMPLETE equivalentAttempts=3 breakerDecision="
+        << (verify.expected ? "INDETERMINATE" : "TEMP_NECESSARY_AND_SUFFICIENT") << '\n';
+      return results;
+    }
+    const fs::path tmpDir = stage / L"tmp-variant";
+    fs::create_directories(tmpDir, filesystemError);
+    Environment tmpEnvironment = environmentVariant(environment, tmpDir.wstring(), false, true);
+    auto tmp = runNodeStep("N1", stagedNode.wstring(), {L"--version"}, 0,
+      tmpEnvironment, stagedWorkspace.wstring(), sid);
+    results.emplace_back(tmp, tmp.expected);
+    std::cout << "state=TEST_TMP_ONLY evidence=" << (tmp.expected ? "PASS" : "EXIT_134")
+      << " nextState=COMPLETE equivalentAttempts=3 breakerDecision="
+      << (tmp.expected ? "VERIFY_CONTROL" : "BLOCKED_ADAPTIVE_BREAKER_OPEN") << '\n';
     return results;
   }();
 
