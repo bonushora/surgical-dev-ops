@@ -13,7 +13,7 @@ call "%VSINSTALL%\VC\Auxiliary\Build\vcvars64.bat" >nul
 if errorlevel 1 exit /b 4
 
 pushd "%FIXTURE_ROOT%"
-cl /nologo /std:c++17 /EHsc /O2 /W4 /WX /MT /utf-8 /DUNICODE /D_UNICODE windows-appcontainer-environment-diagnostic.cpp /Fo:windows-appcontainer-environment-diagnostic.obj /Fe:windows-appcontainer-environment-diagnostic.exe /link advapi32.lib userenv.lib
+cl /nologo /std:c++17 /EHsc /O2 /W4 /WX /MT /utf-8 /DUNICODE /D_UNICODE windows-appcontainer-environment-diagnostic.cpp /Fo:windows-appcontainer-environment-diagnostic.obj /Fe:windows-appcontainer-environment-diagnostic.exe /link advapi32.lib userenv.lib ole32.lib
 if errorlevel 1 goto compile_failed
 
 if exist windows-appcontainer-environment-diagnostic.obj del /q windows-appcontainer-environment-diagnostic.obj
