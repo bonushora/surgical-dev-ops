@@ -401,7 +401,7 @@ VariantResult runVariant(const std::wstring& executable,
                          const wchar_t* currentDirectory,
                          const Environment& environment,
                          LPPROC_THREAD_ATTRIBUTE_LIST attributes,
-                         HANDLE job) {
+                         HANDLE job, bool explicitApplicationName = true) {
   std::wstring command = quote(executable) + L" " + kChildArgument;
   std::vector<wchar_t> commandLine(command.begin(), command.end());
   commandLine.push_back(L'\0');
@@ -411,7 +411,8 @@ VariantResult runVariant(const std::wstring& executable,
   startup.lpAttributeList = attributes;
   PROCESS_INFORMATION process{};
   const BOOL created = CreateProcessW(
-    executable.c_str(), commandLine.data(), nullptr, nullptr, FALSE,
+    explicitApplicationName ? executable.c_str() : nullptr,
+    commandLine.data(), nullptr, nullptr, FALSE,
     CREATE_SUSPENDED | CREATE_UNICODE_ENVIRONMENT | EXTENDED_STARTUPINFO_PRESENT,
     const_cast<wchar_t*>(environment.block.data()), currentDirectory,
     &startup.StartupInfo, &process
@@ -509,16 +510,19 @@ void reportVariant(const char* variant, const char* source,
 void reportArgumentVariant(const char* variant, const char* currentDirectoryMode,
                            const PathMetadata& executable,
                            const PathMetadata& currentDirectory,
-                           const VariantResult& result, bool cleanup) {
+                           const VariantResult& result, bool cleanup,
+                           bool explicitApplicationName = true) {
   std::cout << "variant=" << variant
-            << " applicationNameMode=absolute"
+            << " applicationNameMode="
+            << (explicitApplicationName ? "absolute" : "null")
             << " executablePathKind=" << executable.pathKind
             << " executableExists=" << (executable.exists ? "true" : "false")
             << " executableType=" << executable.executableType
             << " aclAssessment=" << aclAssessmentName(executable.aclAssessment)
             << " aclDiagnosticCode=" << executable.aclDiagnosticCode
             << " executableBasename=" << executable.basename
-            << " commandLineMode=explicit-separated"
+            << " commandLineMode="
+            << (explicitApplicationName ? "explicit-separated" : "quoted-first-token")
             << " argcExpected=2"
             << " currentDirectoryMode=" << currentDirectoryMode
             << " currentDirectoryPathKind=" << currentDirectory.pathKind
@@ -740,6 +744,8 @@ int wmain(int argc, wchar_t* argv[]) {
   VariantResult d{};
   VariantResult e{};
   VariantResult f{};
+  VariantResult g{};
+  VariantResult h{};
   if (failure.stage == nullptr) {
     const VariantResult a = runVariant(
       stagedExecutable.wstring(), stagedWorkspace.c_str(), manual, attributes, job
@@ -759,13 +765,23 @@ int wmain(int argc, wchar_t* argv[]) {
       stagedExecutable.wstring(), stagedExecutableDirectory.c_str(), nativeSanitized,
       attributes, job
     );
+    g = runVariant(
+      stagedExecutable.wstring(), stagedWorkspace.c_str(), nativeSanitized, attributes, job,
+      true
+    );
+    h = runVariant(
+      stagedExecutable.wstring(), stagedWorkspace.c_str(), nativeSanitized, attributes, job,
+      false
+    );
     argumentVariantsRan = true;
     variantsComplete =
       (!a.createProcess || (a.hasChildExit && a.childExit == kChildExit)) &&
       (!d.createProcess || (d.hasChildExit && d.childExit == kChildExit)) &&
       (!c.createProcess || (c.hasChildExit && c.childExit == kChildExit)) &&
       (!e.createProcess || (e.hasChildExit && e.childExit == kChildExit)) &&
-      (!f.createProcess || (f.hasChildExit && f.childExit == kChildExit));
+      (!f.createProcess || (f.hasChildExit && f.childExit == kChildExit)) &&
+      (!g.createProcess || (g.hasChildExit && g.childExit == kChildExit)) &&
+      (!h.createProcess || (h.hasChildExit && h.childExit == kChildExit));
     if (!variantsComplete) failure = {"variant-containment", ERROR_PROCESS_ABORTED};
   }
 
@@ -809,6 +825,14 @@ int wmain(int argc, wchar_t* argv[]) {
     reportArgumentVariant(
       "F", "explicit-executable-directory", executableMetadata,
       executableDirectoryMetadata, f, cleanupPassed
+    );
+    reportArgumentVariant(
+      "G", "explicit-workspace", executableMetadata, workspaceMetadata, g,
+      cleanupPassed, true
+    );
+    reportArgumentVariant(
+      "H", "explicit-workspace", executableMetadata, workspaceMetadata, h,
+      cleanupPassed, false
     );
   }
 

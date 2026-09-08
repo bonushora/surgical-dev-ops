@@ -225,11 +225,18 @@ test('Windows AppContainer environment comparison is isolated, sanitized and str
   assert.match(diagnostic,
     /reportArgumentVariant\(\s*"F", "explicit-executable-directory"/);
   assert.match(diagnostic, /stagedExecutable\.wstring\(\), nullptr, nativeSanitized/);
+  assert.match(diagnostic, /reportArgumentVariant\(\s*"G", "explicit-workspace"/);
+  assert.match(diagnostic, /reportArgumentVariant\(\s*"H", "explicit-workspace"/);
+  assert.match(diagnostic,
+    /explicitApplicationName \? executable\.c_str\(\) : nullptr/);
+  assert.match(diagnostic,
+    /stagedExecutable\.wstring\(\), stagedWorkspace\.c_str\(\), nativeSanitized, attributes, job,\s*false/);
+  assert.match(diagnostic, /quoted-first-token/);
   for (const field of [
-    'applicationNameMode=absolute', 'executablePathKind=', 'executableExists=',
+    'applicationNameMode=', 'executablePathKind=', 'executableExists=',
     'executableType=', 'aclAssessment=', 'aclDiagnosticCode=',
     'executableBasename=',
-    'commandLineMode=explicit-separated', 'argcExpected=2',
+    'commandLineMode=', 'argcExpected=2',
     'currentDirectoryMode=', 'currentDirectoryPathKind=',
     'currentDirectoryExists=', 'currentDirectoryAclAssessment=',
     'currentDirectoryBasename=', 'environmentSource=native-sanitized',
@@ -240,6 +247,8 @@ test('Windows AppContainer environment comparison is isolated, sanitized and str
   ]) {
     assert.match(diagnostic, new RegExp(field));
   }
+  assert.match(diagnostic, /applicationNameMode=\S/);
+  assert.match(diagnostic, /commandLineMode=\S/);
   assert.match(diagnostic,
     /creationFlags=CREATE_SUSPENDED\|CREATE_UNICODE_ENVIRONMENT\|[\s\S]+EXTENDED_STARTUPINFO_PRESENT/);
   assert.match(diagnostic, /L"SystemRoot"/);
