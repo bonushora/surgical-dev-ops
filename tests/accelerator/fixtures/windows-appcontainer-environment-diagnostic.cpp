@@ -7,6 +7,7 @@
 
 #include <windows.h>
 #include <Aclapi.h>
+#include <sddl.h>
 #include <userenv.h>
 
 #include <algorithm>
