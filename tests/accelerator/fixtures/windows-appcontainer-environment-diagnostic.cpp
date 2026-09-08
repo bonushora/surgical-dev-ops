@@ -652,8 +652,17 @@ int wmain(int argc, wchar_t* argv[]) {
     return fail({"appcontainer-profile", win32CodeFromHresult(profileResult)});
   }
 
+  LPWSTR sidText = nullptr;
+  if (!ConvertSidToStringSidW(sid, &sidText)) {
+    const DWORD sidError = GetLastError();
+    DeleteAppContainerProfile(profileName.c_str());
+    FreeSid(sid);
+    fs::remove_all(stage, filesystemError);
+    return fail({"appcontainer-sid-text", sidError});
+  }
   PWSTR profilePathRaw = nullptr;
-  const HRESULT profilePathResult = GetAppContainerFolderPath(sid, &profilePathRaw);
+  const HRESULT profilePathResult = GetAppContainerFolderPath(sidText, &profilePathRaw);
+  LocalFree(sidText);
   if (FAILED(profilePathResult) || profilePathRaw == nullptr) {
     DeleteAppContainerProfile(profileName.c_str());
     FreeSid(sid);
