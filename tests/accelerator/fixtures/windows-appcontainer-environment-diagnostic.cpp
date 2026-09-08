@@ -54,6 +54,13 @@ struct VariantResult {
   DWORD childExit;
 };
 
+struct PathMetadata {
+  bool exists;
+  bool accessible;
+  const char* pathKind;
+  const char* basename;
+};
+
 struct DiagnosticFailure {
   const char* stage;
   DWORD win32Error;
@@ -306,12 +313,74 @@ bool restoreDacl(const std::wstring& root, PSECURITY_DESCRIPTOR descriptor,
   return true;
 }
 
+bool validateAppContainerPath(const std::wstring& path, bool expectDirectory,
+                              const char* basename, PSID sid,
+                              PathMetadata* metadata,
+                              DiagnosticFailure* failure) {
+  const DWORD attributes = GetFileAttributesW(path.c_str());
+  const DWORD attributeError =
+    attributes == INVALID_FILE_ATTRIBUTES ? GetLastError() : ERROR_SUCCESS;
+  const bool exists = attributes != INVALID_FILE_ATTRIBUTES;
+  const bool isDirectory = exists && (attributes & FILE_ATTRIBUTE_DIRECTORY) != 0;
+  *metadata = {
+    exists, false, expectDirectory ? "directory" : "file", basename
+  };
+  if (!exists || isDirectory != expectDirectory) {
+    *failure = {
+      expectDirectory ? "current-directory-validate" : "executable-validate",
+      exists ? ERROR_DIRECTORY : attributeError
+    };
+    return false;
+  }
+
+  PSECURITY_DESCRIPTOR descriptor = nullptr;
+  PACL dacl = nullptr;
+  const DWORD securityError = GetNamedSecurityInfoW(
+    const_cast<LPWSTR>(path.c_str()), SE_FILE_OBJECT, DACL_SECURITY_INFORMATION,
+    nullptr, nullptr, &dacl, nullptr, &descriptor
+  );
+  if (securityError != ERROR_SUCCESS || dacl == nullptr) {
+    if (descriptor != nullptr) LocalFree(descriptor);
+    *failure = {
+      expectDirectory ? "current-directory-dacl" : "executable-dacl",
+      securityError == ERROR_SUCCESS ? ERROR_INVALID_ACL : securityError
+    };
+    return false;
+  }
+
+  TRUSTEEW trustee{};
+  BuildTrusteeWithSidW(&trustee, sid);
+  ACCESS_MASK rights = 0;
+  const DWORD rightsError = GetEffectiveRightsFromAclW(dacl, &trustee, &rights);
+  LocalFree(descriptor);
+  if (rightsError != ERROR_SUCCESS) {
+    *failure = {
+      expectDirectory ? "current-directory-access" : "executable-access", rightsError
+    };
+    return false;
+  }
+  GENERIC_MAPPING fileMapping{
+    FILE_GENERIC_READ, FILE_GENERIC_WRITE, FILE_GENERIC_EXECUTE, FILE_ALL_ACCESS
+  };
+  MapGenericMask(&rights, &fileMapping);
+  const ACCESS_MASK required = FILE_GENERIC_READ | FILE_GENERIC_EXECUTE;
+  metadata->accessible = (rights & required) == required;
+  if (!metadata->accessible) {
+    *failure = {
+      expectDirectory ? "current-directory-access" : "executable-access",
+      ERROR_ACCESS_DENIED
+    };
+    return false;
+  }
+  return true;
+}
+
 std::wstring quote(const std::wstring& value) {
   return L"\"" + value + L"\"";
 }
 
 VariantResult runVariant(const std::wstring& executable,
-                         const std::wstring& currentDirectory,
+                         const wchar_t* currentDirectory,
                          const Environment& environment,
                          LPPROC_THREAD_ATTRIBUTE_LIST attributes,
                          HANDLE job) {
@@ -326,7 +395,7 @@ VariantResult runVariant(const std::wstring& executable,
   const BOOL created = CreateProcessW(
     executable.c_str(), commandLine.data(), nullptr, nullptr, FALSE,
     CREATE_SUSPENDED | CREATE_UNICODE_ENVIRONMENT | EXTENDED_STARTUPINFO_PRESENT,
-    const_cast<wchar_t*>(environment.block.data()), currentDirectory.c_str(),
+    const_cast<wchar_t*>(environment.block.data()), currentDirectory,
     &startup.StartupInfo, &process
   );
   const DWORD createError = created ? ERROR_SUCCESS : GetLastError();
@@ -417,6 +486,42 @@ void reportVariant(const char* variant, const char* source,
   if (result.hasChildExit) std::cout << result.childExit;
   else std::cout << "null";
   std::cout << '\n';
+}
+
+void reportArgumentVariant(const char* variant, const char* currentDirectoryMode,
+                           const PathMetadata& executable,
+                           const PathMetadata& currentDirectory,
+                           const VariantResult& result, bool cleanup) {
+  std::cout << "variant=" << variant
+            << " applicationNameMode=absolute"
+            << " executablePathKind=" << executable.pathKind
+            << " executableExists=" << (executable.exists ? "true" : "false")
+            << " executableAccessible=" << (executable.accessible ? "true" : "false")
+            << " executableBasename=" << executable.basename
+            << " commandLineMode=explicit-separated"
+            << " argcExpected=2"
+            << " currentDirectoryMode=" << currentDirectoryMode
+            << " currentDirectoryPathKind=" << currentDirectory.pathKind
+            << " currentDirectoryExists="
+            << (currentDirectory.exists ? "true" : "false")
+            << " currentDirectoryAccessible="
+            << (currentDirectory.accessible ? "true" : "false")
+            << " currentDirectoryBasename=" << currentDirectory.basename
+            << " environmentSource=native-sanitized"
+            << " appContainer=true"
+            << " creationFlags=CREATE_SUSPENDED|CREATE_UNICODE_ENVIRONMENT|"
+               "EXTENDED_STARTUPINFO_PRESENT"
+            << " startupInfoExBytes=" << sizeof(STARTUPINFOEXW)
+            << " securityCapabilities=true"
+            << " attributeListValid=true"
+            << " creationToken=calling-process"
+            << " createProcess=" << (result.createProcess ? "PASS" : "FAIL")
+            << " win32Error=" << result.win32Error
+            << " stage=" << result.stage
+            << " childExit=";
+  if (result.hasChildExit) std::cout << result.childExit;
+  else std::cout << "null";
+  std::cout << " cleanup=" << (cleanup ? "PASS" : "FAIL") << '\n';
 }
 
 }  // namespace
@@ -563,25 +668,94 @@ int wmain(int argc, wchar_t* argv[]) {
     failure = {"security-capabilities", GetLastError()};
   }
 
+  PathMetadata executableMetadata{};
+  PathMetadata workspaceMetadata{};
+  PathMetadata executableDirectoryMetadata{};
+  if (failure.stage == nullptr) {
+    validateAppContainerPath(
+      stagedExecutable.wstring(), false, "environment-diagnostic.exe", sid,
+      &executableMetadata, &failure
+    );
+  }
+  if (failure.stage == nullptr) {
+    validateAppContainerPath(
+      stagedWorkspace.wstring(), true, "workspace", sid,
+      &workspaceMetadata, &failure
+    );
+  }
+  if (failure.stage == nullptr) {
+    validateAppContainerPath(
+      stagedExecutableDirectory.wstring(), true, "node", sid,
+      &executableDirectoryMetadata, &failure
+    );
+  }
+
+  std::vector<wchar_t> originalCurrentDirectory;
+  bool currentDirectoryConfined = false;
+  if (failure.stage == nullptr) {
+    const DWORD required = GetCurrentDirectoryW(0, nullptr);
+    const DWORD currentDirectoryError = required == 0 ? GetLastError() : ERROR_SUCCESS;
+    if (required == 0) {
+      failure = {"current-directory-read", currentDirectoryError};
+    } else {
+      originalCurrentDirectory.resize(required);
+      const DWORD copied = GetCurrentDirectoryW(required, originalCurrentDirectory.data());
+      if (copied == 0 || copied >= required) {
+        failure = {
+          "current-directory-read",
+          copied == 0 ? GetLastError() : ERROR_INSUFFICIENT_BUFFER
+        };
+      }
+    }
+  }
+  if (failure.stage == nullptr) {
+    currentDirectoryConfined = SetCurrentDirectoryW(stagedWorkspace.c_str()) != FALSE;
+    if (!currentDirectoryConfined) {
+      failure = {"current-directory-confine", GetLastError()};
+    }
+  }
+
   bool variantsComplete = false;
+  bool argumentVariantsRan = false;
+  VariantResult d{};
+  VariantResult e{};
+  VariantResult f{};
   if (failure.stage == nullptr) {
     const VariantResult a = runVariant(
-      stagedExecutable.wstring(), stagedWorkspace.wstring(), manual, attributes, job
+      stagedExecutable.wstring(), stagedWorkspace.c_str(), manual, attributes, job
     );
     reportVariant("A", "manual", metadata(manual), a);
-    const VariantResult b = runVariant(
-      stagedExecutable.wstring(), stagedWorkspace.wstring(), nativeSanitized, attributes, job
+    d = runVariant(
+      stagedExecutable.wstring(), stagedWorkspace.c_str(), nativeSanitized, attributes, job
     );
-    reportVariant("B", "native-sanitized", metadata(nativeSanitized), b);
     const VariantResult c = runVariant(
-      stagedExecutable.wstring(), stagedWorkspace.wstring(), minimalNative, attributes, job
+      stagedExecutable.wstring(), stagedWorkspace.c_str(), minimalNative, attributes, job
     );
     reportVariant("C", "minimal-native", metadata(minimalNative), c);
+    e = runVariant(
+      stagedExecutable.wstring(), nullptr, nativeSanitized, attributes, job
+    );
+    f = runVariant(
+      stagedExecutable.wstring(), stagedExecutableDirectory.c_str(), nativeSanitized,
+      attributes, job
+    );
+    argumentVariantsRan = true;
     variantsComplete =
       (!a.createProcess || (a.hasChildExit && a.childExit == kChildExit)) &&
-      (!b.createProcess || (b.hasChildExit && b.childExit == kChildExit)) &&
-      (!c.createProcess || (c.hasChildExit && c.childExit == kChildExit));
+      (!d.createProcess || (d.hasChildExit && d.childExit == kChildExit)) &&
+      (!c.createProcess || (c.hasChildExit && c.childExit == kChildExit)) &&
+      (!e.createProcess || (e.hasChildExit && e.childExit == kChildExit)) &&
+      (!f.createProcess || (f.hasChildExit && f.childExit == kChildExit));
     if (!variantsComplete) failure = {"variant-containment", ERROR_PROCESS_ABORTED};
+  }
+
+  bool currentDirectoryRestored = !currentDirectoryConfined;
+  if (currentDirectoryConfined) {
+    currentDirectoryRestored =
+      SetCurrentDirectoryW(originalCurrentDirectory.data()) != FALSE;
+    if (!currentDirectoryRestored && failure.stage == nullptr) {
+      failure = {"current-directory-restore", GetLastError()};
+    }
   }
 
   if (attributes != nullptr) {
@@ -600,6 +774,23 @@ int wmain(int argc, wchar_t* argv[]) {
   const bool stageRemoved = !filesystemError;
   const HRESULT profileCleanup = DeleteAppContainerProfile(profileName.c_str());
   FreeSid(sid);
+
+  const bool cleanupPassed = currentDirectoryRestored && daclRestored && stageRemoved &&
+    profileCleanup == S_OK;
+  if (argumentVariantsRan) {
+    reportArgumentVariant(
+      "D", "explicit-workspace", executableMetadata, workspaceMetadata, d,
+      cleanupPassed
+    );
+    reportArgumentVariant(
+      "E", "null-confined-parent", executableMetadata, workspaceMetadata, e,
+      cleanupPassed
+    );
+    reportArgumentVariant(
+      "F", "explicit-executable-directory", executableMetadata,
+      executableDirectoryMetadata, f, cleanupPassed
+    );
+  }
 
   if (failure.stage != nullptr) return fail(failure);
   if (!daclRestored) return fail(cleanupFailure);

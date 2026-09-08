@@ -205,11 +205,36 @@ test('Windows AppContainer environment comparison is isolated, sanitized and str
   assert.match(diagnostic, /restoreDacl/);
   assert.match(diagnostic, /CreateAppContainerProfile/);
   assert.match(diagnostic, /DeleteAppContainerProfile/);
+  assert.match(diagnostic, /GetFileAttributesW/);
+  assert.match(diagnostic, /GetEffectiveRightsFromAclW/);
+  assert.match(diagnostic, /MapGenericMask/);
+  assert.match(diagnostic, /SetCurrentDirectoryW\(stagedWorkspace\.c_str\(\)\)/);
+  assert.match(diagnostic, /SetCurrentDirectoryW\(originalCurrentDirectory\.data\(\)\)/);
   assert.match(diagnostic, /variant=[\s\S]+environmentSource=[\s\S]+entryNames=\[/);
   assert.match(diagnostic, /const EnvironmentMetadata& environment/);
   assert.match(diagnostic, /reportVariant\("A", "manual"/);
-  assert.match(diagnostic, /reportVariant\("B", "native-sanitized"/);
   assert.match(diagnostic, /reportVariant\("C", "minimal-native"/);
+  assert.match(diagnostic, /reportArgumentVariant\(\s*"D", "explicit-workspace"/);
+  assert.match(diagnostic, /reportArgumentVariant\(\s*"E", "null-confined-parent"/);
+  assert.match(diagnostic,
+    /reportArgumentVariant\(\s*"F", "explicit-executable-directory"/);
+  assert.match(diagnostic, /stagedExecutable\.wstring\(\), nullptr, nativeSanitized/);
+  for (const field of [
+    'applicationNameMode=absolute', 'executablePathKind=', 'executableExists=',
+    'executableAccessible=', 'executableBasename=',
+    'commandLineMode=explicit-separated', 'argcExpected=2',
+    'currentDirectoryMode=', 'currentDirectoryPathKind=',
+    'currentDirectoryExists=', 'currentDirectoryAccessible=',
+    'currentDirectoryBasename=', 'environmentSource=native-sanitized',
+    'appContainer=true', 'creationFlags=', 'startupInfoExBytes=',
+    'securityCapabilities=true', 'attributeListValid=true',
+    'creationToken=calling-process', 'createProcess=', 'win32Error=', 'stage=',
+    'childExit=', 'cleanup='
+  ]) {
+    assert.match(diagnostic, new RegExp(field));
+  }
+  assert.match(diagnostic,
+    /creationFlags=CREATE_SUSPENDED\|CREATE_UNICODE_ENVIRONMENT\|[\s\S]+EXTENDED_STARTUPINFO_PRESENT/);
   assert.match(diagnostic, /L"SystemRoot"/);
   assert.match(diagnostic, /L"windir"/);
   assert.match(diagnostic, /L"ComSpec"/);
