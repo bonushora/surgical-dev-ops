@@ -250,6 +250,9 @@ test('Windows AppContainer environment comparison is isolated, sanitized and str
   assert.match(diagnostic, /state=CONTROL_N1/);
   assert.match(diagnostic, /state=TEST_USERPROFILE_ONLY/);
   assert.match(diagnostic, /state=TEST_APPDATA_ONLY/);
+  assert.match(diagnostic,
+    /control\.expected \? "BLOCKED" : "TEST_USERPROFILE_ONLY"/);
+  assert.doesNotMatch(diagnostic, /TEST_TEMP_ONLY|VERIFY_TEMP_CONTROL|TEST_TMP_ONLY|VERIFY_TMP_CONTROL/);
   assert.match(diagnostic, /environmentVariant/);
   assert.match(diagnostic, /JOB_OBJECT_LIMIT_ACTIVE_PROCESS/);
   assert.match(diagnostic, /CapabilityCount = 0/);
@@ -274,6 +277,31 @@ test('Windows AppContainer environment comparison is isolated, sanitized and str
   assert.match(startupRunner, /shell: false/);
   assert.match(startupRunner, /env: \{\}/);
   assert.doesNotMatch(startupRunner, /process\.env|execSync|shell: true/);
+  assert.doesNotMatch(startupRunner,
+    /TEST_TEMP_ONLY|VERIFY_TEMP_CONTROL|TEST_TMP_ONLY|VERIFY_TMP_CONTROL/);
+  const transitionPrefix = '  const transition = /';
+  const transitionDeclaration = startupRunner.split(/\r?\n/)
+    .find((line) => line.startsWith(transitionPrefix));
+  assert.ok(transitionDeclaration?.endsWith('/;'));
+  const transitionContract = new RegExp(
+    transitionDeclaration.slice(transitionPrefix.length, -2)
+  );
+  assert.match(
+    'state=CONTROL_N1 evidence=EXIT_134 nextState=TEST_USERPROFILE_ONLY ' +
+      'equivalentAttempts=1 breakerDecision=CONTINUE',
+    transitionContract
+  );
+  assert.doesNotMatch(
+    'state=CONTROL_N1 evidence=EXIT_134 nextState=TEST_TEMP_ONLY ' +
+      'equivalentAttempts=1 breakerDecision=CONTINUE',
+    transitionContract
+  );
+  for (const field of [
+    'invalidLineClass=', 'invalidField=', 'invalidState=', 'invalidExitStatus=',
+    'totalLines=', 'stepLines=', 'stateLines='
+  ]) assert.match(startupRunner, new RegExp(field));
+  assert.doesNotMatch(startupRunner,
+    /console\.error\((?:invalidLine|result\.(?:stdout|stderr))/);
   assert.match(diagnostic,
     /explicitApplicationName \? executable\.c_str\(\) : nullptr/);
   assert.match(diagnostic,

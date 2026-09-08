@@ -1194,7 +1194,7 @@ int runNodeStartupDiagnostic(const std::wstring& requestedNode) {
       environment, stagedWorkspace.wstring(), sid);
     results.emplace_back(control, control.expected);
     std::cout << "state=CONTROL_N1 evidence=" << (control.expected ? "PASS" : "EXIT_134")
-      << " nextState=" << (control.expected ? "BLOCKED" : "TEST_TEMP_ONLY")
+      << " nextState=" << (control.expected ? "BLOCKED" : "TEST_USERPROFILE_ONLY")
       << " equivalentAttempts=1 breakerDecision=" << (control.expected ? "CONTROL_NOT_REPRODUCED" : "CONTINUE") << '\n';
     if (control.expected) return results;
     const fs::path userProfileDir = stage / L"userprofile-variant";
