@@ -59,6 +59,10 @@ struct DiagnosticFailure {
   DWORD win32Error;
 };
 
+DWORD win32CodeFromHresult(HRESULT value) {
+  return static_cast<DWORD>(HRESULT_CODE(value));
+}
+
 int fail(const DiagnosticFailure& failure) {
   std::cerr << "WINDOWS_ENVIRONMENT_DIAGNOSTIC_FAILED"
             << " stage=" << failure.stage
@@ -470,7 +474,7 @@ int wmain(int argc, wchar_t* argv[]) {
   );
   if (FAILED(profileResult) || sid == nullptr) {
     fs::remove_all(stage, filesystemError);
-    return fail({"appcontainer-profile", HRESULT_CODE(profileResult)});
+    return fail({"appcontainer-profile", win32CodeFromHresult(profileResult)});
   }
 
   DiagnosticFailure failure{};
@@ -603,7 +607,7 @@ int wmain(int argc, wchar_t* argv[]) {
     return fail({"staging-cleanup", static_cast<DWORD>(filesystemError.value())});
   }
   if (profileCleanup != S_OK) {
-    return fail({"profile-cleanup", HRESULT_CODE(profileCleanup)});
+    return fail({"profile-cleanup", win32CodeFromHresult(profileCleanup)});
   }
   return variantsComplete ? 0 : 2;
 }
