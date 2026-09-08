@@ -277,11 +277,11 @@ std::vector<wchar_t> environment(const std::wstring& nodeDirectory,
   const UINT length = GetWindowsDirectoryW(windowsDirectory, MAX_PATH);
   if (length == 0 || length >= MAX_PATH) return {};
   std::vector<std::wstring> entries{
-    L"PATH=" + nodeDirectory,
     L"HOME=" + workspace,
+    L"PATH=" + nodeDirectory,
+    L"SystemRoot=" + std::wstring(windowsDirectory),
     L"TEMP=" + workspace,
-    L"TMP=" + workspace,
-    L"SystemRoot=" + std::wstring(windowsDirectory)
+    L"TMP=" + workspace
   };
   std::vector<wchar_t> result;
   for (const std::wstring& entry : entries) {

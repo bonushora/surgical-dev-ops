@@ -140,6 +140,8 @@ test('existing Win32 helper is not misrepresented as NODE_TEST_FILE containment'
   assert.match(nodeSandbox, /JOB_OBJECT_LIMIT_KILL_ON_JOB_CLOSE/);
   assert.match(nodeSandbox, /--permission/);
   assert.match(nodeSandbox, /--test-isolation=none/);
+  assert.match(nodeSandbox,
+    /L"HOME="[\s\S]*L"PATH="[\s\S]*L"SystemRoot="[\s\S]*L"TEMP="[\s\S]*L"TMP="/);
   assert.match(nodeSandbox, /SDO_WIN32_NODE_TEST_INTERNAL/);
   assert.match(nodeSandbox, /stage=/);
   assert.match(nodeSandbox, /win32Error=/);
