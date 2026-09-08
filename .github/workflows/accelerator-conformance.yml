@@ -134,6 +134,18 @@ jobs:
         continue-on-error: true
         run: node --test --test-reporter=spec tests/accelerator/windows-native-primitives-diagnostic.test.js
 
+      - name: Compare Windows AppContainer environment contracts
+        if: always() && matrix.os == 'windows-latest' && github.event_name == 'workflow_dispatch'
+        continue-on-error: true
+        shell: cmd
+        run: |
+          call tests\accelerator\fixtures\build-windows-appcontainer-environment-diagnostic.cmd
+          if errorlevel 1 exit /b 1
+          tests\accelerator\fixtures\windows-appcontainer-environment-diagnostic.exe
+          set "DIAGNOSTIC_STATUS=%ERRORLEVEL%"
+          del /q tests\accelerator\fixtures\windows-appcontainer-environment-diagnostic.exe
+          exit /b %DIAGNOSTIC_STATUS%
+
       - name: Emit native failure diagnostics
         if: steps.conformance.outcome == 'failure'
         run: |

@@ -174,6 +174,63 @@ test('Win32 Node test failures retain bounded sanitized execution diagnostics', 
   assert.doesNotMatch(adapter, /process\.env/);
 });
 
+test('Windows AppContainer environment comparison is isolated, sanitized and structural', () => {
+  const diagnostic = fs.readFileSync(path.join(
+    __dirname, 'fixtures/windows-appcontainer-environment-diagnostic.cpp'
+  ), 'utf8');
+  const build = fs.readFileSync(path.join(
+    __dirname, 'fixtures/build-windows-appcontainer-environment-diagnostic.cmd'
+  ), 'utf8');
+  const workflow = fs.readFileSync(path.join(
+    __dirname, '../../.github/workflows/accelerator-conformance.yml'
+  ), 'utf8');
+  const productionBuild = fs.readFileSync(path.join(
+    __dirname, '../../accelerator/native/windows/build-helper.cmd'
+  ), 'utf8');
+  const productionAdapter = fs.readFileSync(path.join(
+    __dirname, '../../accelerator/adapters/windows-node-test-sandbox-adapter.js'
+  ), 'utf8');
+
+  assert.match(diagnostic, /manualCurrentEnvironment/);
+  assert.match(diagnostic, /CreateEnvironmentBlock\(&nativeEnvironment, token, FALSE\)/);
+  assert.match(diagnostic, /nativeSanitizedEnvironment\(\s*nullptr/);
+  assert.match(diagnostic, /DestroyEnvironmentBlock\(nativeEnvironment\)/);
+  assert.match(diagnostic, /const BOOL created = CreateProcessW\([\s\S]+const DWORD createError = created \? ERROR_SUCCESS : GetLastError\(\)/);
+  assert.match(diagnostic, /PROC_THREAD_ATTRIBUTE_SECURITY_CAPABILITIES/);
+  assert.match(diagnostic, /JOB_OBJECT_LIMIT_KILL_ON_JOB_CLOSE/);
+  assert.match(diagnostic, /JOB_OBJECT_LIMIT_ACTIVE_PROCESS/);
+  assert.match(diagnostic, /AssignProcessToJobObject/);
+  assert.match(diagnostic, /TerminateJobObject/);
+  assert.match(diagnostic, /grantAppContainerReadExecute/);
+  assert.match(diagnostic, /restoreDacl/);
+  assert.match(diagnostic, /CreateAppContainerProfile/);
+  assert.match(diagnostic, /DeleteAppContainerProfile/);
+  assert.match(diagnostic, /variant=[\s\S]+environmentSource=[\s\S]+entryNames=\[/);
+  assert.match(diagnostic, /const EnvironmentMetadata& environment/);
+  assert.match(diagnostic, /reportVariant\("A", "manual"/);
+  assert.match(diagnostic, /reportVariant\("B", "native-sanitized"/);
+  assert.match(diagnostic, /reportVariant\("C", "minimal-native"/);
+  assert.match(diagnostic, /L"SystemRoot"/);
+  assert.match(diagnostic, /L"windir"/);
+  assert.match(diagnostic, /L"ComSpec"/);
+  assert.match(diagnostic, /L"HOME"/);
+  assert.match(diagnostic, /L"TEMP"/);
+  assert.match(diagnostic, /L"TMP"/);
+  assert.match(diagnostic, /L"PATH"/);
+  assert.doesNotMatch(diagnostic, /GetEnvironmentStrings|SetEnvironmentVariable/);
+  assert.doesNotMatch(diagnostic,
+    /L"(?:TOKEN|SECRET|PASSWORD|COOKIE|AUTHORIZATION|API_KEY|SSH|GITHUB|AZURE|USERPROFILE|APPDATA|LOCALAPPDATA)"/i);
+  assert.doesNotMatch(diagnostic, /entryValues|std::wcout|modulePath\s*<</);
+  assert.match(diagnostic, /--inert-child/);
+  assert.match(build, /\/W4 \/WX \/MT \/utf-8/);
+  assert.match(workflow,
+    /Compare Windows AppContainer environment contracts[\s\S]+matrix\.os == 'windows-latest' && github\.event_name == 'workflow_dispatch'/);
+  assert.match(workflow,
+    /build-windows-appcontainer-environment-diagnostic\.cmd[\s\S]+windows-appcontainer-environment-diagnostic\.exe/);
+  assert.doesNotMatch(productionBuild, /environment-diagnostic/);
+  assert.doesNotMatch(productionAdapter, /environment-diagnostic/);
+});
+
 test('Windows Job Object timeout terminates the native test tree', {
   skip: process.platform !== 'win32'
 }, () => {
