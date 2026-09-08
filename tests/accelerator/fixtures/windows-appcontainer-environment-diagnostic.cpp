@@ -613,6 +613,8 @@ struct NodeStepResult {
   DWORD exitCode;
   const char* stage;
   const char* stderrClass;
+  std::string fatalReason;
+  const char* subsystem;
   std::string firstNativeFrame;
   bool expected;
 };
@@ -738,6 +740,61 @@ std::string firstNodeNativeFrame(const std::string& stderrText) {
   return frame.empty() || frame.size() > 160 ? "indeterminate" : frame;
 }
 
+std::string sanitizedFatalReason(const std::string& stderrText) {
+  const std::vector<std::string> markers{
+    "Fatal error in", "FATAL ERROR", "Check failed:", "Assertion failed"
+  };
+  size_t markerPosition = std::string::npos;
+  for (const std::string& marker : markers) {
+    const size_t candidate = stderrText.find(marker);
+    if (candidate != std::string::npos &&
+        (markerPosition == std::string::npos || candidate < markerPosition)) {
+      markerPosition = candidate;
+    }
+  }
+  if (markerPosition == std::string::npos) return "NATIVE_ABORT_NO_MESSAGE";
+  size_t end = stderrText.find('\n', markerPosition);
+  if (end == std::string::npos) end = stderrText.size();
+  const std::string line = stderrText.substr(markerPosition, end - markerPosition);
+  std::string result;
+  bool previousSeparator = false;
+  for (size_t index = 0; index < line.size() && result.size() < 120; ++index) {
+    if (index + 2 < line.size() &&
+        ((line[index] >= 'A' && line[index] <= 'Z') ||
+         (line[index] >= 'a' && line[index] <= 'z')) &&
+        line[index + 1] == ':' &&
+        (line[index + 2] == '\\' || line[index + 2] == '/')) {
+      result += "PATH";
+      previousSeparator = false;
+      while (index < line.size() && line[index] != ' ' && line[index] != '\t') ++index;
+      if (index < line.size()) --index;
+      continue;
+    }
+    const unsigned char character = static_cast<unsigned char>(line[index]);
+    if (std::isalnum(character)) {
+      result.push_back(static_cast<char>(character));
+      previousSeparator = false;
+    } else if (!previousSeparator) {
+      result.push_back('_');
+      previousSeparator = true;
+    }
+  }
+  while (!result.empty() && result.back() == '_') result.pop_back();
+  return result.empty() ? "NATIVE_ABORT_MESSAGE_EMPTY" : result;
+}
+
+const char* fatalSubsystem(const std::string& stderrText) {
+  std::string lower = stderrText;
+  std::transform(lower.begin(), lower.end(), lower.begin(),
+    [](unsigned char character) { return static_cast<char>(std::tolower(character)); });
+  if (lower.find("icu") != std::string::npos) return "ICU";
+  if (lower.find("config") != std::string::npos ||
+      lower.find("node_options") != std::string::npos) return "CONFIGURATION";
+  if (lower.find("permission") != std::string::npos) return "PERMISSION";
+  if (lower.find("environment") != std::string::npos) return "ENVIRONMENT";
+  return "NODE_BOOTSTRAP";
+}
+
 NodeStepResult runNodeStep(const char* step, const std::wstring& node,
                            const std::vector<std::wstring>& arguments,
                            DWORD expectedExit, const Environment& environment,
@@ -757,7 +814,8 @@ NodeStepResult runNodeStep(const char* step, const std::wstring& node,
     if (stdoutWrite) CloseHandle(stdoutWrite);
     if (stderrRead) CloseHandle(stderrRead);
     if (stderrWrite) CloseHandle(stderrWrite);
-    return {step, false, false, 0, "pipe", "EMPTY", "none", false};
+    return {step, false, false, 0, "pipe", "EMPTY", "NATIVE_ABORT_NO_MESSAGE",
+      "UNKNOWN", "none", false};
   }
 
   HANDLE job = CreateJobObjectW(nullptr, nullptr);
@@ -770,7 +828,8 @@ NodeStepResult runNodeStep(const char* step, const std::wstring& node,
     if (job) CloseHandle(job);
     CloseHandle(stdoutRead); CloseHandle(stdoutWrite);
     CloseHandle(stderrRead); CloseHandle(stderrWrite);
-    return {step, false, false, 0, "job", "EMPTY", "none", false};
+    return {step, false, false, 0, "job", "EMPTY", "NATIVE_ABORT_NO_MESSAGE",
+      "UNKNOWN", "none", false};
   }
 
   SECURITY_CAPABILITIES capabilities{};
@@ -791,7 +850,8 @@ NodeStepResult runNodeStep(const char* step, const std::wstring& node,
     if (attributes) HeapFree(GetProcessHeap(), 0, attributes);
     CloseHandle(job); CloseHandle(stdoutRead); CloseHandle(stdoutWrite);
     CloseHandle(stderrRead); CloseHandle(stderrWrite);
-    return {step, false, false, 0, "attributes", "EMPTY", "none", false};
+    return {step, false, false, 0, "attributes", "EMPTY", "NATIVE_ABORT_NO_MESSAGE",
+      "UNKNOWN", "none", false};
   }
 
   std::wstring command = quote(node);
@@ -817,7 +877,8 @@ NodeStepResult runNodeStep(const char* step, const std::wstring& node,
   HeapFree(GetProcessHeap(), 0, attributes);
   if (!created) {
     CloseHandle(job); CloseHandle(stdoutRead); CloseHandle(stderrRead);
-    return {step, false, false, 0, "process-create", "EMPTY", "none", false};
+    return {step, false, false, 0, "process-create", "EMPTY",
+      "NATIVE_ABORT_NO_MESSAGE", "UNKNOWN", "none", false};
   }
   if (!AssignProcessToJobObject(job, process.hProcess) ||
       ResumeThread(process.hThread) == static_cast<DWORD>(-1)) {
@@ -825,7 +886,8 @@ NodeStepResult runNodeStep(const char* step, const std::wstring& node,
     WaitForSingleObject(process.hProcess, INFINITE);
     CloseHandle(process.hThread); CloseHandle(process.hProcess);
     CloseHandle(job); CloseHandle(stdoutRead); CloseHandle(stderrRead);
-    return {step, true, false, 0, "process-policy", "EMPTY", "none", false};
+    return {step, true, false, 0, "process-policy", "EMPTY",
+      "NATIVE_ABORT_NO_MESSAGE", "UNKNOWN", "none", false};
   }
 
   NodeCapture stdoutCapture;
@@ -854,6 +916,7 @@ NodeStepResult runNodeStep(const char* step, const std::wstring& node,
     wait == WAIT_OBJECT_0 ? "complete" : "process-wait";
   return {
     step, true, hasExitCode, exitCode, stage, stderrClass,
+    sanitizedFatalReason(stderrCapture.value), fatalSubsystem(stderrCapture.value),
     firstNodeNativeFrame(stderrCapture.value),
     !overflow && wait == WAIT_OBJECT_0 && hasExitCode && exitCode == expectedExit
   };
@@ -867,6 +930,8 @@ void reportNodeStep(const NodeStepResult& result, bool cleanup) {
   else std::cout << "null";
   std::cout << " stage=" << result.stage
             << " stderrClass=" << result.stderrClass
+            << " fatalReason=" << result.fatalReason
+            << " subsystem=" << result.subsystem
             << " firstNativeFrame=" << result.firstNativeFrame
             << " markerPresent=true"
             << " cleanup=" << (cleanup ? "PASS" : "FAIL") << '\n';

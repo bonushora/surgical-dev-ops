@@ -25,7 +25,7 @@ try {
   const lines = typeof result.stdout === 'string'
     ? result.stdout.trim().split(/\r?\n/).filter(Boolean)
     : [];
-  const evidence = /^step=N[1-4] processCreated=(?:true|false) exitCode=(?:\d+|null) stage=[a-z-]+ stderrClass=(?:NATIVE_ABORT|EMPTY|OTHER|OUTPUT_LIMIT) firstNativeFrame=[A-Za-z0-9_:<>~.+-]+ markerPresent=true cleanup=(?:PASS|FAIL)$/;
+  const evidence = /^step=N[1-4] processCreated=(?:true|false) exitCode=(?:\d+|null) stage=[a-z-]+ stderrClass=(?:NATIVE_ABORT|EMPTY|OTHER|OUTPUT_LIMIT) fatalReason=[A-Za-z0-9_+-]+ subsystem=[A-Z_]+ firstNativeFrame=[A-Za-z0-9_:<>~.+-]+ markerPresent=true cleanup=(?:PASS|FAIL)$/;
   if (lines.length === 0 || lines.some((line) => !evidence.test(line))) {
     console.error('WINDOWS_NODE_STARTUP_DIAGNOSTIC_INVALID_OUTPUT');
     process.exitCode = 2;

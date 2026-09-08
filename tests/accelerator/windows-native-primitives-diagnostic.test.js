@@ -254,6 +254,10 @@ test('Windows AppContainer environment comparison is isolated, sanitized and str
   assert.match(diagnostic, /JOB_OBJECT_LIMIT_ACTIVE_PROCESS/);
   assert.match(diagnostic, /CapabilityCount = 0/);
   assert.match(diagnostic, /firstNativeFrame=/);
+  assert.match(diagnostic, /sanitizedFatalReason/);
+  assert.match(diagnostic, /fatalSubsystem/);
+  assert.match(diagnostic, /fatalReason=/);
+  assert.match(diagnostic, /subsystem=/);
   assert.match(diagnostic, /markerPresent=true/);
   assert.match(diagnostic, /cleanup=/);
   assert.match(startupRunner, /\['--node-startup-diagnostic', process\.execPath\]/);
