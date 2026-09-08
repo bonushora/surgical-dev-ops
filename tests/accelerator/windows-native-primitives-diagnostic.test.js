@@ -258,6 +258,16 @@ test('Windows AppContainer environment comparison is isolated, sanitized and str
   assert.match(diagnostic, /fatalSubsystem/);
   assert.match(diagnostic, /fatalReason=/);
   assert.match(diagnostic, /subsystem=/);
+  assert.match(diagnostic, /DEBUG_ONLY_THIS_PROCESS/);
+  assert.match(diagnostic, /WaitForDebugEvent/);
+  assert.match(diagnostic, /ContinueDebugEvent/);
+  assert.match(diagnostic, /EXCEPTION_DEBUG_EVENT/);
+  assert.match(diagnostic, /EXIT_PROCESS_DEBUG_EVENT/);
+  assert.match(diagnostic, /DBG_EXCEPTION_NOT_HANDLED/);
+  for (const field of [
+    'nativeEventObserved=', 'exceptionCode=', 'exceptionClass=', 'firstChance=',
+    'terminationClass=', 'terminationOrigin=', 'exitProcessCode=', 'debugLoopStatus='
+  ]) assert.match(diagnostic, new RegExp(field));
   assert.match(diagnostic, /markerPresent=true/);
   assert.match(diagnostic, /cleanup=/);
   assert.match(startupRunner, /\['--node-startup-diagnostic', process\.execPath\]/);

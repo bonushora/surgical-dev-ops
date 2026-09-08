@@ -617,6 +617,18 @@ struct NodeStepResult {
   const char* subsystem;
   std::string firstNativeFrame;
   bool expected;
+  bool nativeEventObserved = false;
+  bool initialBreakpointObserved = false;
+  bool hasExceptionCode = false;
+  DWORD exceptionCode = 0;
+  bool hasFirstChance = false;
+  bool firstChance = false;
+  bool hasExitProcessCode = false;
+  DWORD exitProcessCode = 0;
+  const char* exceptionClass = "NONE";
+  const char* terminationClass = "UNKNOWN";
+  const char* terminationOrigin = "INDETERMINATE";
+  const char* debugLoopStatus = "NOT_OBSERVED";
 };
 
 void readNodePipe(HANDLE pipe, NodeCapture* capture) {
@@ -795,6 +807,19 @@ const char* fatalSubsystem(const std::string& stderrText) {
   return "NODE_BOOTSTRAP";
 }
 
+const char* exceptionClassName(DWORD code) {
+  switch (code) {
+    case EXCEPTION_BREAKPOINT: return "BREAKPOINT";
+    case EXCEPTION_SINGLE_STEP: return "SINGLE_STEP";
+    case EXCEPTION_ACCESS_VIOLATION: return "ACCESS_VIOLATION";
+    case EXCEPTION_ILLEGAL_INSTRUCTION: return "ILLEGAL_INSTRUCTION";
+    case EXCEPTION_INT_DIVIDE_BY_ZERO: return "INTEGER_DIVIDE_BY_ZERO";
+    case 0xC0000409u: return "STACK_BUFFER_OVERRUN_OR_FAST_FAIL";
+    case 0x40000015u: return "FATAL_APP_EXIT";
+    default: return "OTHER_EXCEPTION";
+  }
+}
+
 NodeStepResult runNodeStep(const char* step, const std::wstring& node,
                            const std::vector<std::wstring>& arguments,
                            DWORD expectedExit, const Environment& environment,
@@ -867,7 +892,8 @@ NodeStepResult runNodeStep(const char* step, const std::wstring& node,
   PROCESS_INFORMATION process{};
   const BOOL created = CreateProcessW(
     node.c_str(), commandLine.data(), nullptr, nullptr, TRUE,
-    CREATE_SUSPENDED | CREATE_UNICODE_ENVIRONMENT | EXTENDED_STARTUPINFO_PRESENT,
+    CREATE_SUSPENDED | CREATE_UNICODE_ENVIRONMENT | EXTENDED_STARTUPINFO_PRESENT |
+      DEBUG_ONLY_THIS_PROCESS,
     const_cast<wchar_t*>(environment.block.data()), workspace.c_str(),
     &startup.StartupInfo, &process
   );
@@ -894,14 +920,97 @@ NodeStepResult runNodeStep(const char* step, const std::wstring& node,
   NodeCapture stderrCapture;
   std::thread stdoutReader(readNodePipe, stdoutRead, &stdoutCapture);
   std::thread stderrReader(readNodePipe, stderrRead, &stderrCapture);
-  const DWORD wait = WaitForSingleObject(process.hProcess, kWaitMilliseconds);
-  if (wait == WAIT_TIMEOUT) {
+  bool processExited = false;
+  bool timedOut = false;
+  bool debugError = false;
+  bool nativeEventObserved = false;
+  bool initialBreakpointObserved = false;
+  bool hasExceptionCode = false;
+  DWORD exceptionCode = 0;
+  bool hasFirstChance = false;
+  bool firstChance = false;
+  bool hasExitProcessCode = false;
+  DWORD exitProcessCode = 0;
+  const char* exceptionClass = "NONE";
+  const ULONGLONG deadline = GetTickCount64() + kWaitMilliseconds;
+  while (!processExited) {
+    DEBUG_EVENT event{};
+    const BOOL received = WaitForDebugEvent(&event, 50);
+    if (!received) {
+      const DWORD error = GetLastError();
+      if (WaitForSingleObject(process.hProcess, 0) == WAIT_OBJECT_0) {
+        processExited = true;
+        break;
+      }
+      if (error != ERROR_SEM_TIMEOUT) {
+        debugError = true;
+        break;
+      }
+      if (!timedOut && GetTickCount64() >= deadline) {
+        timedOut = true;
+        TerminateJobObject(job, WAIT_TIMEOUT);
+      }
+      continue;
+    }
+
+    DWORD continueStatus = DBG_CONTINUE;
+    switch (event.dwDebugEventCode) {
+      case CREATE_PROCESS_DEBUG_EVENT:
+        if (event.u.CreateProcessInfo.hFile != nullptr) {
+          CloseHandle(event.u.CreateProcessInfo.hFile);
+        }
+        break;
+      case LOAD_DLL_DEBUG_EVENT:
+        if (event.u.LoadDll.hFile != nullptr) CloseHandle(event.u.LoadDll.hFile);
+        break;
+      case EXCEPTION_DEBUG_EVENT: {
+        nativeEventObserved = true;
+        const EXCEPTION_DEBUG_INFO& exception = event.u.Exception;
+        const DWORD code = exception.ExceptionRecord.ExceptionCode;
+        const bool isInitialBreakpoint =
+          code == EXCEPTION_BREAKPOINT && exception.dwFirstChance != FALSE &&
+          !hasExceptionCode;
+        if (isInitialBreakpoint) {
+          initialBreakpointObserved = true;
+        } else {
+          hasExceptionCode = true;
+          exceptionCode = code;
+          hasFirstChance = true;
+          firstChance = exception.dwFirstChance != FALSE;
+          exceptionClass = exceptionClassName(code);
+          continueStatus = DBG_EXCEPTION_NOT_HANDLED;
+        }
+        break;
+      }
+      case EXIT_PROCESS_DEBUG_EVENT:
+        nativeEventObserved = true;
+        hasExitProcessCode = true;
+        exitProcessCode = event.u.ExitProcess.dwExitCode;
+        processExited = true;
+        break;
+      default:
+        break;
+    }
+    if (!ContinueDebugEvent(event.dwProcessId, event.dwThreadId, continueStatus)) {
+      debugError = true;
+      break;
+    }
+    if (!timedOut && GetTickCount64() >= deadline) {
+      timedOut = true;
+      TerminateJobObject(job, WAIT_TIMEOUT);
+    }
+  }
+  if (!processExited && !timedOut) {
+    debugError = true;
+    TerminateJobObject(job, ERROR_PROCESS_ABORTED);
+  }
+  if (!processExited) {
+    timedOut = true;
     TerminateJobObject(job, WAIT_TIMEOUT);
     WaitForSingleObject(process.hProcess, INFINITE);
   }
   DWORD exitCode = WAIT_TIMEOUT;
-  const bool hasExitCode = wait == WAIT_TIMEOUT ||
-    GetExitCodeProcess(process.hProcess, &exitCode) != FALSE;
+  const bool hasExitCode = GetExitCodeProcess(process.hProcess, &exitCode) != FALSE;
   CloseHandle(process.hThread); CloseHandle(process.hProcess);
   CloseHandle(stdoutRead); CloseHandle(stderrRead);
   stdoutReader.join(); stderrReader.join();
@@ -912,14 +1021,30 @@ NodeStepResult runNodeStep(const char* step, const std::wstring& node,
     stderrCapture.value.find("Native stack trace") != std::string::npos
       ? "NATIVE_ABORT"
       : stderrCapture.value.empty() ? "EMPTY" : "OTHER";
-  const char* stage = wait == WAIT_TIMEOUT ? "timeout" :
-    wait == WAIT_OBJECT_0 ? "complete" : "process-wait";
-  return {
+  const char* stage = timedOut ? "timeout" : debugError ? "debug-loop" : "complete";
+  NodeStepResult result{
     step, true, hasExitCode, exitCode, stage, stderrClass,
     sanitizedFatalReason(stderrCapture.value), fatalSubsystem(stderrCapture.value),
     firstNodeNativeFrame(stderrCapture.value),
-    !overflow && wait == WAIT_OBJECT_0 && hasExitCode && exitCode == expectedExit
+    !overflow && !timedOut && !debugError && hasExitCode && exitCode == expectedExit
   };
+  result.nativeEventObserved = nativeEventObserved;
+  result.initialBreakpointObserved = initialBreakpointObserved;
+  result.hasExceptionCode = hasExceptionCode;
+  result.exceptionCode = exceptionCode;
+  result.hasFirstChance = hasFirstChance;
+  result.firstChance = firstChance;
+  result.hasExitProcessCode = hasExitProcessCode;
+  result.exitProcessCode = hasExitProcessCode ? exitProcessCode : exitCode;
+  result.exceptionClass = hasExceptionCode ? exceptionClass : "NONE";
+  result.terminationClass = timedOut ? "EXTERNAL_JOB_TIMEOUT" :
+    hasExceptionCode && !firstChance ? "UNHANDLED_EXCEPTION" :
+    processExited ? "EXIT_PROCESS_ONLY" : "UNKNOWN";
+  result.terminationOrigin = timedOut ? "JOB_OBJECT" :
+    hasExceptionCode ? "DEBUG_EVENT" :
+    processExited ? "PROCESS_EXIT_EVENT" : "INDETERMINATE";
+  result.debugLoopStatus = debugError ? "ERROR" : timedOut ? "TIMEOUT" : "COMPLETE";
+  return result;
 }
 
 void reportNodeStep(const NodeStepResult& result, bool cleanup) {
@@ -932,6 +1057,23 @@ void reportNodeStep(const NodeStepResult& result, bool cleanup) {
             << " stderrClass=" << result.stderrClass
             << " fatalReason=" << result.fatalReason
             << " subsystem=" << result.subsystem
+            << " nativeEventObserved=" << (result.nativeEventObserved ? "true" : "false")
+            << " exceptionCode=";
+  if (result.hasExceptionCode) {
+    std::cout << "0x" << std::hex << std::uppercase << result.exceptionCode << std::dec;
+  } else {
+    std::cout << "NOT_OBSERVED";
+  }
+  std::cout << " exceptionClass=" << result.exceptionClass
+            << " firstChance=";
+  if (result.hasFirstChance) std::cout << (result.firstChance ? "true" : "false");
+  else std::cout << "NOT_APPLICABLE";
+  std::cout << " terminationClass=" << result.terminationClass
+            << " terminationOrigin=" << result.terminationOrigin
+            << " exitProcessCode=";
+  if (result.hasExitProcessCode) std::cout << result.exitProcessCode;
+  else std::cout << "NOT_OBSERVED";
+  std::cout << " debugLoopStatus=" << result.debugLoopStatus
             << " firstNativeFrame=" << result.firstNativeFrame
             << " markerPresent=true"
             << " cleanup=" << (cleanup ? "PASS" : "FAIL") << '\n';
