@@ -191,6 +191,9 @@ test('Windows AppContainer environment comparison is isolated, sanitized and str
   const build = fs.readFileSync(path.join(
     __dirname, 'fixtures/build-windows-appcontainer-environment-diagnostic.cmd'
   ), 'utf8');
+  const startupRunner = fs.readFileSync(path.join(
+    __dirname, 'fixtures/run-windows-node-startup-diagnostic.js'
+  ), 'utf8');
   const workflow = fs.readFileSync(path.join(
     __dirname, '../../.github/workflows/accelerator-conformance.yml'
   ), 'utf8');
@@ -243,6 +246,20 @@ test('Windows AppContainer environment comparison is isolated, sanitized and str
   assert.match(diagnostic, /reportProfileVariant\("K"/);
   assert.match(diagnostic, /L"LOCALAPPDATA"/);
   assert.match(diagnostic, /profileTempPath/);
+  assert.match(diagnostic, /kNodeDiagnosticArgument\[\] = L"--node-startup-diagnostic"/);
+  assert.match(diagnostic, /attempt\("N1", \{L"--version"\}, 0\)/);
+  assert.match(diagnostic, /attempt\("N2", \{L"-e", L"process\.exit\(37\)"\}, 37\)/);
+  assert.match(diagnostic, /attempt\("N3", \{[\s\S]+L"--permission"[\s\S]+allowRead/);
+  assert.match(diagnostic, /attempt\("N4", \{[\s\S]+L"--test-isolation=none"[\s\S]+L"--test"/);
+  assert.match(diagnostic, /JOB_OBJECT_LIMIT_ACTIVE_PROCESS/);
+  assert.match(diagnostic, /CapabilityCount = 0/);
+  assert.match(diagnostic, /firstNativeFrame=/);
+  assert.match(diagnostic, /markerPresent=true/);
+  assert.match(diagnostic, /cleanup=/);
+  assert.match(startupRunner, /\['--node-startup-diagnostic', process\.execPath\]/);
+  assert.match(startupRunner, /shell: false/);
+  assert.match(startupRunner, /env: \{\}/);
+  assert.doesNotMatch(startupRunner, /process\.env|execSync|shell: true/);
   assert.match(diagnostic,
     /explicitApplicationName \? executable\.c_str\(\) : nullptr/);
   assert.match(diagnostic,
@@ -284,6 +301,8 @@ test('Windows AppContainer environment comparison is isolated, sanitized and str
     /Compare Windows AppContainer environment contracts[\s\S]+matrix\.os == 'windows-latest' && github\.event_name == 'workflow_dispatch'/);
   assert.match(workflow,
     /build-windows-appcontainer-environment-diagnostic\.cmd[\s\S]+windows-appcontainer-environment-diagnostic\.exe/);
+  assert.match(workflow,
+    /Observe Windows Node startup boundary[\s\S]+run-windows-node-startup-diagnostic\.js/);
   assert.doesNotMatch(productionBuild, /environment-diagnostic/);
   assert.doesNotMatch(productionAdapter, /environment-diagnostic/);
 });

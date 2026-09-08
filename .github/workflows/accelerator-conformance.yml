@@ -115,6 +115,15 @@ jobs:
         shell: cmd
         run: accelerator\native\windows\build-helper.cmd
 
+      - name: Build Windows Node startup diagnostic
+        if: matrix.os == 'windows-latest' && github.event_name == 'workflow_dispatch'
+        shell: cmd
+        run: tests\accelerator\fixtures\build-windows-appcontainer-environment-diagnostic.cmd
+
+      - name: Observe Windows Node startup boundary
+        if: matrix.os == 'windows-latest' && github.event_name == 'workflow_dispatch'
+        run: node tests/accelerator/fixtures/run-windows-node-startup-diagnostic.js
+
       - name: Build qualified macOS native Seatbelt helper
         if: matrix.os == 'macos-latest'
         run: sh accelerator/native/macos/build-helper.sh

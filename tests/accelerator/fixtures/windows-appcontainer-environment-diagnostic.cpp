@@ -11,10 +11,14 @@
 #include <userenv.h>
 
 #include <algorithm>
+#include <atomic>
+#include <cctype>
 #include <cwchar>
 #include <filesystem>
+#include <fstream>
 #include <iostream>
 #include <string>
+#include <thread>
 #include <utility>
 #include <vector>
 
@@ -27,7 +31,9 @@ namespace {
 
 constexpr DWORD kChildExit = 37;
 constexpr DWORD kWaitMilliseconds = 30000;
+constexpr DWORD kNodeOutputLimit = 256u * 1024u;
 constexpr wchar_t kChildArgument[] = L"--inert-child";
+constexpr wchar_t kNodeDiagnosticArgument[] = L"--node-startup-diagnostic";
 
 struct Entry {
   std::wstring name;
@@ -595,11 +601,417 @@ void reportArgumentVariant(const char* variant, const char* currentDirectoryMode
   std::cout << " cleanup=" << (cleanup ? "PASS" : "FAIL") << '\n';
 }
 
+struct NodeCapture {
+  std::string value;
+  std::atomic<bool> overflow{false};
+};
+
+struct NodeStepResult {
+  const char* step;
+  bool processCreated;
+  bool hasExitCode;
+  DWORD exitCode;
+  const char* stage;
+  const char* stderrClass;
+  std::string firstNativeFrame;
+  bool expected;
+};
+
+void readNodePipe(HANDLE pipe, NodeCapture* capture) {
+  char buffer[8192];
+  DWORD count = 0;
+  while (ReadFile(pipe, buffer, sizeof(buffer), &count, nullptr) && count > 0) {
+    if (capture->value.size() + count > kNodeOutputLimit) {
+      capture->overflow = true;
+      continue;
+    }
+    capture->value.append(buffer, count);
+  }
+}
+
+bool copyNodeTree(const fs::path& source, const fs::path& destination,
+                  DiagnosticFailure* failure) {
+  std::error_code error;
+  if (!fs::is_directory(source, error) || error) {
+    *failure = {"node-source", error ? static_cast<DWORD>(error.value()) : ERROR_DIRECTORY};
+    return false;
+  }
+  fs::create_directories(destination, error);
+  if (error) {
+    *failure = {"node-stage-create", static_cast<DWORD>(error.value())};
+    return false;
+  }
+  for (const fs::directory_entry& entry : fs::directory_iterator(source, error)) {
+    if (error || entry.is_symlink(error) || entry.is_other(error) || error) {
+      *failure = {"node-stage-shape",
+        error ? static_cast<DWORD>(error.value()) : ERROR_INVALID_DATA};
+      return false;
+    }
+    const fs::path target = destination / entry.path().filename();
+    if (entry.is_directory(error)) {
+      if (error || !copyNodeTree(entry.path(), target, failure)) return false;
+    } else if (entry.is_regular_file(error)) {
+      if (error || !fs::copy_file(entry.path(), target,
+          fs::copy_options::overwrite_existing, error) || error) {
+        *failure = {"node-stage-copy",
+          error ? static_cast<DWORD>(error.value()) : ERROR_CANNOT_MAKE};
+        return false;
+      }
+      if (!SetFileAttributesW(target.c_str(), FILE_ATTRIBUTE_READONLY)) {
+        *failure = {"node-stage-readonly", GetLastError()};
+        return false;
+      }
+    } else {
+      *failure = {"node-stage-shape", ERROR_INVALID_DATA};
+      return false;
+    }
+  }
+  return true;
+}
+
+bool writeNodeFixture(const fs::path& target, const char* source,
+                      DiagnosticFailure* failure) {
+  std::ofstream output(target, std::ios::binary | std::ios::trunc);
+  output << source;
+  output.close();
+  if (!output) {
+    *failure = {"node-fixture-write", ERROR_WRITE_FAULT};
+    return false;
+  }
+  if (!SetFileAttributesW(target.c_str(), FILE_ATTRIBUTE_READONLY)) {
+    *failure = {"node-fixture-readonly", GetLastError()};
+    return false;
+  }
+  return true;
+}
+
+bool productionNodeEnvironment(const std::wstring& nodeDirectory,
+                               const std::wstring& workspace,
+                               const std::wstring& profile,
+                               Environment* environment,
+                               DiagnosticFailure* failure) {
+  wchar_t windowsDirectory[MAX_PATH]{};
+  const UINT length = GetWindowsDirectoryW(windowsDirectory, MAX_PATH);
+  if (length == 0 || length >= MAX_PATH) {
+    *failure = {"node-environment-system-root",
+      length == 0 ? GetLastError() : ERROR_INSUFFICIENT_BUFFER};
+    return false;
+  }
+  std::vector<Entry> entries{
+    {L"HOME", workspace},
+    {L"LOCALAPPDATA", profile},
+    {L"PATH", nodeDirectory},
+    {L"SystemRoot", std::wstring(windowsDirectory)},
+    {L"TEMP", workspace},
+    {L"TMP", workspace}
+  };
+  if (!addDriveEntry(&entries, workspace)) {
+    *failure = {"node-environment-drive-entry", ERROR_INVALID_DRIVE};
+    return false;
+  }
+  *environment = serialize(std::move(entries));
+  if (!environmentWellFormed(*environment)) {
+    *failure = {"node-environment-shape", ERROR_BAD_ENVIRONMENT};
+    return false;
+  }
+  return true;
+}
+
+std::string firstNodeNativeFrame(const std::string& stderrText) {
+  size_t first = std::string::npos;
+  for (const char* prefix : {"node::", "v8::", "uv_"}) {
+    const size_t candidate = stderrText.find(prefix);
+    if (candidate != std::string::npos && (first == std::string::npos || candidate < first)) {
+      first = candidate;
+    }
+  }
+  if (first == std::string::npos) return "none";
+  size_t end = first;
+  while (end < stderrText.size()) {
+    const unsigned char character = static_cast<unsigned char>(stderrText[end]);
+    if (!(std::isalnum(character) || character == ':' || character == '_' ||
+          character == '+' || character == '-' || character == '<' ||
+          character == '>' || character == '~' || character == '.')) break;
+    ++end;
+  }
+  const std::string frame = stderrText.substr(first, end - first);
+  return frame.empty() || frame.size() > 160 ? "indeterminate" : frame;
+}
+
+NodeStepResult runNodeStep(const char* step, const std::wstring& node,
+                           const std::vector<std::wstring>& arguments,
+                           DWORD expectedExit, const Environment& environment,
+                           const std::wstring& workspace, PSID sid) {
+  SECURITY_ATTRIBUTES pipeSecurity{};
+  pipeSecurity.nLength = sizeof(pipeSecurity);
+  pipeSecurity.bInheritHandle = TRUE;
+  HANDLE stdoutRead = nullptr;
+  HANDLE stdoutWrite = nullptr;
+  HANDLE stderrRead = nullptr;
+  HANDLE stderrWrite = nullptr;
+  if (!CreatePipe(&stdoutRead, &stdoutWrite, &pipeSecurity, 0) ||
+      !CreatePipe(&stderrRead, &stderrWrite, &pipeSecurity, 0) ||
+      !SetHandleInformation(stdoutRead, HANDLE_FLAG_INHERIT, 0) ||
+      !SetHandleInformation(stderrRead, HANDLE_FLAG_INHERIT, 0)) {
+    if (stdoutRead) CloseHandle(stdoutRead);
+    if (stdoutWrite) CloseHandle(stdoutWrite);
+    if (stderrRead) CloseHandle(stderrRead);
+    if (stderrWrite) CloseHandle(stderrWrite);
+    return {step, false, false, 0, "pipe", "EMPTY", "none", false};
+  }
+
+  HANDLE job = CreateJobObjectW(nullptr, nullptr);
+  JOBOBJECT_EXTENDED_LIMIT_INFORMATION limits{};
+  limits.BasicLimitInformation.LimitFlags =
+    JOB_OBJECT_LIMIT_KILL_ON_JOB_CLOSE | JOB_OBJECT_LIMIT_ACTIVE_PROCESS;
+  limits.BasicLimitInformation.ActiveProcessLimit = 1;
+  if (job == nullptr || !SetInformationJobObject(
+      job, JobObjectExtendedLimitInformation, &limits, sizeof(limits))) {
+    if (job) CloseHandle(job);
+    CloseHandle(stdoutRead); CloseHandle(stdoutWrite);
+    CloseHandle(stderrRead); CloseHandle(stderrWrite);
+    return {step, false, false, 0, "job", "EMPTY", "none", false};
+  }
+
+  SECURITY_CAPABILITIES capabilities{};
+  capabilities.AppContainerSid = sid;
+  capabilities.CapabilityCount = 0;
+  capabilities.Capabilities = nullptr;
+  SIZE_T attributeSize = 0;
+  InitializeProcThreadAttributeList(nullptr, 1, 0, &attributeSize);
+  auto* attributes = reinterpret_cast<LPPROC_THREAD_ATTRIBUTE_LIST>(
+    HeapAlloc(GetProcessHeap(), HEAP_ZERO_MEMORY, attributeSize)
+  );
+  bool attributesReady = attributes != nullptr && InitializeProcThreadAttributeList(
+    attributes, 1, 0, &attributeSize) && UpdateProcThreadAttribute(
+      attributes, 0, PROC_THREAD_ATTRIBUTE_SECURITY_CAPABILITIES,
+      &capabilities, sizeof(capabilities), nullptr, nullptr
+    );
+  if (!attributesReady) {
+    if (attributes) HeapFree(GetProcessHeap(), 0, attributes);
+    CloseHandle(job); CloseHandle(stdoutRead); CloseHandle(stdoutWrite);
+    CloseHandle(stderrRead); CloseHandle(stderrWrite);
+    return {step, false, false, 0, "attributes", "EMPTY", "none", false};
+  }
+
+  std::wstring command = quote(node);
+  for (const std::wstring& argument : arguments) command += L" " + quote(argument);
+  std::vector<wchar_t> commandLine(command.begin(), command.end());
+  commandLine.push_back(L'\0');
+  STARTUPINFOEXW startup{};
+  startup.StartupInfo.cb = sizeof(startup);
+  startup.StartupInfo.dwFlags = STARTF_USESTDHANDLES;
+  startup.StartupInfo.hStdOutput = stdoutWrite;
+  startup.StartupInfo.hStdError = stderrWrite;
+  startup.lpAttributeList = attributes;
+  PROCESS_INFORMATION process{};
+  const BOOL created = CreateProcessW(
+    node.c_str(), commandLine.data(), nullptr, nullptr, TRUE,
+    CREATE_SUSPENDED | CREATE_UNICODE_ENVIRONMENT | EXTENDED_STARTUPINFO_PRESENT,
+    const_cast<wchar_t*>(environment.block.data()), workspace.c_str(),
+    &startup.StartupInfo, &process
+  );
+  CloseHandle(stdoutWrite);
+  CloseHandle(stderrWrite);
+  DeleteProcThreadAttributeList(attributes);
+  HeapFree(GetProcessHeap(), 0, attributes);
+  if (!created) {
+    CloseHandle(job); CloseHandle(stdoutRead); CloseHandle(stderrRead);
+    return {step, false, false, 0, "process-create", "EMPTY", "none", false};
+  }
+  if (!AssignProcessToJobObject(job, process.hProcess) ||
+      ResumeThread(process.hThread) == static_cast<DWORD>(-1)) {
+    TerminateJobObject(job, ERROR_ACCESS_DENIED);
+    WaitForSingleObject(process.hProcess, INFINITE);
+    CloseHandle(process.hThread); CloseHandle(process.hProcess);
+    CloseHandle(job); CloseHandle(stdoutRead); CloseHandle(stderrRead);
+    return {step, true, false, 0, "process-policy", "EMPTY", "none", false};
+  }
+
+  NodeCapture stdoutCapture;
+  NodeCapture stderrCapture;
+  std::thread stdoutReader(readNodePipe, stdoutRead, &stdoutCapture);
+  std::thread stderrReader(readNodePipe, stderrRead, &stderrCapture);
+  const DWORD wait = WaitForSingleObject(process.hProcess, kWaitMilliseconds);
+  if (wait == WAIT_TIMEOUT) {
+    TerminateJobObject(job, WAIT_TIMEOUT);
+    WaitForSingleObject(process.hProcess, INFINITE);
+  }
+  DWORD exitCode = WAIT_TIMEOUT;
+  const bool hasExitCode = wait == WAIT_TIMEOUT ||
+    GetExitCodeProcess(process.hProcess, &exitCode) != FALSE;
+  CloseHandle(process.hThread); CloseHandle(process.hProcess);
+  CloseHandle(stdoutRead); CloseHandle(stderrRead);
+  stdoutReader.join(); stderrReader.join();
+  CloseHandle(job);
+
+  const bool overflow = stdoutCapture.overflow || stderrCapture.overflow;
+  const char* stderrClass = overflow ? "OUTPUT_LIMIT" :
+    stderrCapture.value.find("Native stack trace") != std::string::npos
+      ? "NATIVE_ABORT"
+      : stderrCapture.value.empty() ? "EMPTY" : "OTHER";
+  const char* stage = wait == WAIT_TIMEOUT ? "timeout" :
+    wait == WAIT_OBJECT_0 ? "complete" : "process-wait";
+  return {
+    step, true, hasExitCode, exitCode, stage, stderrClass,
+    firstNodeNativeFrame(stderrCapture.value),
+    !overflow && wait == WAIT_OBJECT_0 && hasExitCode && exitCode == expectedExit
+  };
+}
+
+void reportNodeStep(const NodeStepResult& result, bool cleanup) {
+  std::cout << "step=" << result.step
+            << " processCreated=" << (result.processCreated ? "true" : "false")
+            << " exitCode=";
+  if (result.hasExitCode) std::cout << result.exitCode;
+  else std::cout << "null";
+  std::cout << " stage=" << result.stage
+            << " stderrClass=" << result.stderrClass
+            << " firstNativeFrame=" << result.firstNativeFrame
+            << " markerPresent=true"
+            << " cleanup=" << (cleanup ? "PASS" : "FAIL") << '\n';
+}
+
+int runNodeStartupDiagnostic(const std::wstring& requestedNode) {
+  std::error_code filesystemError;
+  if (!fs::path(requestedNode).is_absolute() ||
+      !equalName(fs::path(requestedNode).filename().wstring(), L"node.exe") ||
+      !fs::is_regular_file(requestedNode, filesystemError) || filesystemError) {
+    return fail({"node-absolute", ERROR_BAD_PATHNAME});
+  }
+  const fs::path canonicalNode = fs::canonical(requestedNode, filesystemError);
+  if (filesystemError || canonicalNode.empty()) {
+    return fail({"node-canonical", static_cast<DWORD>(filesystemError.value())});
+  }
+
+  const fs::path stage = fs::temp_directory_path(filesystemError) /
+    (L"sdo-node-startup-diagnostic-" + std::to_wstring(GetCurrentProcessId()));
+  const fs::path stagedWorkspace = stage / L"workspace";
+  const fs::path stagedNodeDirectory = stage / L"node";
+  fs::create_directories(stagedWorkspace, filesystemError);
+  if (filesystemError) return fail({"node-staging", static_cast<DWORD>(filesystemError.value())});
+
+  DiagnosticFailure failure{};
+  if (!copyNodeTree(canonicalNode.parent_path(), stagedNodeDirectory, &failure)) {
+    fs::remove_all(stage, filesystemError);
+    return fail(failure);
+  }
+  const fs::path stagedNode = stagedNodeDirectory / canonicalNode.filename();
+  const fs::path minimalScript = stagedWorkspace / L"minimal.js";
+  const fs::path minimalTest = stagedWorkspace / L"minimal.test.js";
+  static constexpr char kMinimalSource[] =
+    "'use strict';\n"
+    "const fs = require('node:fs');\n"
+    "fs.readFileSync(__filename, 'utf8');\n"
+    "process.exit(37);\n";
+  static constexpr char kMinimalTestSource[] =
+    "'use strict';\n"
+    "const test = require('node:test');\n"
+    "const assert = require('node:assert/strict');\n"
+    "const fs = require('node:fs');\n"
+    "test('minimal staging-only fixture', () => {\n"
+    "  assert.match(fs.readFileSync(__filename, 'utf8'), /staging-only/);\n"
+    "});\n";
+  if (!writeNodeFixture(minimalScript, kMinimalSource, &failure) ||
+      !writeNodeFixture(minimalTest, kMinimalTestSource, &failure)) {
+    fs::remove_all(stage, filesystemError);
+    return fail(failure);
+  }
+
+  const std::wstring profileName =
+    L"SdoNodeStartupDiagnostic-" + std::to_wstring(GetCurrentProcessId());
+  PSID sid = nullptr;
+  const HRESULT profileResult = CreateAppContainerProfile(
+    profileName.c_str(), L"SDO Node startup diagnostic", L"SDO Node startup diagnostic",
+    nullptr, 0, &sid
+  );
+  if (FAILED(profileResult) || sid == nullptr) {
+    fs::remove_all(stage, filesystemError);
+    return fail({"node-appcontainer-profile", win32CodeFromHresult(profileResult)});
+  }
+
+  LPWSTR sidText = nullptr;
+  PWSTR profilePathRaw = nullptr;
+  if (!ConvertSidToStringSidW(sid, &sidText) ||
+      FAILED(GetAppContainerFolderPath(sidText, &profilePathRaw)) || profilePathRaw == nullptr) {
+    if (sidText) LocalFree(sidText);
+    if (profilePathRaw) CoTaskMemFree(profilePathRaw);
+    DeleteAppContainerProfile(profileName.c_str());
+    FreeSid(sid);
+    fs::remove_all(stage, filesystemError);
+    return fail({"node-appcontainer-folder", GetLastError()});
+  }
+  const std::wstring profilePath(profilePathRaw);
+  LocalFree(sidText);
+  CoTaskMemFree(profilePathRaw);
+
+  Environment environment;
+  PSECURITY_DESCRIPTOR oldDescriptor = nullptr;
+  PACL oldDacl = nullptr;
+  if (!productionNodeEnvironment(
+        stagedNodeDirectory.wstring(), stagedWorkspace.wstring(), profilePath,
+        &environment, &failure) ||
+      !grantAppContainerReadExecute(
+        stage.wstring(), sid, &oldDescriptor, &oldDacl, &failure)) {
+    if (oldDescriptor) {
+      DiagnosticFailure ignoredCleanup{};
+      restoreDacl(stage.wstring(), oldDescriptor, oldDacl, &ignoredCleanup);
+      LocalFree(oldDescriptor);
+    }
+    DeleteAppContainerProfile(profileName.c_str());
+    FreeSid(sid);
+    fs::remove_all(stage, filesystemError);
+    return fail(failure);
+  }
+
+  const std::wstring allowRead = L"--allow-fs-read=" + stagedWorkspace.wstring();
+  const std::vector<std::pair<NodeStepResult, bool>> attempted = [&]() {
+    std::vector<std::pair<NodeStepResult, bool>> results;
+    const auto attempt = [&](const char* step, std::vector<std::wstring> arguments,
+                             DWORD expectedExit) {
+      NodeStepResult result = runNodeStep(
+        step, stagedNode.wstring(), arguments, expectedExit, environment,
+        stagedWorkspace.wstring(), sid
+      );
+      results.emplace_back(result, result.expected);
+      return result.expected;
+    };
+    if (!attempt("N1", {L"--version"}, 0)) return results;
+    if (!attempt("N2", {L"-e", L"process.exit(37)"}, 37)) return results;
+    if (!attempt("N3", {
+          L"--permission", allowRead, minimalScript.wstring()
+        }, 37)) return results;
+    attempt("N4", {
+      L"--permission", allowRead, L"--test-isolation=none", L"--test",
+      minimalTest.wstring()
+    }, 0);
+    return results;
+  }();
+
+  DiagnosticFailure cleanupFailure{};
+  const bool daclRestored = restoreDacl(
+    stage.wstring(), oldDescriptor, oldDacl, &cleanupFailure
+  );
+  if (oldDescriptor) LocalFree(oldDescriptor);
+  filesystemError.clear();
+  fs::remove_all(stage, filesystemError);
+  const bool stageRemoved = !filesystemError;
+  const HRESULT profileCleanup = DeleteAppContainerProfile(profileName.c_str());
+  FreeSid(sid);
+  const bool cleanup = daclRestored && stageRemoved && profileCleanup == S_OK;
+  for (const auto& entry : attempted) reportNodeStep(entry.first, cleanup);
+  if (!cleanup || attempted.empty()) return 2;
+  return attempted.back().second ? 0 : 1;
+}
+
 }  // namespace
 
 int wmain(int argc, wchar_t* argv[]) {
   if (argc == 2 && std::wcscmp(argv[1], kChildArgument) == 0) {
     return static_cast<int>(kChildExit);
+  }
+  if (argc == 3 && std::wcscmp(argv[1], kNodeDiagnosticArgument) == 0) {
+    return runNodeStartupDiagnostic(argv[2]);
   }
   if (argc != 1) return fail({"arguments", ERROR_BAD_ARGUMENTS});
 
