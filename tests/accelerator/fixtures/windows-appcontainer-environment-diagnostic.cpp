@@ -54,6 +54,14 @@ struct VariantResult {
   DWORD childExit;
 };
 
+struct ProfileEnvironmentMetadata {
+  bool hasLocalAppData;
+  bool tempProfileBound;
+  bool tmpProfileBound;
+  bool profileDirectoryExists;
+  bool profileTempExists;
+};
+
 enum class AclAssessment {
   kAllowed,
   kDenied,
@@ -155,6 +163,18 @@ Environment serialize(std::vector<Entry> entries) {
   }
   block.push_back(L'\0');
   return {std::move(entries), std::move(block)};
+}
+
+Environment profileEnvironment(const Environment& base, const std::wstring& profile,
+                               bool bindTemp) {
+  std::vector<Entry> entries = base.entries;
+  setEntry(&entries, L"LOCALAPPDATA", profile);
+  if (bindTemp) {
+    const std::wstring temp = (fs::path(profile) / L"Temp").wstring();
+    setEntry(&entries, L"TEMP", temp);
+    setEntry(&entries, L"TMP", temp);
+  }
+  return serialize(std::move(entries));
 }
 
 bool environmentSorted(const Environment& environment) {
@@ -507,6 +527,32 @@ void reportVariant(const char* variant, const char* source,
   std::cout << '\n';
 }
 
+void reportProfileVariant(const char* variant, const Environment& environment,
+                          const ProfileEnvironmentMetadata& profile,
+                          const VariantResult& result, bool cleanup) {
+  const EnvironmentMetadata meta = metadata(environment);
+  std::cout << "variant=" << variant << " environmentSource=profile-"
+            << (profile.tempProfileBound ? "complete" :
+                (profile.hasLocalAppData ? "localappdata" : "native-sanitized"))
+            << " entryNames=[";
+  for (size_t index = 0; index < meta.names.size(); ++index) {
+    if (index != 0) std::cout << ',';
+    std::cout << meta.names[index];
+  }
+  std::cout << "] hasLocalAppData=" << (profile.hasLocalAppData ? "true" : "false")
+            << " tempProfileBound=" << (profile.tempProfileBound ? "true" : "false")
+            << " tmpProfileBound=" << (profile.tmpProfileBound ? "true" : "false")
+            << " profileDirectoryExists="
+            << (profile.profileDirectoryExists ? "true" : "false")
+            << " profileTempExists=" << (profile.profileTempExists ? "true" : "false")
+            << " createProcess=" << (result.createProcess ? "PASS" : "FAIL")
+            << " win32Error=" << result.win32Error << " stage=" << result.stage
+            << " childExit=";
+  if (result.hasChildExit) std::cout << result.childExit;
+  else std::cout << "null";
+  std::cout << " cleanup=" << (cleanup ? "PASS" : "FAIL") << '\n';
+}
+
 void reportArgumentVariant(const char* variant, const char* currentDirectoryMode,
                            const PathMetadata& executable,
                            const PathMetadata& currentDirectory,
@@ -604,6 +650,36 @@ int wmain(int argc, wchar_t* argv[]) {
   if (FAILED(profileResult) || sid == nullptr) {
     fs::remove_all(stage, filesystemError);
     return fail({"appcontainer-profile", win32CodeFromHresult(profileResult)});
+  }
+
+  PWSTR profilePathRaw = nullptr;
+  const HRESULT profilePathResult = GetAppContainerFolderPath(sid, &profilePathRaw);
+  if (FAILED(profilePathResult) || profilePathRaw == nullptr) {
+    DeleteAppContainerProfile(profileName.c_str());
+    FreeSid(sid);
+    fs::remove_all(stage, filesystemError);
+    return fail({"appcontainer-folder", win32CodeFromHresult(profilePathResult)});
+  }
+  const fs::path profilePath(profilePathRaw);
+  CoTaskMemFree(profilePathRaw);
+  const fs::path profileTempPath = profilePath / L"Temp";
+  std::error_code profileFsError;
+  const bool profileDirectoryExists = fs::is_directory(profilePath, profileFsError) &&
+    !profileFsError;
+  if (!profileDirectoryExists) {
+    DeleteAppContainerProfile(profileName.c_str());
+    FreeSid(sid);
+    fs::remove_all(stage, filesystemError);
+    return fail({"appcontainer-folder", ERROR_PATH_NOT_FOUND});
+  }
+  fs::create_directories(profileTempPath, profileFsError);
+  const bool profileTempExists = fs::is_directory(profileTempPath, profileFsError) &&
+    !profileFsError;
+  if (!profileTempExists) {
+    DeleteAppContainerProfile(profileName.c_str());
+    FreeSid(sid);
+    fs::remove_all(stage, filesystemError);
+    return fail({"appcontainer-temp", ERROR_PATH_NOT_FOUND});
   }
 
   DiagnosticFailure failure{};
@@ -746,6 +822,20 @@ int wmain(int argc, wchar_t* argv[]) {
   VariantResult f{};
   VariantResult g{};
   VariantResult h{};
+  VariantResult i{};
+  VariantResult j{};
+  VariantResult k{};
+  Environment profileLocalAppData;
+  Environment profileComplete;
+  ProfileEnvironmentMetadata profileMetadata{
+    false, false, false, profileDirectoryExists, profileTempExists
+  };
+  ProfileEnvironmentMetadata localAppDataMetadata{
+    true, false, false, profileDirectoryExists, profileTempExists
+  };
+  ProfileEnvironmentMetadata completeMetadata{
+    true, true, true, profileDirectoryExists, profileTempExists
+  };
   if (failure.stage == nullptr) {
     const VariantResult a = runVariant(
       stagedExecutable.wstring(), stagedWorkspace.c_str(), manual, attributes, job
@@ -773,6 +863,14 @@ int wmain(int argc, wchar_t* argv[]) {
       stagedExecutable.wstring(), stagedWorkspace.c_str(), nativeSanitized, attributes, job,
       false
     );
+    profileLocalAppData = profileEnvironment(nativeSanitized, profilePath.wstring(), false);
+    profileComplete = profileEnvironment(nativeSanitized, profilePath.wstring(), true);
+    i = runVariant(stagedExecutable.wstring(), stagedWorkspace.c_str(), nativeSanitized,
+                   attributes, job);
+    j = runVariant(stagedExecutable.wstring(), stagedWorkspace.c_str(), profileLocalAppData,
+                   attributes, job);
+    k = runVariant(stagedExecutable.wstring(), stagedWorkspace.c_str(), profileComplete,
+                   attributes, job);
     argumentVariantsRan = true;
     variantsComplete =
       (!a.createProcess || (a.hasChildExit && a.childExit == kChildExit)) &&
@@ -782,6 +880,10 @@ int wmain(int argc, wchar_t* argv[]) {
       (!f.createProcess || (f.hasChildExit && f.childExit == kChildExit)) &&
       (!g.createProcess || (g.hasChildExit && g.childExit == kChildExit)) &&
       (!h.createProcess || (h.hasChildExit && h.childExit == kChildExit));
+    variantsComplete = variantsComplete &&
+      (!i.createProcess || (i.hasChildExit && i.childExit == kChildExit)) &&
+      (!j.createProcess || (j.hasChildExit && j.childExit == kChildExit)) &&
+      (!k.createProcess || (k.hasChildExit && k.childExit == kChildExit));
     if (!variantsComplete) failure = {"variant-containment", ERROR_PROCESS_ABORTED};
   }
 
@@ -834,6 +936,10 @@ int wmain(int argc, wchar_t* argv[]) {
       "H", "explicit-workspace", executableMetadata, workspaceMetadata, h,
       cleanupPassed, false
     );
+    reportProfileVariant("I", nativeSanitized,
+      profileMetadata, i, cleanupPassed);
+    reportProfileVariant("J", profileLocalAppData, localAppDataMetadata, j, cleanupPassed);
+    reportProfileVariant("K", profileComplete, completeMetadata, k, cleanupPassed);
   }
 
   if (failure.stage != nullptr) return fail(failure);

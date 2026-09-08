@@ -227,6 +227,12 @@ test('Windows AppContainer environment comparison is isolated, sanitized and str
   assert.match(diagnostic, /stagedExecutable\.wstring\(\), nullptr, nativeSanitized/);
   assert.match(diagnostic, /reportArgumentVariant\(\s*"G", "explicit-workspace"/);
   assert.match(diagnostic, /reportArgumentVariant\(\s*"H", "explicit-workspace"/);
+  assert.match(diagnostic, /GetAppContainerFolderPath/);
+  assert.match(diagnostic, /reportProfileVariant\("I"/);
+  assert.match(diagnostic, /reportProfileVariant\("J"/);
+  assert.match(diagnostic, /reportProfileVariant\("K"/);
+  assert.match(diagnostic, /L"LOCALAPPDATA"/);
+  assert.match(diagnostic, /profileTempPath/);
   assert.match(diagnostic,
     /explicitApplicationName \? executable\.c_str\(\) : nullptr/);
   assert.match(diagnostic,
@@ -260,7 +266,7 @@ test('Windows AppContainer environment comparison is isolated, sanitized and str
   assert.match(diagnostic, /L"PATH"/);
   assert.doesNotMatch(diagnostic, /GetEnvironmentStrings|SetEnvironmentVariable/);
   assert.doesNotMatch(diagnostic,
-    /L"(?:TOKEN|SECRET|PASSWORD|COOKIE|AUTHORIZATION|API_KEY|SSH|GITHUB|AZURE|USERPROFILE|APPDATA|LOCALAPPDATA)"/i);
+    /L"(?:TOKEN|SECRET|PASSWORD|COOKIE|AUTHORIZATION|API_KEY|SSH|GITHUB|AZURE|USERPROFILE|APPDATA)"/i);
   assert.doesNotMatch(diagnostic, /entryValues|std::wcout|modulePath\s*<</);
   assert.match(diagnostic, /--inert-child/);
   assert.match(build, /\/W4 \/WX \/MT \/utf-8/);
