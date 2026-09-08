@@ -31,7 +31,7 @@ if errorlevel 1 exit /b 5
 if exist "%OBJECT%" del /q "%OBJECT%"
 if not exist "%OUTPUT%" exit /b 6
 
-cl /nologo /std:c++17 /EHsc /O2 /W4 /WX /MT /utf-8 /DUNICODE /D_UNICODE "%NODE_SOURCE%" /Fo:"%NODE_OBJECT%" /Fe:"%NODE_OUTPUT%" /link advapi32.lib userenv.lib
+cl /nologo /std:c++17 /EHsc /O2 /W4 /WX /MT /utf-8 /DUNICODE /D_UNICODE "%NODE_SOURCE%" /Fo:"%NODE_OBJECT%" /Fe:"%NODE_OUTPUT%" /link advapi32.lib userenv.lib ole32.lib
 if errorlevel 1 exit /b 7
 
 if exist "%NODE_OBJECT%" del /q "%NODE_OBJECT%"

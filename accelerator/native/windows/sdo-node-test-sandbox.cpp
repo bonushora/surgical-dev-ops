@@ -7,6 +7,7 @@
 
 #include <windows.h>
 #include <Aclapi.h>
+#include <sddl.h>
 #include <userenv.h>
 
 #include <atomic>
@@ -271,13 +272,36 @@ std::wstring quote(const std::wstring& value) {
   return result;
 }
 
-std::vector<wchar_t> environment(const std::wstring& nodeDirectory,
-                                 const std::wstring& workspace) {
+bool environment(const std::wstring& nodeDirectory, const std::wstring& workspace,
+                 PSID sid, std::vector<wchar_t>* result,
+                 InternalFailure* failure) {
   wchar_t windowsDirectory[MAX_PATH]{};
   const UINT length = GetWindowsDirectoryW(windowsDirectory, MAX_PATH);
-  if (length == 0 || length >= MAX_PATH) return {};
+  if (length == 0 || length >= MAX_PATH) {
+    recordFailure(failure, L"environment-system-root",
+                  length == 0 ? GetLastError() : ERROR_INSUFFICIENT_BUFFER);
+    return false;
+  }
+  LPWSTR sidText = nullptr;
+  if (!ConvertSidToStringSidW(sid, &sidText)) {
+    const DWORD sidError = GetLastError();
+    recordFailure(failure, L"appcontainer-sid-text", sidError);
+    return false;
+  }
+  PWSTR profilePathRaw = nullptr;
+  const HRESULT profilePathResult = GetAppContainerFolderPath(sidText, &profilePathRaw);
+  LocalFree(sidText);
+  if (FAILED(profilePathResult) || profilePathRaw == nullptr) {
+    if (profilePathRaw != nullptr) CoTaskMemFree(profilePathRaw);
+    recordFailure(failure, L"appcontainer-folder",
+                  static_cast<DWORD>(HRESULT_CODE(profilePathResult)));
+    return false;
+  }
+  const std::wstring profilePath(profilePathRaw);
+  CoTaskMemFree(profilePathRaw);
   std::vector<std::wstring> entries{
     L"HOME=" + workspace,
+    L"LOCALAPPDATA=" + profilePath,
     L"PATH=" + nodeDirectory,
     L"SystemRoot=" + std::wstring(windowsDirectory),
     L"TEMP=" + workspace,
@@ -287,13 +311,13 @@ std::vector<wchar_t> environment(const std::wstring& nodeDirectory,
   if (drive.size() == 2 && drive[1] == L':') {
     entries.insert(entries.begin(), L"=" + drive + L"=" + workspace);
   }
-  std::vector<wchar_t> result;
+  result->clear();
   for (const std::wstring& entry : entries) {
-    result.insert(result.end(), entry.begin(), entry.end());
-    result.push_back(L'\0');
+    result->insert(result->end(), entry.begin(), entry.end());
+    result->push_back(L'\0');
   }
-  result.push_back(L'\0');
-  return result;
+  result->push_back(L'\0');
+  return true;
 }
 
 int runNode(const std::wstring& operationId, const std::wstring& requirementFingerprint,
@@ -403,9 +427,8 @@ int runNode(const std::wstring& operationId, const std::wstring& requirementFing
     L" --test-isolation=none --test " + quote(targetPath);
   std::vector<wchar_t> commandLine(command.begin(), command.end());
   commandLine.push_back(L'\0');
-  std::vector<wchar_t> env = environment(stagedNodeDirectory, stagedWorkspace);
-  if (env.empty()) {
-    recordFailure(&failure, L"environment", GetLastError());
+  std::vector<wchar_t> env;
+  if (!environment(stagedNodeDirectory, stagedWorkspace, sid, &env, &failure)) {
     DeleteProcThreadAttributeList(attributes);
     HeapFree(GetProcessHeap(), 0, attributes);
     CloseHandle(job); CloseHandle(stdoutRead); CloseHandle(stdoutWrite);

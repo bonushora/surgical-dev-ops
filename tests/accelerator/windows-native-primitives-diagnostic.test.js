@@ -142,6 +142,16 @@ test('existing Win32 helper is not misrepresented as NODE_TEST_FILE containment'
   assert.match(nodeSandbox, /--test-isolation=none/);
   assert.match(nodeSandbox,
     /L"HOME="[\s\S]*L"PATH="[\s\S]*L"SystemRoot="[\s\S]*L"TEMP="[\s\S]*L"TMP="/);
+  assert.match(nodeSandbox, /#include <sddl\.h>/);
+  assert.match(nodeSandbox, /ConvertSidToStringSidW\(sid, &sidText\)/);
+  assert.match(nodeSandbox, /GetAppContainerFolderPath\(sidText, &profilePathRaw\)/);
+  assert.match(nodeSandbox, /L"LOCALAPPDATA=" \+ profilePath/);
+  assert.match(nodeSandbox, /LocalFree\(sidText\)/);
+  assert.match(nodeSandbox, /CoTaskMemFree\(profilePathRaw\)/);
+  assert.match(nodeSandbox, /recordFailure\(failure, L"appcontainer-(?:sid-text|folder)"/);
+  assert.match(build, /\/link advapi32\.lib userenv\.lib ole32\.lib/);
+  assert.doesNotMatch(nodeSandbox,
+    /L"(?:TOKEN|SECRET|PASSWORD|COOKIE|AUTHORIZATION|API_KEY|SSH|GITHUB|AZURE|USERPROFILE|APPDATA)="/i);
   assert.match(nodeSandbox, /entries\.insert\(entries\.begin\(\), L"=" \+ drive \+ L"=" \+ workspace\)/);
   assert.match(nodeSandbox, /SDO_WIN32_NODE_TEST_INTERNAL/);
   assert.match(nodeSandbox, /stage=/);
