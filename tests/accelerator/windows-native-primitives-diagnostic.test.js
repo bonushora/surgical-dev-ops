@@ -208,6 +208,12 @@ test('Windows AppContainer environment comparison is isolated, sanitized and str
   assert.match(diagnostic, /GetFileAttributesW/);
   assert.match(diagnostic, /GetEffectiveRightsFromAclW/);
   assert.match(diagnostic, /MapGenericMask/);
+  assert.match(diagnostic, /enum class AclAssessment/);
+  assert.match(diagnostic, /kAllowed/);
+  assert.match(diagnostic, /kDenied/);
+  assert.match(diagnostic, /kIndeterminate/);
+  assert.match(diagnostic, /aclAssessmentName/);
+  assert.match(diagnostic, /ERROR_REPARSE_TAG_INVALID/);
   assert.match(diagnostic, /SetCurrentDirectoryW\(stagedWorkspace\.c_str\(\)\)/);
   assert.match(diagnostic, /SetCurrentDirectoryW\(originalCurrentDirectory\.data\(\)\)/);
   assert.match(diagnostic, /variant=[\s\S]+environmentSource=[\s\S]+entryNames=\[/);
@@ -221,10 +227,11 @@ test('Windows AppContainer environment comparison is isolated, sanitized and str
   assert.match(diagnostic, /stagedExecutable\.wstring\(\), nullptr, nativeSanitized/);
   for (const field of [
     'applicationNameMode=absolute', 'executablePathKind=', 'executableExists=',
-    'executableAccessible=', 'executableBasename=',
+    'executableType=', 'aclAssessment=', 'aclDiagnosticCode=',
+    'executableBasename=',
     'commandLineMode=explicit-separated', 'argcExpected=2',
     'currentDirectoryMode=', 'currentDirectoryPathKind=',
-    'currentDirectoryExists=', 'currentDirectoryAccessible=',
+    'currentDirectoryExists=', 'currentDirectoryAclAssessment=',
     'currentDirectoryBasename=', 'environmentSource=native-sanitized',
     'appContainer=true', 'creationFlags=', 'startupInfoExBytes=',
     'securityCapabilities=true', 'attributeListValid=true',

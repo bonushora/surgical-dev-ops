@@ -54,17 +54,34 @@ struct VariantResult {
   DWORD childExit;
 };
 
+enum class AclAssessment {
+  kAllowed,
+  kDenied,
+  kIndeterminate
+};
+
 struct PathMetadata {
   bool exists;
-  bool accessible;
   const char* pathKind;
   const char* basename;
+  const char* executableType;
+  AclAssessment aclAssessment;
+  DWORD aclDiagnosticCode;
 };
 
 struct DiagnosticFailure {
   const char* stage;
   DWORD win32Error;
 };
+
+const char* aclAssessmentName(AclAssessment assessment) {
+  switch (assessment) {
+    case AclAssessment::kAllowed: return "ALLOWED";
+    case AclAssessment::kDenied: return "DENIED";
+    case AclAssessment::kIndeterminate: return "INDETERMINATE";
+  }
+  return "INDETERMINATE";
+}
 
 DWORD win32CodeFromHresult(HRESULT value) {
   return static_cast<DWORD>(HRESULT_CODE(value));
@@ -323,13 +340,20 @@ bool validateAppContainerPath(const std::wstring& path, bool expectDirectory,
   const bool exists = attributes != INVALID_FILE_ATTRIBUTES;
   const bool isDirectory = exists && (attributes & FILE_ATTRIBUTE_DIRECTORY) != 0;
   *metadata = {
-    exists, false, expectDirectory ? "directory" : "file", basename
+    exists, expectDirectory ? "directory" : "file", basename,
+    expectDirectory ? "directory" : "regular-file",
+    AclAssessment::kIndeterminate,
+    exists ? ERROR_SUCCESS : attributeError
   };
   if (!exists || isDirectory != expectDirectory) {
     *failure = {
       expectDirectory ? "current-directory-validate" : "executable-validate",
       exists ? ERROR_DIRECTORY : attributeError
     };
+    return false;
+  }
+  if (!expectDirectory && (attributes & FILE_ATTRIBUTE_REPARSE_POINT) != 0) {
+    *failure = {"executable-validate", ERROR_REPARSE_TAG_INVALID};
     return false;
   }
 
@@ -341,11 +365,10 @@ bool validateAppContainerPath(const std::wstring& path, bool expectDirectory,
   );
   if (securityError != ERROR_SUCCESS || dacl == nullptr) {
     if (descriptor != nullptr) LocalFree(descriptor);
-    *failure = {
-      expectDirectory ? "current-directory-dacl" : "executable-dacl",
-      securityError == ERROR_SUCCESS ? ERROR_INVALID_ACL : securityError
-    };
-    return false;
+    metadata->aclAssessment = AclAssessment::kIndeterminate;
+    metadata->aclDiagnosticCode =
+      securityError == ERROR_SUCCESS ? ERROR_INVALID_ACL : securityError;
+    return true;
   }
 
   TRUSTEEW trustee{};
@@ -354,24 +377,19 @@ bool validateAppContainerPath(const std::wstring& path, bool expectDirectory,
   const DWORD rightsError = GetEffectiveRightsFromAclW(dacl, &trustee, &rights);
   LocalFree(descriptor);
   if (rightsError != ERROR_SUCCESS) {
-    *failure = {
-      expectDirectory ? "current-directory-access" : "executable-access", rightsError
-    };
-    return false;
+    metadata->aclAssessment = AclAssessment::kIndeterminate;
+    metadata->aclDiagnosticCode = rightsError;
+    return true;
   }
   GENERIC_MAPPING fileMapping{
     FILE_GENERIC_READ, FILE_GENERIC_WRITE, FILE_GENERIC_EXECUTE, FILE_ALL_ACCESS
   };
   MapGenericMask(&rights, &fileMapping);
   const ACCESS_MASK required = FILE_GENERIC_READ | FILE_GENERIC_EXECUTE;
-  metadata->accessible = (rights & required) == required;
-  if (!metadata->accessible) {
-    *failure = {
-      expectDirectory ? "current-directory-access" : "executable-access",
-      ERROR_ACCESS_DENIED
-    };
-    return false;
-  }
+  metadata->aclAssessment = (rights & required) == required
+    ? AclAssessment::kAllowed : AclAssessment::kIndeterminate;
+  metadata->aclDiagnosticCode = metadata->aclAssessment == AclAssessment::kAllowed
+    ? ERROR_SUCCESS : ERROR_ACCESS_DENIED;
   return true;
 }
 
@@ -496,7 +514,9 @@ void reportArgumentVariant(const char* variant, const char* currentDirectoryMode
             << " applicationNameMode=absolute"
             << " executablePathKind=" << executable.pathKind
             << " executableExists=" << (executable.exists ? "true" : "false")
-            << " executableAccessible=" << (executable.accessible ? "true" : "false")
+            << " executableType=" << executable.executableType
+            << " aclAssessment=" << aclAssessmentName(executable.aclAssessment)
+            << " aclDiagnosticCode=" << executable.aclDiagnosticCode
             << " executableBasename=" << executable.basename
             << " commandLineMode=explicit-separated"
             << " argcExpected=2"
@@ -504,8 +524,8 @@ void reportArgumentVariant(const char* variant, const char* currentDirectoryMode
             << " currentDirectoryPathKind=" << currentDirectory.pathKind
             << " currentDirectoryExists="
             << (currentDirectory.exists ? "true" : "false")
-            << " currentDirectoryAccessible="
-            << (currentDirectory.accessible ? "true" : "false")
+            << " currentDirectoryAclAssessment="
+            << aclAssessmentName(currentDirectory.aclAssessment)
             << " currentDirectoryBasename=" << currentDirectory.basename
             << " environmentSource=native-sanitized"
             << " appContainer=true"
