@@ -184,14 +184,10 @@ Environment profileEnvironment(const Environment& base, const std::wstring& prof
   return serialize(std::move(entries));
 }
 
-Environment environmentVariant(const Environment& base, const std::wstring& value,
-                                bool tempOnly, bool tmpOnly) {
+Environment environmentVariant(const Environment& base, const wchar_t* variable,
+                               const std::wstring& value) {
   std::vector<Entry> entries = base.entries;
-  setEntry(&entries, L"TEMP", tempOnly ? value : L"");
-  setEntry(&entries, L"TMP", tmpOnly ? value : L"");
-  entries.erase(std::remove_if(entries.begin(), entries.end(), [](const Entry& e) {
-    return e.value.empty();
-  }), entries.end());
+  setEntry(&entries, variable, value);
   return serialize(std::move(entries));
 }
 
@@ -1201,33 +1197,33 @@ int runNodeStartupDiagnostic(const std::wstring& requestedNode) {
       << " nextState=" << (control.expected ? "BLOCKED" : "TEST_TEMP_ONLY")
       << " equivalentAttempts=1 breakerDecision=" << (control.expected ? "CONTROL_NOT_REPRODUCED" : "CONTINUE") << '\n';
     if (control.expected) return results;
-    const fs::path tempDir = stage / L"temp-variant";
-    fs::create_directories(tempDir, filesystemError);
-    Environment tempEnvironment = environmentVariant(environment, tempDir.wstring(), true, false);
-    auto temp = runNodeStep("N1", stagedNode.wstring(), {L"--version"}, 0,
-      tempEnvironment, stagedWorkspace.wstring(), sid);
-    results.emplace_back(temp, temp.expected);
-    std::cout << "state=TEST_TEMP_ONLY evidence=" << (temp.expected ? "PASS" : "EXIT_134")
-      << " nextState=" << (temp.expected ? "VERIFY_TEMP_CONTROL" : "TEST_TMP_ONLY")
-      << " equivalentAttempts=2 breakerDecision=" << (temp.expected ? "VERIFY_CONTROL" : "CONTINUE") << '\n';
-    if (temp.expected) {
+    const fs::path userProfileDir = stage / L"userprofile-variant";
+    fs::create_directories(userProfileDir, filesystemError);
+    Environment userProfileEnvironment = environmentVariant(environment, L"USERPROFILE", userProfileDir.wstring());
+    auto userProfile = runNodeStep("N1", stagedNode.wstring(), {L"--version"}, 0,
+      userProfileEnvironment, stagedWorkspace.wstring(), sid);
+    results.emplace_back(userProfile, userProfile.expected);
+    std::cout << "state=TEST_USERPROFILE_ONLY evidence=" << (userProfile.expected ? "PASS" : "EXIT_134")
+      << " nextState=" << (userProfile.expected ? "VERIFY_USERPROFILE_CONTROL" : "TEST_APPDATA_ONLY")
+      << " equivalentAttempts=2 breakerDecision=" << (userProfile.expected ? "VERIFY_CONTROL" : "CONTINUE") << '\n';
+    if (userProfile.expected) {
       auto verify = runNodeStep("N1", stagedNode.wstring(), {L"--version"}, 0,
         environment, stagedWorkspace.wstring(), sid);
       results.emplace_back(verify, verify.expected);
-      std::cout << "state=VERIFY_TEMP_CONTROL evidence=" << (verify.expected ? "PASS" : "EXIT_134")
+      std::cout << "state=VERIFY_USERPROFILE_CONTROL evidence=" << (verify.expected ? "PASS" : "EXIT_134")
         << " nextState=COMPLETE equivalentAttempts=3 breakerDecision="
-        << (verify.expected ? "INDETERMINATE" : "TEMP_NECESSARY_AND_SUFFICIENT") << '\n';
+        << (verify.expected ? "INDETERMINATE" : "USERPROFILE_NECESSARY_AND_SUFFICIENT") << '\n';
       return results;
     }
-    const fs::path tmpDir = stage / L"tmp-variant";
-    fs::create_directories(tmpDir, filesystemError);
-    Environment tmpEnvironment = environmentVariant(environment, tmpDir.wstring(), false, true);
-    auto tmp = runNodeStep("N1", stagedNode.wstring(), {L"--version"}, 0,
-      tmpEnvironment, stagedWorkspace.wstring(), sid);
-    results.emplace_back(tmp, tmp.expected);
-    std::cout << "state=TEST_TMP_ONLY evidence=" << (tmp.expected ? "PASS" : "EXIT_134")
+    const fs::path appDataDir = stage / L"appdata-variant";
+    fs::create_directories(appDataDir, filesystemError);
+    Environment appDataEnvironment = environmentVariant(environment, L"APPDATA", appDataDir.wstring());
+    auto appData = runNodeStep("N1", stagedNode.wstring(), {L"--version"}, 0,
+      appDataEnvironment, stagedWorkspace.wstring(), sid);
+    results.emplace_back(appData, appData.expected);
+    std::cout << "state=TEST_APPDATA_ONLY evidence=" << (appData.expected ? "PASS" : "EXIT_134")
       << " nextState=COMPLETE equivalentAttempts=3 breakerDecision="
-      << (tmp.expected ? "VERIFY_CONTROL" : "BLOCKED_ADAPTIVE_BREAKER_OPEN") << '\n';
+      << (appData.expected ? "VERIFY_CONTROL" : "USERPROFILE_APPDATA_REFUTED") << '\n';
     return results;
   }();
 

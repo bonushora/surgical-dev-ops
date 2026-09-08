@@ -248,8 +248,8 @@ test('Windows AppContainer environment comparison is isolated, sanitized and str
   assert.match(diagnostic, /profileTempPath/);
   assert.match(diagnostic, /kNodeDiagnosticArgument\[\] = L"--node-startup-diagnostic"/);
   assert.match(diagnostic, /state=CONTROL_N1/);
-  assert.match(diagnostic, /state=TEST_TEMP_ONLY/);
-  assert.match(diagnostic, /state=TEST_TMP_ONLY/);
+  assert.match(diagnostic, /state=TEST_USERPROFILE_ONLY/);
+  assert.match(diagnostic, /state=TEST_APPDATA_ONLY/);
   assert.match(diagnostic, /environmentVariant/);
   assert.match(diagnostic, /JOB_OBJECT_LIMIT_ACTIVE_PROCESS/);
   assert.match(diagnostic, /CapabilityCount = 0/);
@@ -307,7 +307,7 @@ test('Windows AppContainer environment comparison is isolated, sanitized and str
   assert.match(diagnostic, /L"PATH"/);
   assert.doesNotMatch(diagnostic, /GetEnvironmentStrings|SetEnvironmentVariable/);
   assert.doesNotMatch(diagnostic,
-    /L"(?:TOKEN|SECRET|PASSWORD|COOKIE|AUTHORIZATION|API_KEY|SSH|GITHUB|AZURE|USERPROFILE|APPDATA)"/i);
+    /L"(?:TOKEN|SECRET|PASSWORD|COOKIE|AUTHORIZATION|API_KEY|SSH|GITHUB|AZURE)"/i);
   assert.doesNotMatch(diagnostic, /entryValues|std::wcout|modulePath\s*<</);
   assert.match(diagnostic, /--inert-child/);
   assert.match(build, /\/W4 \/WX \/MT \/utf-8/);
