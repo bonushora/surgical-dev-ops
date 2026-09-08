@@ -283,6 +283,10 @@ std::vector<wchar_t> environment(const std::wstring& nodeDirectory,
     L"TEMP=" + workspace,
     L"TMP=" + workspace
   };
+  const std::wstring drive = fs::path(workspace).root_name().wstring();
+  if (drive.size() == 2 && drive[1] == L':') {
+    entries.insert(entries.begin(), L"=" + drive + L"=" + workspace);
+  }
   std::vector<wchar_t> result;
   for (const std::wstring& entry : entries) {
     result.insert(result.end(), entry.begin(), entry.end());
