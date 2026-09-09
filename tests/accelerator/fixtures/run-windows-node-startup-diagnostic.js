@@ -26,15 +26,14 @@ try {
     ? result.stdout.trim().split(/\r?\n/).filter(Boolean)
     : [];
   const evidence = /^step=N1 processCreated=(?:true|false) exitCode=(?:\d+|null) stage=[a-z-]+ stderrClass=(?:NATIVE_ABORT|EMPTY|OTHER|OUTPUT_LIMIT) fatalReason=[A-Za-z0-9_+-]+ subsystem=[A-Z_]+ nativeEventObserved=(?:true|false) exceptionCode=(?:0x[0-9A-F]+|NOT_OBSERVED) exceptionClass=[A-Z_]+ firstChance=(?:true|false|NOT_APPLICABLE) terminationClass=[A-Z_]+ terminationOrigin=[A-Z_]+ exitProcessCode=(?:\d+|NOT_OBSERVED) debugLoopStatus=[A-Z_]+ firstNativeFrame=[A-Za-z0-9_:<>~.+-]+ nativeFrames=[A-Za-z0-9_:<>~.+,-]+ markerPresent=true cleanup=(?:PASS|FAIL)$/;
-  const transition = /^state=(?:CONTROL_N1|TEST_USERPROFILE_ONLY|VERIFY_USERPROFILE_CONTROL|TEST_APPDATA_ONLY|VERIFY_APPDATA_CONTROL|SUFFICIENT_EVIDENCE|NO_PROGRESS|BLOCKED|COMPLETE) evidence=[A-Z0-9_]+ nextState=(?:CONTROL_N1|TEST_USERPROFILE_ONLY|VERIFY_USERPROFILE_CONTROL|TEST_APPDATA_ONLY|VERIFY_APPDATA_CONTROL|SUFFICIENT_EVIDENCE|NO_PROGRESS|BLOCKED|COMPLETE) equivalentAttempts=\d+ breakerDecision=[A-Z0-9_]+$/;
+  const transition = /^state=(?:CONTROL_N1|TEST_GOVERNED_STDIN|VERIFY_ORIGINAL_CONTROL|BLOCKED|COMPLETE) evidence=[A-Z0-9_]+ nextState=(?:CONTROL_N1|TEST_GOVERNED_STDIN|VERIFY_ORIGINAL_CONTROL|BLOCKED|COMPLETE) equivalentAttempts=\d+ breakerDecision=[A-Z0-9_]+$/;
   const invalidLine = lines.find((line) => !evidence.test(line) && !transition.test(line));
   if (lines.length === 0 || invalidLine) {
     const stepLines = lines.filter((line) => line.startsWith('step=')).length;
     const stateLines = lines.filter((line) => line.startsWith('state=')).length;
     const transitionStates = new Set([
-      'CONTROL_N1', 'TEST_USERPROFILE_ONLY', 'VERIFY_USERPROFILE_CONTROL',
-      'TEST_APPDATA_ONLY', 'VERIFY_APPDATA_CONTROL', 'SUFFICIENT_EVIDENCE',
-      'NO_PROGRESS', 'BLOCKED', 'COMPLETE'
+      'CONTROL_N1', 'TEST_GOVERNED_STDIN', 'VERIFY_ORIGINAL_CONTROL',
+      'BLOCKED', 'COMPLETE'
     ]);
     let invalidLineClass = lines.length === 0 ? 'EMPTY_OUTPUT' : 'UNSANITIZED_LINE';
     let invalidField = 'NOT_APPLICABLE';

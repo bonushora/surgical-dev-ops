@@ -251,12 +251,15 @@ test('Windows AppContainer environment comparison is isolated, sanitized and str
   assert.match(diagnostic, /profileTempPath/);
   assert.match(diagnostic, /kNodeDiagnosticArgument\[\] = L"--node-startup-diagnostic"/);
   assert.match(diagnostic, /state=CONTROL_N1/);
-  assert.match(diagnostic, /state=TEST_USERPROFILE_ONLY/);
-  assert.match(diagnostic, /state=TEST_APPDATA_ONLY/);
+  assert.match(diagnostic, /state=TEST_GOVERNED_STDIN/);
+  assert.match(diagnostic, /state=VERIFY_ORIGINAL_CONTROL/);
   assert.match(diagnostic,
-    /control\.expected \? "BLOCKED" : "TEST_USERPROFILE_ONLY"/);
-  assert.doesNotMatch(diagnostic, /TEST_TEMP_ONLY|VERIFY_TEMP_CONTROL|TEST_TMP_ONLY|VERIFY_TMP_CONTROL/);
-  assert.match(diagnostic, /environmentVariant/);
+    /controlReproduced \? "TEST_GOVERNED_STDIN" : "BLOCKED"/);
+  assert.doesNotMatch(diagnostic,
+    /TEST_(?:TEMP|TMP|USERPROFILE|APPDATA)_ONLY|VERIFY_(?:TEMP|TMP|USERPROFILE|APPDATA)_CONTROL/);
+  assert.match(diagnostic, /hStdInput = governedStdin \? stdinRead : nullptr/);
+  assert.match(diagnostic,
+    /SetHandleInformation\(stdinWrite, HANDLE_FLAG_INHERIT, 0\)/);
   assert.match(diagnostic, /JOB_OBJECT_LIMIT_ACTIVE_PROCESS/);
   assert.match(diagnostic, /CapabilityCount = 0/);
   assert.match(diagnostic, /firstNativeFrame=/);
@@ -284,7 +287,7 @@ test('Windows AppContainer environment comparison is isolated, sanitized and str
   assert.match(startupRunner, /env: \{\}/);
   assert.doesNotMatch(startupRunner, /process\.env|execSync|shell: true/);
   assert.doesNotMatch(startupRunner,
-    /TEST_TEMP_ONLY|VERIFY_TEMP_CONTROL|TEST_TMP_ONLY|VERIFY_TMP_CONTROL/);
+    /TEST_(?:TEMP|TMP|USERPROFILE|APPDATA)_ONLY|VERIFY_(?:TEMP|TMP|USERPROFILE|APPDATA)_CONTROL/);
   const transitionPrefix = '  const transition = /';
   const transitionDeclaration = startupRunner.split(/\r?\n/)
     .find((line) => line.startsWith(transitionPrefix));
@@ -293,12 +296,12 @@ test('Windows AppContainer environment comparison is isolated, sanitized and str
     transitionDeclaration.slice(transitionPrefix.length, -2)
   );
   assert.match(
-    'state=CONTROL_N1 evidence=EXIT_134 nextState=TEST_USERPROFILE_ONLY ' +
+    'state=CONTROL_N1 evidence=EXIT_134 nextState=TEST_GOVERNED_STDIN ' +
       'equivalentAttempts=1 breakerDecision=CONTINUE',
     transitionContract
   );
   assert.doesNotMatch(
-    'state=CONTROL_N1 evidence=EXIT_134 nextState=TEST_TEMP_ONLY ' +
+    'state=CONTROL_N1 evidence=EXIT_134 nextState=TEST_USERPROFILE_ONLY ' +
       'equivalentAttempts=1 breakerDecision=CONTINUE',
     transitionContract
   );
@@ -359,7 +362,7 @@ test('Windows AppContainer environment comparison is isolated, sanitized and str
     /9a4eb5f1c29c6a2e93852ead46b999e284a6a5ca8bab4d4e241d587d025a52de/);
   assert.match(symbolizer,
     /fe2510a54825d0a60c468fdd6bbff096cb3a5d0bca1c75188ca5d90c064fd68b/);
-  assert.match(symbolizer, /F3DA19C1-119A-A539-4C4C-44205044422E/);
+  assert.match(symbolizer, /C119DAF3-9A11-39A5-4C4C-44205044422E/);
   assert.match(symbolizer, /sourceFile=\$sourceFile line=\$line column=\$column/);
   assert.doesNotMatch(symbolizer, /Write-Output\s+\$output|Write-Host/);
   assert.match(symbolizer, /Remove-Item -LiteralPath \$probeRoot -Recurse -Force/);

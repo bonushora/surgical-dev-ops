@@ -864,7 +864,8 @@ const char* exceptionClassName(DWORD code) {
 NodeStepResult runNodeStep(const char* step, const std::wstring& node,
                            const std::vector<std::wstring>& arguments,
                            DWORD expectedExit, const Environment& environment,
-                           const std::wstring& workspace, PSID sid) {
+                           const std::wstring& workspace, PSID sid,
+                           bool governedStdin) {
   SECURITY_ATTRIBUTES pipeSecurity{};
   pipeSecurity.nLength = sizeof(pipeSecurity);
   pipeSecurity.bInheritHandle = TRUE;
@@ -872,10 +873,18 @@ NodeStepResult runNodeStep(const char* step, const std::wstring& node,
   HANDLE stdoutWrite = nullptr;
   HANDLE stderrRead = nullptr;
   HANDLE stderrWrite = nullptr;
-  if (!CreatePipe(&stdoutRead, &stdoutWrite, &pipeSecurity, 0) ||
+  HANDLE stdinRead = nullptr;
+  HANDLE stdinWrite = nullptr;
+  if ((governedStdin &&
+       !CreatePipe(&stdinRead, &stdinWrite, &pipeSecurity, 0)) ||
+      !CreatePipe(&stdoutRead, &stdoutWrite, &pipeSecurity, 0) ||
       !CreatePipe(&stderrRead, &stderrWrite, &pipeSecurity, 0) ||
+      (governedStdin &&
+       !SetHandleInformation(stdinWrite, HANDLE_FLAG_INHERIT, 0)) ||
       !SetHandleInformation(stdoutRead, HANDLE_FLAG_INHERIT, 0) ||
       !SetHandleInformation(stderrRead, HANDLE_FLAG_INHERIT, 0)) {
+    if (stdinRead) CloseHandle(stdinRead);
+    if (stdinWrite) CloseHandle(stdinWrite);
     if (stdoutRead) CloseHandle(stdoutRead);
     if (stdoutWrite) CloseHandle(stdoutWrite);
     if (stderrRead) CloseHandle(stderrRead);
@@ -892,6 +901,8 @@ NodeStepResult runNodeStep(const char* step, const std::wstring& node,
   if (job == nullptr || !SetInformationJobObject(
       job, JobObjectExtendedLimitInformation, &limits, sizeof(limits))) {
     if (job) CloseHandle(job);
+    if (stdinRead) CloseHandle(stdinRead);
+    if (stdinWrite) CloseHandle(stdinWrite);
     CloseHandle(stdoutRead); CloseHandle(stdoutWrite);
     CloseHandle(stderrRead); CloseHandle(stderrWrite);
     return {step, false, false, 0, "job", "EMPTY", "NATIVE_ABORT_NO_MESSAGE",
@@ -914,6 +925,8 @@ NodeStepResult runNodeStep(const char* step, const std::wstring& node,
     );
   if (!attributesReady) {
     if (attributes) HeapFree(GetProcessHeap(), 0, attributes);
+    if (stdinRead) CloseHandle(stdinRead);
+    if (stdinWrite) CloseHandle(stdinWrite);
     CloseHandle(job); CloseHandle(stdoutRead); CloseHandle(stdoutWrite);
     CloseHandle(stderrRead); CloseHandle(stderrWrite);
     return {step, false, false, 0, "attributes", "EMPTY", "NATIVE_ABORT_NO_MESSAGE",
@@ -927,6 +940,7 @@ NodeStepResult runNodeStep(const char* step, const std::wstring& node,
   STARTUPINFOEXW startup{};
   startup.StartupInfo.cb = sizeof(startup);
   startup.StartupInfo.dwFlags = STARTF_USESTDHANDLES;
+  startup.StartupInfo.hStdInput = governedStdin ? stdinRead : nullptr;
   startup.StartupInfo.hStdOutput = stdoutWrite;
   startup.StartupInfo.hStdError = stderrWrite;
   startup.lpAttributeList = attributes;
@@ -938,6 +952,8 @@ NodeStepResult runNodeStep(const char* step, const std::wstring& node,
     const_cast<wchar_t*>(environment.block.data()), workspace.c_str(),
     &startup.StartupInfo, &process
   );
+  if (stdinRead) CloseHandle(stdinRead);
+  if (stdinWrite) CloseHandle(stdinWrite);
   CloseHandle(stdoutWrite);
   CloseHandle(stderrWrite);
   DeleteProcThreadAttributeList(attributes);
@@ -1215,51 +1231,38 @@ int runNodeStartupDiagnostic(const std::wstring& requestedNode) {
   }
 
   const std::wstring allowRead = L"--allow-fs-read=" + stagedWorkspace.wstring();
+  bool stdinHypothesisConfirmed = false;
   const std::vector<std::pair<NodeStepResult, bool>> attempted = [&]() {
     std::vector<std::pair<NodeStepResult, bool>> results;
-    const auto attempt = [&](const char* step, std::vector<std::wstring> arguments,
-                             DWORD expectedExit) {
-      NodeStepResult result = runNodeStep(
-        step, stagedNode.wstring(), arguments, expectedExit, environment,
-        stagedWorkspace.wstring(), sid
-      );
-      results.emplace_back(result, result.expected);
-      return result.expected;
-    };
     auto control = runNodeStep("N1", stagedNode.wstring(), {L"--version"}, 0,
-      environment, stagedWorkspace.wstring(), sid);
+      environment, stagedWorkspace.wstring(), sid, false);
     results.emplace_back(control, control.expected);
-    std::cout << "state=CONTROL_N1 evidence=" << (control.expected ? "PASS" : "EXIT_134")
-      << " nextState=" << (control.expected ? "BLOCKED" : "TEST_USERPROFILE_ONLY")
-      << " equivalentAttempts=1 breakerDecision=" << (control.expected ? "CONTROL_NOT_REPRODUCED" : "CONTINUE") << '\n';
-    if (control.expected) return results;
-    const fs::path userProfileDir = stage / L"userprofile-variant";
-    fs::create_directories(userProfileDir, filesystemError);
-    Environment userProfileEnvironment = environmentVariant(environment, L"USERPROFILE", userProfileDir.wstring());
-    auto userProfile = runNodeStep("N1", stagedNode.wstring(), {L"--version"}, 0,
-      userProfileEnvironment, stagedWorkspace.wstring(), sid);
-    results.emplace_back(userProfile, userProfile.expected);
-    std::cout << "state=TEST_USERPROFILE_ONLY evidence=" << (userProfile.expected ? "PASS" : "EXIT_134")
-      << " nextState=" << (userProfile.expected ? "VERIFY_USERPROFILE_CONTROL" : "TEST_APPDATA_ONLY")
-      << " equivalentAttempts=2 breakerDecision=" << (userProfile.expected ? "VERIFY_CONTROL" : "CONTINUE") << '\n';
-    if (userProfile.expected) {
-      auto verify = runNodeStep("N1", stagedNode.wstring(), {L"--version"}, 0,
-        environment, stagedWorkspace.wstring(), sid);
-      results.emplace_back(verify, verify.expected);
-      std::cout << "state=VERIFY_USERPROFILE_CONTROL evidence=" << (verify.expected ? "PASS" : "EXIT_134")
-        << " nextState=COMPLETE equivalentAttempts=3 breakerDecision="
-        << (verify.expected ? "INDETERMINATE" : "USERPROFILE_NECESSARY_AND_SUFFICIENT") << '\n';
-      return results;
-    }
-    const fs::path appDataDir = stage / L"appdata-variant";
-    fs::create_directories(appDataDir, filesystemError);
-    Environment appDataEnvironment = environmentVariant(environment, L"APPDATA", appDataDir.wstring());
-    auto appData = runNodeStep("N1", stagedNode.wstring(), {L"--version"}, 0,
-      appDataEnvironment, stagedWorkspace.wstring(), sid);
-    results.emplace_back(appData, appData.expected);
-    std::cout << "state=TEST_APPDATA_ONLY evidence=" << (appData.expected ? "PASS" : "EXIT_134")
+    const bool controlReproduced = control.hasExitCode && control.exitCode == 134;
+    std::cout << "state=CONTROL_N1 evidence="
+      << (controlReproduced ? "EXIT_134" : control.expected ? "PASS" : "EXIT_OTHER")
+      << " nextState=" << (controlReproduced ? "TEST_GOVERNED_STDIN" : "BLOCKED")
+      << " equivalentAttempts=1 breakerDecision="
+      << (controlReproduced ? "CONTINUE" : "CONTROL_NOT_REPRODUCED") << '\n';
+    if (!controlReproduced) return results;
+    auto governedStdin = runNodeStep("N1", stagedNode.wstring(), {L"--version"}, 0,
+      environment, stagedWorkspace.wstring(), sid, true);
+    results.emplace_back(governedStdin, governedStdin.expected);
+    std::cout << "state=TEST_GOVERNED_STDIN evidence="
+      << (governedStdin.expected ? "PASS" : "EXIT_NONZERO")
+      << " nextState=" << (governedStdin.expected ? "VERIFY_ORIGINAL_CONTROL" : "COMPLETE")
+      << " equivalentAttempts=2 breakerDecision="
+      << (governedStdin.expected ? "VERIFY_CONTROL" : "STDIN_PIPE_REFUTED") << '\n';
+    if (!governedStdin.expected) return results;
+    auto verify = runNodeStep("N1", stagedNode.wstring(), {L"--version"}, 0,
+      environment, stagedWorkspace.wstring(), sid, false);
+    results.emplace_back(verify, verify.expected);
+    const bool verifyReproduced = verify.hasExitCode && verify.exitCode == 134;
+    std::cout << "state=VERIFY_ORIGINAL_CONTROL evidence="
+      << (verifyReproduced ? "EXIT_134" : verify.expected ? "PASS" : "EXIT_OTHER")
       << " nextState=COMPLETE equivalentAttempts=3 breakerDecision="
-      << (appData.expected ? "VERIFY_CONTROL" : "USERPROFILE_APPDATA_REFUTED") << '\n';
+      << (verifyReproduced ? "STDIN_PIPE_NECESSARY_AND_SUFFICIENT" : "INDETERMINATE")
+      << '\n';
+    stdinHypothesisConfirmed = verifyReproduced;
     return results;
   }();
 
@@ -1276,7 +1279,7 @@ int runNodeStartupDiagnostic(const std::wstring& requestedNode) {
   const bool cleanup = daclRestored && stageRemoved && profileCleanup == S_OK;
   for (const auto& entry : attempted) reportNodeStep(entry.first, cleanup);
   if (!cleanup || attempted.empty()) return 2;
-  return attempted.back().second ? 0 : 1;
+  return stdinHypothesisConfirmed ? 0 : 1;
 }
 
 }  // namespace

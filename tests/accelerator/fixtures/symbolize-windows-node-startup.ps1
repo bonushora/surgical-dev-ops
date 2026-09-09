@@ -4,7 +4,7 @@ Set-StrictMode -Version Latest
 $nodeVersion = '24.18.0'
 $nodeSha256 = '9a4eb5f1c29c6a2e93852ead46b999e284a6a5ca8bab4d4e241d587d025a52de'
 $pdbZipSha256 = 'fe2510a54825d0a60c468fdd6bbff096cb3a5d0bca1c75188ca5d90c064fd68b'
-$pdbGuid = 'F3DA19C1-119A-A539-4C4C-44205044422E'
+$pdbGuid = 'C119DAF3-9A11-39A5-4C4C-44205044422E'
 $probeRoot = Join-Path $env:RUNNER_TEMP ("sdo-node-symbols-" + [Guid]::NewGuid().ToString('N'))
 
 function Assert-Sha256([string]$Target, [string]$Expected) {
