@@ -643,8 +643,13 @@ int wmain(int argc, wchar_t* argv[]) {
     return failRunNode(profileFailure);
   }
   std::error_code error;
-  const fs::path stage = fs::path(profilePath) / L"Temp" /
-    (L"sdo-node-test-" + profileName);
+  /*
+   * The profile is unique to this invocation, so another unique subtree name
+   * adds no isolation. Keep the staging prefix deliberately short: governed
+   * repositories may contain content-addressed Git projections whose bounded
+   * component names approach the legacy Win32 path limit.
+   */
+  const fs::path stage = fs::path(profilePath) / L"s";
   if (error || !fs::create_directories(stage, error) || error) {
     DeleteAppContainerProfile(profileName.c_str());
     FreeSid(sid);

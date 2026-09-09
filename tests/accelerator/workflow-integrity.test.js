@@ -90,8 +90,17 @@ test(
     assert.match(step, /sudo apt-get update/);
     assert.match(
       step,
-      /sudo apt-get install --yes --no-install-recommends bubblewrap/
+      /sudo apt-get install --yes --no-install-recommends \\\n+\s+apparmor-profiles apparmor-utils bubblewrap/
     );
+    assert.match(
+      step,
+      /\/usr\/share\/apparmor\/extra-profiles\/bwrap-userns-restrict/
+    );
+    assert.match(
+      step,
+      /sudo apparmor_parser -r \/etc\/apparmor\.d\/bwrap-userns-restrict/
+    );
+    assert.doesNotMatch(step, /apparmor_restrict_unprivileged_userns=0/);
     assert.match(step, /bwrap_path="\$\(command -v bwrap\)"/);
     assert.match(step, /test "\$bwrap_path" = "\/usr\/bin\/bwrap"/);
     assert.match(step, /test -x "\$bwrap_path"/);

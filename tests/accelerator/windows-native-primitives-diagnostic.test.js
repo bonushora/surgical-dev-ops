@@ -168,7 +168,8 @@ test('existing Win32 helper is not misrepresented as NODE_TEST_FILE containment'
   assert.match(nodeSandbox, /GetAppContainerFolderPath\(sidText, &profilePathRaw\)/);
   assert.match(nodeSandbox, /L"LOCALAPPDATA=" \+ profilePath/);
   assert.match(nodeSandbox,
-    /const fs::path stage = fs::path\(profilePath\) \/ L"Temp"/);
+    /const fs::path stage = fs::path\(profilePath\) \/ L"s"/);
+  assert.doesNotMatch(nodeSandbox, /L"sdo-node-test-" \+ profileName/);
   assert.match(nodeSandbox, /LocalFree\(sidText\)/);
   assert.match(nodeSandbox, /CoTaskMemFree\(profilePathRaw\)/);
   assert.match(nodeSandbox, /recordFailure\(failure, L"appcontainer-(?:sid-text|folder)"/);
@@ -479,6 +480,85 @@ test('Windows Job Object timeout terminates the native test tree', {
     assert.equal(execution.result.status, 124);
     assert.equal(execution.adapterEvidence.controls.genericProcessDenied, true);
     assert.equal(execution.adapterEvidence.controls.networkDenied, true);
+  } finally {
+    fs.rmSync(workspace, { recursive: true, force: true });
+  }
+});
+
+test('Windows native sandbox stages deep content-addressed workspace paths', {
+  skip: process.platform !== 'win32'
+}, () => {
+  const workspace = fs.realpathSync(fs.mkdtempSync(path.join(os.tmpdir(), 'sdo-win-node-deep-')));
+  const target = 'deep.test.js';
+  const relativeProjection = path.join(
+    '.git',
+    'surgical-devops',
+    'materialized',
+    'a'.repeat(64),
+    `${'b'.repeat(40)}.blob`
+  );
+  fs.mkdirSync(path.join(workspace, path.dirname(relativeProjection)), { recursive: true });
+  fs.writeFileSync(path.join(workspace, relativeProjection), 'qualified\n');
+  fs.writeFileSync(path.join(workspace, target), [
+    "const assert = require('node:assert/strict');",
+    "const fs = require('node:fs');",
+    "const path = require('node:path');",
+    "const test = require('node:test');",
+    `const projection = ${JSON.stringify(relativeProjection.split(path.sep).join('/'))};`,
+    "test('deep projection is readable', () => {",
+    "  assert.equal(fs.readFileSync(path.join(process.cwd(), projection), 'utf8'), 'qualified\\n');",
+    "});",
+    ''
+  ].join('\n'));
+  const observedAt = '2099-01-01T00:01:00.000Z';
+  const expiresAt = '2099-01-01T00:05:00.000Z';
+  const request = createMachineAccessRequest({
+    requestId: 'win-deep-path-request',
+    operationId: 'win-deep-path-operation',
+    workspace,
+    operationType: 'RUN_NODE_TEST',
+    target,
+    purpose: 'Qualify deep content-addressed projection staging.',
+    requestedAt: observedAt
+  });
+  const grantEvaluation = deepFreeze({
+    schema: 'sdo.capability_grant_evaluation.v1',
+    decision: 'ALLOWED',
+    grant: {
+      operationId: request.operationId,
+      workspace: request.workspace,
+      capabilityType: request.capabilityType,
+      action: request.action,
+      riskLevel: request.riskLevel,
+      policyDecision: 'ALLOWED',
+      lifecycleState: 'PENDING',
+      fingerprint: 'b'.repeat(64)
+    }
+  });
+  const authority = createMachineAccessAuthority({
+    authorityId: 'win-deep-path-authority',
+    request,
+    grantEvaluation,
+    issuedAt: observedAt,
+    expiresAt
+  });
+  const requirement = createSandboxRequirement({
+    requirementId: 'win-deep-path-requirement',
+    operation: createMachineAccessOperation({ request, authority }),
+    platform: 'win32',
+    requiredAt: observedAt
+  });
+  try {
+    const execution = executeWindowsNodeTest({
+      requirement,
+      target,
+      observedAt,
+      expiresAt,
+      timeoutMs: 5000,
+      maxOutputBytes: 64 * 1024
+    });
+    assert.equal(execution.result.status, 0, execution.result.stderr);
+    assert.match(execution.result.stdout, /deep projection is readable/);
   } finally {
     fs.rmSync(workspace, { recursive: true, force: true });
   }

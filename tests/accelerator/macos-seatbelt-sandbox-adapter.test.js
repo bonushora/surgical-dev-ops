@@ -196,6 +196,7 @@ test('Seatbelt profile is deny-default operation-bound and network-silent', () =
   assert.match(source, /\['SIGABRT', 'SIGKILL', 'SIGSYS'\]/);
   const nodeProfile = createNodeTestProfile('/qualified/workspace', '/qualified/node');
   assert.match(nodeProfile, /allow process-exec \(literal "\/qualified\/node"\)/);
+  assert.match(nodeProfile, /\(allow process-fork\)/);
   assert.doesNotMatch(nodeProfile, /allow process-exec[^\n]*\/bin\/sh/);
   assert.doesNotMatch(nodeProfile, /dynamic-code-generation/);
   assert.match(source, /process\.execPath/);
