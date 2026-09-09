@@ -257,6 +257,8 @@ test('Windows AppContainer environment comparison is isolated, sanitized and str
   assert.match(diagnostic, /JOB_OBJECT_LIMIT_ACTIVE_PROCESS/);
   assert.match(diagnostic, /CapabilityCount = 0/);
   assert.match(diagnostic, /firstNativeFrame=/);
+  assert.match(diagnostic, /nativeFrames=/);
+  assert.match(diagnostic, /nodeNativeFrames/);
   assert.match(diagnostic, /sanitizedFatalReason/);
   assert.match(diagnostic, /fatalSubsystem/);
   assert.match(diagnostic, /fatalReason=/);
@@ -269,7 +271,8 @@ test('Windows AppContainer environment comparison is isolated, sanitized and str
   assert.match(diagnostic, /DBG_EXCEPTION_NOT_HANDLED/);
   for (const field of [
     'nativeEventObserved=', 'exceptionCode=', 'exceptionClass=', 'firstChance=',
-    'terminationClass=', 'terminationOrigin=', 'exitProcessCode=', 'debugLoopStatus='
+    'terminationClass=', 'terminationOrigin=', 'exitProcessCode=', 'debugLoopStatus=',
+    'nativeFrames='
   ]) assert.match(diagnostic, new RegExp(field));
   assert.match(diagnostic, /markerPresent=true/);
   assert.match(diagnostic, /cleanup=/);

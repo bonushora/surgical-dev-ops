@@ -636,6 +636,7 @@ struct NodeStepResult {
   const char* terminationClass = "UNKNOWN";
   const char* terminationOrigin = "INDETERMINATE";
   const char* debugLoopStatus = "NOT_OBSERVED";
+  std::string nativeFrames = "none";
 };
 
 void readNodePipe(HANDLE pipe, NodeCapture* capture) {
@@ -757,6 +758,39 @@ std::string firstNodeNativeFrame(const std::string& stderrText) {
   }
   const std::string frame = stderrText.substr(first, end - first);
   return frame.empty() || frame.size() > 160 ? "indeterminate" : frame;
+}
+
+std::string nodeNativeFrames(const std::string& stderrText) {
+  std::string result;
+  size_t cursor = 0;
+  size_t count = 0;
+  while (cursor < stderrText.size() && count < 12) {
+    size_t first = std::string::npos;
+    for (const char* prefix : {"node::", "v8::", "uv_"}) {
+      const size_t candidate = stderrText.find(prefix, cursor);
+      if (candidate != std::string::npos &&
+          (first == std::string::npos || candidate < first)) {
+        first = candidate;
+      }
+    }
+    if (first == std::string::npos) break;
+    size_t end = first;
+    while (end < stderrText.size()) {
+      const unsigned char character = static_cast<unsigned char>(stderrText[end]);
+      if (!(std::isalnum(character) || character == ':' || character == '_' ||
+            character == '+' || character == '-' || character == '<' ||
+            character == '>' || character == '~' || character == '.')) break;
+      ++end;
+    }
+    const std::string frame = stderrText.substr(first, end - first);
+    if (!frame.empty() && frame.size() <= 160) {
+      if (!result.empty()) result.push_back(',');
+      result += frame;
+      ++count;
+    }
+    cursor = end > first ? end : first + 1;
+  }
+  return result.empty() ? "none" : result;
 }
 
 std::string sanitizedFatalReason(const std::string& stderrText) {
@@ -1051,6 +1085,7 @@ NodeStepResult runNodeStep(const char* step, const std::wstring& node,
     hasExceptionCode ? "DEBUG_EVENT" :
     processExited ? "PROCESS_EXIT_EVENT" : "INDETERMINATE";
   result.debugLoopStatus = debugError ? "ERROR" : timedOut ? "TIMEOUT" : "COMPLETE";
+  result.nativeFrames = nodeNativeFrames(stderrCapture.value);
   return result;
 }
 
@@ -1082,6 +1117,7 @@ void reportNodeStep(const NodeStepResult& result, bool cleanup) {
   else std::cout << "NOT_OBSERVED";
   std::cout << " debugLoopStatus=" << result.debugLoopStatus
             << " firstNativeFrame=" << result.firstNativeFrame
+            << " nativeFrames=" << result.nativeFrames
             << " markerPresent=true"
             << " cleanup=" << (cleanup ? "PASS" : "FAIL") << '\n';
 }
