@@ -110,10 +110,10 @@ jobs:
           test "$bwrap_path" = "/usr/bin/bwrap"
           test -x "$bwrap_path"
           "$bwrap_path" --version
-          unshare_path="$(command -v unshare)"
-          test "$unshare_path" = "/usr/bin/unshare"
-          test -x "$unshare_path"
-          "$unshare_path" --version
+          "$bwrap_path" --unshare-user --unshare-pid --unshare-net \
+            --unshare-ipc --unshare-uts --new-session --die-with-parent \
+            --dir /usr --ro-bind /usr /usr --symlink usr/lib /lib \
+            --symlink usr/lib64 /lib64 --proc /proc --dev /dev /usr/bin/true
 
       - name: Build qualified Windows native durability helper
         if: matrix.os == 'windows-latest'

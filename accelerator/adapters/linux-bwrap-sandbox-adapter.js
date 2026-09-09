@@ -6,7 +6,6 @@ const childProcess = require('node:child_process');
 const { canonicalizeAuthorizedRoot } = require('../core/workspace-boundary');
 
 const BWRAP = '/usr/bin/bwrap';
-const NETWORK_NAMESPACE_LAUNCHER = '/usr/bin/unshare';
 const TIMEOUT_MS = 5000;
 const MAX_OUTPUT_BYTES = 32 * 1024;
 const PROBE = path.resolve(__dirname, '../native/linux/bwrap-sandbox-probe.js');
@@ -37,10 +36,6 @@ function qualifiedRuntime(requirement) {
   if (!fs.existsSync(BWRAP) || !fs.statSync(BWRAP).isFile()) {
     throw new Error('Qualified Bubblewrap executable is unavailable.');
   }
-  if (!fs.existsSync(NETWORK_NAMESPACE_LAUNCHER) ||
-      !fs.statSync(NETWORK_NAMESPACE_LAUNCHER).isFile()) {
-    throw new Error('Qualified Linux network namespace launcher is unavailable.');
-  }
   const workspace = canonicalizeAuthorizedRoot(requirement.workspace);
   const node = fs.realpathSync(process.execPath);
   if (!fs.statSync(node).isFile() || !fs.statSync(PROBE).isFile()) {
@@ -51,7 +46,7 @@ function qualifiedRuntime(requirement) {
 
 function containmentArguments(workspace, node) {
   return [
-    '--unshare-user', '--unshare-pid', '--unshare-ipc', '--unshare-uts',
+    '--unshare-user', '--unshare-pid', '--unshare-net', '--unshare-ipc', '--unshare-uts',
     '--new-session', '--die-with-parent', '--clearenv',
     '--dir', '/runtime', '--ro-bind', node, '/runtime/node',
     '--ro-bind', PROBE, '/runtime/probe.js',
@@ -65,7 +60,7 @@ function containmentArguments(workspace, node) {
 
 function codexContainmentArguments(cognitiveRoot, runtimeBindings) {
   const arguments_ = [
-    '--unshare-user', '--unshare-pid', '--unshare-ipc', '--unshare-uts',
+    '--unshare-user', '--unshare-pid', '--unshare-net', '--unshare-ipc', '--unshare-uts',
     '--new-session', '--die-with-parent', '--dir', '/runtime'
   ];
   if (runtimeBindings.some((binding) => binding.target.startsWith('/usr/'))) {
@@ -86,23 +81,9 @@ function codexContainmentArguments(cognitiveRoot, runtimeBindings) {
   return arguments_;
 }
 
-function networkNamespaceArguments(bubblewrapArguments) {
-  return [
-    '--user', '--map-current-user', '--net', '--', BWRAP, ...bubblewrapArguments
-  ];
-}
-
 function qualifiedCodexRoot(cognitiveRoot) {
   if (process.platform !== 'linux' || !fs.existsSync(BWRAP) || !fs.statSync(BWRAP).isFile()) {
     const error = new Error('CODEX_CONTAINMENT_UNAVAILABLE: Linux Bubblewrap is unavailable.');
-    error.code = 'CODEX_CONTAINMENT_UNAVAILABLE';
-    throw error;
-  }
-  if (!fs.existsSync(NETWORK_NAMESPACE_LAUNCHER) ||
-      !fs.statSync(NETWORK_NAMESPACE_LAUNCHER).isFile()) {
-    const error = new Error(
-      'CODEX_CONTAINMENT_UNAVAILABLE: Linux network namespace launcher is unavailable.'
-    );
     error.code = 'CODEX_CONTAINMENT_UNAVAILABLE';
     throw error;
   }
@@ -133,8 +114,7 @@ function attestLinuxCodexContainment(cognitiveRoot, observedAt) {
     '--remount-ro', '/',
     '/runtime/node', '/runtime/probe.js'
   ];
-  const args = networkNamespaceArguments(bubblewrapArguments);
-  const result = childProcess.spawnSync(NETWORK_NAMESPACE_LAUNCHER, args, {
+  const result = childProcess.spawnSync(BWRAP, bubblewrapArguments, {
     cwd: root,
     shell: false,
     encoding: 'utf8',
@@ -218,8 +198,8 @@ function createLinuxCodexCognitiveLaunchSpec({
   return deepFreeze({
     schema: 'sdo.codex_cognitive_launch_spec.v1',
     platform: 'linux',
-    nativeLauncher: NETWORK_NAMESPACE_LAUNCHER,
-    nativeArguments: networkNamespaceArguments([
+    nativeLauncher: BWRAP,
+    nativeArguments: [
       ...codexContainmentArguments(root, [
         { source: CODEX_EXECUTABLE_FD, target: '/runtime/codex' },
         ...qualifiedBindings
@@ -231,7 +211,7 @@ function createLinuxCodexCognitiveLaunchSpec({
       '--remount-ro', '/',
       '/runtime/codex',
       ...codexExecutableArguments
-    ]),
+    ],
     executable,
     executableFdToken: CODEX_EXECUTABLE_FD,
     sdkWorkingDirectory: '/cognitive/workspace',
@@ -249,10 +229,9 @@ function attestLinuxBwrapSandbox({ requirement, observedAt, expiresAt }) {
   const bubblewrapArguments = [
     ...containmentArguments(workspace, node), '/runtime/node', '/runtime/probe.js'
   ];
-  const args = networkNamespaceArguments(bubblewrapArguments);
   const input = JSON.stringify({ operationId: requirement.operationId,
     requirementFingerprint: requirement.fingerprint });
-  const result = childProcess.spawnSync(NETWORK_NAMESPACE_LAUNCHER, args, {
+  const result = childProcess.spawnSync(BWRAP, bubblewrapArguments, {
     cwd: workspace, shell: false, input, encoding: 'utf8', timeout: TIMEOUT_MS,
     maxBuffer: MAX_OUTPUT_BYTES, windowsHide: true, env: { PATH: '/usr/bin:/bin' }
   });
@@ -321,8 +300,8 @@ function executeLinuxBwrapNodeTest({
     '/runtime/node',
     ...sandboxedArguments
   ];
-  const arguments_ = networkNamespaceArguments(bubblewrapArguments);
-  const result = childProcess.spawnSync(NETWORK_NAMESPACE_LAUNCHER, arguments_, {
+  const arguments_ = bubblewrapArguments;
+  const result = childProcess.spawnSync(BWRAP, arguments_, {
     cwd: workspace,
     shell: false,
     encoding: 'utf8',
@@ -333,7 +312,7 @@ function executeLinuxBwrapNodeTest({
   });
   return {
     adapterEvidence,
-    executable: NETWORK_NAMESPACE_LAUNCHER,
+    executable: BWRAP,
     arguments: arguments_,
     sandboxedExecutable: '/runtime/node',
     sandboxedArguments,

@@ -78,18 +78,18 @@ test('adapter rejects malformed requirement and invalid evidence lifetime', () =
   }
 });
 
-test('adapter fails closed without the qualified network namespace launcher', {
+test('adapter fails closed without the qualified Bubblewrap launcher', {
   skip: process.platform !== 'linux'
 }, (context) => {
   const originalExists = fs.existsSync.bind(fs);
   context.mock.method(fs, 'existsSync', (candidate) =>
-    candidate === '/usr/bin/unshare' ? false : originalExists(candidate));
+    candidate === '/usr/bin/bwrap' ? false : originalExists(candidate));
   const requirement = createSandboxRequirement({
     requirementId: 'bwrap-requirement', operation: operation(), platform: 'linux', requiredAt: NOW
   });
   assert.throws(() => attestLinuxBwrapSandbox({
     requirement, observedAt: OBSERVED, expiresAt: EXPIRES
-  }), /network namespace launcher is unavailable/);
+  }), /Bubblewrap executable is unavailable/);
 });
 
 test('network namespace initialization failure blocks the operation', {
@@ -111,10 +111,9 @@ test('adapter fixes executable arguments environment and disables shell', () => 
     require.resolve('../../accelerator/adapters/linux-bwrap-sandbox-adapter'), 'utf8'
   );
   assert.match(source, /const BWRAP = '\/usr\/bin\/bwrap'/);
-  assert.match(source, /const NETWORK_NAMESPACE_LAUNCHER = '\/usr\/bin\/unshare'/);
   assert.match(source, /shell: false/);
-  assert.match(source, /'--user', '--map-current-user', '--net', '--', BWRAP/);
-  assert.doesNotMatch(source, /--unshare-net/);
+  assert.match(source, /'--unshare-user', '--unshare-pid', '--unshare-net'/);
+  assert.doesNotMatch(source, /NETWORK_NAMESPACE_LAUNCHER|\/usr\/bin\/unshare/);
   assert.match(source, /--ro-bind/);
   assert.match(source, /--permission/);
   assert.match(source, /--test-isolation=none/);
