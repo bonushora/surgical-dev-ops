@@ -150,7 +150,11 @@ test('existing Win32 helper is not misrepresented as NODE_TEST_FILE containment'
   assert.match(nodeSandbox, /TerminateJobObject/);
   assert.match(nodeSandbox, /JOB_OBJECT_LIMIT_KILL_ON_JOB_CLOSE/);
   assert.match(nodeSandbox, /--permission/);
+  assert.match(nodeSandbox, /--preserve-symlinks --preserve-symlinks-main/);
+  assert.match(nodeSandbox, /--test " \+ quote\(target\)/);
   assert.match(nodeSandbox, /--test-isolation=none/);
+  assert.match(nodeAdapter,
+    /sandboxedArguments: \[\s*'--preserve-symlinks',\s*'--preserve-symlinks-main'/);
   assert.match(nodeSandbox,
     /L"HOME="[\s\S]*L"PATH="[\s\S]*L"SystemRoot="[\s\S]*L"TEMP="[\s\S]*L"TMP="/);
   assert.match(nodeSandbox, /#include <sddl\.h>/);
@@ -278,8 +282,8 @@ test('Windows AppContainer environment comparison is isolated, sanitized and str
   assert.match(diagnostic, /state=RUN_N4/);
   assert.match(diagnostic, /state=RUN_N5/);
   assert.match(diagnostic, /state=RUN_N6/);
-  assert.match(diagnostic, /state=RUN_N7/);
   assert.match(diagnostic, /readFileSync\(process\.argv\[1\]\)/);
+  assert.match(diagnostic, /L"--preserve-symlinks-main"/);
   assert.match(diagnostic, /STAGE_REMOVE_FAILED/);
   assert.match(diagnostic, /cleanupCode=/);
   assert.match(diagnostic, /MODULE_NOT_FOUND/);

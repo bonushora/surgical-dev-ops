@@ -179,11 +179,13 @@ function executeWindowsNodeTest({
     arguments: helperArguments,
     sandboxedExecutable: native.stagedNode,
     sandboxedArguments: [
+      '--preserve-symlinks',
+      '--preserve-symlinks-main',
       '--permission',
       `--allow-fs-read=${native.stagingWorkspace}`,
       '--test-isolation=none',
       '--test',
-      native.stagedTarget
+      native.target
     ],
     result: { ...result, stdout, stderr: result.stderr || '' }
   };

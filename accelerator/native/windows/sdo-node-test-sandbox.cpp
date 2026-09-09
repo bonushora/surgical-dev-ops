@@ -463,8 +463,9 @@ int runNode(const std::wstring& operationId, const std::wstring& requirementFing
 
   const std::wstring targetPath = join(stagedWorkspace, target);
   const std::wstring allowRead = L"--allow-fs-read=" + stagedWorkspace;
-  std::wstring command = quote(stagedNode) + L" --permission " + quote(allowRead) +
-    L" --test-isolation=none --test " + quote(targetPath);
+  std::wstring command = quote(stagedNode) +
+    L" --preserve-symlinks --preserve-symlinks-main --permission " +
+    quote(allowRead) + L" --test-isolation=none --test " + quote(target);
   std::vector<wchar_t> commandLine(command.begin(), command.end());
   commandLine.push_back(L'\0');
   std::vector<wchar_t> env;
@@ -558,7 +559,7 @@ int runNode(const std::wstring& operationId, const std::wstring& requirementFing
   std::cout << ",\"stagedNode\":";
   printJsonString(stagedNode);
   std::cout << ",\"stagedTarget\":";
-  printJsonString(join(stagedWorkspace, target));
+  printJsonString(targetPath);
   std::cout << ",\"appContainerNoNetworkCapabilities\":true,"
                "\"workspaceReadOnly\":true,\"workspaceBound\":true,"
                "\"networkDenied\":true,\"genericProcessDenied\":true,"

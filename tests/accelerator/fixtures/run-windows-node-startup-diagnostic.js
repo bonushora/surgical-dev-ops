@@ -25,16 +25,15 @@ try {
   const lines = typeof result.stdout === 'string'
     ? result.stdout.trim().split(/\r?\n/).filter(Boolean)
     : [];
-  const evidence = /^step=N[1-7] processCreated=(?:true|false) exitCode=(?:\d+|null) stage=[a-z-]+ stderrClass=(?:NATIVE_ABORT|EMPTY|OTHER|OUTPUT_LIMIT) fatalReason=[A-Za-z0-9_+-]+ subsystem=[A-Z_]+ nativeEventObserved=(?:true|false) exceptionCode=(?:0x[0-9A-F]+|NOT_OBSERVED) exceptionClass=[A-Z_]+ firstChance=(?:true|false|NOT_APPLICABLE) terminationClass=[A-Z_]+ terminationOrigin=[A-Z_]+ exitProcessCode=(?:\d+|NOT_OBSERVED) debugLoopStatus=[A-Z_]+ firstNativeFrame=[A-Za-z0-9_:<>~.+-]+ nativeFrames=[A-Za-z0-9_:<>~.+,-]+ markerPresent=true cleanup=(?:PASS|DACL_RESTORE_FAILED|STAGE_REMOVE_FAILED|PROFILE_DELETE_FAILED) cleanupCode=\d+$/;
-  const transition = /^state=(?:CONTROL_N1|TEST_GOVERNED_STDIN|VERIFY_ORIGINAL_CONTROL|RUN_N2|RUN_N3|RUN_N4|RUN_N5|RUN_N6|RUN_N7|BLOCKED|COMPLETE) evidence=[A-Z0-9_]+ nextState=(?:CONTROL_N1|TEST_GOVERNED_STDIN|VERIFY_ORIGINAL_CONTROL|RUN_N2|RUN_N3|RUN_N4|RUN_N5|RUN_N6|RUN_N7|BLOCKED|COMPLETE) equivalentAttempts=\d+ breakerDecision=[A-Z0-9_]+$/;
+  const evidence = /^step=N[1-6] processCreated=(?:true|false) exitCode=(?:\d+|null) stage=[a-z-]+ stderrClass=(?:NATIVE_ABORT|EMPTY|OTHER|OUTPUT_LIMIT) fatalReason=[A-Za-z0-9_+-]+ subsystem=[A-Z_]+ nativeEventObserved=(?:true|false) exceptionCode=(?:0x[0-9A-F]+|NOT_OBSERVED) exceptionClass=[A-Z_]+ firstChance=(?:true|false|NOT_APPLICABLE) terminationClass=[A-Z_]+ terminationOrigin=[A-Z_]+ exitProcessCode=(?:\d+|NOT_OBSERVED) debugLoopStatus=[A-Z_]+ firstNativeFrame=[A-Za-z0-9_:<>~.+-]+ nativeFrames=[A-Za-z0-9_:<>~.+,-]+ markerPresent=true cleanup=(?:PASS|DACL_RESTORE_FAILED|STAGE_REMOVE_FAILED|PROFILE_DELETE_FAILED) cleanupCode=\d+$/;
+  const transition = /^state=(?:CONTROL_N1|TEST_GOVERNED_STDIN|VERIFY_ORIGINAL_CONTROL|RUN_N2|RUN_N3|RUN_N4|RUN_N5|RUN_N6|BLOCKED|COMPLETE) evidence=[A-Z0-9_]+ nextState=(?:CONTROL_N1|TEST_GOVERNED_STDIN|VERIFY_ORIGINAL_CONTROL|RUN_N2|RUN_N3|RUN_N4|RUN_N5|RUN_N6|BLOCKED|COMPLETE) equivalentAttempts=\d+ breakerDecision=[A-Z0-9_]+$/;
   const invalidLine = lines.find((line) => !evidence.test(line) && !transition.test(line));
   if (lines.length === 0 || invalidLine) {
     const stepLines = lines.filter((line) => line.startsWith('step=')).length;
     const stateLines = lines.filter((line) => line.startsWith('state=')).length;
     const transitionStates = new Set([
       'CONTROL_N1', 'TEST_GOVERNED_STDIN', 'VERIFY_ORIGINAL_CONTROL',
-      'RUN_N2', 'RUN_N3', 'RUN_N4', 'RUN_N5', 'RUN_N6', 'RUN_N7',
-      'BLOCKED', 'COMPLETE'
+      'RUN_N2', 'RUN_N3', 'RUN_N4', 'RUN_N5', 'RUN_N6', 'BLOCKED', 'COMPLETE'
     ]);
     let invalidLineClass = lines.length === 0 ? 'EMPTY_OUTPUT' : 'UNSANITIZED_LINE';
     let invalidField = 'NOT_APPLICABLE';
