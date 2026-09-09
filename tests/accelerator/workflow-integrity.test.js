@@ -87,10 +87,14 @@ test(
     const step = workflow.slice(bubblewrapStep, conformanceStep);
     assert.match(step, /if: matrix\.os == 'ubuntu-latest'/);
     assert.match(step, /set -euo pipefail/);
-    assert.match(step, /sudo apt-get update/);
     assert.match(
       step,
-      /sudo apt-get install --yes --no-install-recommends \\\n+\s+apparmor-profiles apparmor-utils bubblewrap/
+      /sudo apt-get update[\s\S]+Dir::Etc::sourcelist="sources\.list\.d\/ubuntu\.sources"/
+    );
+    assert.match(step, /Dir::Etc::sourceparts="-"/);
+    assert.match(
+      step,
+      /sudo apt-get install --yes --no-install-recommends \\\r?\n\s+apparmor-profiles apparmor-utils bubblewrap/
     );
     assert.match(
       step,
@@ -111,6 +115,14 @@ test(
     assert.doesNotMatch(step, /continue-on-error/);
   }
 );
+
+test('workflow captures bounded macOS Node abort evidence only for manual diagnosis', () => {
+  const workflow = source();
+  assert.match(
+    workflow,
+    /Observe macOS Node abort boundary[\s\S]+steps\.conformance\.outcome == 'failure'[\s\S]+matrix\.os == 'macos-15'[\s\S]+github\.event_name == 'workflow_dispatch'[\s\S]+continue-on-error: true[\s\S]+report-macos-node-abort\.js/
+  );
+});
 
 test(
   'diagnostic continuation cannot hide canonical conformance failure',

@@ -104,7 +104,10 @@ jobs:
         shell: bash
         run: |
           set -euo pipefail
-          sudo apt-get update
+          sudo apt-get update \
+            -o Dir::Etc::sourcelist="sources.list.d/ubuntu.sources" \
+            -o Dir::Etc::sourceparts="-" \
+            -o APT::Get::List-Cleanup="0"
           sudo apt-get install --yes --no-install-recommends \
             apparmor-profiles apparmor-utils bubblewrap
           sudo install -m 0644 \
@@ -165,6 +168,11 @@ jobs:
           set "DIAGNOSTIC_STATUS=%ERRORLEVEL%"
           del /q tests\accelerator\fixtures\windows-appcontainer-environment-diagnostic.exe
           exit /b %DIAGNOSTIC_STATUS%
+
+      - name: Observe macOS Node abort boundary
+        if: steps.conformance.outcome == 'failure' && matrix.os == 'macos-15' && github.event_name == 'workflow_dispatch'
+        continue-on-error: true
+        run: node tests/accelerator/fixtures/report-macos-node-abort.js
 
       - name: Emit native failure diagnostics
         if: steps.conformance.outcome == 'failure'
