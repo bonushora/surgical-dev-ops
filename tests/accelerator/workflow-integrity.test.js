@@ -128,6 +128,14 @@ test(
   }
 );
 
+test('canonical conformance serializes process-heavy test files', () => {
+  const packageJson = JSON.parse(fs.readFileSync(
+    require.resolve('../../package.json'), 'utf8'
+  ));
+
+  assert.match(packageJson.scripts.test, /--test-concurrency=1/);
+});
+
 
 test(
   'pull-request merge checkout receives deterministic physical branch identity',
