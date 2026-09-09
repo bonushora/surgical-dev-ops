@@ -798,11 +798,17 @@ std::string sanitizedFatalReason(const std::string& stderrText) {
   std::transform(lower.begin(), lower.end(), lower.begin(),
     [](unsigned char character) { return static_cast<char>(std::tolower(character)); });
   if (lower.find("cannot find module") != std::string::npos) return "MODULE_NOT_FOUND";
-  if (lower.find("could not find") != std::string::npos) return "TARGET_NOT_FOUND";
+  if (lower.find("could not find") != std::string::npos ||
+      lower.find("cannot find") != std::string::npos ||
+      lower.find("not found") != std::string::npos ||
+      lower.find("enoent") != std::string::npos) return "TARGET_NOT_FOUND";
   if (lower.find("err_access_denied") != std::string::npos) return "NODE_ACCESS_DENIED";
   if (lower.find("eacces") != std::string::npos ||
       lower.find("access is denied") != std::string::npos ||
-      lower.find("permission denied") != std::string::npos) return "FILESYSTEM_ACCESS_DENIED";
+      lower.find("permission denied") != std::string::npos ||
+      lower.find("access denied") != std::string::npos ||
+      lower.find("eperm") != std::string::npos ||
+      lower.find("not permitted") != std::string::npos) return "FILESYSTEM_ACCESS_DENIED";
   const std::vector<std::string> markers{
     "Fatal error in", "FATAL ERROR", "Check failed:", "Assertion failed"
   };
