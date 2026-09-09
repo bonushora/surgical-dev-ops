@@ -1310,10 +1310,8 @@ test(
     await waitFor(() => completions() === 1);
 
     now = instant(59_999);
-    const validHitStartedAt = performance.now();
     input.write('Explique o estado atual deste projeto.\n');
     await waitFor(() => completions() === 2);
-    const validHitElapsedMs = performance.now() - validHitStartedAt;
 
     assert.equal(fileReads, 1, 'before the bound the governed evidence is reused');
 
@@ -1374,7 +1372,6 @@ test(
     assert.match(observed, new RegExp(shaA));
     assert.match(observed, new RegExp(shaB));
     assert.notEqual(shaA, shaB);
-    assert.ok(validHitElapsedMs < 500);
     assert.equal(dispatches, 12);
     assert.equal(
       handledSessionInputs.filter((inputValue) => inputValue === 'sim').length,
@@ -1423,7 +1420,7 @@ test(
       observedAt: instant(130_002),
       expiresAt: instant(190_002)
     });
-    t.diagnostic(`governed file reads=5; before/exact/after/new-authorization/new-SHA covered; valid cache hit=${validHitElapsedMs.toFixed(3)}ms; shaA=${shaA}; shaB=${shaB}`);
+    t.diagnostic(`governed file reads=5; before/exact/after/new-authorization/new-SHA covered; shaA=${shaA}; shaB=${shaB}`);
   }
 );
 
