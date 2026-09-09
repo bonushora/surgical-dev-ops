@@ -189,6 +189,30 @@ bool copyNodeExecutable(const fs::path& source, const fs::path& destination,
   return true;
 }
 
+bool clearReadOnlyTree(const fs::path& root, long* internalCode) {
+  std::error_code error;
+  fs::recursive_directory_iterator entry(root, error);
+  const fs::recursive_directory_iterator end;
+  while (!error && entry != end) {
+    const DWORD attributes = GetFileAttributesW(entry->path().c_str());
+    if (attributes == INVALID_FILE_ATTRIBUTES) {
+      *internalCode = GetLastError();
+      return false;
+    }
+    if ((attributes & FILE_ATTRIBUTE_READONLY) != 0 &&
+        !SetFileAttributesW(entry->path().c_str(), attributes & ~FILE_ATTRIBUTE_READONLY)) {
+      *internalCode = GetLastError();
+      return false;
+    }
+    entry.increment(error);
+  }
+  if (error) {
+    *internalCode = error.value();
+    return false;
+  }
+  return true;
+}
+
 bool createAppContainer(const std::wstring& fingerprint, PSID* sid,
                         std::wstring* profileName) {
   *profileName = L"SdoNodeTest-" + fingerprint.substr(0, 32);
@@ -607,7 +631,14 @@ int wmain(int argc, wchar_t* argv[]) {
       return target;
     }(), argv[5], static_cast<DWORD>(timeout), stage.wstring(), profilePath, sid
   );
-  fs::remove_all(stage, error);
+  long readOnlyCleanupCode = 0;
+  if (!clearReadOnlyTree(stage, &readOnlyCleanupCode)) {
+    error = std::error_code(
+      static_cast<int>(readOnlyCleanupCode), std::system_category()
+    );
+  } else {
+    fs::remove_all(stage, error);
+  }
   const bool stageRemoved = !error;
   const int stageCleanupCode = error.value();
   const HRESULT profileCleanupResult = DeleteAppContainerProfile(profileName.c_str());

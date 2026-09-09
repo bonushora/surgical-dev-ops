@@ -696,6 +696,30 @@ bool writeNodeFixture(const fs::path& target, const char* source,
   return true;
 }
 
+bool clearReadOnlyTree(const fs::path& root, DiagnosticFailure* failure) {
+  std::error_code error;
+  fs::recursive_directory_iterator entry(root, error);
+  const fs::recursive_directory_iterator end;
+  while (!error && entry != end) {
+    const DWORD attributes = GetFileAttributesW(entry->path().c_str());
+    if (attributes == INVALID_FILE_ATTRIBUTES) {
+      *failure = {"stage-cleanup-attributes", GetLastError()};
+      return false;
+    }
+    if ((attributes & FILE_ATTRIBUTE_READONLY) != 0 &&
+        !SetFileAttributesW(entry->path().c_str(), attributes & ~FILE_ATTRIBUTE_READONLY)) {
+      *failure = {"stage-cleanup-readonly", GetLastError()};
+      return false;
+    }
+    entry.increment(error);
+  }
+  if (error) {
+    *failure = {"stage-cleanup-enumerate", static_cast<DWORD>(error.value())};
+    return false;
+  }
+  return true;
+}
+
 bool productionNodeEnvironment(const std::wstring& nodeDirectory,
                                const std::wstring& workspace,
                                const std::wstring& profile,
@@ -1020,19 +1044,6 @@ NodeStepResult runNodeStep(const char* step, const std::wstring& node,
         if (event.u.CreateProcessInfo.hFile != nullptr) {
           CloseHandle(event.u.CreateProcessInfo.hFile);
         }
-        if (event.u.CreateProcessInfo.hProcess != nullptr &&
-            event.u.CreateProcessInfo.hProcess != process.hProcess) {
-          CloseHandle(event.u.CreateProcessInfo.hProcess);
-        }
-        if (event.u.CreateProcessInfo.hThread != nullptr &&
-            event.u.CreateProcessInfo.hThread != process.hThread) {
-          CloseHandle(event.u.CreateProcessInfo.hThread);
-        }
-        break;
-      case CREATE_THREAD_DEBUG_EVENT:
-        if (event.u.CreateThread.hThread != nullptr) {
-          CloseHandle(event.u.CreateThread.hThread);
-        }
         break;
       case LOAD_DLL_DEBUG_EVENT:
         if (event.u.LoadDll.hFile != nullptr) CloseHandle(event.u.LoadDll.hFile);
@@ -1345,8 +1356,9 @@ int runNodeStartupDiagnostic(const std::wstring& requestedNode) {
   );
   if (oldDescriptor) LocalFree(oldDescriptor);
   filesystemError.clear();
-  fs::remove_all(stage, filesystemError);
-  const bool stageRemoved = !filesystemError;
+  const bool readOnlyCleared = daclRestored && clearReadOnlyTree(stage, &cleanupFailure);
+  if (readOnlyCleared) fs::remove_all(stage, filesystemError);
+  const bool stageRemoved = readOnlyCleared && !filesystemError;
   const HRESULT profileCleanup = DeleteAppContainerProfile(profileName.c_str());
   FreeSid(sid);
   const char* cleanup = !daclRestored ? "DACL_RESTORE_FAILED" :
@@ -1354,6 +1366,7 @@ int runNodeStartupDiagnostic(const std::wstring& requestedNode) {
     profileCleanup != S_OK ? "PROFILE_DELETE_FAILED" : "PASS";
   const DWORD cleanupCode = !daclRestored
     ? cleanupFailure.win32Error
+    : !readOnlyCleared ? cleanupFailure.win32Error
     : !stageRemoved ? static_cast<DWORD>(filesystemError.value())
     : profileCleanup != S_OK ? win32CodeFromHresult(profileCleanup) : ERROR_SUCCESS;
   for (const auto& entry : attempted) reportNodeStep(entry.first, cleanup, cleanupCode);
