@@ -54,7 +54,7 @@ function assertLfArtifact(relative, attributes) {
   assert.equal(bytes.at(-1), 0x0a, `${relative} must terminate with LF`);
   assert.equal(bytes.includes(0x0d), false, `${relative} must not contain CRLF`);
   assert.ok(
-    attributes.split('\n').includes(`${relative} text eol=lf`),
+    attributes.split(/\r?\n/).includes(`${relative} text eol=lf`),
     `${relative} must have a stable LF path rule`
   );
 }
@@ -95,6 +95,13 @@ test('one-byte v2.3 RAW mutation fails the fixed SHA-256 gate', () => {
     () => assertArtifactIntegrity(relative, ACTIVE_RAW[relative], changed),
     /changed at byte level/
   );
+});
+
+test('LF policy parsing tolerates the native checkout spelling of metadata', () => {
+  assert.doesNotThrow(() => assertLfArtifact(
+    'protocols/BH-SEP.md',
+    'protocols/BH-SEP.md text eol=lf\r\n'
+  ));
 });
 
 test('English and Portuguese entry points agree on protocol and software versions', () => {
