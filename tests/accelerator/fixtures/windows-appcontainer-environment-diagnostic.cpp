@@ -794,6 +794,15 @@ std::string nodeNativeFrames(const std::string& stderrText) {
 }
 
 std::string sanitizedFatalReason(const std::string& stderrText) {
+  std::string lower = stderrText;
+  std::transform(lower.begin(), lower.end(), lower.begin(),
+    [](unsigned char character) { return static_cast<char>(std::tolower(character)); });
+  if (lower.find("cannot find module") != std::string::npos) return "MODULE_NOT_FOUND";
+  if (lower.find("could not find") != std::string::npos) return "TARGET_NOT_FOUND";
+  if (lower.find("err_access_denied") != std::string::npos) return "NODE_ACCESS_DENIED";
+  if (lower.find("eacces") != std::string::npos ||
+      lower.find("access is denied") != std::string::npos ||
+      lower.find("permission denied") != std::string::npos) return "FILESYSTEM_ACCESS_DENIED";
   const std::vector<std::string> markers{
     "Fatal error in", "FATAL ERROR", "Check failed:", "Assertion failed"
   };
@@ -1270,7 +1279,8 @@ int runNodeStartupDiagnostic(const std::wstring& requestedNode) {
       << (verifyReproduced ? "STDIN_PIPE_NECESSARY_AND_SUFFICIENT" : "INDETERMINATE")
       << '\n';
     if (!verifyReproduced) return results;
-    auto n2 = runNodeStep("N2", stagedNode.wstring(), {minimalScript.wstring()}, 37,
+    auto n2 = runNodeStep("N2", stagedNode.wstring(),
+      {L"--eval", L"process.exit(37)"}, 37,
       environment, stagedWorkspace.wstring(), sid, true);
     results.emplace_back(n2, n2.expected);
     std::cout << "state=RUN_N2 evidence=" << (n2.expected ? "PASS" : "EXIT_UNEXPECTED")
@@ -1278,8 +1288,7 @@ int runNodeStartupDiagnostic(const std::wstring& requestedNode) {
       << " equivalentAttempts=4 breakerDecision="
       << (n2.expected ? "CONTINUE" : "N2_FAILED") << '\n';
     if (!n2.expected) return results;
-    auto n3 = runNodeStep("N3", stagedNode.wstring(),
-      {L"--permission", allowRead, minimalScript.wstring()}, 37,
+    auto n3 = runNodeStep("N3", stagedNode.wstring(), {minimalScript.wstring()}, 37,
       environment, stagedWorkspace.wstring(), sid, true);
     results.emplace_back(n3, n3.expected);
     std::cout << "state=RUN_N3 evidence=" << (n3.expected ? "PASS" : "EXIT_UNEXPECTED")
@@ -1288,14 +1297,23 @@ int runNodeStartupDiagnostic(const std::wstring& requestedNode) {
       << (n3.expected ? "CONTINUE" : "N3_FAILED") << '\n';
     if (!n3.expected) return results;
     auto n4 = runNodeStep("N4", stagedNode.wstring(),
-      {L"--permission", allowRead, L"--test-isolation=none", L"--test",
-       minimalTest.wstring()}, 0,
+      {L"--permission", allowRead, minimalScript.wstring()}, 37,
       environment, stagedWorkspace.wstring(), sid, true);
     results.emplace_back(n4, n4.expected);
     std::cout << "state=RUN_N4 evidence=" << (n4.expected ? "PASS" : "EXIT_UNEXPECTED")
-      << " nextState=COMPLETE equivalentAttempts=6 breakerDecision="
-      << (n4.expected ? "LADDER_PASS" : "N4_FAILED") << '\n';
-    diagnosticQualified = n4.expected;
+      << " nextState=" << (n4.expected ? "RUN_N5" : "COMPLETE")
+      << " equivalentAttempts=6 breakerDecision="
+      << (n4.expected ? "CONTINUE" : "N4_FAILED") << '\n';
+    if (!n4.expected) return results;
+    auto n5 = runNodeStep("N5", stagedNode.wstring(),
+      {L"--permission", allowRead, L"--test-isolation=none", L"--test",
+       minimalTest.wstring()}, 0,
+      environment, stagedWorkspace.wstring(), sid, true);
+    results.emplace_back(n5, n5.expected);
+    std::cout << "state=RUN_N5 evidence=" << (n5.expected ? "PASS" : "EXIT_UNEXPECTED")
+      << " nextState=COMPLETE equivalentAttempts=7 breakerDecision="
+      << (n5.expected ? "LADDER_PASS" : "N5_FAILED") << '\n';
+    diagnosticQualified = n5.expected;
     return results;
   }();
 

@@ -264,6 +264,10 @@ test('Windows AppContainer environment comparison is isolated, sanitized and str
   assert.match(diagnostic, /state=RUN_N2/);
   assert.match(diagnostic, /state=RUN_N3/);
   assert.match(diagnostic, /state=RUN_N4/);
+  assert.match(diagnostic, /state=RUN_N5/);
+  assert.match(diagnostic, /MODULE_NOT_FOUND/);
+  assert.match(diagnostic, /TARGET_NOT_FOUND/);
+  assert.match(diagnostic, /FILESYSTEM_ACCESS_DENIED/);
   assert.match(diagnostic,
     /controlReproduced \? "TEST_GOVERNED_STDIN" : "BLOCKED"/);
   assert.doesNotMatch(diagnostic,
@@ -312,8 +316,8 @@ test('Windows AppContainer environment comparison is isolated, sanitized and str
     transitionContract
   );
   assert.match(
-    'state=RUN_N4 evidence=PASS nextState=COMPLETE ' +
-      'equivalentAttempts=6 breakerDecision=LADDER_PASS',
+    'state=RUN_N5 evidence=PASS nextState=COMPLETE ' +
+      'equivalentAttempts=7 breakerDecision=LADDER_PASS',
     transitionContract
   );
   assert.doesNotMatch(
