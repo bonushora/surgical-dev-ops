@@ -1231,7 +1231,7 @@ int runNodeStartupDiagnostic(const std::wstring& requestedNode) {
   }
 
   const std::wstring allowRead = L"--allow-fs-read=" + stagedWorkspace.wstring();
-  bool stdinHypothesisConfirmed = false;
+  bool diagnosticQualified = false;
   const std::vector<std::pair<NodeStepResult, bool>> attempted = [&]() {
     std::vector<std::pair<NodeStepResult, bool>> results;
     auto control = runNodeStep("N1", stagedNode.wstring(), {L"--version"}, 0,
@@ -1259,10 +1259,37 @@ int runNodeStartupDiagnostic(const std::wstring& requestedNode) {
     const bool verifyReproduced = verify.hasExitCode && verify.exitCode == 134;
     std::cout << "state=VERIFY_ORIGINAL_CONTROL evidence="
       << (verifyReproduced ? "EXIT_134" : verify.expected ? "PASS" : "EXIT_OTHER")
-      << " nextState=COMPLETE equivalentAttempts=3 breakerDecision="
+      << " nextState=" << (verifyReproduced ? "RUN_N2" : "COMPLETE")
+      << " equivalentAttempts=3 breakerDecision="
       << (verifyReproduced ? "STDIN_PIPE_NECESSARY_AND_SUFFICIENT" : "INDETERMINATE")
       << '\n';
-    stdinHypothesisConfirmed = verifyReproduced;
+    if (!verifyReproduced) return results;
+    auto n2 = runNodeStep("N2", stagedNode.wstring(), {minimalScript.wstring()}, 37,
+      environment, stagedWorkspace.wstring(), sid, true);
+    results.emplace_back(n2, n2.expected);
+    std::cout << "state=RUN_N2 evidence=" << (n2.expected ? "PASS" : "EXIT_UNEXPECTED")
+      << " nextState=" << (n2.expected ? "RUN_N3" : "COMPLETE")
+      << " equivalentAttempts=4 breakerDecision="
+      << (n2.expected ? "CONTINUE" : "N2_FAILED") << '\n';
+    if (!n2.expected) return results;
+    auto n3 = runNodeStep("N3", stagedNode.wstring(),
+      {L"--permission", allowRead, minimalScript.wstring()}, 37,
+      environment, stagedWorkspace.wstring(), sid, true);
+    results.emplace_back(n3, n3.expected);
+    std::cout << "state=RUN_N3 evidence=" << (n3.expected ? "PASS" : "EXIT_UNEXPECTED")
+      << " nextState=" << (n3.expected ? "RUN_N4" : "COMPLETE")
+      << " equivalentAttempts=5 breakerDecision="
+      << (n3.expected ? "CONTINUE" : "N3_FAILED") << '\n';
+    if (!n3.expected) return results;
+    auto n4 = runNodeStep("N4", stagedNode.wstring(),
+      {L"--permission", allowRead, L"--test-isolation=none", L"--test",
+       minimalTest.wstring()}, 0,
+      environment, stagedWorkspace.wstring(), sid, true);
+    results.emplace_back(n4, n4.expected);
+    std::cout << "state=RUN_N4 evidence=" << (n4.expected ? "PASS" : "EXIT_UNEXPECTED")
+      << " nextState=COMPLETE equivalentAttempts=6 breakerDecision="
+      << (n4.expected ? "LADDER_PASS" : "N4_FAILED") << '\n';
+    diagnosticQualified = n4.expected;
     return results;
   }();
 
@@ -1279,7 +1306,7 @@ int runNodeStartupDiagnostic(const std::wstring& requestedNode) {
   const bool cleanup = daclRestored && stageRemoved && profileCleanup == S_OK;
   for (const auto& entry : attempted) reportNodeStep(entry.first, cleanup);
   if (!cleanup || attempted.empty()) return 2;
-  return stdinHypothesisConfirmed ? 0 : 1;
+  return diagnosticQualified ? 0 : 1;
 }
 
 }  // namespace
