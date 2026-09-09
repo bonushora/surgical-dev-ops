@@ -1150,16 +1150,47 @@ int runNodeStartupDiagnostic(const std::wstring& requestedNode) {
     return fail({"node-canonical", static_cast<DWORD>(filesystemError.value())});
   }
 
-  const fs::path stage = fs::temp_directory_path(filesystemError) /
+  const std::wstring profileName =
+    L"SdoNodeStartupDiagnostic-" + std::to_wstring(GetCurrentProcessId());
+  PSID sid = nullptr;
+  const HRESULT profileResult = CreateAppContainerProfile(
+    profileName.c_str(), L"SDO Node startup diagnostic", L"SDO Node startup diagnostic",
+    nullptr, 0, &sid
+  );
+  if (FAILED(profileResult) || sid == nullptr) {
+    return fail({"node-appcontainer-profile", win32CodeFromHresult(profileResult)});
+  }
+
+  LPWSTR sidText = nullptr;
+  PWSTR profilePathRaw = nullptr;
+  if (!ConvertSidToStringSidW(sid, &sidText) ||
+      FAILED(GetAppContainerFolderPath(sidText, &profilePathRaw)) || profilePathRaw == nullptr) {
+    if (sidText) LocalFree(sidText);
+    if (profilePathRaw) CoTaskMemFree(profilePathRaw);
+    DeleteAppContainerProfile(profileName.c_str());
+    FreeSid(sid);
+    return fail({"node-appcontainer-folder", GetLastError()});
+  }
+  const std::wstring profilePath(profilePathRaw);
+  LocalFree(sidText);
+  CoTaskMemFree(profilePathRaw);
+
+  const fs::path stage = fs::path(profilePath) / L"Temp" /
     (L"sdo-node-startup-diagnostic-" + std::to_wstring(GetCurrentProcessId()));
   const fs::path stagedWorkspace = stage / L"workspace";
   const fs::path stagedNodeDirectory = stage / L"node";
   fs::create_directories(stagedWorkspace, filesystemError);
-  if (filesystemError) return fail({"node-staging", static_cast<DWORD>(filesystemError.value())});
+  if (filesystemError) {
+    DeleteAppContainerProfile(profileName.c_str());
+    FreeSid(sid);
+    return fail({"node-staging", static_cast<DWORD>(filesystemError.value())});
+  }
 
   DiagnosticFailure failure{};
   if (!copyNodeTree(canonicalNode.parent_path(), stagedNodeDirectory, &failure)) {
     fs::remove_all(stage, filesystemError);
+    DeleteAppContainerProfile(profileName.c_str());
+    FreeSid(sid);
     return fail(failure);
   }
   const fs::path stagedNode = stagedNodeDirectory / canonicalNode.filename();
@@ -1181,35 +1212,10 @@ int runNodeStartupDiagnostic(const std::wstring& requestedNode) {
   if (!writeNodeFixture(minimalScript, kMinimalSource, &failure) ||
       !writeNodeFixture(minimalTest, kMinimalTestSource, &failure)) {
     fs::remove_all(stage, filesystemError);
-    return fail(failure);
-  }
-
-  const std::wstring profileName =
-    L"SdoNodeStartupDiagnostic-" + std::to_wstring(GetCurrentProcessId());
-  PSID sid = nullptr;
-  const HRESULT profileResult = CreateAppContainerProfile(
-    profileName.c_str(), L"SDO Node startup diagnostic", L"SDO Node startup diagnostic",
-    nullptr, 0, &sid
-  );
-  if (FAILED(profileResult) || sid == nullptr) {
-    fs::remove_all(stage, filesystemError);
-    return fail({"node-appcontainer-profile", win32CodeFromHresult(profileResult)});
-  }
-
-  LPWSTR sidText = nullptr;
-  PWSTR profilePathRaw = nullptr;
-  if (!ConvertSidToStringSidW(sid, &sidText) ||
-      FAILED(GetAppContainerFolderPath(sidText, &profilePathRaw)) || profilePathRaw == nullptr) {
-    if (sidText) LocalFree(sidText);
-    if (profilePathRaw) CoTaskMemFree(profilePathRaw);
     DeleteAppContainerProfile(profileName.c_str());
     FreeSid(sid);
-    fs::remove_all(stage, filesystemError);
-    return fail({"node-appcontainer-folder", GetLastError()});
+    return fail(failure);
   }
-  const std::wstring profilePath(profilePathRaw);
-  LocalFree(sidText);
-  CoTaskMemFree(profilePathRaw);
 
   Environment environment;
   PSECURITY_DESCRIPTOR oldDescriptor = nullptr;

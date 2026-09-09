@@ -272,20 +272,12 @@ std::wstring quote(const std::wstring& value) {
   return result;
 }
 
-bool environment(const std::wstring& nodeDirectory, const std::wstring& workspace,
-                 PSID sid, std::vector<wchar_t>* result,
-                 InternalFailure* failure) {
-  wchar_t windowsDirectory[MAX_PATH]{};
-  const UINT length = GetWindowsDirectoryW(windowsDirectory, MAX_PATH);
-  if (length == 0 || length >= MAX_PATH) {
-    recordFailure(failure, L"environment-system-root",
-                  length == 0 ? GetLastError() : ERROR_INSUFFICIENT_BUFFER);
-    return false;
-  }
+bool appContainerFolder(PSID sid, std::wstring* result,
+                        InternalFailure* failure) {
+  if (result == nullptr) return false;
   LPWSTR sidText = nullptr;
   if (!ConvertSidToStringSidW(sid, &sidText)) {
-    const DWORD sidError = GetLastError();
-    recordFailure(failure, L"appcontainer-sid-text", sidError);
+    recordFailure(failure, L"appcontainer-sid-text", GetLastError());
     return false;
   }
   PWSTR profilePathRaw = nullptr;
@@ -297,8 +289,21 @@ bool environment(const std::wstring& nodeDirectory, const std::wstring& workspac
                   static_cast<DWORD>(HRESULT_CODE(profilePathResult)));
     return false;
   }
-  const std::wstring profilePath(profilePathRaw);
+  *result = profilePathRaw;
   CoTaskMemFree(profilePathRaw);
+  return !result->empty();
+}
+
+bool environment(const std::wstring& nodeDirectory, const std::wstring& workspace,
+                 const std::wstring& profilePath, std::vector<wchar_t>* result,
+                 InternalFailure* failure) {
+  wchar_t windowsDirectory[MAX_PATH]{};
+  const UINT length = GetWindowsDirectoryW(windowsDirectory, MAX_PATH);
+  if (length == 0 || length >= MAX_PATH) {
+    recordFailure(failure, L"environment-system-root",
+                  length == 0 ? GetLastError() : ERROR_INSUFFICIENT_BUFFER);
+    return false;
+  }
   std::vector<std::wstring> entries{
     L"HOME=" + workspace,
     L"LOCALAPPDATA=" + profilePath,
@@ -323,7 +328,7 @@ bool environment(const std::wstring& nodeDirectory, const std::wstring& workspac
 int runNode(const std::wstring& operationId, const std::wstring& requirementFingerprint,
             const std::wstring& workspace, const std::wstring& target,
             const std::wstring& nodePath, DWORD timeoutMs, const std::wstring& stageRoot,
-            PSID sid) {
+            const std::wstring& profilePath, PSID sid) {
   const std::wstring stagedWorkspace = join(stageRoot, L"workspace");
   const std::wstring stagedNodeDirectory = join(stageRoot, L"node");
   const std::wstring stagedNode = join(stagedNodeDirectory, fs::path(nodePath).filename().wstring());
@@ -441,7 +446,7 @@ int runNode(const std::wstring& operationId, const std::wstring& requirementFing
   std::vector<wchar_t> commandLine(command.begin(), command.end());
   commandLine.push_back(L'\0');
   std::vector<wchar_t> env;
-  if (!environment(stagedNodeDirectory, stagedWorkspace, sid, &env, &failure)) {
+  if (!environment(stagedNodeDirectory, stagedWorkspace, profilePath, &env, &failure)) {
     DeleteProcThreadAttributeList(attributes);
     HeapFree(GetProcessHeap(), 0, attributes);
     CloseHandle(stdinRead); CloseHandle(stdinWrite);
@@ -557,8 +562,15 @@ int wmain(int argc, wchar_t* argv[]) {
   if (!createAppContainer(argv[2], &sid, &profileName)) {
     return fail(L"AppContainer unavailable");
   }
+  InternalFailure profileFailure{};
+  std::wstring profilePath;
+  if (!appContainerFolder(sid, &profilePath, &profileFailure)) {
+    DeleteAppContainerProfile(profileName.c_str());
+    FreeSid(sid);
+    return failRunNode(profileFailure);
+  }
   std::error_code error;
-  const fs::path stage = fs::temp_directory_path(error) /
+  const fs::path stage = fs::path(profilePath) / L"Temp" /
     (L"sdo-node-test-" + profileName);
   if (error || !fs::create_directories(stage, error) || error) {
     DeleteAppContainerProfile(profileName.c_str());
@@ -570,7 +582,7 @@ int wmain(int argc, wchar_t* argv[]) {
       std::wstring target = argv[4];
       for (wchar_t& character : target) if (character == L'/') character = L'\\';
       return target;
-    }(), argv[5], static_cast<DWORD>(timeout), stage.wstring(), sid
+    }(), argv[5], static_cast<DWORD>(timeout), stage.wstring(), profilePath, sid
   );
   fs::remove_all(stage, error);
   const bool stageRemoved = !error;

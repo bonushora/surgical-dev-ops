@@ -150,6 +150,8 @@ test('existing Win32 helper is not misrepresented as NODE_TEST_FILE containment'
   assert.match(nodeSandbox, /ConvertSidToStringSidW\(sid, &sidText\)/);
   assert.match(nodeSandbox, /GetAppContainerFolderPath\(sidText, &profilePathRaw\)/);
   assert.match(nodeSandbox, /L"LOCALAPPDATA=" \+ profilePath/);
+  assert.match(nodeSandbox,
+    /const fs::path stage = fs::path\(profilePath\) \/ L"Temp"/);
   assert.match(nodeSandbox, /LocalFree\(sidText\)/);
   assert.match(nodeSandbox, /CoTaskMemFree\(profilePathRaw\)/);
   assert.match(nodeSandbox, /recordFailure\(failure, L"appcontainer-(?:sid-text|folder)"/);
@@ -248,6 +250,8 @@ test('Windows AppContainer environment comparison is isolated, sanitized and str
   assert.match(diagnostic, /reportArgumentVariant\(\s*"G", "explicit-workspace"/);
   assert.match(diagnostic, /reportArgumentVariant\(\s*"H", "explicit-workspace"/);
   assert.match(diagnostic, /GetAppContainerFolderPath/);
+  assert.match(diagnostic,
+    /const fs::path stage = fs::path\(profilePath\) \/ L"Temp"/);
   assert.match(diagnostic, /reportProfileVariant\("I"/);
   assert.match(diagnostic, /reportProfileVariant\("J"/);
   assert.match(diagnostic, /reportProfileVariant\("K"/);
