@@ -278,8 +278,10 @@ test('Windows AppContainer environment comparison is isolated, sanitized and str
   assert.match(diagnostic, /state=RUN_N4/);
   assert.match(diagnostic, /state=RUN_N5/);
   assert.match(diagnostic, /state=RUN_N6/);
+  assert.match(diagnostic, /state=RUN_N7/);
   assert.match(diagnostic, /readFileSync\(process\.argv\[1\]\)/);
   assert.match(diagnostic, /STAGE_REMOVE_FAILED/);
+  assert.match(diagnostic, /cleanupCode=/);
   assert.match(diagnostic, /MODULE_NOT_FOUND/);
   assert.match(diagnostic, /TARGET_NOT_FOUND/);
   assert.match(diagnostic, /FILESYSTEM_ACCESS_DENIED/);
