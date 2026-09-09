@@ -191,6 +191,16 @@ test('valid single-file replacement', () => {
   assert.equal(fs.readFileSync(targetPath, 'utf8'), 'after\n');
 });
 
+test('qualified replacement provider uses protected exclusive temporary creation', () => {
+  const source = fs.readFileSync(
+    require.resolve('./helpers/qualified-mutation-provider'),
+    'utf8'
+  );
+
+  assert.match(source, /openExclusiveRegularWrite\(temporary/);
+  assert.doesNotMatch(source, /fs\.openSync\(temporary/);
+});
+
 test('direct patch adapter invocation without trusted qualified provider is denied before mutation', () => {
   assert.throws(() => patch({ mutationProvider: null }), /provider boundary.*untrusted/i);
   assert.equal(fs.readFileSync(targetPath, 'utf8'), 'before\n');

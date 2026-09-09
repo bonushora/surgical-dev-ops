@@ -11,6 +11,8 @@ const { requireDurabilityReceipt, durabilityClaims } =
   require('../../../accelerator/core/mutation-durability');
 const { defaultFilesystemDurabilityAdapter } =
   require('../../../accelerator/adapters/filesystem-durability-adapter');
+const { openExclusiveRegularWrite } =
+  require('../../../accelerator/adapters/filesystem-safe-write-adapter');
 
 function frozen(value) {
   if (!value || typeof value !== 'object' || Object.isFrozen(value)) return value;
@@ -84,9 +86,9 @@ function createQualifiedTestMutationProvider(hooks = {}) {
         `.sdo-test-provider-${crypto.randomUUID()}.tmp`);
       let temporaryDescriptor;
       try {
-        temporaryDescriptor = fs.openSync(temporary,
-          fs.constants.O_WRONLY | fs.constants.O_CREAT | fs.constants.O_EXCL |
-          fs.constants.O_NOFOLLOW, request.mode & 0o777);
+        temporaryDescriptor = openExclusiveRegularWrite(temporary, {
+          mode: request.mode & 0o777
+        }).descriptor;
         fs.writeFileSync(temporaryDescriptor, replacement);
         requireDurabilityReceipt(durability.flushFile(temporaryDescriptor,
           `replacement-temp:${temporary}`), 'FLUSH_FILE_DATA');
