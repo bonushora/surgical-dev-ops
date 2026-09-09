@@ -94,6 +94,11 @@ jobs:
         run: |
           node -e "console.log(JSON.stringify({ platform: process.platform, arch: process.arch, node: process.version }))"
 
+      - name: Symbolize Windows Node startup abort
+        if: matrix.os == 'windows-latest' && github.event_name == 'workflow_dispatch'
+        shell: pwsh
+        run: tests/accelerator/fixtures/symbolize-windows-node-startup.ps1
+
       - name: Install and attest qualified Linux Bubblewrap
         if: matrix.os == 'ubuntu-latest'
         shell: bash

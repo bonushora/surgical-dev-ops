@@ -194,6 +194,9 @@ test('Windows AppContainer environment comparison is isolated, sanitized and str
   const startupRunner = fs.readFileSync(path.join(
     __dirname, 'fixtures/run-windows-node-startup-diagnostic.js'
   ), 'utf8');
+  const symbolizer = fs.readFileSync(path.join(
+    __dirname, 'fixtures/symbolize-windows-node-startup.ps1'
+  ), 'utf8');
   const workflow = fs.readFileSync(path.join(
     __dirname, '../../.github/workflows/accelerator-conformance.yml'
   ), 'utf8');
@@ -348,6 +351,18 @@ test('Windows AppContainer environment comparison is isolated, sanitized and str
     /build-windows-appcontainer-environment-diagnostic\.cmd[\s\S]+windows-appcontainer-environment-diagnostic\.exe/);
   assert.match(workflow,
     /Observe Windows Node startup boundary[\s\S]+run-windows-node-startup-diagnostic\.js/);
+  assert.match(workflow,
+    /Symbolize Windows Node startup abort[\s\S]+symbolize-windows-node-startup\.ps1/);
+  assert.match(symbolizer, /llvm-pdbutil\.exe/);
+  assert.match(symbolizer, /llvm-symbolizer\.exe/);
+  assert.match(symbolizer,
+    /9a4eb5f1c29c6a2e93852ead46b999e284a6a5ca8bab4d4e241d587d025a52de/);
+  assert.match(symbolizer,
+    /fe2510a54825d0a60c468fdd6bbff096cb3a5d0bca1c75188ca5d90c064fd68b/);
+  assert.match(symbolizer, /F3DA19C1-119A-A539-4C4C-44205044422E/);
+  assert.match(symbolizer, /sourceFile=\$sourceFile line=\$line column=\$column/);
+  assert.doesNotMatch(symbolizer, /Write-Output\s+\$output|Write-Host/);
+  assert.match(symbolizer, /Remove-Item -LiteralPath \$probeRoot -Recurse -Force/);
   assert.doesNotMatch(productionBuild, /environment-diagnostic/);
   assert.doesNotMatch(productionAdapter, /environment-diagnostic/);
 });
