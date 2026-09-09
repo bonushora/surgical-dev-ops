@@ -326,7 +326,9 @@ bool grantAppContainerReadExecute(const std::wstring& root, PSID sid,
   entries[0].Trustee.TrusteeForm = TRUSTEE_IS_SID;
   entries[0].Trustee.ptstrName = reinterpret_cast<LPWSTR>(sid);
   entries[1] = entries[0];
-  entries[1].grfAccessPermissions = GENERIC_WRITE | DELETE | FILE_DELETE_CHILD;
+  entries[1].grfAccessPermissions =
+    FILE_WRITE_DATA | FILE_APPEND_DATA | FILE_WRITE_EA | FILE_WRITE_ATTRIBUTES |
+    DELETE | FILE_DELETE_CHILD | WRITE_DAC | WRITE_OWNER;
   entries[1].grfAccessMode = DENY_ACCESS;
 
   PACL updated = nullptr;
@@ -651,42 +653,29 @@ void readNodePipe(HANDLE pipe, NodeCapture* capture) {
   }
 }
 
-bool copyNodeTree(const fs::path& source, const fs::path& destination,
-                  DiagnosticFailure* failure) {
+bool copyNodeExecutable(const fs::path& source, const fs::path& destination,
+                        DiagnosticFailure* failure) {
   std::error_code error;
-  if (!fs::is_directory(source, error) || error) {
-    *failure = {"node-source", error ? static_cast<DWORD>(error.value()) : ERROR_DIRECTORY};
+  const fs::file_status status = fs::symlink_status(source, error);
+  if (error || !fs::is_regular_file(status)) {
+    *failure = {"node-source",
+      error ? static_cast<DWORD>(error.value()) : ERROR_INVALID_DATA};
     return false;
   }
-  fs::create_directories(destination, error);
+  fs::create_directories(destination.parent_path(), error);
   if (error) {
     *failure = {"node-stage-create", static_cast<DWORD>(error.value())};
     return false;
   }
-  for (const fs::directory_entry& entry : fs::directory_iterator(source, error)) {
-    if (error || entry.is_symlink(error) || entry.is_other(error) || error) {
-      *failure = {"node-stage-shape",
-        error ? static_cast<DWORD>(error.value()) : ERROR_INVALID_DATA};
-      return false;
-    }
-    const fs::path target = destination / entry.path().filename();
-    if (entry.is_directory(error)) {
-      if (error || !copyNodeTree(entry.path(), target, failure)) return false;
-    } else if (entry.is_regular_file(error)) {
-      if (error || !fs::copy_file(entry.path(), target,
-          fs::copy_options::overwrite_existing, error) || error) {
-        *failure = {"node-stage-copy",
-          error ? static_cast<DWORD>(error.value()) : ERROR_CANNOT_MAKE};
-        return false;
-      }
-      if (!SetFileAttributesW(target.c_str(), FILE_ATTRIBUTE_READONLY)) {
-        *failure = {"node-stage-readonly", GetLastError()};
-        return false;
-      }
-    } else {
-      *failure = {"node-stage-shape", ERROR_INVALID_DATA};
-      return false;
-    }
+  if (!fs::copy_file(source, destination, fs::copy_options::overwrite_existing,
+                     error) || error) {
+    *failure = {"node-stage-copy",
+      error ? static_cast<DWORD>(error.value()) : ERROR_CANNOT_MAKE};
+    return false;
+  }
+  if (!SetFileAttributesW(destination.c_str(), FILE_ATTRIBUTE_READONLY)) {
+    *failure = {"node-stage-readonly", GetLastError()};
+    return false;
   }
   return true;
 }
@@ -1202,13 +1191,13 @@ int runNodeStartupDiagnostic(const std::wstring& requestedNode) {
   }
 
   DiagnosticFailure failure{};
-  if (!copyNodeTree(canonicalNode.parent_path(), stagedNodeDirectory, &failure)) {
+  const fs::path stagedNode = stagedNodeDirectory / canonicalNode.filename();
+  if (!copyNodeExecutable(canonicalNode, stagedNode, &failure)) {
     fs::remove_all(stage, filesystemError);
     DeleteAppContainerProfile(profileName.c_str());
     FreeSid(sid);
     return fail(failure);
   }
-  const fs::path stagedNode = stagedNodeDirectory / canonicalNode.filename();
   const fs::path minimalScript = stagedWorkspace / L"minimal.js";
   const fs::path minimalTest = stagedWorkspace / L"minimal.test.js";
   static constexpr char kMinimalSource[] =

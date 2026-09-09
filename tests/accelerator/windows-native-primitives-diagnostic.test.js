@@ -137,6 +137,13 @@ test('existing Win32 helper is not misrepresented as NODE_TEST_FILE containment'
     /SetHandleInformation\(stdinWrite, HANDLE_FLAG_INHERIT, 0\)/);
   assert.match(nodeSandbox, /startup\.StartupInfo\.hStdInput = stdinRead/);
   assert.match(nodeSandbox, /SetEntriesInAclW/);
+  assert.match(nodeSandbox,
+    /FILE_WRITE_DATA \| FILE_APPEND_DATA \| FILE_WRITE_EA \| FILE_WRITE_ATTRIBUTES/);
+  assert.doesNotMatch(nodeSandbox, /grfAccessPermissions = GENERIC_WRITE/);
+  assert.match(nodeSandbox,
+    /copyNodeExecutable\(fs::path\(nodePath\), fs::path\(stagedNode\)/);
+  assert.doesNotMatch(nodeSandbox,
+    /copyTree\(fs::path\(nodePath\)\.parent_path\(\)/);
   assert.match(nodeSandbox, /CREATE_SUSPENDED/);
   assert.match(nodeSandbox, /AssignProcessToJobObject/);
   assert.match(nodeSandbox, /WaitForSingleObject/);
@@ -224,6 +231,11 @@ test('Windows AppContainer environment comparison is isolated, sanitized and str
   assert.match(diagnostic, /AssignProcessToJobObject/);
   assert.match(diagnostic, /TerminateJobObject/);
   assert.match(diagnostic, /grantAppContainerReadExecute/);
+  assert.match(diagnostic,
+    /FILE_WRITE_DATA \| FILE_APPEND_DATA \| FILE_WRITE_EA \| FILE_WRITE_ATTRIBUTES/);
+  assert.doesNotMatch(diagnostic, /grfAccessPermissions = GENERIC_WRITE/);
+  assert.match(diagnostic,
+    /copyNodeExecutable\(canonicalNode, stagedNode, &failure\)/);
   assert.match(diagnostic, /restoreDacl/);
   assert.match(diagnostic, /CreateAppContainerProfile/);
   assert.match(diagnostic, /DeleteAppContainerProfile/);

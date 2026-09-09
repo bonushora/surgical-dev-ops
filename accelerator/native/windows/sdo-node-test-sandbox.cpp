@@ -168,6 +168,27 @@ bool copyTree(const fs::path& source, const fs::path& destination,
   return true;
 }
 
+bool copyNodeExecutable(const fs::path& source, const fs::path& destination,
+                        long* internalCode) {
+  std::error_code error;
+  const fs::file_status status = fs::symlink_status(source, error);
+  if (error || !fs::is_regular_file(status)) {
+    *internalCode = error ? error.value() : ERROR_INVALID_DATA;
+    return false;
+  }
+  fs::create_directories(destination.parent_path(), error);
+  if (error || !fs::copy_file(source, destination, fs::copy_options::overwrite_existing,
+                              error) || error) {
+    *internalCode = error ? error.value() : ERROR_CANNOT_MAKE;
+    return false;
+  }
+  if (!SetFileAttributesW(destination.c_str(), FILE_ATTRIBUTE_READONLY)) {
+    *internalCode = GetLastError();
+    return false;
+  }
+  return true;
+}
+
 bool createAppContainer(const std::wstring& fingerprint, PSID* sid,
                         std::wstring* profileName) {
   *profileName = L"SdoNodeTest-" + fingerprint.substr(0, 32);
@@ -197,7 +218,9 @@ bool grantReadOnlyAppContainer(const std::wstring& root, PSID sid,
   entries[0].Trustee.TrusteeForm = TRUSTEE_IS_SID;
   entries[0].Trustee.ptstrName = reinterpret_cast<LPWSTR>(sid);
   entries[1] = entries[0];
-  entries[1].grfAccessPermissions = GENERIC_WRITE | DELETE | FILE_DELETE_CHILD;
+  entries[1].grfAccessPermissions =
+    FILE_WRITE_DATA | FILE_APPEND_DATA | FILE_WRITE_EA | FILE_WRITE_ATTRIBUTES |
+    DELETE | FILE_DELETE_CHILD | WRITE_DAC | WRITE_OWNER;
   entries[1].grfAccessMode = DENY_ACCESS;
 
   PACL updated = nullptr;
@@ -336,8 +359,7 @@ int runNode(const std::wstring& operationId, const std::wstring& requirementFing
   if (!copyTree(fs::path(workspace), fs::path(stagedWorkspace), &internalCode)) {
     return failRunNode({L"staging-workspace", GetLastError(), internalCode});
   }
-  if (!copyTree(fs::path(nodePath).parent_path(), fs::path(stagedNodeDirectory),
-                &internalCode)) {
+  if (!copyNodeExecutable(fs::path(nodePath), fs::path(stagedNode), &internalCode)) {
     return failRunNode({L"staging-node", GetLastError(), internalCode});
   }
   if (!fs::is_regular_file(stagedNode)) {
