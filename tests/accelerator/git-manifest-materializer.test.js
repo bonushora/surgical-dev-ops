@@ -582,5 +582,15 @@ test(
       source,
       /execSync|shell:\s*true/
     );
+
+    assert.match(
+      source,
+      /openExclusiveRegularWrite\(\s*file/
+    );
+
+    assert.doesNotMatch(
+      source,
+      /fs\.openSync\(\s*file/
+    );
   }
 );

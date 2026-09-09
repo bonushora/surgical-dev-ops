@@ -18,6 +18,12 @@ const {
   './workspace-boundary'
 );
 
+const {
+  openExclusiveRegularWrite
+} = require(
+  '../adapters/filesystem-safe-write-adapter'
+);
+
 const MANIFEST_SCHEMA =
   'sdo.content_addressed_manifest.v1';
 
@@ -537,11 +543,12 @@ function createImmutableProjection(
 
   try {
     descriptor =
-      fs.openSync(
+      openExclusiveRegularWrite(
         file,
-        'wx',
-        0o600
-      );
+        {
+          mode: 0o600
+        }
+      ).descriptor;
 
     fs.writeFileSync(
       descriptor,
