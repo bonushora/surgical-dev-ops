@@ -213,6 +213,30 @@ bool clearReadOnlyTree(const fs::path& root, long* internalCode) {
   return true;
 }
 
+bool removeTreeWithRetries(const fs::path& root, long* internalCode) {
+  constexpr DWORD kAttempts = 20;
+  constexpr DWORD kDelayMilliseconds = 50;
+  for (DWORD attempt = 0; attempt < kAttempts; ++attempt) {
+    std::error_code existsError;
+    if (!fs::exists(root, existsError) && !existsError) return true;
+    if (existsError) {
+      *internalCode = existsError.value();
+      return false;
+    }
+    if (!clearReadOnlyTree(root, internalCode)) return false;
+    std::error_code removeError;
+    fs::remove_all(root, removeError);
+    if (!removeError) return true;
+    *internalCode = removeError.value();
+    if (attempt + 1 == kAttempts ||
+        (removeError.value() != ERROR_ACCESS_DENIED &&
+         removeError.value() != ERROR_SHARING_VIOLATION &&
+         removeError.value() != ERROR_LOCK_VIOLATION)) return false;
+    Sleep(kDelayMilliseconds);
+  }
+  return false;
+}
+
 bool createAppContainer(const std::wstring& fingerprint, PSID* sid,
                         std::wstring* profileName) {
   *profileName = L"SdoNodeTest-" + fingerprint.substr(0, 32);
@@ -631,16 +655,14 @@ int wmain(int argc, wchar_t* argv[]) {
       return target;
     }(), argv[5], static_cast<DWORD>(timeout), stage.wstring(), profilePath, sid
   );
-  long readOnlyCleanupCode = 0;
-  if (!clearReadOnlyTree(stage, &readOnlyCleanupCode)) {
+  long stageCleanupCode = 0;
+  if (!removeTreeWithRetries(stage, &stageCleanupCode)) {
     error = std::error_code(
-      static_cast<int>(readOnlyCleanupCode), std::system_category()
+      static_cast<int>(stageCleanupCode), std::system_category()
     );
-  } else {
-    fs::remove_all(stage, error);
   }
   const bool stageRemoved = !error;
-  const int stageCleanupCode = error.value();
+  stageCleanupCode = error.value();
   const HRESULT profileCleanupResult = DeleteAppContainerProfile(profileName.c_str());
   const bool profileDeleted = profileCleanupResult == S_OK;
   FreeSid(sid);

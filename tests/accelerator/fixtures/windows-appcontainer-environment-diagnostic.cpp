@@ -720,6 +720,30 @@ bool clearReadOnlyTree(const fs::path& root, DiagnosticFailure* failure) {
   return true;
 }
 
+bool removeTreeWithRetries(const fs::path& root, DiagnosticFailure* failure) {
+  constexpr DWORD kAttempts = 20;
+  constexpr DWORD kDelayMilliseconds = 50;
+  for (DWORD attempt = 0; attempt < kAttempts; ++attempt) {
+    std::error_code existsError;
+    if (!fs::exists(root, existsError) && !existsError) return true;
+    if (existsError) {
+      *failure = {"stage-cleanup-exists", static_cast<DWORD>(existsError.value())};
+      return false;
+    }
+    if (!clearReadOnlyTree(root, failure)) return false;
+    std::error_code removeError;
+    fs::remove_all(root, removeError);
+    if (!removeError) return true;
+    *failure = {"stage-cleanup-remove", static_cast<DWORD>(removeError.value())};
+    if (attempt + 1 == kAttempts ||
+        (removeError.value() != ERROR_ACCESS_DENIED &&
+         removeError.value() != ERROR_SHARING_VIOLATION &&
+         removeError.value() != ERROR_LOCK_VIOLATION)) return false;
+    Sleep(kDelayMilliseconds);
+  }
+  return false;
+}
+
 bool productionNodeEnvironment(const std::wstring& nodeDirectory,
                                const std::wstring& workspace,
                                const std::wstring& profile,
@@ -1356,9 +1380,7 @@ int runNodeStartupDiagnostic(const std::wstring& requestedNode) {
   );
   if (oldDescriptor) LocalFree(oldDescriptor);
   filesystemError.clear();
-  const bool readOnlyCleared = daclRestored && clearReadOnlyTree(stage, &cleanupFailure);
-  if (readOnlyCleared) fs::remove_all(stage, filesystemError);
-  const bool stageRemoved = readOnlyCleared && !filesystemError;
+  const bool stageRemoved = daclRestored && removeTreeWithRetries(stage, &cleanupFailure);
   const HRESULT profileCleanup = DeleteAppContainerProfile(profileName.c_str());
   FreeSid(sid);
   const char* cleanup = !daclRestored ? "DACL_RESTORE_FAILED" :
@@ -1366,8 +1388,7 @@ int runNodeStartupDiagnostic(const std::wstring& requestedNode) {
     profileCleanup != S_OK ? "PROFILE_DELETE_FAILED" : "PASS";
   const DWORD cleanupCode = !daclRestored
     ? cleanupFailure.win32Error
-    : !readOnlyCleared ? cleanupFailure.win32Error
-    : !stageRemoved ? static_cast<DWORD>(filesystemError.value())
+    : !stageRemoved ? cleanupFailure.win32Error
     : profileCleanup != S_OK ? win32CodeFromHresult(profileCleanup) : ERROR_SUCCESS;
   for (const auto& entry : attempted) reportNodeStep(entry.first, cleanup, cleanupCode);
   if (cleanup != std::string("PASS") || attempted.empty()) return 2;
