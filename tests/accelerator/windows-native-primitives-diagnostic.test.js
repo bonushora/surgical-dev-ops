@@ -132,6 +132,10 @@ test('existing Win32 helper is not misrepresented as NODE_TEST_FILE containment'
   assert.match(nodeSandbox, /CapabilityCount = 0/);
   assert.match(nodeSandbox, /JOB_OBJECT_LIMIT_KILL_ON_JOB_CLOSE/);
   assert.match(nodeSandbox, /JOB_OBJECT_LIMIT_ACTIVE_PROCESS/);
+  assert.match(nodeSandbox, /CreatePipe\(&stdinRead, &stdinWrite/);
+  assert.match(nodeSandbox,
+    /SetHandleInformation\(stdinWrite, HANDLE_FLAG_INHERIT, 0\)/);
+  assert.match(nodeSandbox, /startup\.StartupInfo\.hStdInput = stdinRead/);
   assert.match(nodeSandbox, /SetEntriesInAclW/);
   assert.match(nodeSandbox, /CREATE_SUSPENDED/);
   assert.match(nodeSandbox, /AssignProcessToJobObject/);

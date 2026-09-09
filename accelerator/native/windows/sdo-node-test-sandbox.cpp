@@ -348,13 +348,18 @@ int runNode(const std::wstring& operationId, const std::wstring& requirementFing
   SECURITY_ATTRIBUTES pipeSecurity{};
   pipeSecurity.nLength = sizeof(pipeSecurity);
   pipeSecurity.bInheritHandle = TRUE;
+  HANDLE stdinRead = nullptr, stdinWrite = nullptr;
   HANDLE stdoutRead = nullptr, stdoutWrite = nullptr;
   HANDLE stderrRead = nullptr, stderrWrite = nullptr;
   bool pipesReady = false;
-  if (!CreatePipe(&stdoutRead, &stdoutWrite, &pipeSecurity, 0)) {
+  if (!CreatePipe(&stdinRead, &stdinWrite, &pipeSecurity, 0)) {
+    recordFailure(&failure, L"stdin-pipe-create", GetLastError());
+  } else if (!CreatePipe(&stdoutRead, &stdoutWrite, &pipeSecurity, 0)) {
     recordFailure(&failure, L"stdout-pipe-create", GetLastError());
   } else if (!CreatePipe(&stderrRead, &stderrWrite, &pipeSecurity, 0)) {
     recordFailure(&failure, L"stderr-pipe-create", GetLastError());
+  } else if (!SetHandleInformation(stdinWrite, HANDLE_FLAG_INHERIT, 0)) {
+    recordFailure(&failure, L"stdin-pipe-inheritance", GetLastError());
   } else if (!SetHandleInformation(stdoutRead, HANDLE_FLAG_INHERIT, 0)) {
     recordFailure(&failure, L"stdout-pipe-inheritance", GetLastError());
   } else if (!SetHandleInformation(stderrRead, HANDLE_FLAG_INHERIT, 0)) {
@@ -363,6 +368,12 @@ int runNode(const std::wstring& operationId, const std::wstring& requirementFing
     pipesReady = true;
   }
   if (!pipesReady) {
+    if (stdinRead) CloseHandle(stdinRead);
+    if (stdinWrite) CloseHandle(stdinWrite);
+    if (stdoutRead) CloseHandle(stdoutRead);
+    if (stdoutWrite) CloseHandle(stdoutWrite);
+    if (stderrRead) CloseHandle(stderrRead);
+    if (stderrWrite) CloseHandle(stderrWrite);
     restoreDacl(stageRoot, oldDescriptor, oldDacl);
     if (oldDescriptor) LocalFree(oldDescriptor);
     return failRunNode(failure);
@@ -383,6 +394,7 @@ int runNode(const std::wstring& operationId, const std::wstring& requirementFing
     jobReady = true;
   }
   if (!jobReady) {
+    CloseHandle(stdinRead); CloseHandle(stdinWrite);
     CloseHandle(stdoutRead); CloseHandle(stdoutWrite);
     CloseHandle(stderrRead); CloseHandle(stderrWrite);
     if (job) CloseHandle(job);
@@ -414,6 +426,7 @@ int runNode(const std::wstring& operationId, const std::wstring& requirementFing
   }
   if (!attributesReady) {
     if (attributes) HeapFree(GetProcessHeap(), 0, attributes);
+    CloseHandle(stdinRead); CloseHandle(stdinWrite);
     CloseHandle(job); CloseHandle(stdoutRead); CloseHandle(stdoutWrite);
     CloseHandle(stderrRead); CloseHandle(stderrWrite);
     restoreDacl(stageRoot, oldDescriptor, oldDacl);
@@ -431,6 +444,7 @@ int runNode(const std::wstring& operationId, const std::wstring& requirementFing
   if (!environment(stagedNodeDirectory, stagedWorkspace, sid, &env, &failure)) {
     DeleteProcThreadAttributeList(attributes);
     HeapFree(GetProcessHeap(), 0, attributes);
+    CloseHandle(stdinRead); CloseHandle(stdinWrite);
     CloseHandle(job); CloseHandle(stdoutRead); CloseHandle(stdoutWrite);
     CloseHandle(stderrRead); CloseHandle(stderrWrite);
     restoreDacl(stageRoot, oldDescriptor, oldDacl);
@@ -441,6 +455,7 @@ int runNode(const std::wstring& operationId, const std::wstring& requirementFing
   STARTUPINFOEXW startup{};
   startup.StartupInfo.cb = sizeof(startup);
   startup.StartupInfo.dwFlags = STARTF_USESTDHANDLES;
+  startup.StartupInfo.hStdInput = stdinRead;
   startup.StartupInfo.hStdOutput = stdoutWrite;
   startup.StartupInfo.hStdError = stderrWrite;
   startup.lpAttributeList = attributes;
@@ -451,6 +466,7 @@ int runNode(const std::wstring& operationId, const std::wstring& requirementFing
     env.data(), stagedWorkspace.c_str(), &startup.StartupInfo, &process
   );
   const DWORD createError = created ? ERROR_SUCCESS : GetLastError();
+  CloseHandle(stdinRead); CloseHandle(stdinWrite);
   CloseHandle(stdoutWrite); CloseHandle(stderrWrite);
   DeleteProcThreadAttributeList(attributes);
   HeapFree(GetProcessHeap(), 0, attributes);
