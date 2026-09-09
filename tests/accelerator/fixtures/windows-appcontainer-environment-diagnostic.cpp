@@ -1109,7 +1109,7 @@ NodeStepResult runNodeStep(const char* step, const std::wstring& node,
   return result;
 }
 
-void reportNodeStep(const NodeStepResult& result, bool cleanup) {
+void reportNodeStep(const NodeStepResult& result, const char* cleanup) {
   std::cout << "step=" << result.step
             << " processCreated=" << (result.processCreated ? "true" : "false")
             << " exitCode=";
@@ -1139,7 +1139,7 @@ void reportNodeStep(const NodeStepResult& result, bool cleanup) {
             << " firstNativeFrame=" << result.firstNativeFrame
             << " nativeFrames=" << result.nativeFrames
             << " markerPresent=true"
-            << " cleanup=" << (cleanup ? "PASS" : "FAIL") << '\n';
+            << " cleanup=" << cleanup << '\n';
 }
 
 int runNodeStartupDiagnostic(const std::wstring& requestedNode) {
@@ -1202,8 +1202,6 @@ int runNodeStartupDiagnostic(const std::wstring& requestedNode) {
   const fs::path minimalTest = stagedWorkspace / L"minimal.test.js";
   static constexpr char kMinimalSource[] =
     "'use strict';\n"
-    "const fs = require('node:fs');\n"
-    "fs.readFileSync(__filename, 'utf8');\n"
     "process.exit(37);\n";
   static constexpr char kMinimalTestSource[] =
     "'use strict';\n"
@@ -1283,7 +1281,9 @@ int runNodeStartupDiagnostic(const std::wstring& requestedNode) {
       << " equivalentAttempts=4 breakerDecision="
       << (n2.expected ? "CONTINUE" : "N2_FAILED") << '\n';
     if (!n2.expected) return results;
-    auto n3 = runNodeStep("N3", stagedNode.wstring(), {minimalScript.wstring()}, 37,
+    auto n3 = runNodeStep("N3", stagedNode.wstring(),
+      {L"--eval", L"require('node:fs').readFileSync(process.argv[1]);process.exit(37)",
+       minimalScript.wstring()}, 37,
       environment, stagedWorkspace.wstring(), sid, true);
     results.emplace_back(n3, n3.expected);
     std::cout << "state=RUN_N3 evidence=" << (n3.expected ? "PASS" : "EXIT_UNEXPECTED")
@@ -1291,8 +1291,7 @@ int runNodeStartupDiagnostic(const std::wstring& requestedNode) {
       << " equivalentAttempts=5 breakerDecision="
       << (n3.expected ? "CONTINUE" : "N3_FAILED") << '\n';
     if (!n3.expected) return results;
-    auto n4 = runNodeStep("N4", stagedNode.wstring(),
-      {L"--permission", allowRead, minimalScript.wstring()}, 37,
+    auto n4 = runNodeStep("N4", stagedNode.wstring(), {minimalScript.wstring()}, 37,
       environment, stagedWorkspace.wstring(), sid, true);
     results.emplace_back(n4, n4.expected);
     std::cout << "state=RUN_N4 evidence=" << (n4.expected ? "PASS" : "EXIT_UNEXPECTED")
@@ -1301,14 +1300,23 @@ int runNodeStartupDiagnostic(const std::wstring& requestedNode) {
       << (n4.expected ? "CONTINUE" : "N4_FAILED") << '\n';
     if (!n4.expected) return results;
     auto n5 = runNodeStep("N5", stagedNode.wstring(),
-      {L"--permission", allowRead, L"--test-isolation=none", L"--test",
-       minimalTest.wstring()}, 0,
+      {L"--permission", allowRead, minimalScript.wstring()}, 37,
       environment, stagedWorkspace.wstring(), sid, true);
     results.emplace_back(n5, n5.expected);
     std::cout << "state=RUN_N5 evidence=" << (n5.expected ? "PASS" : "EXIT_UNEXPECTED")
-      << " nextState=COMPLETE equivalentAttempts=7 breakerDecision="
-      << (n5.expected ? "LADDER_PASS" : "N5_FAILED") << '\n';
-    diagnosticQualified = n5.expected;
+      << " nextState=" << (n5.expected ? "RUN_N6" : "COMPLETE")
+      << " equivalentAttempts=7 breakerDecision="
+      << (n5.expected ? "CONTINUE" : "N5_FAILED") << '\n';
+    if (!n5.expected) return results;
+    auto n6 = runNodeStep("N6", stagedNode.wstring(),
+      {L"--permission", allowRead, L"--test-isolation=none", L"--test",
+       minimalTest.wstring()}, 0,
+      environment, stagedWorkspace.wstring(), sid, true);
+    results.emplace_back(n6, n6.expected);
+    std::cout << "state=RUN_N6 evidence=" << (n6.expected ? "PASS" : "EXIT_UNEXPECTED")
+      << " nextState=COMPLETE equivalentAttempts=8 breakerDecision="
+      << (n6.expected ? "LADDER_PASS" : "N6_FAILED") << '\n';
+    diagnosticQualified = n6.expected;
     return results;
   }();
 
@@ -1322,9 +1330,11 @@ int runNodeStartupDiagnostic(const std::wstring& requestedNode) {
   const bool stageRemoved = !filesystemError;
   const HRESULT profileCleanup = DeleteAppContainerProfile(profileName.c_str());
   FreeSid(sid);
-  const bool cleanup = daclRestored && stageRemoved && profileCleanup == S_OK;
+  const char* cleanup = !daclRestored ? "DACL_RESTORE_FAILED" :
+    !stageRemoved ? "STAGE_REMOVE_FAILED" :
+    profileCleanup != S_OK ? "PROFILE_DELETE_FAILED" : "PASS";
   for (const auto& entry : attempted) reportNodeStep(entry.first, cleanup);
-  if (!cleanup || attempted.empty()) return 2;
+  if (cleanup != std::string("PASS") || attempted.empty()) return 2;
   return diagnosticQualified ? 0 : 1;
 }
 
