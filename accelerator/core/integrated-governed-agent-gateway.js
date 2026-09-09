@@ -744,7 +744,32 @@ function normalizeTest(orchestration) {
       data: { orchestratorStatus: orchestration.orchestration.status }
     };
   }
-  const validation = orchestration.execution.validation;
+  const execution = orchestration.execution || {};
+  const validation = execution.validation;
+  if (!validation) {
+    return {
+      classification: 'FAILURE',
+      reason: orchestration.nextStep ||
+        'Governed test invocation produced no physical validation evidence.',
+      data: deepFreeze({
+        kind: 'TEST_RUN',
+        selector: execution.selector || 'NODE_TEST_FILE',
+        target: execution.target && execution.target.requested
+          ? execution.target.requested
+          : null,
+        status: 'FAILED',
+        exitCode: null,
+        testsDiscovered: null,
+        passed: null,
+        failed: null,
+        skipped: null,
+        stdoutSha256: sha256(''),
+        stderrSha256: sha256(''),
+        rawOutputOmittedFromCognition: true,
+        orchestratorStatus: orchestration.orchestration.status
+      })
+    };
+  }
   const summary = validation.testSummary || {};
   const passed = validation.status === 'PASSED';
   return {
@@ -754,8 +779,8 @@ function normalizeTest(orchestration) {
       : 'Governed Node test file failed.',
     data: deepFreeze({
       kind: 'TEST_RUN',
-      selector: orchestration.execution.selector,
-      target: orchestration.execution.target.requested,
+      selector: execution.selector,
+      target: execution.target.requested,
       status: validation.status,
       exitCode: validation.exitCode,
       testsDiscovered: Number.isSafeInteger(summary.tests) ? summary.tests : null,

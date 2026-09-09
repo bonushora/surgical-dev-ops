@@ -46,7 +46,8 @@ function qualifiedRuntime(requirement) {
 
 function containmentArguments(workspace, node) {
   return [
-    '--unshare-user', '--unshare-pid', '--unshare-net', '--unshare-ipc', '--unshare-uts',
+    '--unshare-user', '--uid', '0', '--gid', '0',
+    '--unshare-pid', '--unshare-net', '--unshare-ipc', '--unshare-uts',
     '--new-session', '--die-with-parent', '--clearenv',
     '--dir', '/runtime', '--ro-bind', node, '/runtime/node',
     '--ro-bind', PROBE, '/runtime/probe.js',
@@ -60,7 +61,8 @@ function containmentArguments(workspace, node) {
 
 function codexContainmentArguments(cognitiveRoot, runtimeBindings) {
   const arguments_ = [
-    '--unshare-user', '--unshare-pid', '--unshare-net', '--unshare-ipc', '--unshare-uts',
+    '--unshare-user', '--uid', '0', '--gid', '0',
+    '--unshare-pid', '--unshare-net', '--unshare-ipc', '--unshare-uts',
     '--new-session', '--die-with-parent', '--dir', '/runtime'
   ];
   if (runtimeBindings.some((binding) => binding.target.startsWith('/usr/'))) {

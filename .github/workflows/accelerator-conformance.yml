@@ -29,7 +29,7 @@ jobs:
         os:
           - ubuntu-latest
           - windows-latest
-          - macos-latest
+          - macos-15
 
     runs-on: ${{ matrix.os }}
 
@@ -110,7 +110,8 @@ jobs:
           test "$bwrap_path" = "/usr/bin/bwrap"
           test -x "$bwrap_path"
           "$bwrap_path" --version
-          "$bwrap_path" --unshare-user --unshare-pid --unshare-net \
+          "$bwrap_path" --unshare-user --uid 0 --gid 0 \
+            --unshare-pid --unshare-net \
             --unshare-ipc --unshare-uts --new-session --die-with-parent \
             --dir /usr --ro-bind /usr /usr --symlink usr/lib /lib \
             --symlink usr/lib64 /lib64 --proc /proc --dev /dev /usr/bin/true
@@ -130,7 +131,7 @@ jobs:
         run: node tests/accelerator/fixtures/run-windows-node-startup-diagnostic.js
 
       - name: Build qualified macOS native Seatbelt helper
-        if: matrix.os == 'macos-latest'
+        if: matrix.os == 'macos-15'
         run: sh accelerator/native/macos/build-helper.sh
 
       - name: Run canonical conformance suite

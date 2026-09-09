@@ -267,6 +267,35 @@ test('tests.run invokes a real governed Node test file and records mission test 
   }
 });
 
+test('tests.run preserves an adapter-level native failure as bounded test evidence', (context) => {
+  const root = fixture();
+  try {
+    const current = mission(root);
+    context.mock.method(surgicalOrchestrator, 'orchestrate', () => freeze({
+      schema: 'sdo.orchestration.v1',
+      orchestration: {
+        status: 'FAILED',
+        executionAttempted: true,
+        executionAllowed: true
+      },
+      nextStep: 'Inspect the bounded native adapter failure.'
+    }));
+
+    const result = dispatch(current, 'tests.run', { target: 'sample.test.js' });
+    assert.equal(result.result.classification, 'FAILURE');
+    assert.equal(result.result.reason, 'Inspect the bounded native adapter failure.');
+    assert.equal(result.result.data.status, 'FAILED');
+    assert.equal(result.result.data.target, null);
+    assert.equal(result.mission.tests.lastResult.classification, 'FAILED');
+    assert.deepEqual(result.result.events.map((event) => event.type), [
+      'TEST_STARTED',
+      'TEST_FAILED'
+    ]);
+  } finally {
+    fs.rmSync(root, { recursive: true, force: true });
+  }
+});
+
 test('contextual approval preserves local commit push and mutation boundaries', () => {
   const root = fixture();
   try {

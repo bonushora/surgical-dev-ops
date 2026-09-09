@@ -70,7 +70,6 @@ function createProfile(workspace) {
 function createNodeTestProfile(workspace, node) {
   return [
     createProfile(workspace),
-    '(allow ipc-posix-shm*)',
     `(allow file-read* (literal "${seatbeltLiteral(node)}"))`,
     `(allow file-map-executable (literal "${seatbeltLiteral(node)}"))`,
     `(allow process-exec (literal "${seatbeltLiteral(node)}"))`

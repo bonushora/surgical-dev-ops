@@ -30,7 +30,7 @@ test('manual conformance accepts and verifies an exact requested ref without rel
   assert.match(workflow, /git\s+rev-parse\s+--verify\s+HEAD\^\{commit\}/);
   assert.match(workflow, /qualification_ref/);
   assert.match(workflow, /ubuntu-latest/);
-  assert.match(workflow, /macos-latest/);
+  assert.match(workflow, /macos-15/);
   assert.match(workflow, /windows-latest/);
   assert.match(workflow, /github\.event_name\s*!=\s*['"]workflow_dispatch['"]\s*&&\s*startsWith\(github\.ref, ['"]refs\/tags\/v['"]\)/);
   const publicationJob = workflow.split('  publish-npm:')[1] || '';

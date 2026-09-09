@@ -58,7 +58,7 @@ test(
     for (const platform of [
       'ubuntu-latest',
       'windows-latest',
-      'macos-latest'
+      'macos-15'
     ]) {
       assert.match(
         workflow,
@@ -96,7 +96,8 @@ test(
     assert.match(step, /test "\$bwrap_path" = "\/usr\/bin\/bwrap"/);
     assert.match(step, /test -x "\$bwrap_path"/);
     assert.match(step, /"\$bwrap_path" --version/);
-    assert.match(step, /"\$bwrap_path" --unshare-user --unshare-pid --unshare-net/);
+    assert.match(step, /"\$bwrap_path" --unshare-user --uid 0 --gid 0/);
+    assert.match(step, /--unshare-pid --unshare-net/);
     assert.doesNotMatch(step, /unshare_path|\/usr\/bin\/unshare/);
     assert.doesNotMatch(step, /continue-on-error/);
   }

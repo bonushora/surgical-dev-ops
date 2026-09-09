@@ -129,6 +129,8 @@ test('existing Win32 helper is not misrepresented as NODE_TEST_FILE containment'
   assert.doesNotMatch(bridge, /NODE_TEST_FILE|SandboxEvidence/);
   assert.match(validation, /win32: executeWindowsNodeTest/);
   assert.match(nodeSandbox, /CreateAppContainerProfile/);
+  assert.match(nodeSandbox, /GetCurrentProcessId/);
+  assert.match(nodeSandbox, /GetTickCount64/);
   assert.match(nodeSandbox, /CapabilityCount = 0/);
   assert.match(nodeSandbox, /JOB_OBJECT_LIMIT_KILL_ON_JOB_CLOSE/);
   assert.match(nodeSandbox, /JOB_OBJECT_LIMIT_ACTIVE_PROCESS/);

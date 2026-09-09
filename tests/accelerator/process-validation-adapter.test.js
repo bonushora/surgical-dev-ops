@@ -132,8 +132,8 @@ test('fixed Node test-file selector returns normalized PASSED evidence', () => {
   assert.equal(result.validation.testSummary.failed, 0);
   if (process.platform === 'linux') {
     assert.equal(result.execution.executable, '/usr/bin/bwrap');
-    assert.deepEqual(result.execution.arguments.slice(0, 3), [
-      '--unshare-user', '--unshare-pid', '--unshare-net'
+    assert.deepEqual(result.execution.arguments.slice(0, 7), [
+      '--unshare-user', '--uid', '0', '--gid', '0', '--unshare-pid', '--unshare-net'
     ]);
   } else if (process.platform === 'darwin') {
     assert.match(result.execution.executable, /sdo-seatbelt-probe$/);

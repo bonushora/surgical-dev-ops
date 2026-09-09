@@ -112,7 +112,8 @@ test('adapter fixes executable arguments environment and disables shell', () => 
   );
   assert.match(source, /const BWRAP = '\/usr\/bin\/bwrap'/);
   assert.match(source, /shell: false/);
-  assert.match(source, /'--unshare-user', '--unshare-pid', '--unshare-net'/);
+  assert.match(source, /'--unshare-user', '--uid', '0', '--gid', '0'/);
+  assert.match(source, /'--unshare-pid', '--unshare-net'/);
   assert.doesNotMatch(source, /NETWORK_NAMESPACE_LAUNCHER|\/usr\/bin\/unshare/);
   assert.match(source, /--ro-bind/);
   assert.match(source, /--permission/);

@@ -239,7 +239,9 @@ bool removeTreeWithRetries(const fs::path& root, long* internalCode) {
 
 bool createAppContainer(const std::wstring& fingerprint, PSID* sid,
                         std::wstring* profileName) {
-  *profileName = L"SdoNodeTest-" + fingerprint.substr(0, 32);
+  *profileName = L"SdoNodeTest-" + fingerprint.substr(0, 16) + L"-" +
+    std::to_wstring(GetCurrentProcessId()) + L"-" +
+    std::to_wstring(GetTickCount64());
   const HRESULT result = CreateAppContainerProfile(
     profileName->c_str(), L"Surgical DevOps Node Test", L"Surgical DevOps Node Test",
     nullptr, 0, sid
