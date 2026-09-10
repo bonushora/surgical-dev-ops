@@ -142,7 +142,7 @@ test('fixed Node test-file selector returns normalized PASSED evidence', () => {
   }
   assert.equal(result.execution.environmentKeys.length, 0);
   assert.equal(result.execution.sandboxEvidence.operationId, 'op-1');
-  assert.equal(result.execution.sandboxEvidence.workspace, workspace);
+  assert.equal(result.execution.sandboxEvidence.workspace, fs.realpathSync(workspace));
   assert.equal(result.execution.sandboxEvidence.controls.workspaceReadOnly, true);
   assert.equal(result.execution.sandboxEvidence.controls.networkDenied, true);
   assert.equal(result.execution.sandboxEvidence.controls.genericProcessDenied, true);
