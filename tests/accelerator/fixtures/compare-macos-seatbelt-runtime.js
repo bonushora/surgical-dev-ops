@@ -18,24 +18,6 @@ function bounded(value) {
   return String(value || '').replace(/[\r\n]+/g, ' ').slice(0, 256);
 }
 
-function sandboxDenials() {
-  Atomics.wait(new Int32Array(new SharedArrayBuffer(4)), 0, 0, 1000);
-  const result = childProcess.spawnSync('/usr/bin/log', [
-    'show', '--last', '1m', '--style', 'compact',
-    '--predicate', 'process == "sandboxd"'
-  ], {
-    encoding: 'utf8',
-    shell: false,
-    timeout: TIMEOUT_MS,
-    maxBuffer: MAX_OUTPUT_BYTES,
-    env: { PATH: '/usr/bin:/bin' }
-  });
-  return String(result.stdout || '').split(/\r?\n/)
-    .filter((line) => /sdo-seatbelt-probe/i.test(line) && /file-read-data/i.test(line))
-    .slice(-24)
-    .map(bounded);
-}
-
 function observe(name, profile, workspace, target, node) {
   const result = childProcess.spawnSync(HELPER, [
     'macos-runtime-diagnostic',
@@ -84,9 +66,9 @@ if (process.platform !== 'darwin') {
     const baseline = createNodeTestProfile(workspace, node);
     const candidates = [
       ['baseline', ''],
+      ['dyld-support-import', '(import "/System/Library/Sandbox/Profiles/dyld-support.sb")'],
       ['file-read', '(allow file-read*)'],
-      ['file-read-data', '(allow file-read-data)'],
-      ['debug-file-read-denials', '(debug deny)']
+      ['file-read-data', '(allow file-read-data)']
     ];
     const observations = candidates.map(([name, addition]) => observe(
       name,
@@ -98,8 +80,7 @@ if (process.platform !== 'darwin') {
     console.log(`SDO_MACOS_SEATBELT_RUNTIME ${JSON.stringify({
       schema: 'sdo.macos_seatbelt_runtime_diagnostic.v1',
       status: 'OBSERVED',
-      observations,
-      sandboxDenials: sandboxDenials()
+      observations
     })}`);
   } finally {
     fs.rmSync(root, { recursive: true, force: true });
