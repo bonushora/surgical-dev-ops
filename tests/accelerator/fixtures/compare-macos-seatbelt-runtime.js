@@ -18,6 +18,24 @@ function bounded(value) {
   return String(value || '').replace(/[\r\n]+/g, ' ').slice(0, 256);
 }
 
+function sandboxDenials() {
+  Atomics.wait(new Int32Array(new SharedArrayBuffer(4)), 0, 0, 1000);
+  const result = childProcess.spawnSync('/usr/bin/log', [
+    'show', '--last', '1m', '--style', 'compact',
+    '--predicate', 'process == "sandboxd"'
+  ], {
+    encoding: 'utf8',
+    shell: false,
+    timeout: TIMEOUT_MS,
+    maxBuffer: MAX_OUTPUT_BYTES,
+    env: { PATH: '/usr/bin:/bin' }
+  });
+  return String(result.stdout || '').split(/\r?\n/)
+    .filter((line) => /sdo-seatbelt-probe/i.test(line) && /file-read-data/i.test(line))
+    .slice(-24)
+    .map(bounded);
+}
+
 function observe(name, profile, workspace, target, node) {
   const result = childProcess.spawnSync(HELPER, [
     'macos-runtime-diagnostic',
@@ -64,25 +82,11 @@ if (process.platform !== 'darwin') {
   try {
     const node = fs.realpathSync(process.execPath);
     const baseline = createNodeTestProfile(workspace, node);
-    const nodeRoot = path.dirname(path.dirname(node));
     const candidates = [
       ['baseline', ''],
       ['file-read', '(allow file-read*)'],
       ['file-read-data', '(allow file-read-data)'],
-      ['file-read-xattr', '(allow file-read-xattr)'],
-      ['node-install-root', `(allow file-read* (subpath ${JSON.stringify(nodeRoot)}))`],
-      ['user-root', `(allow file-read* (subpath ${JSON.stringify(os.homedir())}))`],
-      ['library-root', '(allow file-read* (subpath "/Library"))'],
-      ['private-root', '(allow file-read* (subpath "/private"))'],
-      ['usr-root', '(allow file-read* (subpath "/usr"))'],
-      ['dev-root', '(allow file-read* (subpath "/dev"))'],
-      ['opt-root', '(allow file-read* (subpath "/opt"))'],
-      ['applications-root', '(allow file-read* (subpath "/Applications"))'],
-      ['volumes-root', '(allow file-read* (subpath "/Volumes"))'],
-      ['private-var-db', '(allow file-read* (subpath "/private/var/db"))'],
-      ['private-var-folders', '(allow file-read* (subpath "/private/var/folders"))'],
-      ['private-var-protected', '(allow file-read* (subpath "/private/var/protected"))'],
-      ['private-preboot', '(allow file-read* (subpath "/private/preboot"))']
+      ['debug-file-read-denials', '(debug deny)']
     ];
     const observations = candidates.map(([name, addition]) => observe(
       name,
@@ -94,7 +98,8 @@ if (process.platform !== 'darwin') {
     console.log(`SDO_MACOS_SEATBELT_RUNTIME ${JSON.stringify({
       schema: 'sdo.macos_seatbelt_runtime_diagnostic.v1',
       status: 'OBSERVED',
-      observations
+      observations,
+      sandboxDenials: sandboxDenials()
     })}`);
   } finally {
     fs.rmSync(root, { recursive: true, force: true });
