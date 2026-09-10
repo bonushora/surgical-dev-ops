@@ -174,11 +174,6 @@ jobs:
         continue-on-error: true
         run: node tests/accelerator/fixtures/report-macos-node-abort.js
 
-      - name: Compare macOS Seatbelt runtime contracts
-        if: steps.conformance.outcome == 'failure' && matrix.os == 'macos-15' && github.event_name == 'workflow_dispatch'
-        continue-on-error: true
-        run: node tests/accelerator/fixtures/compare-macos-seatbelt-runtime.js
-
       - name: Emit native failure diagnostics
         if: steps.conformance.outcome == 'failure'
         run: |

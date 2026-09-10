@@ -52,6 +52,7 @@ function createProfile(workspace) {
   return [
     '(version 1)',
     '(deny default)',
+    '(import "/System/Library/Sandbox/Profiles/dyld-support.sb")',
     '(allow process-info* (target same-sandbox))',
     '(allow signal (target same-sandbox))',
     '(allow sysctl-read)',

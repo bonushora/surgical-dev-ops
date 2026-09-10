@@ -179,8 +179,13 @@ test('macOS adapter rejects malformed requirement and invalid evidence lifetime'
 test('Seatbelt profile is deny-default operation-bound and network-silent', () => {
   const profile = createProfile('/qualified/workspace');
   assert.match(profile, /\(deny default\)/);
+  assert.match(
+    profile,
+    /\(import "\/System\/Library\/Sandbox\/Profiles\/dyld-support\.sb"\)/
+  );
   assert.match(profile, /allow file-map-executable/);
   assert.match(profile, /qualified\/workspace/);
+  assert.doesNotMatch(profile, /^\(allow file-read-data\)$/m);
   assert.doesNotMatch(profile, /allow network|file-write|process-exec|\/Users/);
   const source = fs.readFileSync(
     require.resolve('../../accelerator/adapters/macos-seatbelt-sandbox-adapter'), 'utf8'

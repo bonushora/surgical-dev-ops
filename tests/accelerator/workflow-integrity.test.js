@@ -124,14 +124,6 @@ test('workflow captures bounded macOS Node abort evidence only for manual diagno
   );
 });
 
-test('workflow compares bounded macOS Seatbelt runtime contracts only after failure', () => {
-  const workflow = source();
-  assert.match(
-    workflow,
-    /Compare macOS Seatbelt runtime contracts[\s\S]+steps\.conformance\.outcome == 'failure'[\s\S]+matrix\.os == 'macos-15'[\s\S]+github\.event_name == 'workflow_dispatch'[\s\S]+continue-on-error: true[\s\S]+compare-macos-seatbelt-runtime\.js/
-  );
-});
-
 test(
   'diagnostic continuation cannot hide canonical conformance failure',
   () => {
