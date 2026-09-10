@@ -64,29 +64,25 @@ if (process.platform !== 'darwin') {
   try {
     const node = fs.realpathSync(process.execPath);
     const baseline = createNodeTestProfile(workspace, node);
+    const nodeRoot = path.dirname(path.dirname(node));
     const candidates = [
       ['baseline', ''],
-      ['file-test-existence', '(allow file-test-existence)'],
       ['file-read', '(allow file-read*)'],
-      ['file-map-executable', '(allow file-map-executable)'],
-      ['dev-null-write', '(allow file-write-data (literal "/dev/null"))'],
-      ['dynamic-code-generation', '(allow dynamic-code-generation)'],
-      ['process-exec', '(allow process-exec)'],
-      ['ipc', '(allow ipc*)'],
-      ['iokit', '(allow iokit*)'],
-      ['mach', '(allow mach*)'],
-      ['system-mac-syscall', '(allow system-mac-syscall)'],
-      ['system-fsctl', '(allow system-fsctl)'],
-      ['system-runtime-baseline', [
-        '(allow file-test-existence)',
-        '(allow file-write-data (literal "/dev/null"))',
-        '(allow system-mac-syscall (mac-policy-name "vnguard"))',
-        '(allow system-mac-syscall',
-        '  (require-all',
-        '    (mac-policy-name "Sandbox")',
-        '    (mac-syscall-number 67)))',
-        '(allow system-fsctl (fsctl-command FSIOC_CAS_BSDFLAGS))'
-      ].join('\n')]
+      ['file-read-data', '(allow file-read-data)'],
+      ['file-read-xattr', '(allow file-read-xattr)'],
+      ['node-install-root', `(allow file-read* (subpath ${JSON.stringify(nodeRoot)}))`],
+      ['user-root', `(allow file-read* (subpath ${JSON.stringify(os.homedir())}))`],
+      ['library-root', '(allow file-read* (subpath "/Library"))'],
+      ['private-root', '(allow file-read* (subpath "/private"))'],
+      ['usr-root', '(allow file-read* (subpath "/usr"))'],
+      ['dev-root', '(allow file-read* (subpath "/dev"))'],
+      ['opt-root', '(allow file-read* (subpath "/opt"))'],
+      ['applications-root', '(allow file-read* (subpath "/Applications"))'],
+      ['volumes-root', '(allow file-read* (subpath "/Volumes"))'],
+      ['private-var-db', '(allow file-read* (subpath "/private/var/db"))'],
+      ['private-var-folders', '(allow file-read* (subpath "/private/var/folders"))'],
+      ['private-var-protected', '(allow file-read* (subpath "/private/var/protected"))'],
+      ['private-preboot', '(allow file-read* (subpath "/private/preboot"))']
     ];
     const observations = candidates.map(([name, addition]) => observe(
       name,
