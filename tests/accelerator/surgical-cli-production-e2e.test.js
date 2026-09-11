@@ -18,12 +18,16 @@ const os =
 const path =
   require('node:path');
 
+const { PassThrough } =
+  require('node:stream');
+
+const childProcess =
+  require('node:child_process');
+
 const {
   execFileSync,
   spawnSync
-} = require(
-  'node:child_process'
-);
+} = childProcess;
 
 const {
   provisionLocalOfflineHumanAuthority
@@ -36,6 +40,8 @@ const CLI =
     __dirname,
     '../../accelerator/cli/surgical.js'
   );
+
+const surgicalCli = require(CLI);
 
 function git(repo, args) {
   return execFileSync(
@@ -245,6 +251,76 @@ function runCli(
     }
   );
 }
+
+test(
+  'real NATURAL Codex bootstrap discovers its repository and reaches the prompt',
+  async (context) => {
+    const state = fixture();
+    const input = new PassThrough();
+    const output = new PassThrough();
+    let stdout = '';
+    let syncGitCalls = 0;
+
+    output.on('data', (chunk) => { stdout += chunk.toString(); });
+
+    try {
+      context.mock.method(
+        childProcess,
+        'spawnSync',
+        (executable, args, options) => {
+          if (executable !== 'git') {
+            return spawnSync(executable, args, options);
+          }
+          syncGitCalls += 1;
+          return {
+            status: 0,
+            signal: null,
+            stdout: 'git version 2.0.0\n',
+            stderr: '',
+            error: Object.assign(new Error('operation not permitted'), {
+              code: 'EPERM',
+              syscall: 'spawnSync git'
+            })
+          };
+        }
+      );
+
+      const originalCwd = process.cwd();
+      process.chdir(state.repo);
+      try {
+        await surgicalCli.main(
+          ['--interaction', 'NATURAL', '--codex'],
+          { input, output }
+        );
+      } finally {
+        process.chdir(originalCwd);
+      }
+
+      assert.equal(syncGitCalls, 0);
+      assert.match(stdout, /Olá\. Estou conectado ao projeto "repo"\./);
+      assert.match(stdout, /surgical>/i);
+
+      const closed = new Promise((resolve, reject) => {
+        const timeout = setTimeout(
+          () => reject(new Error('NATURAL/Codex session did not exit cleanly.')),
+          2000
+        );
+        output.on('data', () => {
+          if (/Sessão Surgical encerrada/i.test(stdout)) {
+            clearTimeout(timeout);
+            resolve();
+          }
+        });
+      });
+      input.end('exit\n');
+      await closed;
+    } finally {
+      input.destroy();
+      output.destroy();
+      cleanup(state);
+    }
+  }
+);
 
 test(
   'real EXPERT surgical process activates a deterministic human session',

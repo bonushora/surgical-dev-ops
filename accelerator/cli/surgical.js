@@ -9,7 +9,8 @@ const {
 } = require('../core/surgical-orchestrator');
 
 const {
-  discover
+  discover,
+  discoverAsync
 } = require('../core/repository-discovery');
 
 const {
@@ -663,6 +664,20 @@ function createInteractiveActivation(
 ) {
   const discovery = discover(repositoryPath);
 
+  return createActivationFromDiscovery(discovery, interactionMode, language);
+}
+
+async function createInteractiveActivationAsync(
+  repositoryPath = process.cwd(),
+  interactionMode = 'EXPERT',
+  language = null
+) {
+  const discovery = await discoverAsync(repositoryPath);
+
+  return createActivationFromDiscovery(discovery, interactionMode, language);
+}
+
+function createActivationFromDiscovery(discovery, interactionMode, language) {
   const interaction =
     createInteractionMode(interactionMode);
 
@@ -4755,7 +4770,7 @@ async function main(
   }
 
   const activation =
-    createInteractiveActivation(
+    await createInteractiveActivationAsync(
       process.cwd(),
       interactionMode,
       language
@@ -4811,6 +4826,7 @@ module.exports = {
   main,
   orchestrate,
   createInteractiveActivation,
+  createInteractiveActivationAsync,
   formatInteractiveActivation,
   formatCognitiveProgressMessage,
   activateInteractive,

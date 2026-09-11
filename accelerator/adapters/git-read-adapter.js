@@ -279,6 +279,124 @@ function runTrustedGitRead(workspaceInput, selectorInput) {
   return deepFreeze({ workspace, selector, result: normalizeOutput(selector, stdout, workspace) });
 }
 
+function runTrustedGitReadAsync(workspaceInput, selectorInput) {
+  const workspace = safeWorkspace(workspaceInput);
+  const selector = requireText(selectorInput, 'selector').toUpperCase();
+  const template = SELECTORS[selector];
+  if (!template || !PREflightSelectors.has(selector)) {
+    return Promise.reject(new Error('Git preflight command is unapproved.'));
+  }
+  const isolation = createGitPlatformIsolation();
+  const args = [...isolation.fixedConfig, ...template.args];
+
+  return new Promise((resolve, reject) => {
+    let stdout = '';
+    let stderr = '';
+    let stdoutBytes = 0;
+    let stderrBytes = 0;
+    let outputExceeded = false;
+    let timedOut = false;
+    let settled = false;
+    let timeout = null;
+    let child;
+
+    function finish(error, value) {
+      if (settled) return;
+      settled = true;
+      clearTimeout(timeout);
+      if (error) reject(error);
+      else resolve(value);
+    }
+
+    try {
+      child = childProcess.spawn('git', args, {
+        cwd: workspace,
+        shell: false,
+        stdio: ['ignore', 'pipe', 'pipe'],
+        windowsHide: true,
+        env: Object.fromEntries(Object.entries(sanitizedEnvironment()).filter(([, value]) => value !== undefined))
+      });
+    } catch {
+      reject(new Error('Git read process failed closed.'));
+      return;
+    }
+
+    timeout = setTimeout(() => {
+      timedOut = true;
+      try {
+        if (!child.kill('SIGKILL') && child.exitCode === null) {
+          finish(new Error('Git read process failed closed.'));
+        }
+      } catch {
+        finish(new Error('Git read process failed closed.'));
+      }
+    }, TIMEOUT_MS);
+
+    child.stdout.setEncoding('utf8');
+    child.stderr.setEncoding('utf8');
+
+    child.stdout.on('data', (chunk) => {
+      stdoutBytes += Buffer.byteLength(chunk);
+      if (stdoutBytes > MAX_OUTPUT_BYTES) {
+        outputExceeded = true;
+        child.kill('SIGKILL');
+        return;
+      }
+      stdout += chunk;
+    });
+
+    child.stderr.on('data', (chunk) => {
+      stderrBytes += Buffer.byteLength(chunk);
+      if (stderrBytes > MAX_OUTPUT_BYTES) {
+        outputExceeded = true;
+        child.kill('SIGKILL');
+        return;
+      }
+      stderr += chunk;
+    });
+
+    child.once('error', () => {
+      finish(new Error(
+        timedOut
+          ? 'Git preflight timed out.'
+          : 'Git read process failed closed.'
+      ));
+    });
+
+    child.once('close', (status, signal) => {
+      if (timedOut) {
+        finish(new Error('Git preflight timed out.'));
+        return;
+      }
+      if (outputExceeded) {
+        finish(new Error('Git preflight output exceeded limit.'));
+        return;
+      }
+      if (signal) {
+        finish(new Error(`Git read terminated by signal: ${signal}`));
+        return;
+      }
+      if (!Number.isInteger(status) || status !== 0) {
+        finish(new Error('Git read returned a nonzero exit status.'));
+        return;
+      }
+      if (stderr.trim()) {
+        finish(new Error('Git read produced unexpected stderr output.'));
+        return;
+      }
+      try {
+        finish(null, deepFreeze({
+          workspace,
+          selector,
+          result: normalizeOutput(selector, stdout, workspace)
+        }));
+      } catch (error) {
+        finish(error);
+      }
+    });
+  });
+}
+
 function readGitWithGrant(request) {
   validateRequestShape(request);
   const grant = validateGrant(request.grantEvaluation);
@@ -333,5 +451,6 @@ function readGitWithGrant(request) {
 module.exports = {
   createGitPlatformIsolation,
   readGitWithGrant,
-  runTrustedGitRead
+  runTrustedGitRead,
+  runTrustedGitReadAsync
 };

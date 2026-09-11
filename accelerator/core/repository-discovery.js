@@ -4,7 +4,10 @@
 
 const fs = require('fs');
 const path = require('path');
-const { runTrustedGitRead } = require('../adapters/git-read-adapter');
+const {
+  runTrustedGitRead,
+  runTrustedGitReadAsync
+} = require('../adapters/git-read-adapter');
 
 function detectPackageManager(repositoryPath) {
   const files = fs.readdirSync(repositoryPath);
@@ -149,6 +152,52 @@ function discover(repositoryPath) {
   };
 }
 
+async function discoverAsync(repositoryPath) {
+  const absolutePath = path.resolve(repositoryPath);
+
+  if (!fs.existsSync(absolutePath)) {
+    throw new Error(`Repository path does not exist: ${absolutePath}`);
+  }
+
+  if (!fs.existsSync(path.join(absolutePath, '.git'))) {
+    throw new Error(`Not a Git repository: ${absolutePath}`);
+  }
+
+  const status = (await runTrustedGitReadAsync(absolutePath, 'WORKTREE_STATUS')).result;
+  const branches = (await runTrustedGitReadAsync(absolutePath, 'CURRENT_BRANCH')).result;
+  const commit = (await runTrustedGitReadAsync(absolutePath, 'HEAD_COMMIT')).result;
+  const shortCommit = commit.slice(0, 7);
+  const root = (await runTrustedGitReadAsync(absolutePath, 'REPOSITORY_ROOT')).result;
+  const trackedFiles = Number(
+    (await runTrustedGitReadAsync(absolutePath, 'TRACKED_FILES')).result.count
+  );
+  const dirtyFiles = status;
+
+  return {
+    schema: 'sdo.repository_discovery.v1',
+    repository: {
+      path: root,
+      name: path.basename(root),
+      branch: branches || null,
+      commit,
+      shortCommit,
+    },
+    worktree: {
+      clean: dirtyFiles.length === 0,
+      changedFiles: dirtyFiles
+    },
+    project: {
+      packageManager: detectPackageManager(root),
+      projectFiles: detectProjectFiles(root),
+      languages: getLanguages(root)
+    },
+    statistics: {
+      trackedFiles,
+      changedFiles: dirtyFiles.length
+    }
+  };
+}
+
 function main() {
   const repositoryPath = process.argv[2] || process.cwd();
 
@@ -168,5 +217,6 @@ if (require.main === module) {
 }
 
 module.exports = {
-  discover
+  discover,
+  discoverAsync
 };

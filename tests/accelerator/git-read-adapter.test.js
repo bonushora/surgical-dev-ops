@@ -3,13 +3,16 @@
 const test = require('node:test');
 const assert = require('node:assert/strict');
 const childProcess = require('child_process');
+const { EventEmitter } = require('events');
 const fs = require('fs');
 const os = require('os');
 const path = require('path');
+const { PassThrough } = require('stream');
 const { evaluateCapabilityGrant } = require('../../accelerator/core/capability-grant');
 const {
   createGitPlatformIsolation,
-  readGitWithGrant
+  readGitWithGrant,
+  runTrustedGitReadAsync
 } = require('../../accelerator/adapters/git-read-adapter');
 
 const root = fs.mkdtempSync(path.join(os.tmpdir(), 'sdo-git-adapter-'));
@@ -159,6 +162,36 @@ test('Git is invoked directly without a shell', (context) => {
   assert.equal(invocation.executable, 'git');
   assert.equal(invocation.options.shell, false);
   assert.ok(invocation.args.includes('credential.helper='));
+});
+
+test('async trusted Git read preserves the fixed process boundary', async (context) => {
+  let invocation;
+  const stdout = new PassThrough();
+  const stderr = new PassThrough();
+  const child = new EventEmitter();
+  child.stdout = stdout;
+  child.stderr = stderr;
+  child.kill = () => true;
+
+  context.mock.method(childProcess, 'spawn', (executable, args, options) => {
+    invocation = { executable, args, options };
+    queueMicrotask(() => {
+      stdout.end(`${git(['rev-parse', 'HEAD'])}\n`);
+      stderr.end();
+      child.emit('close', 0, null);
+    });
+    return child;
+  });
+
+  const result = await runTrustedGitReadAsync(workspace, 'HEAD_COMMIT');
+  assert.match(result.result, /^[0-9a-f]{40}$/);
+  assert.equal(invocation.executable, 'git');
+  assert.equal(invocation.options.shell, false);
+  assert.deepEqual(invocation.options.stdio, ['ignore', 'pipe', 'pipe']);
+  assert.equal(invocation.options.env.GIT_TERMINAL_PROMPT, '0');
+  assert.equal(invocation.options.env.GIT_OPTIONAL_LOCKS, '0');
+  assert.ok(invocation.args.includes('credential.helper='));
+  assert.ok(invocation.args.includes('core.fsmonitor='));
 });
 
 test('credential-bearing, token, SSH, ANSI and multiline Git output never escapes', (context) => {
