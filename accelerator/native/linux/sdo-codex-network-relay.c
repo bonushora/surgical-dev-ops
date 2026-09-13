@@ -31,18 +31,19 @@ static void handle_signal(int signal_number) {
   }
 }
 
-static int enter_cognitive_root(const char *root) {
+static const char *enter_cognitive_root(const char *root) {
   struct __user_cap_header_struct header = {
     .version = _LINUX_CAPABILITY_VERSION_3,
     .pid = 0
   };
   struct __user_cap_data_struct capabilities[2];
   memset(capabilities, 0, sizeof(capabilities));
-  if (chroot(root) != 0 || chdir("/cognitive/workspace") != 0 ||
-      syscall(SYS_capset, &header, capabilities) != 0 ||
-      prctl(PR_SET_NO_NEW_PRIVS, 1, 0, 0, 0) != 0 ||
-      setenv("PWD", "/cognitive/workspace", 1) != 0) return -1;
-  return 0;
+  if (chroot(root) != 0) return "chroot";
+  if (chdir("/cognitive/workspace") != 0) return "chdir";
+  if (syscall(SYS_capset, &header, capabilities) != 0) return "capset";
+  if (prctl(PR_SET_NO_NEW_PRIVS, 1, 0, 0, 0) != 0) return "no-new-privs";
+  if (setenv("PWD", "/cognitive/workspace", 1) != 0) return "environment";
+  return NULL;
 }
 
 static int validate_provider_socket(const char *socket_path, uid_t expected_uid) {
@@ -202,9 +203,17 @@ int main(int argc, char **argv) {
   }
   if (sandbox_pid == 0) {
     close(listener);
-    if (prctl(PR_SET_PDEATHSIG, SIGKILL) != 0 || getppid() == 1 ||
-        enter_cognitive_root(argv[3]) != 0) _exit(126);
+    if (prctl(PR_SET_PDEATHSIG, SIGKILL) != 0 || getppid() == 1) {
+      fputs("Codex cognitive child parent binding failed.\n", stderr);
+      _exit(126);
+    }
+    const char *failed_stage = enter_cognitive_root(argv[3]);
+    if (failed_stage != NULL) {
+      fprintf(stderr, "Codex cognitive child hardening failed at %s.\n", failed_stage);
+      _exit(126);
+    }
     execv(argv[4], &argv[4]);
+    fputs("Codex cognitive child execution failed.\n", stderr);
     _exit(126);
   }
   int result = run_relay(listener, argv[1]);
