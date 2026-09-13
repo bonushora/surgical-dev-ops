@@ -373,6 +373,38 @@ test(
       current.failureCode,
       FAILURE_CODES.MALFORMED_EVENT
     );
+
+    const priorTaskStream =
+      createNaturalPresentationStream({
+        streamId:
+          'stream-prior-task',
+        taskId:
+          'task-prior'
+      });
+
+    const staleTaskEvent =
+      createNaturalPresentationEvent({
+        stream:
+          priorTaskStream,
+        sequence:
+          0,
+        type:
+          EVENT_TYPES.ACKNOWLEDGED,
+        monotonicMs:
+          1,
+        payload: {
+          message:
+            'Prior task evidence.'
+        }
+      });
+
+    assert.equal(
+      consumeNaturalPresentationEvent(
+        initial,
+        staleTaskEvent
+      ).failureCode,
+      FAILURE_CODES.MALFORMED_EVENT
+    );
   }
 );
 

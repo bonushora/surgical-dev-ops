@@ -126,11 +126,35 @@ function normalizeResponse(value) {
     return null;
   }
 
-  return requireBoundedText(
-    value,
-    'response',
-    6000
-  );
+  if (
+    typeof value !== 'string' ||
+    !value.trim()
+  ) {
+    throw new Error(
+      'response is required.'
+    );
+  }
+
+  const text =
+    value.trim();
+
+  if (text.length > 6000) {
+    throw new Error(
+      'response exceeds its fixed bound.'
+    );
+  }
+
+  if (
+    /[\u0000-\u0008\u000b\u000c\u000e-\u001f\u007f-\u009f]/.test(
+      text
+    )
+  ) {
+    throw new Error(
+      'response contains unsafe control text.'
+    );
+  }
+
+  return text;
 }
 
 function normalizeEvidenceReason(

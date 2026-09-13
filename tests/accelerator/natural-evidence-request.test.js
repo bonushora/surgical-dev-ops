@@ -272,6 +272,45 @@ test(
 );
 
 test(
+  'bounded multiline final response is presentation data while unsafe controls remain denied',
+  () => {
+    const result =
+      parseNaturalEvidenceDecision(
+        completed({
+          decision:
+            'RESPOND',
+
+          response:
+            'Resumo governado.\n\n- Evidência observada\n- Incerteza preservada',
+
+          evidenceRequest:
+            null
+        })
+      );
+
+    assert.equal(
+      result.response,
+      'Resumo governado.\n\n- Evidência observada\n- Incerteza preservada'
+    );
+
+    assert.throws(
+      () =>
+        parseNaturalEvidenceDecision(
+          completed({
+            decision:
+              'RESPOND',
+            response:
+              'unsafe\u0001control',
+            evidenceRequest:
+              null
+          })
+        ),
+      /unsafe control text/i
+    );
+  }
+);
+
+test(
   'arbitrary commands and authority-bearing shapes never become evidence requests',
   () => {
     for (const output of [

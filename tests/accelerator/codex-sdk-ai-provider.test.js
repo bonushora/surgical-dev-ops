@@ -879,6 +879,198 @@ test('qualified completion before the deadline succeeds and removes its timer', 
   adapter.dispose();
 });
 
+test('validated terminal evidence completes without waiting for transport EOF', async () => {
+  const observations = {};
+  const controlled = blockingIterator([
+    { type: 'thread.started', thread_id: 'thread-evidence-ready' },
+    {
+      type: 'item.completed',
+      item: {
+        id: 'answer',
+        type: 'agent_message',
+        text: '{"response":"evidence-driven"}'
+      }
+    },
+    { type: 'turn.completed', usage: null }
+  ], observations);
+  const adapter = createCodexSDKAIProviderAdapter({
+    credentialProvider,
+    sdkLoader: async () => sdkWithRunStreamed(
+      async () => ({ events: controlled.iterator })
+    )
+  });
+  const invocation = adapter.invoke(cognitiveRequest());
+
+  const outcome = await Promise.race([
+    invocation.then((value) => ({ status: 'COMPLETED', value })),
+    new Promise((resolve) => setImmediate(
+      () => resolve({ status: 'STILL_WAITING' })
+    ))
+  ]);
+
+  if (outcome.status === 'STILL_WAITING') {
+    controlled.release({ done: true });
+    await invocation;
+  }
+
+  assert.equal(outcome.status, 'COMPLETED');
+  assert.deepEqual(outcome.value, { response: 'evidence-driven' });
+  assert.equal(observations.nextCalls, 3);
+  assert.equal(observations.returnCalls, 1);
+  adapter.dispose();
+});
+
+test('completion waits for late required evidence and then stops before EOF', async () => {
+  const observations = {};
+  const controlled = blockingIterator([
+    { type: 'thread.started', thread_id: 'thread-late-evidence' },
+    {
+      type: 'item.completed',
+      item: {
+        id: 'answer',
+        type: 'agent_message',
+        text: '{"response":"late-evidence"}'
+      }
+    }
+  ], observations);
+  const adapter = createCodexSDKAIProviderAdapter({
+    credentialProvider,
+    sdkLoader: async () => sdkWithRunStreamed(
+      async () => ({ events: controlled.iterator })
+    )
+  });
+  let settled = false;
+  const invocation = adapter.invoke(cognitiveRequest());
+  invocation.then(() => { settled = true; }, () => { settled = true; });
+
+  await controlled.waiting;
+  await new Promise((resolve) => setImmediate(resolve));
+  assert.equal(settled, false);
+
+  controlled.release({
+    done: false,
+    value: { type: 'turn.completed', usage: null }
+  });
+  assert.deepEqual(await invocation, { response: 'late-evidence' });
+  assert.equal(observations.nextCalls, 3);
+  assert.equal(observations.returnCalls, 1);
+  adapter.dispose();
+});
+
+test('contradictory result evidence and execution failure cannot become GREEN', async () => {
+  const contradictory = createCodexSDKAIProviderAdapter({
+    credentialProvider,
+    sdkLoader: async () => sdkWithRunStreamed(async () => ({
+      events: (async function* () {
+        yield { type: 'thread.started', thread_id: 'thread-contradictory' };
+        yield {
+          type: 'item.completed',
+          item: { type: 'agent_message', text: '{"response":"first"}' }
+        };
+        yield {
+          type: 'item.completed',
+          item: { type: 'agent_message', text: '{"response":"second"}' }
+        };
+        yield { type: 'turn.completed', usage: null };
+      })()
+    }))
+  });
+  await assert.rejects(
+    contradictory.invoke(cognitiveRequest()),
+    /output is contradictory/i
+  );
+
+  const failed = createCodexSDKAIProviderAdapter({
+    credentialProvider,
+    sdkLoader: async () => sdkWithRunStreamed(async () => ({
+      events: (async function* () {
+        yield { type: 'thread.started', thread_id: 'thread-failed' };
+        yield {
+          type: 'item.completed',
+          item: { type: 'agent_message', text: '{"response":"apparently-positive"}' }
+        };
+        yield { type: 'turn.failed', error: { message: 'controlled' } };
+      })()
+    }))
+  });
+  await assert.rejects(
+    failed.invoke(cognitiveRequest()),
+    /turn failed safely/i
+  );
+});
+
+test('malformed terminal result evidence fails closed', async () => {
+  const adapter = createCodexSDKAIProviderAdapter({
+    credentialProvider,
+    sdkLoader: async () => sdkWithRunStreamed(async () => ({
+      events: (async function* () {
+        yield { type: 'thread.started', thread_id: 'thread-malformed' };
+        yield {
+          type: 'item.completed',
+          item: { type: 'agent_message', text: '{not-json' }
+        };
+        yield { type: 'turn.completed', usage: null };
+      })()
+    }))
+  });
+
+  await assert.rejects(
+    adapter.invoke(cognitiveRequest()),
+    /not valid JSON/i
+  );
+});
+
+test('duplicate and out-of-order terminal evidence has one deterministic completion', async () => {
+  const orders = [
+    [
+      { type: 'thread.started', thread_id: 'thread-ordered' },
+      { type: 'thread.started', thread_id: 'thread-ordered' },
+      {
+        type: 'item.completed',
+        item: { type: 'agent_message', text: '{"response":"deterministic"}' }
+      },
+      {
+        type: 'item.completed',
+        item: { type: 'agent_message', text: '{"response":"deterministic"}' }
+      },
+      { type: 'turn.completed', usage: null }
+    ],
+    [
+      { type: 'thread.started', thread_id: 'thread-out-of-order' },
+      { type: 'turn.completed', usage: null },
+      { type: 'turn.completed', usage: null },
+      {
+        type: 'item.completed',
+        item: { type: 'agent_message', text: '{"response":"deterministic"}' }
+      }
+    ]
+  ];
+
+  for (const events of orders) {
+    const projected = [];
+    const observations = {};
+    const controlled = blockingIterator(events, observations);
+    const adapter = createCodexSDKAIProviderAdapter({
+      credentialProvider,
+      onPresentationEvent: (event) => projected.push(event),
+      sdkLoader: async () => sdkWithRunStreamed(
+        async () => ({ events: controlled.iterator })
+      )
+    });
+
+    assert.deepEqual(
+      await adapter.invoke(cognitiveRequest()),
+      { response: 'deterministic' }
+    );
+    assert.equal(
+      projected.filter((event) => event.type === 'TURN_COMPLETED').length,
+      1
+    );
+    assert.equal(observations.returnCalls, 1);
+    adapter.dispose();
+  }
+});
+
 test('completion at the exact deadline is a timeout', async () => {
   const scheduler = manualDeadlineScheduler();
   const observations = {};
@@ -892,8 +1084,13 @@ test('completion at the exact deadline is a timeout', async () => {
   ];
   const iterator = {
     async next() {
-      if (events.length > 0) return { done: false, value: events.shift() };
-      scheduler.setNow(CODEX_COGNITIVE_DEADLINE_MS);
+      if (events.length > 0) {
+        const value = events.shift();
+        if (value.type === 'turn.completed') {
+          scheduler.setNow(CODEX_COGNITIVE_DEADLINE_MS);
+        }
+        return { done: false, value };
+      }
       return { done: true };
     },
     async return() {
@@ -918,7 +1115,7 @@ test('completion at the exact deadline is a timeout', async () => {
   assert.equal(scheduler.pendingCount(), 0);
 });
 
-test('late iterator settlement after abort cannot become success or leak a rejection', async () => {
+test('late transport settlement after terminal evidence cannot alter success or leak a rejection', async () => {
   const scheduler = manualDeadlineScheduler();
   const observations = {};
   const projected = [];
@@ -942,9 +1139,8 @@ test('late iterator settlement after abort cannot become success or leak a rejec
       ...deadlineOptions(scheduler)
     });
     const invocation = adapter.invoke(cognitiveRequest());
-    await controlled.waiting;
-    scheduler.expireNext();
-    await assert.rejects(invocation, (error) => error.code === CODEX_COGNITIVE_TIMEOUT);
+    const result = await invocation;
+    assert.deepEqual(result, { response: 'late' });
 
     const projectedBeforeLateSettlement = projected.length;
     controlled.release({ done: true });
@@ -952,8 +1148,9 @@ test('late iterator settlement after abort cannot become success or leak a rejec
     await new Promise((resolve) => setImmediate(resolve));
 
     assert.equal(projected.length, projectedBeforeLateSettlement);
-    assert.equal(adapter.currentThreadId(), 'thread-qualified-prior');
+    assert.equal(adapter.currentThreadId(), 'thread-late');
     assert.equal(observations.returnCalls, 1);
+    assert.equal(scheduler.pendingCount(), 0);
     assert.deepEqual(unhandled, []);
   } finally {
     process.removeListener('unhandledRejection', onUnhandled);

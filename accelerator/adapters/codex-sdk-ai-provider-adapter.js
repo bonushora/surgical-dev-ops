@@ -317,6 +317,7 @@ function createCodexSDKAIProviderAdapter({
     let outputText = null;
     let completed = false;
     let candidateThreadId = logicalThreadId;
+    let observedThreadId = null;
     while (true) {
       turn.assertBeforeDeadline();
       const step = await iterator.next();
@@ -326,22 +327,43 @@ function createCodexSDKAIProviderAdapter({
       }
       if (step.done) break;
       const event = step.value;
+      let duplicateEvidence = false;
       if (event && event.type === 'thread.started') {
-        candidateThreadId = requireText(event.thread_id, 'Codex thread ID', 256);
+        const eventThreadId = requireText(event.thread_id, 'Codex thread ID', 256);
+        if (observedThreadId !== null && observedThreadId !== eventThreadId) {
+          throw new Error('Codex SDK stream thread identity is contradictory.');
+        }
+        duplicateEvidence = observedThreadId === eventThreadId;
+        observedThreadId = eventThreadId;
+        candidateThreadId = eventThreadId;
       }
       if (event && event.type === 'turn.failed') throw new Error('Codex SDK turn failed safely.');
       if (event && event.type === 'error') throw new Error('Codex SDK stream failed safely.');
-      if (event && event.type === 'turn.completed') completed = true;
+      if (event && event.type === 'turn.completed') {
+        duplicateEvidence = completed;
+        completed = true;
+      }
       if (
         event && event.type === 'item.completed' && event.item &&
         event.item.type === 'agent_message'
       ) {
+        if (typeof event.item.text !== 'string') {
+          throw new Error('Codex SDK cognitive output is malformed.');
+        }
+        if (outputText !== null && outputText !== event.item.text) {
+          throw new Error('Codex SDK cognitive output is contradictory.');
+        }
+        duplicateEvidence = outputText === event.item.text;
         outputText = event.item.text;
       }
       const projected = presentationEvent(event);
-      if (projected && onPresentationEvent) onPresentationEvent(projected);
+      if (projected && onPresentationEvent && !duplicateEvidence) {
+        onPresentationEvent(projected);
+      }
+      if (completed && typeof outputText === 'string' && outputText.trim()) {
+        break;
+      }
     }
-    turn.setIterator(null);
     turn.assertBeforeDeadline();
     if (!completed || typeof outputText !== 'string' || !outputText.trim()) {
       throw new Error('Codex SDK stream ended without canonical completion.');
@@ -357,6 +379,8 @@ function createCodexSDKAIProviderAdapter({
     }
     rejectAuthority(output);
     turn.assertBeforeDeadline();
+    turn.closeIterator();
+    turn.setIterator(null);
     const completedAt = monotonicNow();
     if (onMetric) {
       onMetric(deepFreeze({
