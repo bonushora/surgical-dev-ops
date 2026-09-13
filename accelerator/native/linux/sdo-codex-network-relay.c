@@ -3,7 +3,6 @@
 #include <arpa/inet.h>
 #include <errno.h>
 #include <fcntl.h>
-#include <linux/capability.h>
 #include <poll.h>
 #include <signal.h>
 #include <stddef.h>
@@ -13,13 +12,13 @@
 #include <sys/prctl.h>
 #include <sys/socket.h>
 #include <sys/stat.h>
-#include <sys/syscall.h>
 #include <sys/types.h>
 #include <sys/wait.h>
 #include <unistd.h>
 
 #define PROVIDER_PORT 43127
 #define BUFFER_SIZE 32768
+#define BROKER_CHANNEL_COUNT 8
 
 static volatile sig_atomic_t forwarded_signal = 0;
 static pid_t sandbox_pid = -1;
@@ -31,17 +30,8 @@ static void handle_signal(int signal_number) {
   }
 }
 
-static const char *enter_cognitive_root(const char *root) {
-  struct __user_cap_header_struct header = {
-    .version = _LINUX_CAPABILITY_VERSION_3,
-    .pid = 0
-  };
-  struct __user_cap_data_struct capabilities[2];
-  memset(capabilities, 0, sizeof(capabilities));
-  if (chroot(root) != 0) return "chroot";
+static const char *prepare_cognitive_child(void) {
   if (chdir("/cognitive/workspace") != 0) return "chdir";
-  if (syscall(SYS_capset, &header, capabilities) != 0) return "capset";
-  if (prctl(PR_SET_NO_NEW_PRIVS, 1, 0, 0, 0) != 0) return "no-new-privs";
   if (setenv("PWD", "/cognitive/workspace", 1) != 0) return "environment";
   return NULL;
 }
@@ -97,6 +87,17 @@ static int connect_provider_socket(const char *socket_path) {
   return descriptor;
 }
 
+static int wait_for_broker_removal(const char *socket_path) {
+  struct stat status;
+  for (int attempt = 0; attempt < 5000; attempt += 1) {
+    if (lstat(socket_path, &status) != 0) {
+      return errno == ENOENT ? 0 : -1;
+    }
+    usleep(1000);
+  }
+  return -1;
+}
+
 static int write_all(int descriptor, const char *buffer, size_t length) {
   size_t offset = 0;
   while (offset < length) {
@@ -143,8 +144,10 @@ static void bridge_connection(int client, int provider) {
   }
 }
 
-static int run_relay(int listener, const char *socket_path) {
+static int run_relay(int listener, int broker_channels[BROKER_CHANNEL_COUNT],
+    int broker_channel_count) {
   int sandbox_status = 1;
+  int next_broker_channel = 0;
   for (;;) {
     pid_t result = waitpid(sandbox_pid, &sandbox_status, WNOHANG);
     if (result == sandbox_pid) break;
@@ -158,8 +161,9 @@ static int run_relay(int listener, const char *socket_path) {
     if (ready > 0 && (descriptor.revents & POLLIN) != 0) {
       int client = accept4(listener, NULL, NULL, SOCK_CLOEXEC);
       if (client < 0) continue;
-      int provider = connect_provider_socket(socket_path);
-      if (provider >= 0) {
+      if (next_broker_channel < broker_channel_count) {
+        int provider = broker_channels[next_broker_channel++];
+        broker_channels[next_broker_channel - 1] = -1;
         bridge_connection(client, provider);
         close(provider);
       }
@@ -172,20 +176,46 @@ static int run_relay(int listener, const char *socket_path) {
 }
 
 int main(int argc, char **argv) {
-  if (argc < 5 || strcmp(argv[2], "--") != 0 || strcmp(argv[3], "/sandbox") != 0 ||
-      (strcmp(argv[4], "/runtime/codex") != 0 &&
-      strcmp(argv[4], "/runtime/node") != 0)) {
+  if (argc < 4 || strcmp(argv[2], "--") != 0 ||
+      (strcmp(argv[3], "/runtime/codex") != 0 &&
+      strcmp(argv[3], "/runtime/node") != 0) ||
+      (strcmp(argv[1], "--probe") == 0 &&
+      strcmp(argv[3], "/runtime/node") != 0)) {
     fputs("Codex provider relay invocation is invalid.\n", stderr);
     return 126;
   }
-  uid_t uid = getuid();
-  if (validate_provider_socket(argv[1], uid) != 0) {
-    fputs("Codex provider relay endpoint attestation failed.\n", stderr);
-    return 126;
+  int broker_channels[BROKER_CHANNEL_COUNT];
+  int broker_channel_count = strcmp(argv[1], "--probe") == 0
+    ? 0 : BROKER_CHANNEL_COUNT;
+  for (int index = 0; index < BROKER_CHANNEL_COUNT; index += 1) {
+    broker_channels[index] = -1;
+  }
+  if (broker_channel_count > 0) {
+    if (validate_provider_socket(argv[1], getuid()) != 0) {
+      fputs("Codex provider relay endpoint attestation failed.\n", stderr);
+      return 126;
+    }
+    for (int index = 0; index < broker_channel_count; index += 1) {
+      broker_channels[index] = connect_provider_socket(argv[1]);
+      if (broker_channels[index] < 0) {
+        fputs("Codex provider relay channel initialization failed.\n", stderr);
+        return 126;
+      }
+    }
+    if (wait_for_broker_removal(argv[1]) != 0) {
+      fputs("Codex provider relay endpoint sealing failed.\n", stderr);
+      return 126;
+    }
   }
   int listener = create_loopback_listener();
   if (listener < 0) {
     fputs("Codex provider relay listener initialization failed.\n", stderr);
+    return 126;
+  }
+  if (prctl(PR_SET_NO_NEW_PRIVS, 1, 0, 0, 0) != 0 ||
+      prctl(PR_SET_DUMPABLE, 0, 0, 0, 0) != 0) {
+    fputs("Codex provider relay hardening failed.\n", stderr);
+    close(listener);
     return 126;
   }
   struct sigaction action;
@@ -203,20 +233,26 @@ int main(int argc, char **argv) {
   }
   if (sandbox_pid == 0) {
     close(listener);
+    for (int index = 0; index < broker_channel_count; index += 1) {
+      if (broker_channels[index] >= 0) close(broker_channels[index]);
+    }
     if (prctl(PR_SET_PDEATHSIG, SIGKILL) != 0 || getppid() == 1) {
       fputs("Codex cognitive child parent binding failed.\n", stderr);
       _exit(126);
     }
-    const char *failed_stage = enter_cognitive_root(argv[3]);
+    const char *failed_stage = prepare_cognitive_child();
     if (failed_stage != NULL) {
       fprintf(stderr, "Codex cognitive child hardening failed at %s.\n", failed_stage);
       _exit(126);
     }
-    execv(argv[4], &argv[4]);
+    execv(argv[3], &argv[3]);
     fputs("Codex cognitive child execution failed.\n", stderr);
     _exit(126);
   }
-  int result = run_relay(listener, argv[1]);
+  int result = run_relay(listener, broker_channels, broker_channel_count);
+  for (int index = 0; index < broker_channel_count; index += 1) {
+    if (broker_channels[index] >= 0) close(broker_channels[index]);
+  }
   close(listener);
   return result;
 }

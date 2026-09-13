@@ -14,6 +14,7 @@ if (process.platform === 'linux') {
     '-Wall',
     '-Wextra',
     '-Werror',
+    '-static',
     source,
     '-o',
     output,

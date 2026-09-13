@@ -1,6 +1,7 @@
 'use strict';
 
 const assert = require('node:assert/strict');
+const childProcess = require('node:child_process');
 const fs = require('node:fs');
 const os = require('node:os');
 const path = require('node:path');
@@ -9,6 +10,9 @@ const test = require('node:test');
 const {
   createCodexCognitiveContainment
 } = require('../../accelerator/adapters/codex-cognitive-containment-adapter');
+const {
+  CODEX_NETWORK_RELAY
+} = require('../../accelerator/adapters/linux-bwrap-sandbox-adapter');
 const {
   createCodexSDKAIProviderAdapter,
   CODEX_SDK_PROVIDER_ID
@@ -86,6 +90,49 @@ function fakeCodexSource({
     ''
   ].join('\n');
 }
+
+test('Linux qualified relay executes without caller-supplied runtime bindings', {
+  skip: !PHYSICAL,
+  timeout: 15000
+}, async () => {
+  const containment = createCodexCognitiveContainment({
+    codexExecutable: CODEX_NETWORK_RELAY,
+    registerSignalHandlers: false,
+    now: () => '2099-01-01T00:00:00.000Z'
+  });
+  try {
+    const result = await new Promise((resolve, reject) => {
+      const child = childProcess.spawn(containment.launcherPath, [], {
+        env: { LANG: 'C.UTF-8' },
+        stdio: ['ignore', 'pipe', 'pipe']
+      });
+      const stdout = [];
+      const stderr = [];
+      child.stdout.on('data', (chunk) => stdout.push(chunk));
+      child.stderr.on('data', (chunk) => stderr.push(chunk));
+      child.once('error', reject);
+      child.once('exit', (status, signal) => resolve({
+        status,
+        signal,
+        stdout: Buffer.concat(stdout).toString('utf8'),
+        stderr: Buffer.concat(stderr).toString('utf8')
+      }));
+    });
+    assert.deepEqual({
+      status: result.status,
+      signal: result.signal,
+      stdout: result.stdout,
+      stderr: result.stderr
+    }, {
+      status: 126,
+      signal: null,
+      stdout: '',
+      stderr: 'Codex provider relay invocation is invalid.\n'
+    });
+  } finally {
+    containment.dispose();
+  }
+});
 
 test('Linux Codex launcher physically denies original workspace reads writes and network', {
   skip: !PHYSICAL,

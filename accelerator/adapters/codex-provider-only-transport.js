@@ -3,11 +3,13 @@
 const fs = require('node:fs');
 const http = require('node:http');
 const https = require('node:https');
+const net = require('node:net');
 const path = require('node:path');
 
 const PROVIDER_PORT = 43127;
 const PROVIDER_HOST = `127.0.0.1:${PROVIDER_PORT}`;
 const MAX_REQUEST_BYTES = 8 * 1024 * 1024;
+const BROKER_CHANNEL_COUNT = 8;
 const FORBIDDEN_PROVIDER_TOOL_TYPES = new Set([
   'code_interpreter',
   'computer_use_preview',
@@ -278,12 +280,18 @@ function createCodexProviderOnlyTransport({
   }
   const secureRoot = assertSecureControlRoot(controlRoot);
   const socketPath = path.join(secureRoot, 'provider.sock');
-  if (fs.existsSync(socketPath)) {
+  const relayRoot = path.join(secureRoot, 'relay');
+  const relaySocketPath = path.join(relayRoot, 'provider.sock');
+  if (fs.existsSync(socketPath) || fs.existsSync(relayRoot)) {
     throw fail('Codex provider transport endpoint already exists.');
   }
+  fs.mkdirSync(relayRoot, { mode: 0o700 });
+  fs.chmodSync(relayRoot, 0o700);
 
   let disposed = false;
   const tunnels = new Set();
+  const relaySockets = new Set();
+  const relayGates = new Set();
   const server = http.createServer(async (request, response) => {
     let body;
     try {
@@ -327,6 +335,49 @@ function createCodexProviderOnlyTransport({
   });
   server.on('error', () => {});
 
+  function removeRelayEndpoint() {
+    try {
+      fs.unlinkSync(relaySocketPath);
+    } catch (error) {
+      if (error.code !== 'ENOENT') throw error;
+    }
+  }
+
+  function listenRelayGate() {
+    if (disposed) return;
+    let accepted = 0;
+    const gate = net.createServer({ pauseOnConnect: true }, (socket) => {
+      if (accepted >= BROKER_CHANNEL_COUNT) {
+        socket.destroy();
+        return;
+      }
+      accepted += 1;
+      relaySockets.add(socket);
+      socket.once('close', () => relaySockets.delete(socket));
+      server.emit('connection', socket);
+      socket.resume();
+      if (accepted === BROKER_CHANNEL_COUNT) {
+        removeRelayEndpoint();
+        gate.close(() => {
+          relayGates.delete(gate);
+          listenRelayGate();
+        });
+      }
+    });
+    gate.on('error', () => {});
+    gate.listen(relaySocketPath);
+    fs.chmodSync(relaySocketPath, 0o600);
+    const endpoint = fs.lstatSync(relaySocketPath);
+    if (!endpoint.isSocket() || endpoint.uid !== process.getuid() ||
+        (endpoint.mode & 0o177) !== 0) {
+      gate.close();
+      removeRelayEndpoint();
+      throw fail('Codex relay endpoint attestation failed.');
+    }
+    relayGates.add(gate);
+    gate.unref();
+  }
+
   try {
     server.listen(socketPath);
     fs.chmodSync(socketPath, 0o600);
@@ -334,11 +385,15 @@ function createCodexProviderOnlyTransport({
     if (!endpoint.isSocket() || endpoint.uid !== process.getuid() || (endpoint.mode & 0o177) !== 0) {
       throw fail('Codex provider transport endpoint attestation failed.');
     }
+    listenRelayGate();
   } catch (error) {
+    for (const gate of relayGates) gate.close();
     server.close();
     try {
       fs.unlinkSync(socketPath);
     } catch {}
+    removeRelayEndpoint();
+    try { fs.rmdirSync(relayRoot); } catch {}
     throw error && error.code === 'CODEX_PROVIDER_TRANSPORT_UNAVAILABLE'
       ? error
       : fail('Codex provider transport endpoint could not be established.');
@@ -356,10 +411,13 @@ function createCodexProviderOnlyTransport({
     socketOwnerUid: process.getuid(),
     socketMode: '0600',
     providerHost: PROVIDER_HOST,
+    relayChannelCount: BROKER_CHANNEL_COUNT,
+    relayEndpointTransient: true,
   });
 
   return Object.freeze({
     socketPath,
+    relaySocketPath,
     providerBaseUrl: `http://${PROVIDER_HOST}`,
     providerPort: PROVIDER_PORT,
     attestation,
@@ -373,6 +431,10 @@ function createCodexProviderOnlyTransport({
       }
       for (const tunnel of tunnels) tunnel.destroy();
       tunnels.clear();
+      for (const socket of relaySockets) socket.destroy();
+      relaySockets.clear();
+      for (const gate of relayGates) gate.close();
+      relayGates.clear();
       server.close();
       try {
         fs.unlinkSync(socketPath);
@@ -380,6 +442,12 @@ function createCodexProviderOnlyTransport({
         if (error.code !== 'ENOENT') {
           throw error;
         }
+      }
+      removeRelayEndpoint();
+      try {
+        fs.rmdirSync(relayRoot);
+      } catch (error) {
+        if (error.code !== 'ENOENT') throw error;
       }
     },
   });

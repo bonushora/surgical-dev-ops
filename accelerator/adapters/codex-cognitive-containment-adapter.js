@@ -240,7 +240,7 @@ function createCodexCognitiveContainment({
       codexExecutable: stagedExecutable,
       codexExecutableArguments,
       runtimeBindings,
-      providerSocketPath: providerTransport && providerTransport.socketPath,
+      providerSocketPath: providerTransport && providerTransport.relaySocketPath,
       providerTransportAttestation: providerTransport && providerTransport.attestation,
       providerRelayExecutable,
       providerBaseUrl: providerTransport && providerTransport.providerBaseUrl,

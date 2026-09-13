@@ -15,8 +15,8 @@ const CODEX_NETWORK_RELAY = path.resolve(
   '../native/linux/sdo-codex-network-relay'
 );
 const CODEX_EXECUTABLE_FD = '__SDO_CODEX_EXECUTABLE_FD__';
-const CODEX_SANDBOX_ROOT = '/sandbox';
-const CODEX_PROVIDER_SOCKET = '/runtime/provider.sock';
+const CODEX_BROKER_ROOT = '/broker';
+const CODEX_PROVIDER_SOCKET = `${CODEX_BROKER_ROOT}/provider.sock`;
 
 function deepFreeze(value) {
   if (!value || typeof value !== 'object' || Object.isFrozen(value)) return value;
@@ -75,49 +75,44 @@ function codexNetworkNamespaceArguments(
   containedArguments,
   executablePath = null
 ) {
-  const cognitivePath = (target) => CODEX_SANDBOX_ROOT + target;
   const arguments_ = [
     '--unshare-user', '--uid', '0', '--gid', '0', '--unshare-net',
     '--unshare-pid', '--unshare-ipc', '--unshare-uts',
-    '--cap-drop', 'ALL', '--cap-add', 'CAP_SYS_CHROOT',
+    '--cap-drop', 'ALL',
     '--new-session', '--die-with-parent', '--clearenv',
-    '--dir', '/runtime', '--ro-bind', relay, '/runtime/provider-relay',
-    '--bind', providerSocket, CODEX_PROVIDER_SOCKET,
-    '--dir', '/usr', '--ro-bind', '/usr/lib', '/usr/lib',
-    '--ro-bind', '/usr/lib64', '/usr/lib64',
-    '--symlink', 'usr/lib', '/lib', '--symlink', 'usr/lib64', '/lib64',
-    '--tmpfs', CODEX_SANDBOX_ROOT, '--dir', cognitivePath('/runtime')
+    '--dir', '/runtime', '--ro-bind', relay, '/runtime/provider-relay'
   ];
+  if (providerSocket) {
+    arguments_.push('--ro-bind', path.dirname(providerSocket), CODEX_BROKER_ROOT);
+  }
   if (runtimeBindings.some((binding) => binding.target.startsWith('/usr/'))) {
-    arguments_.push('--dir', cognitivePath('/usr'));
+    arguments_.push('--dir', '/usr');
   }
   for (const binding of runtimeBindings) {
     if (binding.source === CODEX_EXECUTABLE_FD && executablePath) {
-      arguments_.push('--ro-bind-fd', '3', cognitivePath(binding.target));
+      arguments_.push('--ro-bind-fd', '3', binding.target);
     } else {
-      arguments_.push('--ro-bind', binding.source, cognitivePath(binding.target));
+      arguments_.push('--ro-bind', binding.source, binding.target);
     }
   }
   arguments_.push(
-    '--dir', cognitivePath('/cognitive'),
-    '--bind', cognitiveRoot, cognitivePath('/cognitive'),
+    '--dir', '/cognitive',
+    '--bind', cognitiveRoot, '/cognitive',
     ...(codexAuthPath
-      ? ['--ro-bind', codexAuthPath,
-        cognitivePath('/cognitive/home/.codex/auth.json')]
+      ? ['--ro-bind', codexAuthPath, '/cognitive/home/.codex/auth.json']
       : []),
-    '--proc', cognitivePath('/proc'), '--dev', cognitivePath('/dev'),
-    '--tmpfs', cognitivePath('/tmp'),
+    '--proc', '/proc', '--dev', '/dev', '--tmpfs', '/tmp',
     ...(runtimeBindings.some((binding) => binding.target === '/usr/lib')
-      ? ['--symlink', 'usr/lib', cognitivePath('/lib')] : []),
+      ? ['--symlink', 'usr/lib', '/lib'] : []),
     ...(runtimeBindings.some((binding) => binding.target === '/usr/lib64')
-      ? ['--symlink', 'usr/lib64', cognitivePath('/lib64')] : []),
-    '--remount-ro', CODEX_SANDBOX_ROOT,
-    '--chdir', cognitivePath('/cognitive/workspace'),
+      ? ['--symlink', 'usr/lib64', '/lib64'] : []),
+    '--remount-ro', '/',
+    '--chdir', '/cognitive/workspace',
     '--setenv', 'PATH', '/runtime',
     '--setenv', 'HOME', '/cognitive/home',
     '--setenv', 'TMPDIR', '/cognitive/tmp',
     '--setenv', 'LANG', 'C.UTF-8',
-    '/runtime/provider-relay', CODEX_PROVIDER_SOCKET, '--', CODEX_SANDBOX_ROOT,
+    '/runtime/provider-relay', providerSocket ? CODEX_PROVIDER_SOCKET : '--probe', '--',
     containedExecutable, ...containedArguments
   );
   return arguments_;
@@ -201,7 +196,7 @@ function attestLinuxCodexContainment(cognitiveRoot, observedAt, {
   const bubblewrapArguments = codexNetworkNamespaceArguments(
     root,
     relay,
-    providerSocket,
+    null,
     [
       { source: node, target: '/runtime/node' },
       { source: CODEX_PROBE, target: '/runtime/probe.js' },
