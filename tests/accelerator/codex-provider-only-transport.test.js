@@ -328,12 +328,19 @@ test('qualified launcher creates one private namespace and relay exposes only it
   assert.match(launcherSource, /nativeLauncher: BWRAP/);
   assert.match(
     launcherSource,
-    /'--unshare-net',[\s\S]*'--cap-add', 'CAP_SYS_ADMIN'/
+    /'--unshare-net',[\s\S]*'--cap-drop', 'ALL', '--cap-add', 'CAP_SYS_CHROOT'/
   );
-  assert.doesNotMatch(launcherSource, /CAP_NET_ADMIN/);
-  assert.match(launcherSource, /'--ro-bind-fd', '3', executablePath/);
+  assert.doesNotMatch(launcherSource, /CAP_NET_ADMIN|CAP_SYS_ADMIN/);
+  assert.match(
+    launcherSource,
+    /'--ro-bind-fd', '3', cognitivePath\(binding\.target\)/
+  );
   assert.doesNotMatch(relaySource, /unshare\(|CLONE_NEWUSER|CLONE_NEWNET/);
   assert.doesNotMatch(relaySource, /SIOCSIFFLAGS|CAP_NET_ADMIN/);
+  assert.doesNotMatch(relaySource, /\/usr\/bin\/bwrap/);
+  assert.match(relaySource, /chroot\(root\)/);
+  assert.match(relaySource, /enter_cognitive_root\(argv\[3\]\)/);
+  assert.match(relaySource, /SYS_capset/);
   assert.match(relaySource, /INADDR_LOOPBACK/);
   assert.match(relaySource, /#define PROVIDER_PORT 43127/);
   assert.match(relaySource, /AF_UNIX/);

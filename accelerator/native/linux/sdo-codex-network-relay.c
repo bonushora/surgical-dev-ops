@@ -3,6 +3,7 @@
 #include <arpa/inet.h>
 #include <errno.h>
 #include <fcntl.h>
+#include <linux/capability.h>
 #include <poll.h>
 #include <signal.h>
 #include <stddef.h>
@@ -12,6 +13,7 @@
 #include <sys/prctl.h>
 #include <sys/socket.h>
 #include <sys/stat.h>
+#include <sys/syscall.h>
 #include <sys/types.h>
 #include <sys/wait.h>
 #include <unistd.h>
@@ -27,6 +29,20 @@ static void handle_signal(int signal_number) {
   if (sandbox_pid > 0) {
     (void)kill(sandbox_pid, signal_number);
   }
+}
+
+static int enter_cognitive_root(const char *root) {
+  struct __user_cap_header_struct header = {
+    .version = _LINUX_CAPABILITY_VERSION_3,
+    .pid = 0
+  };
+  struct __user_cap_data_struct capabilities[2];
+  memset(capabilities, 0, sizeof(capabilities));
+  if (chroot(root) != 0 || chdir("/cognitive/workspace") != 0 ||
+      syscall(SYS_capset, &header, capabilities) != 0 ||
+      prctl(PR_SET_NO_NEW_PRIVS, 1, 0, 0, 0) != 0 ||
+      setenv("PWD", "/cognitive/workspace", 1) != 0) return -1;
+  return 0;
 }
 
 static int validate_provider_socket(const char *socket_path, uid_t expected_uid) {
@@ -155,7 +171,9 @@ static int run_relay(int listener, const char *socket_path) {
 }
 
 int main(int argc, char **argv) {
-  if (argc < 5 || strcmp(argv[2], "--") != 0 || strcmp(argv[3], "/usr/bin/bwrap") != 0) {
+  if (argc < 5 || strcmp(argv[2], "--") != 0 || strcmp(argv[3], "/sandbox") != 0 ||
+      (strcmp(argv[4], "/runtime/codex") != 0 &&
+      strcmp(argv[4], "/runtime/node") != 0)) {
     fputs("Codex provider relay invocation is invalid.\n", stderr);
     return 126;
   }
@@ -184,8 +202,9 @@ int main(int argc, char **argv) {
   }
   if (sandbox_pid == 0) {
     close(listener);
-    if (prctl(PR_SET_PDEATHSIG, SIGKILL) != 0 || getppid() == 1) _exit(126);
-    execv(argv[3], &argv[3]);
+    if (prctl(PR_SET_PDEATHSIG, SIGKILL) != 0 || getppid() == 1 ||
+        enter_cognitive_root(argv[3]) != 0) _exit(126);
+    execv(argv[4], &argv[4]);
     _exit(126);
   }
   int result = run_relay(listener, argv[1]);

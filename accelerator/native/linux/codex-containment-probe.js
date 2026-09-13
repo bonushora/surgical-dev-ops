@@ -48,6 +48,7 @@ async function main() {
     externalWriteDenied: externalWrite !== 'WRITTEN',
     hostFilesystemHidden: !fs.existsSync('/home') && !fs.existsSync('/root') &&
       !fs.existsSync('/workspace') && !fs.existsSync('/etc'),
+    providerSocketHidden: !fs.existsSync('/runtime/provider.sock'),
     networkDenied: networkOutcome !== 'CONNECTED' && networkOutcome !== 'TIMEOUT',
     alternateLocalDenied:
       alternateLocalOutcome !== 'CONNECTED' && alternateLocalOutcome !== 'TIMEOUT',
@@ -64,7 +65,8 @@ async function main() {
   };
   process.stdout.write(`${JSON.stringify(result)}\n`);
   if (!result.cognitiveWriteEnabled || !result.externalWriteDenied ||
-      !result.hostFilesystemHidden || !result.networkDenied || !result.alternateLocalDenied ||
+      !result.hostFilesystemHidden || !result.providerSocketHidden ||
+      !result.networkDenied || !result.alternateLocalDenied ||
       !result.genericProcessDenied || !result.environmentMinimal ||
       !result.homeIsolated || !result.tempIsolated ||
       result.cwd !== '/cognitive/workspace' ||
