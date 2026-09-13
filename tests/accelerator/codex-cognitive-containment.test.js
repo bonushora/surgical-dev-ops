@@ -134,7 +134,7 @@ test('Linux Codex launcher physically denies original workspace reads writes and
   const launcher = fs.readFileSync(containment.launcherPath, 'utf8');
   assert.equal(launcher.includes(originalWorkspace), false);
   assert.equal(launcher.includes(process.cwd()), false);
-  assert.equal(launcher.includes('--unshare-net'), false);
+  assert.equal(launcher.includes('--unshare-net'), true);
   assert.equal(containment.providerBaseUrl, 'http://127.0.0.1:43127');
   assert.equal(containment.attestation.controls.cognitiveServiceNetworkQualified, true);
   assert.equal(containment.attestation.controls.providerOnlyTransport, true);

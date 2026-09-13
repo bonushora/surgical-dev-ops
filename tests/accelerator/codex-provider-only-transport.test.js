@@ -310,18 +310,30 @@ linuxTest('ChatGPT login transport has a separate fixed provider destination', a
   );
 });
 
-test('native relay mechanically creates a private namespace and exposes only its fixed loopback port', () => {
+test('qualified launcher creates one private namespace and relay exposes only its fixed loopback port', () => {
   const relaySource = fs.readFileSync(path.resolve(
     __dirname,
     '../../accelerator/native/linux/sdo-codex-network-relay.c'
+  ), 'utf8');
+  const launcherSource = fs.readFileSync(path.resolve(
+    __dirname,
+    '../../accelerator/adapters/linux-bwrap-sandbox-adapter.js'
   ), 'utf8');
   const brokerSource = fs.readFileSync(path.resolve(
     __dirname,
     '../../accelerator/adapters/codex-provider-only-transport.js'
   ), 'utf8');
 
-  assert.match(relaySource, /unshare\(CLONE_NEWNET\)/);
-  assert.match(relaySource, /SIOCSIFFLAGS/);
+  assert.match(launcherSource, /function codexNetworkNamespaceArguments/);
+  assert.match(launcherSource, /nativeLauncher: BWRAP/);
+  assert.match(
+    launcherSource,
+    /'--unshare-net',[\s\S]*'--cap-add', 'CAP_SYS_ADMIN'/
+  );
+  assert.doesNotMatch(launcherSource, /CAP_NET_ADMIN/);
+  assert.match(launcherSource, /'--ro-bind-fd', '3', executablePath/);
+  assert.doesNotMatch(relaySource, /unshare\(|CLONE_NEWUSER|CLONE_NEWNET/);
+  assert.doesNotMatch(relaySource, /SIOCSIFFLAGS|CAP_NET_ADMIN/);
   assert.match(relaySource, /INADDR_LOOPBACK/);
   assert.match(relaySource, /#define PROVIDER_PORT 43127/);
   assert.match(relaySource, /AF_UNIX/);

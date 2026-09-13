@@ -89,6 +89,32 @@ function codexContainmentArguments(cognitiveRoot, runtimeBindings, codexAuthPath
   return arguments_;
 }
 
+function codexNetworkNamespaceArguments(
+  cognitiveRoot,
+  relay,
+  providerSocket,
+  bubblewrapArguments,
+  executablePath = null
+) {
+  const sessionRoot = path.dirname(cognitiveRoot);
+  const containedArguments = executablePath
+    ? bubblewrapArguments.map((value) =>
+      value === CODEX_EXECUTABLE_FD ? executablePath : value)
+    : bubblewrapArguments;
+  return [
+    '--unshare-user', '--uid', '0', '--gid', '0', '--unshare-net',
+    '--cap-add', 'CAP_SYS_ADMIN',
+    '--new-session', '--die-with-parent', '--clearenv',
+    '--ro-bind', '/', '/', '--bind', sessionRoot, sessionRoot,
+    ...(executablePath ? ['--ro-bind-fd', '3', executablePath] : []),
+    '--setenv', 'PATH', '/usr/bin:/bin',
+    '--setenv', 'HOME', '/cognitive/home',
+    '--setenv', 'TMPDIR', '/cognitive/tmp',
+    '--setenv', 'LANG', 'C.UTF-8',
+    relay, providerSocket, '--', BWRAP, ...containedArguments
+  ];
+}
+
 function qualifiedCodexRoot(cognitiveRoot) {
   if (process.platform !== 'linux' || !fs.existsSync(BWRAP) || !fs.statSync(BWRAP).isFile() ||
       !fs.existsSync(CODEX_NETWORK_RELAY) || !fs.statSync(CODEX_NETWORK_RELAY).isFile()) {
@@ -176,12 +202,12 @@ function attestLinuxCodexContainment(cognitiveRoot, observedAt, {
     '--remount-ro', '/',
     '/runtime/node', '/runtime/probe.js'
   ];
-  const result = childProcess.spawnSync(relay, [
+  const result = childProcess.spawnSync(BWRAP, codexNetworkNamespaceArguments(
+    root,
+    relay,
     providerSocket,
-    '--',
-    BWRAP,
-    ...bubblewrapArguments
-  ], {
+    bubblewrapArguments
+  ), {
     cwd: root,
     shell: false,
     encoding: 'utf8',
@@ -284,23 +310,26 @@ function createLinuxCodexCognitiveLaunchSpec({
   return deepFreeze({
     schema: 'sdo.codex_cognitive_launch_spec.v1',
     platform: 'linux',
-    nativeLauncher: relay,
-    nativeArguments: [
+    nativeLauncher: BWRAP,
+    nativeArguments: codexNetworkNamespaceArguments(
+      root,
+      relay,
       providerSocketPath,
-      '--',
-      BWRAP,
-      ...codexContainmentArguments(root, [
+      [
+        ...codexContainmentArguments(root, [
         { source: CODEX_EXECUTABLE_FD, target: '/runtime/codex' },
         ...qualifiedBindings
-      ], authenticationPath),
-      ...(qualifiedBindings.some((binding) => binding.target === '/usr/lib')
-        ? ['--symlink', 'usr/lib', '/lib'] : []),
-      ...(qualifiedBindings.some((binding) => binding.target === '/usr/lib64')
-        ? ['--symlink', 'usr/lib64', '/lib64'] : []),
-      '--remount-ro', '/',
-      '/runtime/codex',
-      ...codexExecutableArguments
-    ],
+        ], authenticationPath),
+        ...(qualifiedBindings.some((binding) => binding.target === '/usr/lib')
+          ? ['--symlink', 'usr/lib', '/lib'] : []),
+        ...(qualifiedBindings.some((binding) => binding.target === '/usr/lib64')
+          ? ['--symlink', 'usr/lib64', '/lib64'] : []),
+        '--remount-ro', '/',
+        '/runtime/codex',
+        ...codexExecutableArguments
+      ],
+      executable
+    ),
     executable,
     executableFdToken: CODEX_EXECUTABLE_FD,
     sdkWorkingDirectory: '/cognitive/workspace',

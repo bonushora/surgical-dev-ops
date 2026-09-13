@@ -3,15 +3,12 @@
 #include <arpa/inet.h>
 #include <errno.h>
 #include <fcntl.h>
-#include <linux/if.h>
 #include <poll.h>
-#include <sched.h>
 #include <signal.h>
 #include <stddef.h>
 #include <stdio.h>
 #include <stdlib.h>
 #include <string.h>
-#include <sys/ioctl.h>
 #include <sys/prctl.h>
 #include <sys/socket.h>
 #include <sys/stat.h>
@@ -30,54 +27,6 @@ static void handle_signal(int signal_number) {
   if (sandbox_pid > 0) {
     (void)kill(sandbox_pid, signal_number);
   }
-}
-
-static int write_text_file(const char *file_name, const char *value) {
-  int descriptor = open(file_name, O_WRONLY | O_CLOEXEC);
-  if (descriptor < 0) return -1;
-  size_t remaining = strlen(value);
-  const char *cursor = value;
-  while (remaining > 0) {
-    ssize_t written = write(descriptor, cursor, remaining);
-    if (written < 0) {
-      if (errno == EINTR) continue;
-      close(descriptor);
-      return -1;
-    }
-    cursor += written;
-    remaining -= (size_t)written;
-  }
-  return close(descriptor);
-}
-
-static int enter_private_network_namespace(uid_t uid, gid_t gid) {
-  char mapping[96];
-  if (unshare(CLONE_NEWUSER) != 0) return -1;
-  if (write_text_file("/proc/self/setgroups", "deny\n") != 0 && errno != ENOENT) return -1;
-  int length = snprintf(mapping, sizeof(mapping), "0 %lu 1\n", (unsigned long)uid);
-  if (length <= 0 || (size_t)length >= sizeof(mapping) ||
-      write_text_file("/proc/self/uid_map", mapping) != 0) return -1;
-  length = snprintf(mapping, sizeof(mapping), "0 %lu 1\n", (unsigned long)gid);
-  if (length <= 0 || (size_t)length >= sizeof(mapping) ||
-      write_text_file("/proc/self/gid_map", mapping) != 0) return -1;
-  if (setresgid(0, 0, 0) != 0 || setresuid(0, 0, 0) != 0) return -1;
-  return unshare(CLONE_NEWNET);
-}
-
-static int enable_loopback(void) {
-  int descriptor = socket(AF_UNIX, SOCK_DGRAM | SOCK_CLOEXEC, 0);
-  if (descriptor < 0) return -1;
-  struct ifreq request;
-  memset(&request, 0, sizeof(request));
-  (void)snprintf(request.ifr_name, sizeof(request.ifr_name), "lo");
-  if (ioctl(descriptor, SIOCGIFFLAGS, &request) != 0) {
-    close(descriptor);
-    return -1;
-  }
-  request.ifr_flags = (short)(request.ifr_flags | IFF_UP | IFF_RUNNING);
-  int result = ioctl(descriptor, SIOCSIFFLAGS, &request);
-  close(descriptor);
-  return result;
 }
 
 static int validate_provider_socket(const char *socket_path, uid_t expected_uid) {
@@ -211,13 +160,8 @@ int main(int argc, char **argv) {
     return 126;
   }
   uid_t uid = getuid();
-  gid_t gid = getgid();
   if (validate_provider_socket(argv[1], uid) != 0) {
     fputs("Codex provider relay endpoint attestation failed.\n", stderr);
-    return 126;
-  }
-  if (enter_private_network_namespace(uid, gid) != 0 || enable_loopback() != 0) {
-    fputs("Codex private network namespace initialization failed.\n", stderr);
     return 126;
   }
   int listener = create_loopback_listener();
