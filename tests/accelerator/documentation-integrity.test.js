@@ -229,8 +229,10 @@ test('public AI provider recommendation is bilingual bounded and honest', () => 
   assert.match(portuguese, /Providers externos, inclusive Codex, são somente opt-in explícito/i);
   assert.match(english, /No provider selection grants operational authority/i);
   assert.match(portuguese, /Nenhuma seleção de provider concede autoridade operacional/i);
-  assert.match(english, /real Codex\s+remains `BLOCKED` even when explicitly selected/i);
-  assert.match(portuguese, /Codex\s+real permanece `BLOCKED` mesmo quando selecionado explicitamente/i);
+  assert.match(english, /session-scoped native relay exposes one fixed\s+loopback endpoint/i);
+  assert.match(portuguese, /relay nativo com ciclo de vida limitado à sessão\s+expõe um único endpoint loopback fixo/i);
+  assert.match(english, /Arbitrary Internet, host-network, localhost and\s+proxy access remain denied/i);
+  assert.match(portuguese, /Internet arbitrária, rede do host,\s+localhost e acesso de proxy permanecem negados/i);
   assert.match(english, /`@openai\/codex-sdk` is an optional npm dependency/i);
   assert.match(portuguese, /`@openai\/codex-sdk` é uma dependência npm opcional/i);
   assert.match(english, /basic offline installation\s+uses `--omit=optional`/i);

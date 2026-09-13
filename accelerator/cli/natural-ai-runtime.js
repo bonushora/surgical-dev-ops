@@ -322,7 +322,10 @@ function createNaturalCodexComposition(input = {}) {
       adapter.containment.controls.networkDenied === true
         ? 'BLOCKED_BY_CONTAINMENT_NETWORK'
         : adapter.containment && adapter.containment.controls &&
-          adapter.containment.controls.cognitiveServiceNetworkQualified === true
+          adapter.containment.controls.cognitiveServiceNetworkQualified === true &&
+          adapter.containment.controls.providerOnlyTransport === true &&
+          adapter.containment.controls.genericNetworkDenied === true &&
+          adapter.containment.controls.hostNetworkShared === false
           ? 'QUALIFIED'
           : 'UNQUALIFIED_NETWORK_SEPARATION',
     runtime,

@@ -22,6 +22,7 @@ const {
   createNaturalCognitiveSession
 } = require('../../accelerator/cli/natural-cognitive-session');
 const {
+  createCodexAuthenticationOptions,
   createCodexCredentialProvider
 } = require('../../accelerator/cli/surgical');
 
@@ -133,6 +134,7 @@ function fakeContainment(observations = {}, controls = {
     platform: 'linux',
     launcherPath: '/isolated/control/codex-contained-launcher',
     sdkWorkingDirectory: '/cognitive/workspace',
+    providerBaseUrl: 'http://127.0.0.1:43127',
     attestation: Object.freeze({
       schema: 'sdo.codex_cognitive_containment_attestation.v1',
       decision: 'ENFORCED',
@@ -155,7 +157,10 @@ function fakeServiceQualifiedContainmentFactory() {
   return fakeContainment({}, {
     originalWorkspaceDenied: true,
     networkDenied: false,
-    cognitiveServiceNetworkQualified: true
+    genericNetworkDenied: true,
+    cognitiveServiceNetworkQualified: true,
+    providerOnlyTransport: true,
+    hostNetworkShared: false
   });
 }
 
@@ -610,7 +615,10 @@ test('Codex session reset and close dispose each contained logical session', asy
       containmentFactory: () => fakeContainment(lifecycle, {
         originalWorkspaceDenied: true,
         networkDenied: false,
-        cognitiveServiceNetworkQualified: true
+        genericNetworkDenied: true,
+        cognitiveServiceNetworkQualified: true,
+        providerOnlyTransport: true,
+        hostNetworkShared: false
       }),
       sdkLoader: async () => fakeSDK()
     }
@@ -694,6 +702,56 @@ test('CLI Codex credential boundary reaches the full composition only as apiKey'
   assert.deepEqual(Object.keys(observations.codexOptions.env).sort(), ['HOME', 'LANG', 'PATH', 'TMPDIR']);
   assert.equal(JSON.stringify(response).includes(marker), false);
   assert.equal(JSON.stringify(observations.started).includes(marker), false);
+});
+
+test('existing Codex login remains owned by Codex and is never parsed or copied', {
+  skip: process.platform !== 'linux'
+}, async (t) => {
+  const loginHome = fs.mkdtempSync(path.join(os.tmpdir(), 'sdo-codex-login-test-'));
+  t.after(() => fs.rmSync(loginHome, { recursive: true, force: true }));
+  const codexDirectory = path.join(loginHome, '.codex');
+  const authPath = path.join(codexDirectory, 'auth.json');
+  const marker = 'shape-value-must-not-cross-options';
+  fs.mkdirSync(codexDirectory, { mode: 0o700 });
+  fs.writeFileSync(authPath, JSON.stringify({ auth_mode: marker }), { mode: 0o600 });
+
+  const authentication = createCodexAuthenticationOptions({}, loginHome);
+
+  assert.deepEqual(authentication.codexOptions, {
+    authenticationMode: 'CODEX_LOGIN',
+    codexAuthPath: fs.realpathSync(authPath)
+  });
+  assert.equal(authentication.credentialProvider, null);
+  assert.equal(JSON.stringify(authentication).includes(marker), false);
+
+  const observations = {};
+  let containmentInput;
+  const adapter = createCodexSDKAIProviderAdapter({
+    authenticationMode: 'CODEX_LOGIN',
+    codexAuthPath: authPath,
+    containmentFactory: (input) => {
+      containmentInput = input;
+      return fakeContainment({}, {
+        originalWorkspaceDenied: true,
+        networkDenied: false,
+        genericNetworkDenied: true,
+        cognitiveServiceNetworkQualified: true,
+        providerOnlyTransport: true,
+        hostNetworkShared: false
+      });
+    },
+    sdkLoader: async () => fakeSDK({ answer: 'bounded login' }, observations)
+  });
+  assert.deepEqual(await adapter.invoke(cognitiveRequest()), { answer: 'bounded login' });
+  assert.deepEqual(containmentInput, {
+    authenticationMode: 'CODEX_LOGIN',
+    codexAuthPath: authPath
+  });
+  assert.equal(Object.hasOwn(observations.codexOptions, 'apiKey'), false);
+  assert.equal(observations.codexOptions.baseUrl, 'http://127.0.0.1:43127');
+  assert.equal(observations.codexOptions.config.web_search, 'disabled');
+  assert.equal(observations.codexOptions.config.features.plugins, false);
+  adapter.dispose();
 });
 
 test('Codex canonical deadline covers SDK loading without waiting in real time', async () => {
@@ -943,7 +1001,10 @@ test('NATURAL session reset cancels its active Codex turn through the same lifec
       containmentFactory: () => fakeContainment(lifecycle, {
         originalWorkspaceDenied: true,
         networkDenied: false,
-        cognitiveServiceNetworkQualified: true
+        genericNetworkDenied: true,
+        cognitiveServiceNetworkQualified: true,
+        providerOnlyTransport: true,
+        hostNetworkShared: false
       }),
       sdkLoader: async () => sdkWithRunStreamed(async () => ({ events: controlled.iterator })),
       ...deadlineOptions(scheduler)

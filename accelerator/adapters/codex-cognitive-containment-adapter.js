@@ -5,6 +5,7 @@ const os = require('node:os');
 const path = require('node:path');
 const { createRequire } = require('node:module');
 const {
+  CODEX_NETWORK_RELAY,
   createLinuxCodexCognitiveLaunchSpec
 } = require('./linux-bwrap-sandbox-adapter');
 const {
@@ -13,6 +14,9 @@ const {
 const {
   createWindowsCodexCognitiveLaunchSpec
 } = require('./windows-node-test-sandbox-adapter');
+const {
+  createCodexProviderOnlyTransport
+} = require('./codex-provider-only-transport');
 
 const TARGETS = Object.freeze({
   'linux:x64': Object.freeze({
@@ -91,10 +95,10 @@ function secureDirectory(parent, name) {
   return fs.realpathSync(directory);
 }
 
-function stageExecutable(controlRoot, executable, platform) {
-  const staged = path.join(controlRoot, platform === 'win32'
+function stageExecutable(controlRoot, executable, platform, name = null) {
+  const staged = path.join(controlRoot, name || (platform === 'win32'
     ? 'codex-runtime.exe'
-    : 'codex-runtime');
+    : 'codex-runtime'));
   try {
     fs.linkSync(executable, staged);
   } catch {
@@ -164,6 +168,8 @@ function createCodexCognitiveContainment({
   codexExecutable = null,
   codexExecutableArguments = [],
   runtimeBindings = [],
+  authenticationMode = 'API_KEY',
+  codexAuthPath = null,
   nativeFactories = NATIVE_FACTORIES,
   registerSignalHandlers = true,
   now = () => new Date().toISOString()
@@ -178,10 +184,19 @@ function createCodexCognitiveContainment({
   const controlRoot = secureDirectory(sessionRoot, 'control');
   const cognitiveRoot = secureDirectory(sessionRoot, 'cognitive');
   secureDirectory(cognitiveRoot, 'workspace');
-  secureDirectory(cognitiveRoot, 'home');
+  const cognitiveHome = secureDirectory(cognitiveRoot, 'home');
   secureDirectory(cognitiveRoot, 'tmp');
+  if (!['API_KEY', 'CODEX_LOGIN'].includes(authenticationMode) ||
+      (authenticationMode === 'CODEX_LOGIN' && typeof codexAuthPath !== 'string')) {
+    fs.rmSync(sessionRoot, { recursive: true, force: true });
+    throw unavailable('Codex authentication mode is not qualified.');
+  }
+  if (authenticationMode === 'CODEX_LOGIN') {
+    secureDirectory(cognitiveHome, '.codex');
+  }
 
   let disposed = false;
+  let providerTransport = null;
   const signalHandlers = new Map();
   let exitHandler = null;
 
@@ -198,6 +213,7 @@ function createCodexCognitiveContainment({
     if (disposed) return;
     detachHandlers();
     try {
+      if (providerTransport) providerTransport.dispose();
       fs.rmSync(sessionRoot, { recursive: true, force: true });
     } catch {
       throw cleanupFailure();
@@ -208,17 +224,34 @@ function createCodexCognitiveContainment({
 
   try {
     const stagedExecutable = stageExecutable(controlRoot, executable, platform);
+    const providerRelayExecutable = platform === 'linux'
+      ? stageExecutable(controlRoot, CODEX_NETWORK_RELAY, platform, 'provider-relay')
+      : null;
+    if (platform === 'linux') {
+      providerTransport = createCodexProviderOnlyTransport({
+        controlRoot,
+        providerKind: authenticationMode === 'CODEX_LOGIN'
+          ? 'CHATGPT_LOGIN'
+          : 'OPENAI_API'
+      });
+    }
     const spec = nativeFactory({
       cognitiveRoot,
       codexExecutable: stagedExecutable,
       codexExecutableArguments,
       runtimeBindings,
+      providerSocketPath: providerTransport && providerTransport.socketPath,
+      providerTransportAttestation: providerTransport && providerTransport.attestation,
+      providerRelayExecutable,
+      providerBaseUrl: providerTransport && providerTransport.providerBaseUrl,
+      codexAuthPath: authenticationMode === 'CODEX_LOGIN' ? codexAuthPath : null,
       observedAt: now()
     });
     if (!spec || spec.schema !== 'sdo.codex_cognitive_launch_spec.v1' ||
         spec.platform !== platform || typeof spec.nativeLauncher !== 'string' ||
         !Array.isArray(spec.nativeArguments) || typeof spec.sdkWorkingDirectory !== 'string' ||
-        !spec.attestation || spec.attestation.decision !== 'ENFORCED') {
+        !spec.attestation || spec.attestation.decision !== 'ENFORCED' ||
+        (platform === 'linux' && spec.providerBaseUrl !== providerTransport.providerBaseUrl)) {
       throw unavailable(`native adapter for ${platform} returned no qualified launch spec.`);
     }
     const launcherPath = path.join(controlRoot, platform === 'win32'
@@ -252,6 +285,7 @@ function createCodexCognitiveContainment({
       sdkWorkingDirectory: spec.sdkWorkingDirectory,
       sessionRoot,
       cognitiveRoot,
+      providerBaseUrl: spec.providerBaseUrl || null,
       attestation: spec.attestation,
       dispose,
       isDisposed: () => disposed

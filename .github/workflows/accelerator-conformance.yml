@@ -124,6 +124,10 @@ jobs:
             --dir /usr --ro-bind /usr /usr --symlink usr/lib /lib \
             --symlink usr/lib64 /lib64 --proc /proc --dev /dev /usr/bin/true
 
+      - name: Build qualified Linux Codex provider relay
+        if: matrix.os == 'ubuntu-latest'
+        run: node accelerator/native/linux/build-codex-network-relay.js
+
       - name: Build qualified Windows native durability helper
         if: matrix.os == 'windows-latest'
         shell: cmd

@@ -1,5 +1,6 @@
 node_modules
 accelerator/native/macos/sdo-seatbelt-probe
+accelerator/native/linux/sdo-codex-network-relay
 accelerator/native/windows/sdo-node-test-sandbox.exe
 # Keep environment variables out of version control
 .env

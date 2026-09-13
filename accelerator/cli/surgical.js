@@ -2,6 +2,9 @@
 'use strict';
 
 const crypto = require('node:crypto');
+const fs = require('node:fs');
+const os = require('node:os');
+const path = require('node:path');
 const readline = require('node:readline');
 
 const {
@@ -1122,6 +1125,39 @@ function patchOptionsFromEnvironment(
 
 function createCodexCredentialProvider(environment = process.env) {
   return () => environment.OPENAI_API_KEY;
+}
+
+function createCodexAuthenticationOptions(
+  environment = process.env,
+  homeDirectory = os.homedir()
+) {
+  if (typeof environment.OPENAI_API_KEY === 'string' && environment.OPENAI_API_KEY.trim()) {
+    return Object.freeze({
+      codexOptions: Object.freeze({ authenticationMode: 'API_KEY' }),
+      credentialProvider: createCodexCredentialProvider(environment)
+    });
+  }
+  const authPath = path.join(homeDirectory, '.codex', 'auth.json');
+  try {
+    const resolved = fs.realpathSync(authPath);
+    const status = fs.lstatSync(resolved);
+    if (!status.isFile() || status.isSymbolicLink() || status.uid !== process.getuid() ||
+        (status.mode & 0o077) !== 0) {
+      throw new Error('unsafe Codex login boundary');
+    }
+    return Object.freeze({
+      codexOptions: Object.freeze({
+        authenticationMode: 'CODEX_LOGIN',
+        codexAuthPath: resolved
+      }),
+      credentialProvider: null
+    });
+  } catch {
+    return Object.freeze({
+      codexOptions: Object.freeze({ authenticationMode: 'API_KEY' }),
+      credentialProvider: createCodexCredentialProvider(environment)
+    });
+  }
 }
 
 function dispatchInteractiveIntent(
@@ -4795,6 +4831,10 @@ async function main(
     formatInteractiveActivation(activation)
   );
 
+  const codexAuthentication = codex
+    ? createCodexAuthenticationOptions()
+    : null;
+
   createInteractiveSession(
     activation,
     {
@@ -4807,8 +4847,10 @@ async function main(
       patchOptions:
         patchOptionsFromEnvironment(),
       codex,
+      codexOptions:
+        codexAuthentication && codexAuthentication.codexOptions,
       codexCredentialProvider:
-        codex ? createCodexCredentialProvider() : null
+        codexAuthentication && codexAuthentication.credentialProvider
     }
   );
 }
@@ -4832,6 +4874,7 @@ module.exports = {
   activateInteractive,
   handleInteractiveCommand,
   createInteractiveSession,
+  createCodexAuthenticationOptions,
   dispatchInteractiveIntent,
   patchOptionsFromEnvironment,
   createCodexCredentialProvider

@@ -143,6 +143,8 @@ function createCodexSDKAIProviderAdapter({
   model,
   threadId = null,
   credentialProvider,
+  authenticationMode = 'API_KEY',
+  codexAuthPath = null,
   sdkLoader = defaultSDKLoader,
   containmentFactory = createCodexCognitiveContainment,
   onPresentationEvent = null,
@@ -159,7 +161,15 @@ function createCodexSDKAIProviderAdapter({
   if (typeof containmentFactory !== 'function') {
     throw new Error('Codex cognitive containment factory is required.');
   }
-  if (typeof credentialProvider !== 'function') throw new Error('Codex credential boundary is required.');
+  if (!['API_KEY', 'CODEX_LOGIN'].includes(authenticationMode)) {
+    throw new Error('Codex authentication mode is not qualified.');
+  }
+  if (authenticationMode === 'API_KEY' && typeof credentialProvider !== 'function') {
+    throw new Error('Codex credential boundary is required.');
+  }
+  if (authenticationMode === 'CODEX_LOGIN' && typeof codexAuthPath !== 'string') {
+    throw new Error('Existing Codex login boundary is required.');
+  }
   if (onPresentationEvent !== null && typeof onPresentationEvent !== 'function') {
     throw new Error('Codex presentation event sink is malformed.');
   }
@@ -171,10 +181,11 @@ function createCodexSDKAIProviderAdapter({
     throw new Error('Codex cognitive deadline scheduler is required.');
   }
 
-  const containment = containmentFactory();
+  const containment = containmentFactory({ authenticationMode, codexAuthPath });
   if (!containment || containment.schema !== 'sdo.codex_cognitive_containment.v1' ||
       containment.state !== 'ENFORCED' || typeof containment.launcherPath !== 'string' ||
       typeof containment.sdkWorkingDirectory !== 'string' ||
+      containment.providerBaseUrl !== 'http://127.0.0.1:43127' ||
       typeof containment.dispose !== 'function' || typeof containment.isDisposed !== 'function' ||
       !containment.attestation || containment.attestation.decision !== 'ENFORCED') {
     const error = new Error(
@@ -226,8 +237,10 @@ function createCodexSDKAIProviderAdapter({
       throw new Error('Codex SDK cognitive request is malformed or unqualified.');
     }
     turn.assertBeforeDeadline();
-    if (!credentialPromise) credentialPromise = readCodexCredential(credentialProvider);
-    const credential = await credentialPromise;
+    if (authenticationMode === 'API_KEY' && !credentialPromise) {
+      credentialPromise = readCodexCredential(credentialProvider);
+    }
+    const credential = authenticationMode === 'API_KEY' ? await credentialPromise : null;
     turn.assertBeforeDeadline();
     if (!sdkPromise) {
       sdkPromise = Promise.resolve().then(() => sdkLoader()).catch(() => {
@@ -244,7 +257,21 @@ function createCodexSDKAIProviderAdapter({
         logicalCodexInstance = new sdk.Codex({
           codexPathOverride: containment.launcherPath,
           env: createCodexEnvironment(containment.platform),
-          apiKey: credential
+          baseUrl: containment.providerBaseUrl,
+          config: {
+            features: {
+              apps: false,
+              browser_use: false,
+              browser_use_external: false,
+              code_mode: false,
+              code_mode_host: false,
+              enable_mcp_apps: false,
+              multi_agent: false,
+              plugins: false
+            },
+            web_search: 'disabled'
+          },
+          ...(credential ? { apiKey: credential } : {})
         });
       } catch {
         throw new Error('Codex SDK initialization failed safely.');

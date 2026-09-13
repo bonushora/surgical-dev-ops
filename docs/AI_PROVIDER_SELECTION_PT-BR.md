@@ -74,17 +74,20 @@ somente o caminho virtual `/cognitive/workspace` e inicia um launcher gerado em
 uma sessão efêmera restrita. Em hosts Linux qualificados, o Bubblewrap expõe
 somente o executável Codex, bibliotecas indispensáveis e essa sessão cognitiva
 vazia; repositório original, `.git`, diretórios pessoais, segredos do host,
-escritas externas e rede ficam fora do namespace. Conteúdo do repositório só
+escritas externas e rede genérica ficam fora do namespace. Conteúdo do repositório só
 alcança o request cognitivo após aquisição pelo broker e qualificação de conteúdo
 sensível. O launcher preserva stream JSONL e semântica de saída do SDK, e a
 sessão é removida em reset, encerramento e falha.
 
-Codex usa um subprocesso SDK local, mas sua cognição é um serviço externo. A
-contenção atual nega o caminho de rede desse serviço externo; por isso o Codex
-real permanece `BLOCKED` mesmo quando selecionado explicitamente. Essa
-conectividade tem finalidade distinta da autoridade de rede das ferramentas do
-agente; este repositório não alega que exista separação física qualificada entre
-elas.
+Codex usa um subprocesso SDK local, mas sua cognição é um serviço externo. Em
+hosts Linux qualificados, um relay nativo com ciclo de vida limitado à sessão
+expõe um único endpoint loopback fixo dentro do namespace privado. Um broker
+Unix-socket do Orchestrator, cego a credenciais, aceita somente os caminhos fixos
+do protocolo do provider Codex e se conecta somente ao provider selecionado pela
+configuração confiável de autenticação. Internet arbitrária, rede do host,
+localhost e acesso de proxy permanecem negados. Ausência do broker, requests
+malformados, permissões inválidas do endpoint e falha upstream permanecem
+fail-closed, sem fallback para rede compartilhada.
 
 Não existe fallback read-only. Se a contenção nativa estiver ausente ou ainda
 não tiver qualificação física, o Codex permanece indisponível com

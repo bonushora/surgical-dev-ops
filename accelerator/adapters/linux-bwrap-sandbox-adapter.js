@@ -10,6 +10,10 @@ const TIMEOUT_MS = 5000;
 const MAX_OUTPUT_BYTES = 32 * 1024;
 const PROBE = path.resolve(__dirname, '../native/linux/bwrap-sandbox-probe.js');
 const CODEX_PROBE = path.resolve(__dirname, '../native/linux/codex-containment-probe.js');
+const CODEX_NETWORK_RELAY = path.resolve(
+  __dirname,
+  '../native/linux/sdo-codex-network-relay'
+);
 const CODEX_EXECUTABLE_FD = '__SDO_CODEX_EXECUTABLE_FD__';
 
 function deepFreeze(value) {
@@ -59,11 +63,10 @@ function containmentArguments(workspace, node) {
   ];
 }
 
-function codexContainmentArguments(cognitiveRoot, runtimeBindings) {
+function codexContainmentArguments(cognitiveRoot, runtimeBindings, codexAuthPath = null) {
   const arguments_ = [
-    '--unshare-user', '--uid', '0', '--gid', '0',
-    '--unshare-pid', '--unshare-net', '--unshare-ipc', '--unshare-uts',
-    '--new-session', '--die-with-parent', '--dir', '/runtime'
+    '--unshare-pid', '--unshare-ipc', '--unshare-uts',
+    '--new-session', '--die-with-parent', '--cap-drop', 'ALL', '--dir', '/runtime'
   ];
   if (runtimeBindings.some((binding) => binding.target.startsWith('/usr/'))) {
     arguments_.push('--dir', '/usr');
@@ -73,6 +76,9 @@ function codexContainmentArguments(cognitiveRoot, runtimeBindings) {
   }
   arguments_.push(
     '--dir', '/cognitive', '--bind', cognitiveRoot, '/cognitive',
+    ...(codexAuthPath
+      ? ['--ro-bind', codexAuthPath, '/cognitive/home/.codex/auth.json']
+      : []),
     '--proc', '/proc', '--dev', '/dev', '--tmpfs', '/tmp',
     '--chdir', '/cognitive/workspace',
     '--setenv', 'PATH', '/runtime',
@@ -84,7 +90,8 @@ function codexContainmentArguments(cognitiveRoot, runtimeBindings) {
 }
 
 function qualifiedCodexRoot(cognitiveRoot) {
-  if (process.platform !== 'linux' || !fs.existsSync(BWRAP) || !fs.statSync(BWRAP).isFile()) {
+  if (process.platform !== 'linux' || !fs.existsSync(BWRAP) || !fs.statSync(BWRAP).isFile() ||
+      !fs.existsSync(CODEX_NETWORK_RELAY) || !fs.statSync(CODEX_NETWORK_RELAY).isFile()) {
     const error = new Error('CODEX_CONTAINMENT_UNAVAILABLE: Linux Bubblewrap is unavailable.');
     error.code = 'CODEX_CONTAINMENT_UNAVAILABLE';
     throw error;
@@ -97,8 +104,61 @@ function qualifiedCodexRoot(cognitiveRoot) {
   return root;
 }
 
-function attestLinuxCodexContainment(cognitiveRoot, observedAt) {
+function qualifiedCodexRelay(cognitiveRoot, providerRelayExecutable) {
+  const expected = path.join(path.dirname(cognitiveRoot), 'control', 'provider-relay');
+  const destination = fs.realpathSync(providerRelayExecutable);
+  const status = fs.lstatSync(destination);
+  if (destination !== expected ||
+      !fs.statSync(CODEX_NETWORK_RELAY).isFile() ||
+      fs.statSync(destination).size !== fs.statSync(CODEX_NETWORK_RELAY).size ||
+      !fs.readFileSync(destination).equals(fs.readFileSync(CODEX_NETWORK_RELAY)) ||
+      !status.isFile() || status.isSymbolicLink() || status.uid !== process.getuid() ||
+      (status.mode & 0o277) !== 0) {
+    throw new Error('Codex provider relay executable is not qualified.');
+  }
+  return destination;
+}
+
+function qualifiedProviderTransport(providerSocketPath, providerTransportAttestation) {
+  if (typeof providerSocketPath !== 'string' || !path.isAbsolute(providerSocketPath) ||
+      !providerTransportAttestation ||
+      providerTransportAttestation.kind !== 'CODEX_PROVIDER_ONLY_TRANSPORT' ||
+      !providerTransportAttestation.destinationFixed ||
+      !providerTransportAttestation.genericProxyUnavailable ||
+      providerTransportAttestation.hostNetworkFallback !== false) {
+    throw new Error('Codex provider-only transport is not qualified.');
+  }
+  const endpoint = fs.lstatSync(providerSocketPath);
+  if (!endpoint.isSocket() || endpoint.uid !== process.getuid() || (endpoint.mode & 0o177) !== 0) {
+    throw new Error('Codex provider-only transport endpoint is not qualified.');
+  }
+  return providerSocketPath;
+}
+
+function qualifiedCodexAuthPath(codexAuthPath) {
+  if (codexAuthPath === null) return null;
+  const authPath = fs.realpathSync(codexAuthPath);
+  const status = fs.lstatSync(authPath);
+  if (!status.isFile() || status.isSymbolicLink() || status.uid !== process.getuid() ||
+      (status.mode & 0o077) !== 0) {
+    throw new Error('Existing Codex authentication boundary is not qualified.');
+  }
+  return authPath;
+}
+
+function attestLinuxCodexContainment(cognitiveRoot, observedAt, {
+  providerSocketPath,
+  providerTransportAttestation,
+  providerRelayExecutable,
+  codexAuthPath = null
+} = {}) {
   const root = qualifiedCodexRoot(cognitiveRoot);
+  const relay = qualifiedCodexRelay(root, providerRelayExecutable);
+  const providerSocket = qualifiedProviderTransport(
+    providerSocketPath,
+    providerTransportAttestation
+  );
+  const authenticationPath = qualifiedCodexAuthPath(codexAuthPath);
   const observation = timestamp(observedAt, 'Codex containment observedAt');
   const node = fs.realpathSync(process.execPath);
   if (!fs.statSync(node).isFile() || !fs.statSync(CODEX_PROBE).isFile()) {
@@ -110,13 +170,18 @@ function attestLinuxCodexContainment(cognitiveRoot, observedAt) {
       { source: CODEX_PROBE, target: '/runtime/probe.js' },
       { source: '/usr/lib', target: '/usr/lib' },
       { source: '/usr/lib64', target: '/usr/lib64' }
-    ]),
+    ], authenticationPath),
     '--symlink', 'usr/lib', '/lib',
     '--symlink', 'usr/lib64', '/lib64',
     '--remount-ro', '/',
     '/runtime/node', '/runtime/probe.js'
   ];
-  const result = childProcess.spawnSync(BWRAP, bubblewrapArguments, {
+  const result = childProcess.spawnSync(relay, [
+    providerSocket,
+    '--',
+    BWRAP,
+    ...bubblewrapArguments
+  ], {
     cwd: root,
     shell: false,
     encoding: 'utf8',
@@ -149,7 +214,7 @@ function attestLinuxCodexContainment(cognitiveRoot, observedAt) {
   }
   if (probe.schema !== 'sdo.codex_linux_containment_probe.v1' ||
       !probe.cognitiveWriteEnabled || !probe.externalWriteDenied ||
-      !probe.hostFilesystemHidden || !probe.networkDenied ||
+      !probe.hostFilesystemHidden || !probe.networkDenied || !probe.alternateLocalDenied ||
       !probe.genericProcessDenied || !probe.environmentMinimal ||
       !probe.homeIsolated || !probe.tempIsolated || probe.noNewPrivs !== '1' ||
       probe.effectiveCapabilities !== '0000000000000000') {
@@ -166,7 +231,11 @@ function attestLinuxCodexContainment(cognitiveRoot, observedAt) {
       hostFilesystemHidden: true,
       originalWorkspaceDenied: true,
       externalWriteDenied: true,
-      networkDenied: true,
+      genericNetworkDenied: true,
+      cognitiveServiceNetworkQualified: true,
+      providerOnlyTransport: true,
+      providerDestinationFixed: true,
+      hostNetworkShared: false,
       secretAccessDenied: true
     },
     probe
@@ -178,9 +247,15 @@ function createLinuxCodexCognitiveLaunchSpec({
   codexExecutable,
   codexExecutableArguments = [],
   runtimeBindings = [],
-  observedAt
+  observedAt,
+  providerSocketPath,
+  providerTransportAttestation,
+  providerRelayExecutable,
+  codexAuthPath = null,
+  providerBaseUrl
 }) {
   const root = qualifiedCodexRoot(cognitiveRoot);
+  const relay = qualifiedCodexRelay(root, providerRelayExecutable);
   const executable = fs.realpathSync(codexExecutable);
   if (!fs.statSync(executable).isFile()) {
     throw new Error('Qualified Codex executable is unavailable.');
@@ -196,16 +271,28 @@ function createLinuxCodexCognitiveLaunchSpec({
     source: fs.realpathSync(binding.source),
     target: binding.target
   }));
-  const attestation = attestLinuxCodexContainment(root, observedAt);
+  if (typeof providerBaseUrl !== 'string' || providerBaseUrl !== 'http://127.0.0.1:43127') {
+    throw new Error('Codex provider-only base URL is not qualified.');
+  }
+  const authenticationPath = qualifiedCodexAuthPath(codexAuthPath);
+  const attestation = attestLinuxCodexContainment(root, observedAt, {
+    providerSocketPath,
+    providerTransportAttestation,
+    providerRelayExecutable: relay,
+    codexAuthPath: authenticationPath
+  });
   return deepFreeze({
     schema: 'sdo.codex_cognitive_launch_spec.v1',
     platform: 'linux',
-    nativeLauncher: BWRAP,
+    nativeLauncher: relay,
     nativeArguments: [
+      providerSocketPath,
+      '--',
+      BWRAP,
       ...codexContainmentArguments(root, [
         { source: CODEX_EXECUTABLE_FD, target: '/runtime/codex' },
         ...qualifiedBindings
-      ]),
+      ], authenticationPath),
       ...(qualifiedBindings.some((binding) => binding.target === '/usr/lib')
         ? ['--symlink', 'usr/lib', '/lib'] : []),
       ...(qualifiedBindings.some((binding) => binding.target === '/usr/lib64')
@@ -217,6 +304,7 @@ function createLinuxCodexCognitiveLaunchSpec({
     executable,
     executableFdToken: CODEX_EXECUTABLE_FD,
     sdkWorkingDirectory: '/cognitive/workspace',
+    providerBaseUrl,
     attestation
   });
 }
@@ -323,6 +411,7 @@ function executeLinuxBwrapNodeTest({
 }
 
 module.exports = deepFreeze({
+  CODEX_NETWORK_RELAY,
   attestLinuxBwrapSandbox,
   executeLinuxBwrapNodeTest,
   createLinuxCodexCognitiveLaunchSpec,

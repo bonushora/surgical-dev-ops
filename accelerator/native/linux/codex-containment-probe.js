@@ -3,9 +3,9 @@
 const fs = require('node:fs');
 const net = require('node:net');
 
-function networkProbe() {
+function networkProbe(host = '1.1.1.1', port = 53) {
   return new Promise((resolve) => {
-    const socket = net.createConnection({ host: '1.1.1.1', port: 53 });
+    const socket = net.createConnection({ host, port });
     let completed = false;
     const finish = (outcome) => {
       if (completed) return;
@@ -31,6 +31,7 @@ function attemptWrite(target) {
 
 async function main() {
   const networkOutcome = await networkProbe();
+  const alternateLocalOutcome = await networkProbe('127.0.0.1', 43128);
   const internalWrite = attemptWrite('/cognitive/tmp/containment-probe');
   const externalWrite = attemptWrite('/containment-escape-probe');
   const status = fs.readFileSync('/proc/self/status', 'utf8');
@@ -48,19 +49,22 @@ async function main() {
     hostFilesystemHidden: !fs.existsSync('/home') && !fs.existsSync('/root') &&
       !fs.existsSync('/workspace') && !fs.existsSync('/etc'),
     networkDenied: networkOutcome !== 'CONNECTED' && networkOutcome !== 'TIMEOUT',
+    alternateLocalDenied:
+      alternateLocalOutcome !== 'CONNECTED' && alternateLocalOutcome !== 'TIMEOUT',
     genericProcessDenied: !fs.existsSync('/bin/sh') && !fs.existsSync('/usr/bin/env'),
     environmentMinimal: environmentKeys.every((key) =>
       ['HOME', 'LANG', 'PATH', 'PWD', 'TMPDIR'].includes(key)),
     homeIsolated: process.env.HOME === '/cognitive/home',
     tempIsolated: process.env.TMPDIR === '/cognitive/tmp',
     networkOutcome,
+    alternateLocalOutcome,
     externalWrite,
     noNewPrivs: field('NoNewPrivs'),
     effectiveCapabilities: field('CapEff')
   };
   process.stdout.write(`${JSON.stringify(result)}\n`);
   if (!result.cognitiveWriteEnabled || !result.externalWriteDenied ||
-      !result.hostFilesystemHidden || !result.networkDenied ||
+      !result.hostFilesystemHidden || !result.networkDenied || !result.alternateLocalDenied ||
       !result.genericProcessDenied || !result.environmentMinimal ||
       !result.homeIsolated || !result.tempIsolated ||
       result.cwd !== '/cognitive/workspace' ||

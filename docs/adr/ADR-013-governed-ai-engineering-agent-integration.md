@@ -342,6 +342,23 @@ The following invariants SHALL apply to Codex and future engineering agents:
 11. Provider failure SHALL fail safely.
 12. Agent delegation SHALL not transfer authority implicitly.
 
+### 14.1 Provider transport is not agent network authority
+
+The Orchestrator MAY own a session-scoped, attested provider-only transport while
+the Codex cognitive process remains in a private network namespace. This
+transport SHALL expose only the configured provider destination and protocol
+paths; it SHALL NOT expose generic Internet, host-network, localhost, Unix-socket
+or proxy authority to Codex, model output or tools.
+
+The provider destination SHALL derive from trusted provider configuration, never
+from cognitive input. The broker MAY relay existing authentication material in
+memory, but SHALL remain credential-blind: it SHALL neither log nor persist raw
+credentials and SHALL create no credential store. The endpoint, relay and
+lifecycle SHALL be attested and bounded to the governed cognitive session.
+Missing, malformed or failed transport SHALL fail closed without uncontained or
+host-network fallback. Provider transport grants no operational authority; the
+human remains sovereign.
+
 ---
 
 ## 15. Failure Semantics

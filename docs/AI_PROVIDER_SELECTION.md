@@ -72,16 +72,21 @@ only a virtual `/cognitive/workspace` path and starts a generated launcher in a
 restricted ephemeral session. On qualified Linux hosts, Bubblewrap exposes the
 Codex executable, indispensable runtime libraries and that empty cognitive
 session only; the original repository, `.git`, user directories, host secrets,
-external writes and network are outside the namespace. Repository content can
+external writes and generic network are outside the namespace. Repository
+content can
 reach the cognitive request only after broker acquisition and sensitive-content
 qualification. The launcher preserves the SDK JSONL stream and exit semantics,
 and its session is removed on reset, close and failure.
 
 Codex uses a local SDK subprocess, but its cognition is an external service.
-The current containment denies the external-service network path, so real Codex
-remains `BLOCKED` even when explicitly selected. That service connectivity is
-distinct in purpose from agent-tool network authority; this repository does not
-claim a qualified physical separation between them.
+On qualified Linux hosts, a session-scoped native relay exposes one fixed
+loopback endpoint inside the private namespace. An Orchestrator-owned,
+credential-blind Unix-socket broker accepts only the fixed Codex provider
+protocol paths and connects only to the provider selected by trusted
+authentication configuration. Arbitrary Internet, host-network, localhost and
+proxy access remain denied. Broker absence, malformed requests, invalid endpoint
+permissions and upstream failure remain fail-closed with no shared-network
+fallback.
 
 There is no read-only fallback. When native containment is absent or has not
 been physically qualified, Codex remains unavailable with
