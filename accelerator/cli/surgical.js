@@ -277,6 +277,45 @@ function usesEnglish(activation) {
   ) === 'en';
 }
 
+function formatNaturalDevelopmentCompletion(completed, activation) {
+  const managedProjection =
+    completed.validation.authoritativeProjection;
+
+  return (
+    humanText(
+      activation,
+      'A autoridade governada do Manifest-CAS avançou e sua projeção gerenciada foi validada.\n',
+      'Governed Manifest-CAS authority advanced and its managed projection was validated.\n'
+    ) +
+    humanText(activation, 'Alvo lógico: ', 'Logical target: ') +
+    `${completed.target}\n` +
+    humanText(activation, 'Projeção gerenciada: ', 'Managed projection: ') +
+    `${managedProjection}\n` +
+    humanText(
+      activation,
+      'SHA256 BEFORE autoritativo: ',
+      'Authoritative BEFORE SHA256: '
+    ) +
+    `${completed.beforeSha256}\n` +
+    humanText(
+      activation,
+      'SHA256 AFTER autoritativo: ',
+      'Authoritative AFTER SHA256: '
+    ) +
+    `${completed.afterSha256}\n` +
+    humanText(
+      activation,
+      'Caminho comum do worktree: não foi modificado por esta operação e não é autoritativo.\n',
+      'Ordinary worktree path: not modified by this operation and is non-authoritative.\n'
+    ) +
+    humanText(
+      activation,
+      'A autorização foi consumida e não pode ser reutilizada.\n',
+      'The authorization was consumed and cannot be reused.\n'
+    )
+  );
+}
+
 function canonicalInstant(
   value
 ) {
@@ -3284,20 +3323,9 @@ function createInteractiveSession(
                 }
 
                 output.write(
-                  humanText(
-                    activation,
-                    'Alteração governada concluída e validada.\n',
-                    'Governed change completed and validated.\n'
-                  ) +
-                  `Target: ${completed.target}\n` +
-                  `BEFORE SHA256: ${completed.beforeSha256}\n` +
-                  `AFTER SHA256: ${completed.afterSha256}\n` +
-                  `Transaction: ${completed.transactionId}\n` +
-                  `Journal: ${completed.journalId}\n` +
-                  humanText(
-                    activation,
-                    'A autorização foi consumida e não pode ser reutilizada.\n',
-                    'The authorization was consumed and cannot be reused.\n'
+                  formatNaturalDevelopmentCompletion(
+                    completed,
+                    activation
                   )
                 );
               } catch {
@@ -4886,6 +4914,7 @@ module.exports = {
   createInteractiveActivationAsync,
   formatInteractiveActivation,
   formatCognitiveProgressMessage,
+  formatNaturalDevelopmentCompletion,
   activateInteractive,
   handleInteractiveCommand,
   createInteractiveSession,
