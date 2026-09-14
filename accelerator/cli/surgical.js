@@ -3767,8 +3767,23 @@ function createInteractiveSession(
                       `To authorize only this proposal, use: approve patch ${proposal.proposalFingerprint}\n`
                     )
                   );
-                } catch {
+                } catch (error) {
                   pendingDevelopment = null;
+                  if (typeof options.onDevelopmentFailure === 'function') {
+                    try {
+                      options.onDevelopmentFailure(Object.freeze({
+                        schema: 'sdo.natural_development_failure.v1',
+                        code:
+                          error && typeof error.code === 'string'
+                            ? error.code
+                            : 'DEVELOPMENT_PREPARATION_FAILED',
+                        operationalAuthority: false,
+                        mutationAuthority: false
+                      }));
+                    } catch {
+                      /* Diagnostic observers never affect governed execution. */
+                    }
+                  }
                   output.write(
                     humanText(
                       activation,

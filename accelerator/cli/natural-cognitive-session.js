@@ -1060,9 +1060,17 @@ function createNaturalCognitiveSession(
       );
     }
 
-    return materializeGovernedEngineeringProposal(
-      result.output
-    );
+    /*
+     * The objective is already canonical human input at this boundary. The
+     * provider echo is untrusted descriptive data and cannot be the source of
+     * identity for the bounded development contract. Keep every effect-bearing
+     * proposal field provider-supplied and validated, while binding objective
+     * identity to the exact request that produced this cognitive turn.
+     */
+    return materializeGovernedEngineeringProposal({
+      ...result.output,
+      objective: userObjective.trim()
+    });
   }
 
   async function describe() {

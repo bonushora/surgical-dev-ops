@@ -36,6 +36,39 @@ function evidenceText(evidence) {
   ).join('\n\n').slice(0, 96000);
 }
 
+function developmentFailure(code, message) {
+  const error = new Error(message);
+  error.code = code;
+  return error;
+}
+
+function proposalFailure(error) {
+  const message = String(error && error.message || '');
+
+  if (/objective differs/i.test(message)) {
+    return developmentFailure(
+      'PROPOSAL_OBJECTIVE_MISMATCH',
+      'The cognitive proposal objective did not preserve the exact bounded request.'
+    );
+  }
+  if (/no-op replacement/i.test(message)) {
+    return developmentFailure(
+      'NO_OP_PROPOSAL',
+      'The cognitive proposal did not change the governed BEFORE content.'
+    );
+  }
+  if (/exceeds the development contract/i.test(message)) {
+    return developmentFailure(
+      'TARGET_SCOPE_REJECTED',
+      'The cognitive proposal exceeded the bounded development contract.'
+    );
+  }
+  return developmentFailure(
+    'PROPOSAL_BINDING_FAILED',
+    'The cognitive proposal could not be bound to qualified governed evidence.'
+  );
+}
+
 async function prepareInteractiveNaturalDevelopment({
   request,
   activation,
@@ -68,29 +101,60 @@ async function prepareInteractiveNaturalDevelopment({
     validationKinds: ['VALIDATE_JS'],
     riskCeiling: 'R3'
   });
-  const planningResult = await runNaturalDevelopmentPlanningLoop({
-    contract,
-    physicalWorkspaceIdentity,
-    repositoryHead: repository.repository.commit,
-    activation,
-    cognitiveSession,
-    ...(dispatchEvidence ? { dispatchEvidence } : {})
-  });
+  let planningResult;
+  try {
+    planningResult = await runNaturalDevelopmentPlanningLoop({
+      contract,
+      physicalWorkspaceIdentity,
+      repositoryHead: repository.repository.commit,
+      activation,
+      cognitiveSession,
+      ...(dispatchEvidence ? { dispatchEvidence } : {})
+    });
+  } catch {
+    throw developmentFailure(
+      'EVIDENCE_PLANNING_FAILED',
+      'Governed development evidence planning failed safely.'
+    );
+  }
 
   if (planningResult.status !== 'COMPLETED') {
-    throw new Error('Governed development planning did not complete.');
+    const acquisitionFailure = /evidence (?:dispatch|could not be qualified)/i.test(
+      String(planningResult.reason || '')
+    );
+    throw developmentFailure(
+      acquisitionFailure
+        ? 'EVIDENCE_ACQUISITION_FAILED'
+        : 'COGNITIVE_EVIDENCE_PLANNING_FAILED',
+      acquisitionFailure
+        ? 'Qualified governed evidence acquisition failed safely.'
+        : 'Cognitive evidence planning did not complete.'
+    );
   }
-  const governedProposal = await cognitiveSession.proposePatch(
-    request.objective,
-    activation,
-    evidenceText(planningResult.evidence)
-  );
-  const patchProposal = materializeNaturalDevelopmentPatchProposal({
-    contract,
-    planningResult,
-    governedProposal,
-    patchAttempt
-  });
+  let governedProposal;
+  try {
+    governedProposal = await cognitiveSession.proposePatch(
+      request.objective,
+      activation,
+      evidenceText(planningResult.evidence)
+    );
+  } catch {
+    throw developmentFailure(
+      'COGNITIVE_PROPOSAL_FAILED',
+      'The cognitive provider did not return a canonical patch proposal.'
+    );
+  }
+  let patchProposal;
+  try {
+    patchProposal = materializeNaturalDevelopmentPatchProposal({
+      contract,
+      planningResult,
+      governedProposal,
+      patchAttempt
+    });
+  } catch (error) {
+    throw proposalFailure(error);
+  }
 
   return freeze({
     schema: 'sdo.interactive_natural_development_pending.v1',
