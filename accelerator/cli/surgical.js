@@ -261,6 +261,27 @@ function humanText(activation, portuguese, english) {
     : portuguese;
 }
 
+function formatNaturalDevelopmentFailure(code, activation) {
+  if (
+    code === 'TARGET_SCOPE_REJECTED' &&
+    activation &&
+    activation.interactionMode &&
+    activation.interactionMode.mode === 'NATURAL'
+  ) {
+    return humanText(
+      activation,
+      'O alvo solicitado está fora do espaço de trabalho autorizado do projeto. Nenhuma alteração foi realizada.\n',
+      'The requested target is outside the authorized project workspace. No change was made.\n'
+    );
+  }
+
+  return humanText(
+    activation,
+    'Não foi possível preparar uma proposta exata com as evidências qualificadas. Nenhuma alteração foi realizada.\n',
+    'An exact proposal could not be prepared from qualified evidence. No change was made.\n'
+  );
+}
+
 function usesEnglish(activation) {
   const legacyFallback =
     activation &&
@@ -3797,14 +3818,15 @@ function createInteractiveSession(
                   );
                 } catch (error) {
                   pendingDevelopment = null;
+                  const failureCode =
+                    error && typeof error.code === 'string'
+                      ? error.code
+                      : 'DEVELOPMENT_PREPARATION_FAILED';
                   if (typeof options.onDevelopmentFailure === 'function') {
                     try {
                       options.onDevelopmentFailure(Object.freeze({
                         schema: 'sdo.natural_development_failure.v1',
-                        code:
-                          error && typeof error.code === 'string'
-                            ? error.code
-                            : 'DEVELOPMENT_PREPARATION_FAILED',
+                        code: failureCode,
                         operationalAuthority: false,
                         mutationAuthority: false
                       }));
@@ -3813,10 +3835,9 @@ function createInteractiveSession(
                     }
                   }
                   output.write(
-                    humanText(
-                      activation,
-                      'Não foi possível preparar uma proposta exata com as evidências qualificadas. Nenhuma alteração foi realizada.\n',
-                      'An exact proposal could not be prepared from qualified evidence. No change was made.\n'
+                    formatNaturalDevelopmentFailure(
+                      failureCode,
+                      activation
                     )
                   );
                 }

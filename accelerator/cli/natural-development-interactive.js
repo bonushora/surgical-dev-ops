@@ -20,6 +20,9 @@ const {
   createNaturalDevelopmentEndToEndBoundary
 } = require('./natural-development-end-to-end');
 
+const G1_TARGET_SCOPE_REJECTION =
+  'Development target is non-canonical or traverses scope.';
+
 function freeze(value) {
   if (!value || typeof value !== 'object' || Object.isFrozen(value)) return value;
   for (const child of Object.values(value)) freeze(child);
@@ -69,6 +72,19 @@ function proposalFailure(error) {
   );
 }
 
+function taskContractFailure(error) {
+  if (
+    error instanceof Error &&
+    error.message === G1_TARGET_SCOPE_REJECTION
+  ) {
+    return developmentFailure(
+      'TARGET_SCOPE_REJECTED',
+      'The requested development target is outside the bounded task contract.'
+    );
+  }
+  return error;
+}
+
 async function prepareInteractiveNaturalDevelopment({
   request,
   activation,
@@ -92,15 +108,20 @@ async function prepareInteractiveNaturalDevelopment({
   }
   const repositoryPath = fs.realpathSync(repository.repository.path);
   const physicalWorkspaceIdentity = sha(repositoryPath);
-  const contract = createNaturalDevelopmentTaskContract({
-    objective: request.objective,
-    physicalWorkspaceIdentity,
-    repositoryHead: repository.repository.commit,
-    workMode,
-    allowedTargets: [request.target],
-    validationKinds: ['VALIDATE_JS'],
-    riskCeiling: 'R3'
-  });
+  let contract;
+  try {
+    contract = createNaturalDevelopmentTaskContract({
+      objective: request.objective,
+      physicalWorkspaceIdentity,
+      repositoryHead: repository.repository.commit,
+      workMode,
+      allowedTargets: [request.target],
+      validationKinds: ['VALIDATE_JS'],
+      riskCeiling: 'R3'
+    });
+  } catch (error) {
+    throw taskContractFailure(error);
+  }
   let planningResult;
   try {
     planningResult = await runNaturalDevelopmentPlanningLoop({
