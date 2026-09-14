@@ -18,6 +18,10 @@ const {
 const {
   bootstrapManifestAuthority
 } = require('../../accelerator/core/git-manifest-cas');
+const {
+  canonicalizeAuthorizedRoot,
+  samePhysicalWorkspaceIdentity
+} = require('../../accelerator/core/workspace-boundary');
 
 const BEFORE = 'const value = 1;\n';
 const AFTER = 'const value = 2;\n';
@@ -97,6 +101,83 @@ test('authoritative observation preserves ordinary bootstrap evidence when no re
   assert.equal(Object.isFrozen(observed), true);
   assert.equal(git(repository, ['for-each-ref']), beforeRefs);
   assert.equal(fs.existsSync(refPath(repository)), false);
+});
+
+test('authoritative observation compares the workspace and Git root by physical identity', (t) => {
+  const repository = fixture(t);
+  const workspaceRoot = canonicalizeAuthorizedRoot(repository);
+  const gitTopLevel = git(repository, ['rev-parse', '--show-toplevel']);
+  const physicalGitRoot = fs.realpathSync(gitTopLevel);
+
+  assert.equal(
+    samePhysicalWorkspaceIdentity(physicalGitRoot, workspaceRoot),
+    true
+  );
+
+  if (
+    process.platform === 'win32' &&
+    physicalGitRoot !== workspaceRoot
+  ) {
+    assert.notEqual(physicalGitRoot, workspaceRoot);
+  }
+
+  const observed = observeCurrentAuthoritativeTarget({
+    workspace: repository,
+    target: 'target.js'
+  });
+  assert.equal(observed.source, 'ORDINARY_BOOTSTRAP');
+  assert.equal(observed.currentContent, BEFORE);
+
+  const differentRoot = fs.realpathSync(fs.mkdtempSync(
+    path.join(os.tmpdir(), 'sdo-authoritative-other-root-')
+  ));
+  t.after(() => fs.rmSync(differentRoot, { recursive: true, force: true }));
+  assert.equal(
+    samePhysicalWorkspaceIdentity(differentRoot, workspaceRoot),
+    false
+  );
+
+  const originalSpawnSync = childProcess.spawnSync;
+  t.mock.method(childProcess, 'spawnSync', (executable, args, options) => {
+    if (
+      executable === 'git' &&
+      Array.isArray(args) &&
+      args.includes('--show-toplevel')
+    ) {
+      return {
+        status: 0,
+        signal: null,
+        stdout: Buffer.from(`${differentRoot}\n`, 'utf8'),
+        stderr: Buffer.alloc(0)
+      };
+    }
+    return originalSpawnSync(executable, args, options);
+  });
+
+  assert.throws(
+    () => observeCurrentAuthoritativeTarget({
+      workspace: repository,
+      target: 'target.js'
+    }),
+    /not the physical Git root/i
+  );
+  t.mock.restoreAll();
+
+  const targetRef = refPath(repository);
+  fs.mkdirSync(path.dirname(targetRef), { recursive: true });
+  fs.writeFileSync(targetRef, 'not-an-object-id\n');
+
+  assert.throws(
+    () => observeCurrentAuthoritativeTarget({
+      workspace: repository,
+      target: 'target.js'
+    }),
+    /ref identity is malformed/i
+  );
+  assert.equal(
+    fs.readFileSync(path.join(repository, 'target.js'), 'utf8'),
+    BEFORE
+  );
 });
 
 test('authoritative observation verifies the current manifest, blob and managed projection', (t) => {

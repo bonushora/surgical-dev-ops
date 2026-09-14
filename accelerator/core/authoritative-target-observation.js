@@ -18,6 +18,7 @@ const {
 } = require('../adapters/filesystem-safe-read-adapter');
 const {
   canonicalizeAuthorizedRoot,
+  samePhysicalWorkspaceIdentity,
   resolveInspectedFile
 } = require('./workspace-boundary');
 
@@ -102,7 +103,8 @@ function canonicalWorkspace(workspace) {
   }
   const gitRoot = runGit(root, ['rev-parse', '--show-toplevel'])
     .toString('utf8').trim();
-  if (fs.realpathSync(gitRoot) !== root) {
+  const physicalGitRoot = fs.realpathSync(gitRoot);
+  if (!samePhysicalWorkspaceIdentity(physicalGitRoot, root)) {
     throw new Error('Authoritative workspace is not the physical Git root.');
   }
   return { root, gitBacked: true };
