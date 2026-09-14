@@ -8,6 +8,9 @@ const childProcess = require('node:child_process');
 const {
   samePhysicalWorkspaceIdentity
 } = require('./workspace-boundary');
+const {
+  observeCurrentAuthoritativeTarget
+} = require('./authoritative-target-observation');
 
 const MANIFEST_SCHEMA = 'sdo.content_addressed_manifest.v1';
 const RESULT_SCHEMA = 'sdo.manifest_cas_result.v1';
@@ -481,46 +484,39 @@ function bootstrapManifestAuthority({
     );
   }
 
-  const canonicalTarget =
-    fs.realpathSync(
-      path.join(
-        root,
-        relative
-      )
-    );
+  const observation =
+    observeCurrentAuthoritativeTarget({
+      workspace: root,
+      target: relative
+    });
 
-  if (
-    !fs.statSync(
-      canonicalTarget
-    ).isFile()
-  ) {
-    throw new Error(
-      'Bootstrap target must be an existing regular file.'
-    );
-  }
+  const canonicalTarget =
+    observation.ordinaryPath;
 
   const before =
-    fs.readFileSync(
-      canonicalTarget
+    Buffer.from(
+      observation.currentContent,
+      'utf8'
     );
 
   if (
-    sha256(before) !==
+    observation.currentSha256 !==
       expectedBeforeSha256
   ) {
     throw new Error(
-      'Physical bootstrap state does not match authorized BEFORE hash.'
+      observation.source === 'MANIFEST_CAS'
+        ? 'Existing authoritative manifest conflicts with authorized BEFORE state.'
+        : 'Physical bootstrap state does not match authorized BEFORE hash.'
     );
   }
 
   const ref =
-    refFor(relative);
+    observation.ref;
 
   const existing =
-    readRef(
-      root,
-      ref
-    );
+    observation.source === 'MANIFEST_CAS'
+      ? observation.manifestOid
+      : null;
 
   if (existing) {
     const manifest =

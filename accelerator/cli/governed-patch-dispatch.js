@@ -38,6 +38,9 @@ const {
 const {
   createProductionMutationRuntime
 } = require('../core/production-mutation-runtime');
+const {
+  observeCurrentAuthoritativeTarget
+} = require('../core/authoritative-target-observation');
 
 const {
   loadLocalOfflineHumanSigner,
@@ -169,13 +172,14 @@ function createGovernedPatchRequest(
     );
   }
 
-  const before =
-    fs.readFileSync(
-      resolved.canonicalTarget
-    );
+  const authoritativeBefore =
+    observeCurrentAuthoritativeTarget({
+      workspace,
+      target: requestedTarget
+    });
 
   const beforeHash =
-    sha256(before);
+    authoritativeBefore.currentSha256;
 
   const replacementHash =
     sha256(replacement);

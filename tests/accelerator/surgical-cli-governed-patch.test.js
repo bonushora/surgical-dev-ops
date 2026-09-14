@@ -2,6 +2,7 @@
 
 const test = require('node:test');
 const assert = require('node:assert/strict');
+const crypto = require('node:crypto');
 const fs = require('node:fs');
 const os = require('node:os');
 const path = require('node:path');
@@ -37,6 +38,10 @@ function git(repo, args) {
       ]
     }
   ).trim();
+}
+
+function digest(value) {
+  return crypto.createHash('sha256').update(value).digest('hex');
 }
 
 function fixture() {
@@ -357,6 +362,56 @@ test(
           result
         ),
         /Governed filesystem patch: COMPLETED/
+      );
+    } finally {
+      cleanup(state);
+    }
+  }
+);
+
+test(
+  'sequential patch preparation binds BEFORE to current Manifest-CAS authority',
+  () => {
+    const state = fixture();
+
+    try {
+      const first = dispatchGovernedPatch(
+        {
+          target: 'target.js',
+          replacement: 'const value = 2;\n'
+        },
+        state.repo,
+        options(state)
+      );
+      assert.equal(first.orchestration.execution.outcome, 'APPLIED');
+
+      const currentManifest = first.orchestration.execution
+        .mutationProvider.durability.authority.afterManifestOid;
+      const prepared = createGovernedPatchRequest({
+        repositoryPath: state.repo,
+        target: 'target.js',
+        replacement: 'const value = 3;\n',
+        ...options(state)
+      });
+
+      assert.equal(
+        prepared.authority.beforeSha256,
+        digest('const value = 2;\n')
+      );
+      assert.equal(
+        prepared.request.execution.operationRecord.scope.target.beforeSha256,
+        digest('const value = 2;\n')
+      );
+      assert.equal(
+        fs.readFileSync(path.join(state.repo, 'target.js'), 'utf8'),
+        'const value = 1;\n'
+      );
+      assert.equal(
+        git(state.repo, [
+          'rev-parse',
+          `refs/surgical-devops/workspace/${digest('target.js')}`
+        ]),
+        currentManifest
       );
     } finally {
       cleanup(state);

@@ -20,6 +20,11 @@ const {
 } = require(
   '../../accelerator/core/git-manifest-cas'
 );
+const {
+  recoverAuthoritativeMaterialization
+} = require(
+  '../../accelerator/core/git-manifest-materializer'
+);
 
 function digest(value) {
   return crypto
@@ -176,6 +181,13 @@ test(
         expectedBeforeSha256:
           beforeHash
       });
+
+    recoverAuthoritativeMaterialization({
+      workspace: repo,
+      target,
+      expectedManifestOid: first.manifestOid,
+      expectedContentSha256: beforeHash
+    });
 
     const second =
       bootstrapManifestAuthority({
@@ -392,11 +404,18 @@ test(
         fs.readFileSync(target)
       );
 
-    bootstrapManifestAuthority({
+    const authority = bootstrapManifestAuthority({
       workspace: repo,
       target,
       expectedBeforeSha256:
         beforeHash
+    });
+
+    recoverAuthoritativeMaterialization({
+      workspace: repo,
+      target,
+      expectedManifestOid: authority.manifestOid,
+      expectedContentSha256: beforeHash
     });
 
     fs.writeFileSync(

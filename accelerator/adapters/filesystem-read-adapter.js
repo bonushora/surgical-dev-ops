@@ -9,6 +9,9 @@ const {
   canonicalizeAuthorizedRoot,
   resolveInspectedFile
 } = require('../core/workspace-boundary');
+const {
+  observeCurrentAuthoritativeTarget
+} = require('../core/authoritative-target-observation');
 
 function deepFreeze(value) {
   if (!value || typeof value !== 'object' || Object.isFrozen(value)) return value;
@@ -98,16 +101,11 @@ function readFileWithGrant({
     throw new Error('Requested target is outside the authorized capability scope.');
   }
 
-  let opened;
-  let content;
-  try {
-    opened = openVerifiedRegularRead(resolved.canonicalTarget);
-    content = fs.readFileSync(opened.descriptor);
-  } catch {
-    throw new Error('Authorized filesystem read failed closed.');
-  } finally {
-    if (opened) fs.closeSync(opened.descriptor);
-  }
+  const observation = observeCurrentAuthoritativeTarget({
+    workspace: canonicalWorkspace,
+    target: requestedTarget
+  });
+  const content = Buffer.from(observation.currentContent, 'utf8');
 
   return deepFreeze({
     schema: 'sdo.filesystem_read_result.v1',
@@ -121,7 +119,16 @@ function readFileWithGrant({
     evidence: {
       bytes: content.byteLength,
       sha256: crypto.createHash('sha256').update(content).digest('hex'),
-      content: content.toString('utf8')
+      content: content.toString('utf8'),
+      source: observation.source,
+      ...(observation.source === 'MANIFEST_CAS'
+        ? {
+            manifestOid: observation.manifestOid,
+            blobOid: observation.blobOid,
+            managedProjection: observation.managedProjection,
+            ordinaryWorktreeAuthoritative: false
+          }
+        : {})
     }
   });
 }

@@ -117,7 +117,7 @@ test('real temporary repository completes signed G1-G10 mutation and denies repl
 
   await assert.rejects(
     approveInteractiveNaturalDevelopment(approval),
-    /already claimed|already consumed|replay|denied|requires completed R3 journal/i
+    /already claimed|already consumed|replay|denied|requires completed R3 journal|Prepared R3 authority differs from exact G3 content/i
   );
   assert.equal(git(state.repository, ['status', '--porcelain']), '');
 });

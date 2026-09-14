@@ -295,7 +295,7 @@ test('G5 composes G1-G4 through existing R3 journal and Manifest CAS', () => {
 
     assert.throws(
       () => dispatch(state, values),
-      /replay denied|durable claim|consumed|anti-replay/i
+      /Prepared R3 authority differs from exact G3 content/i
     );
 
     const validation = runNaturalDevelopmentValidationLoop({
