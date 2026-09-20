@@ -1,33 +1,89 @@
 # External Engineering Review Package — Surgical DevOps
 
-## Current ADR-038 review target — qualified candidate pending freeze
+## EER-1 current review-evidence policy
 
-The current target is the complete ADR-038 supervised autonomous engineering
-runtime. Its exact runtime completion baseline is
-`2c0686288bdf7e156f37115c40de1e0fe3caedd7`, including Experience Green. R1
-through R7 are internal runtime checkpoints under that one runtime-delivery
-milestone; they are not official ADR milestones.
+The current review package uses `RUNTIME_EXACT_SHA_EVIDENCE`. A Git commit
+cannot contain its own not-yet-known SHA as authoritative evidence. Therefore
+the checked-in manifest defines stable claims, historical evidence, policy and
+the `sdo.qualification_evidence.v1` runtime schema; it deliberately stores no
+future EER-1 candidate SHA or run ID. The authoritative final binding is
+produced by the canonical workflow from the requested full SHA, the checked-out
+SHA and `GITHUB_SHA` at execution time.
 
-The runtime candidate has completed the supervised autonomous engineering
-experience and the manual human gate. The LAST_EVIDENCE continuity repair is
-included in the exact candidate `26c3c5469433eb012f7d6370b0e3f67a7c2d4a46`.
-The Exact-SHA qualification workflow is controlled by
-`2611eea9b2e99cbe74e5753f314c443f103b3ccd` and run `33795522712`; Ubuntu,
-macOS and Windows all completed successfully. That CI commit is qualification
-infrastructure, not runtime content.
+The final evidence identity is the external tuple:
 
-Three physical states must remain distinct:
+`FINAL_EER1_GIT_SHA + EXACT_REF_RUN_ID + RETAINED_MACHINE_READABLE_PLATFORM_EVIDENCE`
 
-1. `2c0686288bdf7e156f37115c40de1e0fe3caedd7` is the exact ADR-038 runtime
-   baseline.
-2. `d2e49908dd50720dfa307d85c391fa20d046ce07` is the historical starting HEAD
-   for package preparation.
-3. This new package composition is committed only by the checkpoint produced
-   by this mission. Its exact final review SHA is not frozen here.
+Do not commit the run ID, artifact IDs or final SHA back into the qualified
+candidate. That would create a different, unqualified commit. GitHub artifact
+retention is bounded, currently configured for 30 days, and is not permanent
+archival storage.
 
-The recorded remote qualification is evidence for the immutable runtime
-candidate, not an external adversarial review. No external review has
-occurred, and no release or publication is implied.
+### Physically verified pre-EER1 historical baseline
+
+Commit `24f0f1946eb795b3464b2846953e191755b9c8c3` passed the canonical Linux,
+macOS and Windows matrix in exact-ref run `34860826996` on Node.js `24.18.0`.
+Run `34862373028` is a separate successful `push` run for `main` at the same
+commit. Both are historical baseline evidence only. Each currently has zero
+retained artifacts, and neither retained the canonical test totals in a
+machine-readable artifact. Neither run can qualify a later EER-1 commit.
+
+### Review status and non-claims
+
+No external review has occurred; the external review is not completed. The
+final review SHA is not frozen by this repository content. Release, merge,
+publication and public exposure are not authorized. CI is not proof of absolute
+security. Physical sudden-power-loss safety and strict pathname
+physical-identity CAS remain unqualified. Linux, macOS and Windows use different
+native isolation mechanisms; qualification does not claim those primitives are
+identical.
+
+### Reproduction and exact identity verification
+
+Use Git `>=2.30`, Node.js `>=24.18.0` and the lockfile install. `npm ci` requires
+network access to the configured npm registry when dependencies are not already
+available. The local canonical path needs no AI provider or provider credential:
+
+```bash
+git rev-parse HEAD
+node --version
+npm ci
+npm test
+npm pack --dry-run --json
+```
+
+For native CI, Linux additionally installs and attests AppArmor/Bubblewrap and
+builds the fixed C relay; macOS uses `/usr/bin/clang` and the system Seatbelt
+library; Windows requires Visual Studio C++ build tools discoverable through
+`vswhere.exe`. The canonical hosted workflow supplies these prerequisites.
+
+After an authorized exact-ref run, retrieve the three artifacts without writing
+to this repository:
+
+```bash
+gh run download EXACT_REF_RUN_ID \
+  --repo bonushora/surgical-dev-ops \
+  --pattern 'qualification-evidence-*' \
+  --dir /tmp/sdo-eer1-evidence
+```
+
+For every JSON file, verify the supported schema, run ID, platform, Node
+version, canonical command and internally consistent totals. The requested ref,
+expected target SHA, checked-out SHA and `GITHUB_SHA` must all equal the full
+candidate SHA; `canonicalTest.exitCode` must be `0`, `canonicalTest.result` must
+be `PASS`, `externalReviewCompleted` must be `false`, and `releaseAuthorized`
+must be `false`. Cross-check the run ID, event, head SHA, attempt and each native
+job conclusion against GitHub Actions metadata rather than trusting the artifact
+alone.
+
+### Historical ADR-038 package evidence
+
+The earlier package described the complete ADR-038 supervised autonomous
+engineering runtime at `2c0686288bdf7e156f37115c40de1e0fe3caedd7`, including
+Experience Green. R1 through R7 were internal runtime checkpoints, not official
+ADR milestones. Its later package and qualification SHAs and run remain in the
+manifest under `historicalAdr038ReviewTarget`; they are not current EER-1
+evidence.
 
 ### Runtime boundary under review
 
@@ -74,6 +130,31 @@ is authorized. Local mutation grants no Git or remote authority. The composed
 candidate must be requalified by exact SHA before a human separately freezes
 it as the review candidate. Public exposure remains a later, separately
 authorized operation under the frozen external-review gate.
+
+## Review evidence index
+
+This index is a navigation map, not a substitute for reading the normative
+source or reproducing the test and CI evidence.
+
+| Claim | Normative source | Implementation | Test | CI evidence | Limitation / non-claim |
+| --- | --- | --- | --- | --- | --- |
+| Human sovereignty | ADR-006; BH-SEP v2.3 | `accelerator/core/human-identity-assertion.js` and Orchestrator admission | `human-identity-assertion.test.js`; `local-offline-human-authority.test.js` | Canonical suite plus exact-SHA platform artifact | A passing test does not create human authority. |
+| Intelligence != authority | ADR-004; ADR-014 | `accelerator/core/ai-provider.js`; `accelerator/core/governed-ai-runtime.js` | `ai-provider.test.js`; `governed-ai-runtime.test.js` | Same exact-SHA artifacts | Model quality and model determinism are not claimed. |
+| Mediated mutation | ADR-007; ADR-013 | `accelerator/core/production-mutation-runtime.js`; `accelerator/cli/governed-patch-dispatch.js` | `production-mutation-runtime.test.js`; `mutation-provider.test.js` | Same exact-SHA artifacts | Local mutation does not grant Git or remote authority. |
+| Fail-closed and no silent fallback | ADR-004; ADR-022 | Orchestrator, provider selection and containment adapters | `surgical-orchestrator.test.js`; `codex-provider-only-transport.test.js` | Same exact-SHA artifacts | Availability failure is not silently promoted to success. |
+| Bounded Git authority | ADR-038 | governed Git read and mission authority composition | `git-read-adapter.test.js`; `natural-mission-scoped-mutation-authority-adversarial.test.js` | Same exact-SHA artifacts | Commit != push != merge != tag != release. |
+| Manifest CAS | ADR-010 | `accelerator/core/git-manifest-materializer.js` and mutation adapters | `git-manifest-cas.test.js`; `git-manifest-materializer.test.js` | Same exact-SHA artifacts | Strict ordinary-pathname physical-identity CAS remains unqualified. |
+| Journal/recovery | ADR-007; ADR-008 | mutation journal, recovery and durability adapters | `mutation-journal-adapter.test.js`; `mutation-recovery.test.js`; native durability tests | Same exact-SHA artifacts | Sudden physical power-loss safety is not claimed. |
+| Filesystem/workspace confinement | ADR-009; ADR-010 | workspace-boundary and filesystem-safe adapters | `workspace-boundary-platform.test.js`; `authority-physical-workspace-platform.test.js` | Same exact-SHA artifacts | Native isolation primitives are not claimed identical. |
+| Provider containment | ADR-012; ADR-022 | provider-only transport and native containment | `codex-cognitive-containment.test.js`; `ollama-local-transport.test.js` | Same exact-SHA artifacts | Provider substitution does not inherit qualification automatically. |
+| Exact-ref qualification tied to exact Git state | ADR-025; ADR-038 | canonical workflow and `accelerator/ci/qualification-evidence.js` | `exact-ref-ci-contract.test.js`; `qualification-evidence.test.js` | One retained artifact per Linux/macOS/Windows job | The pre-EER1 run had no retained artifacts; final proof must come from the final candidate run. |
+| Cross-platform normative invariants | ADR-008; ADR-038 | Linux Bubblewrap, macOS Seatbelt and Windows native helpers | platform-specific adapter and workflow tests | Three successful native jobs and three consistent artifacts | Common invariants do not mean identical OS mechanisms. |
+| Non-transitive mission authority | ADR-038 | mission runner and governed authorization consumption | `mission-runner-policy-v23.test.js`; `natural-development-authorization-consumption.test.js` | Same exact-SHA artifacts | Review, release and publication remain separate human decisions. |
+
+ADR-019 still says `IMPLEMENTED / CI QUALIFICATION REQUIRED`. Existing exact-ref
+history supplies relevant CI evidence, but this status text is retained as ADR
+history because repository policy does not clearly authorize EER-1 to revise the
+decision record. The discrepancy is review metadata, not a rewritten ADR status.
 
 ## Historical ADR-025 review baseline
 

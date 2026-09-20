@@ -131,8 +131,11 @@ test(
 
     assert.match(
       workflow,
-      /id: conformance\s*\n\s+continue-on-error: true/
+      /id: conformance\s*\n\s+shell: bash\s*\n\s+continue-on-error: true/
     );
+    assert.match(workflow, /canonical_test_exit_code=\$\?/);
+    assert.match(workflow, /exit_code=\$canonical_test_exit_code.*GITHUB_OUTPUT/);
+    assert.match(workflow, /exit "\$canonical_test_exit_code"/);
     assert.match(
       workflow,
       /name: Enforce canonical conformance result/
@@ -147,6 +150,25 @@ test(
     );
   }
 );
+
+test('machine-readable evidence retention is non-authoritative and cannot hide failure', () => {
+  const workflow = source();
+  const conformance = workflow.indexOf('- name: Run canonical conformance suite');
+  const produce = workflow.indexOf('- name: Produce machine-readable qualification evidence');
+  const upload = workflow.indexOf('- name: Retain machine-readable qualification evidence');
+  const enforce = workflow.indexOf('- name: Enforce canonical conformance result');
+
+  assert.ok(conformance >= 0 && conformance < produce);
+  assert.ok(produce < upload && upload < enforce);
+  assert.match(workflow.slice(produce, upload), /if: always\(\)/);
+  assert.match(workflow.slice(upload, enforce), /if: always\(\)/);
+  assert.match(workflow.slice(upload, enforce), /actions\/upload-artifact@v4/);
+  assert.match(workflow.slice(upload, enforce), /qualification-evidence\.json/);
+  assert.match(workflow.slice(upload, enforce), /retention-days:/);
+  assert.match(workflow, /CANONICAL_TEST_EXIT_CODE: \$\{\{ steps\.conformance\.outputs\.exit_code \}\}/);
+  assert.match(workflow, /name: Enforce canonical conformance result/);
+  assert.doesNotMatch(workflow, /permissions:[\s\S]{0,120}(?:contents|actions): write/);
+});
 
 test('canonical conformance serializes process-heavy test files', () => {
   const packageJson = JSON.parse(fs.readFileSync(

@@ -39,3 +39,14 @@ test('manual conformance accepts and verifies an exact requested ref without rel
   assert.doesNotMatch(publicationJob, /deploy|vercel/i);
   assert.doesNotMatch(workflow, /qualification_branch[\s\S]{0,600}git\s+push/);
 });
+
+test('exact-ref evidence binds requested resolved checked-out and GitHub SHAs', () => {
+  assert.match(workflow, /checked_out_sha=.*git rev-parse/);
+  assert.match(workflow, /checked_out_sha=\$checked_out_sha.*GITHUB_OUTPUT/);
+  assert.match(workflow, /EXPECTED_TARGET_SHA:/);
+  assert.match(workflow, /CHECKED_OUT_SHA:/);
+  assert.match(workflow, /GITHUB_SHA:/);
+  assert.match(workflow, /REQUESTED_QUALIFICATION_REF:/);
+  assert.match(workflow, /qualification-evidence\.js/);
+  assert.match(workflow, /qualification-evidence-\$\{\{ matrix\.os \}\}-\$\{\{ github\.run_id \}\}/);
+});

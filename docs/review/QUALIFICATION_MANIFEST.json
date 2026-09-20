@@ -1,6 +1,91 @@
 {
-  "schema": "sdo.external_review_qualification_manifest.v1",
+  "schema": "sdo.external_review_qualification_manifest.v2",
   "project": "bonushora/surgical-dev-ops",
+  "historicalBaseline": {
+    "classification": "HISTORICAL_BASELINE",
+    "commit": "24f0f1946eb795b3464b2846953e191755b9c8c3",
+    "workflow": "Accelerator Conformance",
+    "workflowFile": ".github/workflows/accelerator-conformance.yml",
+    "exactRefRun": {
+      "runId": "34860826996",
+      "event": "workflow_dispatch",
+      "resolvedRequestedRef": "24f0f1946eb795b3464b2846953e191755b9c8c3",
+      "headSha": "24f0f1946eb795b3464b2846953e191755b9c8c3",
+      "conclusion": "success",
+      "nodeVersion": "24.18.0",
+      "platforms": [
+        "ubuntu-latest",
+        "macos-15",
+        "windows-latest"
+      ],
+      "artifactCount": 0,
+      "canonicalTestTotalsRetained": false
+    },
+    "mainPushRun": {
+      "runId": "34862373028",
+      "event": "push",
+      "headBranch": "main",
+      "headSha": "24f0f1946eb795b3464b2846953e191755b9c8c3",
+      "conclusion": "success",
+      "platforms": [
+        "ubuntu-latest",
+        "macos-15",
+        "windows-latest"
+      ],
+      "artifactCount": 0,
+      "canonicalTestTotalsRetained": false
+    }
+  },
+  "currentReviewPolicy": {
+    "classification": "CURRENT_REVIEW_POLICY",
+    "bindingMode": "RUNTIME_EXACT_SHA_EVIDENCE",
+    "workflow": "Accelerator Conformance",
+    "workflowFile": ".github/workflows/accelerator-conformance.yml",
+    "exactShaInput": "qualification_ref",
+    "canonicalCommand": "npm test",
+    "requiredPlatforms": [
+      "ubuntu-latest",
+      "macos-15",
+      "windows-latest"
+    ],
+    "artifactRetentionDays": 30,
+    "finalIdentity": [
+      "FINAL_EER1_GIT_SHA",
+      "EXACT_REF_RUN_ID",
+      "RETAINED_MACHINE_READABLE_PLATFORM_EVIDENCE"
+    ]
+  },
+  "runtimeQualificationBinding": {
+    "classification": "RUNTIME_QUALIFICATION_BINDING",
+    "bindingMode": "RUNTIME_EXACT_SHA_EVIDENCE",
+    "evidenceSchema": "sdo.qualification_evidence.v1",
+    "producer": "accelerator/ci/qualification-evidence.js",
+    "candidateShaStoredInGit": false,
+    "bindingSource": [
+      "GITHUB_SHA",
+      "checked-out SHA",
+      "resolved qualification_ref"
+    ],
+    "passRequires": [
+      "matching full SHA identities",
+      "canonical test exit code 0",
+      "internally consistent canonical test totals",
+      "supported native platform",
+      "externalReviewCompleted false",
+      "releaseAuthorized false"
+    ]
+  },
+  "externalReviewStatus": {
+    "classification": "EXTERNAL_REVIEW_STATUS",
+    "status": "NOT_COMPLETED",
+    "completed": false,
+    "releaseAuthorized": false,
+    "publicExposureAuthorized": false
+  },
+  "legacyManifestSections": {
+    "classification": "HISTORICAL_BASELINE",
+    "scope": "All pre-EER1 baseline, repair, package-preparation and adversarial-campaign records below are retained as history unless currentReviewPolicy explicitly supersedes them."
+  },
   "releaseCandidate": "v2.6.0-rc.6",
   "sourceBaseline": {
     "commit": "a3a4e2941914f14457ed1932ea4024fc495bfff1",
@@ -146,7 +231,8 @@
       "expectationRelaxed": false
     }
   },
-  "currentAdr038ReviewTarget": {
+  "historicalAdr038ReviewTarget": {
+    "classification": "HISTORICAL_BASELINE",
     "architectureDecision": "ADR-038",
     "runtimeCompletion": {
       "commit": "2c0686288bdf7e156f37115c40de1e0fe3caedd7",
@@ -240,7 +326,9 @@
   },
   "protocols": {
     "BH-SEP-v2.2-sha256": "f4e8639163b0321fff86133a69ec59c2822ccdebcd24d2ccb459b5bc1c3b35cb",
-    "BH-SDP-v2.2-sha256": "04ea782ada1abf7fb959329054c57f87a0e86fca99a31d2e37751d3bdf7d47bc"
+    "BH-SDP-v2.2-sha256": "04ea782ada1abf7fb959329054c57f87a0e86fca99a31d2e37751d3bdf7d47bc",
+    "BH-SEP-v2.3-sha256": "0360b145b4f1ba8cb211ffdb16cf5d70d47c7dc55a11395bd2afb9d5241eb4ee",
+    "BH-SDP-v2.3-sha256": "413b3613c75ce89defae4d49ad0b21d92f56519c14f5b32c8e8e152997887f47"
   },
   "incrementalAdversarialCampaign": {
     "scope": "G1-G10 interactive governed development loop",
@@ -258,8 +346,10 @@
     "absoluteSecurity": false,
     "independentAuditCompleted": false,
     "powerLossValidated": false,
+    "pathnamePhysicalIdentityCasQualified": false,
     "modelDeterministic": false,
     "externalReviewInvited": true,
-    "externalReviewCompleted": false
+    "externalReviewCompleted": false,
+    "releaseAuthorized": false
   }
 }

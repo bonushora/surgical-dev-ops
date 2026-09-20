@@ -14,9 +14,15 @@ Uma suíte verde é evidência apenas para os contratos cobertos e ambientes obs
 
 Um bypass reproduzível deve tornar vermelha a qualificação afetada até que seja corrigido e preservado como teste de regressão permanente.
 
-## Alvo de revisão ADR-038
+O EER-1 usa `RUNTIME_EXACT_SHA_EVIDENCE`. O pacote versionado não pode conhecer
+o SHA do seu próprio commit futuro; o SHA completo solicitado, o SHA em checkout
+e o `GITHUB_SHA` devem coincidir em cada artefato de plataforma legível por
+máquina retido. A revisão externa não foi concluída, e release ou exposição
+pública não estão autorizados.
 
-O alvo atual do runtime é ADR-038 COMPLETE GREEN no SHA exato de conclusão
+## Alvo histórico de revisão ADR-038
+
+O alvo histórico do runtime era ADR-038 COMPLETE GREEN no SHA exato de conclusão
 `2c0686288bdf7e156f37115c40de1e0fe3caedd7`, incluindo Experience Green. R1 a
 R7 são checkpoints internos do runtime, não marcos oficiais da ADR. O HEAD de
 preparação do pacote está congelada no candidato
@@ -26,9 +32,9 @@ preparação do pacote está congelada no candidato
 O candidato qualificado do runtime é
 `26c3c5469433eb012f7d6370b0e3f67a7c2d4a46`; o controle Exact-SHA
 `2611eea9b2e99cbe74e5753f314c443f103b3ccd` o qualificou no run `33795522712`
-em Ubuntu, macOS e Windows. O candidato é imutável e está congelado para
-revisão. Nenhuma revisão externa ocorreu e nenhuma exposição pública está
-autorizada.
+em Ubuntu, macOS e Windows. Esse pacote histórico registrou um candidato
+congelado para sua própria etapa; ele não é evidência EER-1 atual. Nenhuma
+revisão externa ocorreu e nenhuma exposição pública está autorizada.
 
 O alvo possui fronteira determinística Gateway → Orchestrator, missão específica
 da tarefa, plano específico da tarefa, referências de engenharia limitadas,
@@ -75,7 +81,11 @@ Use um checkout descartável limpo e Node.js 24:
 git clone https://github.com/bonushora/surgical-dev-ops.git
 cd surgical-dev-ops
 
-REVIEW_SHA="$(node -e 'const p=require("./docs/review/QUALIFICATION_MANIFEST.json").currentAdr038ReviewTarget.packagePreparation;if(!p.reviewShaFrozen||!/^[0-9a-f]{40}$/.test(p.reviewCandidateCommit||""))process.exit(1);process.stdout.write(p.reviewCandidateCommit)')"
+: "${REVIEW_SHA:?defina REVIEW_SHA como o SHA completo congelado externamente}"
+case "$REVIEW_SHA" in
+  *[!0-9a-f]*|'') exit 1 ;;
+esac
+test "${#REVIEW_SHA}" -eq 40
 
 git checkout --detach "$REVIEW_SHA"
 test "$(git rev-parse HEAD)" = "$REVIEW_SHA"
@@ -93,10 +103,9 @@ node --version
 git status --short
 ```
 
-No estado atual de preparação sem commit, a extração de `REVIEW_SHA` falha
-fechado intencionalmente porque nenhum SHA final está congelado. Depois que um
-humano congelar um candidato real, a demonstração será intencionalmente
-zero-mutation. Ela expõe a transição governada de autoridade sem exigir Ollama,
+O comando falha fechado se o revisor não fornecer o SHA externo congelado.
+Depois que um humano congelar um candidato real, a demonstração será
+intencionalmente zero-mutation. Ela expõe a transição governada de autoridade sem exigir Ollama,
 credenciais ou escrita no repositório.
 
 Somente para reprodução histórica da ADR-025, o baseline preservado permanece

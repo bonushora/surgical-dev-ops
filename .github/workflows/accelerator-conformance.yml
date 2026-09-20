@@ -60,6 +60,7 @@ jobs:
           test "$resolved_sha" = "$checked_out_sha"
           test -n "$resolved_sha"
           echo "resolved_sha=$resolved_sha" >> "$GITHUB_OUTPUT"
+          echo "checked_out_sha=$checked_out_sha" >> "$GITHUB_OUTPUT"
           echo "Qualified exact commit: $resolved_sha"
 
       - name: Materialize deterministic exact-ref branch identity
@@ -148,8 +149,14 @@ jobs:
 
       - name: Run canonical conformance suite
         id: conformance
+        shell: bash
         continue-on-error: true
-        run: npm test > native-test.log 2>&1
+        run: |
+          set +e
+          npm test > native-test.log 2>&1
+          canonical_test_exit_code=$?
+          echo "exit_code=$canonical_test_exit_code" >> "$GITHUB_OUTPUT"
+          exit "$canonical_test_exit_code"
 
       - name: Observe targeted P.3 native contract
         if: always()
@@ -182,6 +189,25 @@ jobs:
         if: steps.conformance.outcome == 'failure'
         run: |
           node -e "const fs=require('fs'); const log=fs.readFileSync('native-test.log','utf8'); console.log(log); const lines=log.split(/\r?\n/); const selected=lines.filter((line)=>/✖|not ok|AssertionError|ERR_ASSERTION|UNSUPPORTED|unsafe or ambiguous|O_NOFOLLOW|ENOENT|EINVAL|EPERM|EACCES|workspace mismatch|canonical|durability|journal|lock|SDO_WINDOWS_NATIVE_PROBE/i.test(line)); const diagnostic=(selected.length?selected.slice(-140):lines.slice(-140)).join(' | '); const escaped=diagnostic.replace(/%/g,'%25').replace(/\r/g,'%0D').replace(/\n/g,'%0A'); console.log('::error title=Native conformance diagnostics::'+escaped);"
+
+      - name: Produce machine-readable qualification evidence
+        if: always()
+        env:
+          CANONICAL_TEST_EXIT_CODE: ${{ steps.conformance.outputs.exit_code }}
+          REQUESTED_QUALIFICATION_REF: ${{ github.event_name == 'workflow_dispatch' && inputs.qualification_ref || '' }}
+          EXPECTED_TARGET_SHA: ${{ github.event_name == 'workflow_dispatch' && steps.exact_ref.outputs.resolved_sha || github.sha }}
+          CHECKED_OUT_SHA: ${{ github.event_name == 'workflow_dispatch' && steps.exact_ref.outputs.checked_out_sha || github.sha }}
+          GITHUB_SHA: ${{ github.sha }}
+        run: node accelerator/ci/qualification-evidence.js
+
+      - name: Retain machine-readable qualification evidence
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: qualification-evidence-${{ matrix.os }}-${{ github.run_id }}-${{ github.sha }}
+          path: qualification-evidence.json
+          if-no-files-found: error
+          retention-days: 30
 
       - name: Enforce canonical conformance result
         if: steps.conformance.outcome == 'failure'

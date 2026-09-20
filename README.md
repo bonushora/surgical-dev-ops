@@ -20,12 +20,12 @@ operational system around the model explicit, bounded, auditable, and fail-close
 | Evidence | Value |
 | --- | --- |
 | Release line | Surgical DevOps v2.6.0-rc.6 |
-| Local governed workspace checkpoint | `f56750eba3aa07b0426f56021c072a280468ea98` |
-| Initial ADR-034 implementation checkpoint | `2f8d9e1aa40d0d7a127e966a28e475e0f89c4bb0` |
-| Local integrated NATURAL gateway qualification | ADR-036 + ADR-037 on `release/v2.6.0-rc.6`, built on `9ed86a443da18f923b60692d7446f1fd57d0a2da` |
-| Published predecessor with native CI | [`56da715284704f227675961d476e19acce6e9fa3`](https://github.com/bonushora/surgical-dev-ops/commit/56da715284704f227675961d476e19acce6e9fa3), [Accelerator Conformance #33286652480](https://github.com/bonushora/surgical-dev-ops/actions/runs/33286652480) |
-| Published predecessor matrix | Ubuntu, macOS, and Windows: **PASS** |
-| Canonical local suite | 1212 tests discovered; 1207 passed; 0 failures; 5 platform-specific skips |
+| Latest physically verified baseline commit | `24f0f1946eb795b3464b2846953e191755b9c8c3` |
+| Historical exact-ref qualification | Accelerator Conformance `34860826996`; Ubuntu, macOS, and Windows: **PASS** |
+| Historical main-push qualification | Accelerator Conformance `34862373028`; same SHA and native matrix: **PASS** |
+| Historical artifact limitation | Zero retained artifacts; canonical totals were not retained machine-readably |
+| Current review binding policy | `RUNTIME_EXACT_SHA_EVIDENCE`; the final SHA/run/artifact tuple is produced externally by CI |
+| External engineering review | **NOT COMPLETED**; release is not authorized |
 | Active normative protocols | BH-SEP v2.3 + BH-SDP v2.3 |
 
 The complete trail, including runs that failed before the green baseline, is in
@@ -73,11 +73,11 @@ confident model output does not authorize a physical operation.
 
 ## Platform qualification
 
-| Platform | Qualified mechanism | Current evidence |
+| Platform | Qualified mechanism | Evidence status |
 | --- | --- | --- |
-| Linux | Bubblewrap deny-default containment and POSIX primitives | Canonical matrix: PASS |
-| macOS | Seatbelt deny-default profile applied by fixed native helper | Canonical matrix: PASS |
-| Windows | Fixed Win32 security/durability helper and governed adapters | Canonical matrix: PASS |
+| Linux | Bubblewrap deny-default containment and POSIX primitives | Historical exact-ref baseline: PASS; final EER-1 artifact pending authorized CI |
+| macOS | Seatbelt deny-default profile applied by fixed native helper | Historical exact-ref baseline: PASS; final EER-1 artifact pending authorized CI |
+| Windows | Fixed Win32 security/durability helper and governed adapters | Historical exact-ref baseline: PASS; final EER-1 artifact pending authorized CI |
 
 These mechanisms are not presented as identical sandboxes. They are different
 native implementations evaluated against common bounded contracts. See

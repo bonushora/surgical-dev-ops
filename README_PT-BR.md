@@ -20,12 +20,12 @@ sistema operacional ao redor do modelo explícito, limitado, auditável e fail-c
 | Evidência | Valor |
 | --- | --- |
 | Linha de release | Surgical DevOps v2.6.0-rc.6 |
-| Checkpoint local da experiência governada | `f56750eba3aa07b0426f56021c072a280468ea98` |
-| Checkpoint inicial da implementação ADR-034 | `2f8d9e1aa40d0d7a127e966a28e475e0f89c4bb0` |
-| Qualificação local do gateway NATURAL integrado | ADR-036 + ADR-037 em `release/v2.6.0-rc.6`, construída sobre `9ed86a443da18f923b60692d7446f1fd57d0a2da` |
-| Predecessor publicado com CI nativo | [`56da715284704f227675961d476e19acce6e9fa3`](https://github.com/bonushora/surgical-dev-ops/commit/56da715284704f227675961d476e19acce6e9fa3), [Accelerator Conformance #33286652480](https://github.com/bonushora/surgical-dev-ops/actions/runs/33286652480) |
-| Matriz publicada do predecessor | Ubuntu, macOS e Windows: **PASS** |
-| Suíte canônica local | 1212 testes descobertos; 1207 aprovados; 0 falhas; 5 skips específicos de plataforma |
+| Commit do baseline fisicamente verificado mais recente | `24f0f1946eb795b3464b2846953e191755b9c8c3` |
+| Qualificação exact-ref histórica | Accelerator Conformance `34860826996`; Ubuntu, macOS e Windows: **PASS** |
+| Qualificação histórica por push em main | Accelerator Conformance `34862373028`; mesmo SHA e matriz nativa: **PASS** |
+| Limitação histórica dos artefatos | Zero artefatos retidos; os totais canônicos não foram retidos de forma legível por máquina |
+| Política atual de binding da revisão | `RUNTIME_EXACT_SHA_EVIDENCE`; a tupla final SHA/run/artefatos é produzida externamente pelo CI |
+| Revisão externa de engenharia | **NÃO CONCLUÍDA**; release não está autorizado |
 | Protocolos normativos ativos | BH-SEP v2.3 + BH-SDP v2.3 |
 
 A trilha completa, incluindo os runs que falharam antes do baseline verde, está em
@@ -74,11 +74,11 @@ plano ou uma saída confiante do modelo não autorizam uma operação física.
 
 ## Qualificação por plataforma
 
-| Plataforma | Mecanismo qualificado | Evidência atual |
+| Plataforma | Mecanismo qualificado | Estado da evidência |
 | --- | --- | --- |
-| Linux | Contenção Bubblewrap deny-default e primitivas POSIX | Matriz canônica: PASS |
-| macOS | Perfil Seatbelt deny-default aplicado por helper nativo fixo | Matriz canônica: PASS |
-| Windows | Helper fixo de segurança/durabilidade Win32 e adapters governados | Matriz canônica: PASS |
+| Linux | Contenção Bubblewrap deny-default e primitivas POSIX | Baseline exact-ref histórico: PASS; artefato EER-1 final aguarda CI autorizado |
+| macOS | Perfil Seatbelt deny-default aplicado por helper nativo fixo | Baseline exact-ref histórico: PASS; artefato EER-1 final aguarda CI autorizado |
+| Windows | Helper fixo de segurança/durabilidade Win32 e adapters governados | Baseline exact-ref histórico: PASS; artefato EER-1 final aguarda CI autorizado |
 
 Esses mecanismos não são apresentados como sandboxes idênticos. São implementações
 nativas diferentes avaliadas contra contratos limitados em comum. Consulte

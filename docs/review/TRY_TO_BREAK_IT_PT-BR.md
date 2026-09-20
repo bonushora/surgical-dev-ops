@@ -10,9 +10,16 @@ Não confie isoladamente na quantidade de testes nem nesta afirmação. Inspecio
 
 Um bypass reproduzível é um resultado valioso. Ele deve tornar vermelha a qualificação afetada até que o defeito seja corrigido e o contraexemplo se torne um teste de regressão permanente.
 
-## Alvo ADR-038 atual e estado exato
+O EER-1 usa `RUNTIME_EXACT_SHA_EVIDENCE`: o pacote versionado não pode conter o
+SHA do seu próprio commit futuro. O candidato autoritativo é fornecido
+externamente como SHA exato completo e deve corresponder ao ref solicitado, ao
+SHA em checkout e ao `GITHUB_SHA` em cada artefato de plataforma legível por
+máquina. A revisão externa não foi concluída, e release ou exposição pública não
+estão autorizados.
 
-O alvo atual é o runtime completo de engenharia autônoma supervisionada da
+## Alvo ADR-038 histórico e estado exato
+
+O alvo histórico era o runtime completo de engenharia autônoma supervisionada da
 ADR-038 no SHA exato de conclusão do runtime
 `2c0686288bdf7e156f37115c40de1e0fe3caedd7`, incluindo Experience Green. R1 a
 R7 são checkpoints internos do runtime, não marcos oficiais da ADR.
@@ -22,7 +29,8 @@ O preparo do pacote está congelado no candidato
 `1a9dd5aca16366c3a0f5525e8835e1c6b9f73ca9`. O runtime qualificado é
 `26c3c5469433eb012f7d6370b0e3f67a7c2d4a46`, qualificado pelo controle Exact-SHA
 `2611eea9b2e99cbe74e5753f314c443f103b3ccd` no run `33795522712` em Ubuntu,
-macOS e Windows. O candidato é imutável e está congelado para revisão. Nenhuma
+macOS e Windows. Esse pacote histórico registrou seu candidato como congelado
+para aquela etapa; ele não é o candidato nem a evidência EER-1 atual. Nenhuma
 revisão externa ocorreu e nenhuma exposição pública está autorizada.
 
 A afirmação a falsificar é que a fronteira determinística Gateway → Orchestrator
@@ -74,12 +82,11 @@ Use o [playbook de revisão adversarial](./ADVERSARIAL_PLAYBOOK_PT-BR.md) para o
 
 ## Reproduza o futuro candidato à revisão
 
-Não inicie uma revisão externa até que
-`currentAdr038ReviewTarget.packagePreparation.reviewShaFrozen` seja `true` e
-`reviewCandidateCommit` contenha o SHA Git real de 40 caracteres hexadecimais
-observado depois do commit. No estado de preparação, ambas as condições falham
-intencionalmente. Depois que um humano registrar e congelar esse SHA físico, use
-o checkout detached e limpo correspondente com Node.js `>=24.18.0`:
+Não inicie uma revisão externa até que a decisão humana de freeze forneça a
+tupla externa composta pelo SHA completo do candidato, ID do run exact-ref e
+três artefatos retidos válidos. Não derive um SHA futuro do manifesto versionado.
+Use um checkout detached limpo desse SHA fornecido externamente com Node.js
+`>=24.18.0`:
 
 ```bash
 npm ci

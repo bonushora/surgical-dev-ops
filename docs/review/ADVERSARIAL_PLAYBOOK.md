@@ -20,9 +20,15 @@ absolute security.
 A reproducible bypass is a valuable result. It must turn the affected
 qualification red until fixed and retained as a permanent regression test.
 
-## ADR-038 review target
+EER-1 uses `RUNTIME_EXACT_SHA_EVIDENCE`. The checked-in package cannot know its
+own future commit SHA; the requested full SHA, checked-out SHA and `GITHUB_SHA`
+must instead agree in every retained machine-readable platform artifact. The
+external review is not completed, and no release or public exposure is
+authorized.
 
-The current runtime target is ADR-038 COMPLETE GREEN at exact completion SHA
+## Historical ADR-038 review target
+
+The historical runtime target was ADR-038 COMPLETE GREEN at exact completion SHA
 `2c0686288bdf7e156f37115c40de1e0fe3caedd7`, including Experience Green. R1
 through R7 are internal runtime checkpoints, not official ADR milestones. The
 Package preparation began at
@@ -30,8 +36,9 @@ Package preparation began at
 `1a9dd5aca16366c3a0f5525e8835e1c6b9f73ca9`. The qualified runtime candidate is
 `26c3c5469433eb012f7d6370b0e3f67a7c2d4a46`; Exact-SHA control
 `2611eea9b2e99cbe74e5753f314c443f103b3ccd` qualified it in run `33795522712`
-across Ubuntu, macOS and Windows. The candidate is immutable and frozen for
-review. No external review has occurred and no public exposure is authorized.
+across Ubuntu, macOS and Windows. That historical package recorded a frozen
+candidate for its own stage; it is not current EER-1 evidence. No external
+review has occurred and no public exposure is authorized.
 
 The target has a deterministic Gateway → Orchestrator boundary, task-specific
 mission and task-specific plan, bounded engineering references, canonical
@@ -78,10 +85,11 @@ Use a clean disposable checkout and Node.js 24:
 git clone https://github.com/bonushora/surgical-dev-ops.git
 cd surgical-dev-ops
 
-REVIEW_SHA="$(
-  node -e \
-    'const p=require("./docs/review/QUALIFICATION_MANIFEST.json").currentAdr038ReviewTarget.packagePreparation;if(!p.reviewShaFrozen||!/^[0-9a-f]{40}$/.test(p.reviewCandidateCommit||""))process.exit(1);process.stdout.write(p.reviewCandidateCommit)'
-)"
+: "${REVIEW_SHA:?set REVIEW_SHA to the externally frozen full candidate SHA}"
+case "$REVIEW_SHA" in
+  *[!0-9a-f]*|'') exit 1 ;;
+esac
+test "${#REVIEW_SHA}" -eq 40
 
 git checkout --detach "$REVIEW_SHA"
 test "$(git rev-parse HEAD)" = "$REVIEW_SHA"
@@ -99,9 +107,9 @@ node --version
 git status --short
 ```
 
-At the current uncommitted preparation state, extraction of `REVIEW_SHA`
-intentionally fails closed because no final SHA is frozen. After a human freezes
-a real candidate, the demonstration is intentionally zero-mutation. It exposes
+The command fails closed unless the reviewer supplies the external frozen SHA.
+After a human freezes a real candidate, the demonstration is intentionally
+zero-mutation. It exposes
 the governed authority transition without requiring Ollama, credentials or
 repository writes.
 

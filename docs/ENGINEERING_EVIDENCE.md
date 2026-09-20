@@ -6,7 +6,47 @@ This document records reproducible evidence for the current Surgical DevOps
 multiplatform baseline. It distinguishes observed results from broader security
 claims that remain unqualified.
 
-## ADR-036 and ADR-037 integrated NATURAL gateway qualification
+## Current EER-1 evidence contract
+
+The current policy is `RUNTIME_EXACT_SHA_EVIDENCE`. The checked-in package does
+not claim to know the SHA of the commit that contains it. The final EER-1
+identity is instead the externally verified tuple of final Git SHA, exact-ref
+workflow run ID and the three retained machine-readable native-platform
+artifacts generated from `GITHUB_SHA` and the checked-out SHA.
+
+The runtime artifact schema is `sdo.qualification_evidence.v1`. It records the
+repository, workflow and run attempt; requested, expected, checked-out and
+GitHub SHA identities; platform, architecture and Node version; `npm test` exit
+code, result and actual parsed totals; and explicit
+`externalReviewCompleted: false` and `releaseAuthorized: false`. Missing,
+malformed, duplicated or inconsistent totals, unsupported platforms and SHA
+mismatches fail closed. A nonzero canonical test exit remains `FAIL`, and the
+existing final workflow enforcement still fails the job after diagnostic and
+artifact steps.
+
+GitHub artifacts are retained for 30 days by the workflow, not permanently.
+Evidence upload is non-authoritative and cannot override a failed canonical
+suite. The external review is not completed, and no release is authorized.
+
+### Verified pre-EER1 baseline (historical)
+
+| Field | Observed evidence |
+| --- | --- |
+| Commit | `24f0f1946eb795b3464b2846953e191755b9c8c3` |
+| Exact-ref run | `34860826996`; `workflow_dispatch`; Linux/macOS/Windows PASS; Node.js `24.18.0` |
+| Main push run | `34862373028`; `push`; branch `main`; same head SHA; Linux/macOS/Windows PASS |
+| Retained artifact count | `0` for each run |
+| Retained canonical totals | Not available; `native-test.log` was neither printed on success nor uploaded |
+| Classification | Historical baseline only; not evidence for the future EER-1 candidate commit |
+
+The exact-ref jobs physically logged the resolved checked-out commit above.
+GitHub metadata independently reports the same head SHA, workflow, event and
+successful native job conclusions. The historical workflow did not retain the
+literal input separately; it retained the resolved requested commit in each
+job log. No canonical test totals are inferred from the separate diagnostic
+subtests.
+
+## Historical ADR-036 and ADR-037 integrated NATURAL gateway qualification
 
 | Field | Evidence |
 | --- | --- |
@@ -19,7 +59,7 @@ claims that remain unqualified.
 | Historical suite at second repair start | 1209 tests discovered; 1204 passed; zero failures; 5 explicit platform skips |
 | Third manual-counterexample repair start | `13093b76a51d0fbf2886cdf00bef68e3547d75c4` |
 | Historical suite at third repair start | 1210 tests discovered; 1205 passed; zero failures; 5 explicit platform skips |
-| Current local canonical suite | 1212 tests discovered; 1207 passed; zero failures; 5 explicit platform skips |
+| Historical local canonical suite | 1212 tests discovered; 1207 passed; zero failures; 5 explicit platform skips |
 | Counterexample #2 focused deadline/evidence/provider suite | 47 tests passed; zero failures; zero skips |
 | Counterexample #2 adjacent NATURAL/provider/evidence suite | 129 tests passed; zero failures; zero skips |
 | Counterexample #2 adversarial/UX suite | 124 tests passed; zero failures; zero skips |

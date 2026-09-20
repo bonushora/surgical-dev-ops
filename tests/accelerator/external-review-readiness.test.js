@@ -15,8 +15,9 @@ const QUALIFIED_RUNTIME_CANDIDATE = '26c3c5469433eb012f7d6370b0e3f67a7c2d4a46';
 const QUALIFICATION_CONTROL_COMMIT = '2611eea9b2e99cbe74e5753f314c443f103b3ccd';
 const QUALIFICATION_RUN_ID = '33795522712';
 
-function assertCurrentAdr038Manifest(manifest) {
-  const target = manifest.currentAdr038ReviewTarget;
+function assertHistoricalAdr038Manifest(manifest) {
+  const target = manifest.historicalAdr038ReviewTarget;
+  assert.equal(target.classification, 'HISTORICAL_BASELINE');
   assert.equal(target.architectureDecision, 'ADR-038');
   assert.deepEqual(target.runtimeCompletion, {
     commit: ADR038_RUNTIME_COMMIT,
@@ -75,7 +76,7 @@ function attackIds(document) {
 
 test('ADR-025 manifest binds the public green baseline and immutable protocol bytes', () => {
   const manifest = JSON.parse(read('docs/review/QUALIFICATION_MANIFEST.json'));
-  assert.equal(manifest.schema, 'sdo.external_review_qualification_manifest.v1');
+  assert.equal(manifest.schema, 'sdo.external_review_qualification_manifest.v2');
   assert.equal(manifest.sourceBaseline.commit, 'a3a4e2941914f14457ed1932ea4024fc495bfff1');
   assert.equal(manifest.sourceBaseline.runId, '33110168939');
   assert.equal(manifest.sourceBaseline.conclusion, 'success');
@@ -169,32 +170,32 @@ test('ADR-025 manifest binds the public green baseline and immutable protocol by
   assert.equal(manifest.protocols['BH-SDP-v2.2-sha256'], sha('protocols/BH-SDP.md'));
 });
 
-test('post-ADR-038 manifest binds the runtime while leaving the future review SHA unfrozen', () => {
+test('manifest preserves the former ADR-038 package only as historical evidence', () => {
   const manifest = JSON.parse(read('docs/review/QUALIFICATION_MANIFEST.json'));
-  assertCurrentAdr038Manifest(manifest);
+  assertHistoricalAdr038Manifest(manifest);
 });
 
-test('post-ADR-038 manifest validation rejects stale or manufactured readiness', () => {
+test('historical ADR-038 evidence still rejects mutation or manufactured readiness', () => {
   const manifest = JSON.parse(read('docs/review/QUALIFICATION_MANIFEST.json'));
   const mutations = [
-    (candidate) => { delete candidate.currentAdr038ReviewTarget.architectureDecision; },
-    (candidate) => { candidate.currentAdr038ReviewTarget.runtimeCompletion.commit = '0'.repeat(40); },
-    (candidate) => { delete candidate.currentAdr038ReviewTarget.runtimeCompletion.experience; },
-    (candidate) => { candidate.currentAdr038ReviewTarget.authority.envelope = 'UNBOUNDED'; },
-    (candidate) => { candidate.currentAdr038ReviewTarget.authority.missionGrantDispatch = 'direct'; },
-    (candidate) => { candidate.currentAdr038ReviewTarget.claims.externalReviewCompleted = true; },
+    (candidate) => { delete candidate.historicalAdr038ReviewTarget.architectureDecision; },
+    (candidate) => { candidate.historicalAdr038ReviewTarget.runtimeCompletion.commit = '0'.repeat(40); },
+    (candidate) => { delete candidate.historicalAdr038ReviewTarget.runtimeCompletion.experience; },
+    (candidate) => { candidate.historicalAdr038ReviewTarget.authority.envelope = 'UNBOUNDED'; },
+    (candidate) => { candidate.historicalAdr038ReviewTarget.authority.missionGrantDispatch = 'direct'; },
+    (candidate) => { candidate.historicalAdr038ReviewTarget.claims.externalReviewCompleted = true; },
     (candidate) => {
-      candidate.currentAdr038ReviewTarget.packagePreparation.reviewCandidateCommit = 'f'.repeat(40);
-      candidate.currentAdr038ReviewTarget.packagePreparation.reviewShaFrozen = true;
+      candidate.historicalAdr038ReviewTarget.packagePreparation.reviewCandidateCommit = 'f'.repeat(40);
+      candidate.historicalAdr038ReviewTarget.packagePreparation.reviewShaFrozen = true;
     },
-    (candidate) => { candidate.currentAdr038ReviewTarget.authority.nonTransitive = false; },
-    (candidate) => { candidate.currentAdr038ReviewTarget.authority.localMutationImpliesPush = true; }
+    (candidate) => { candidate.historicalAdr038ReviewTarget.authority.nonTransitive = false; },
+    (candidate) => { candidate.historicalAdr038ReviewTarget.authority.localMutationImpliesPush = true; }
   ];
 
   for (const mutate of mutations) {
     const candidate = clone(manifest);
     mutate(candidate);
-    assert.throws(() => assertCurrentAdr038Manifest(candidate));
+    assert.throws(() => assertHistoricalAdr038Manifest(candidate));
   }
 });
 
@@ -599,8 +600,10 @@ test('review manifest reproduction commands are fixed and non-destructive', () =
     absoluteSecurity: false,
     independentAuditCompleted: false,
     powerLossValidated: false,
+    pathnamePhysicalIdentityCasQualified: false,
     modelDeterministic: false,
     externalReviewInvited: true,
-    externalReviewCompleted: false
+    externalReviewCompleted: false,
+    releaseAuthorized: false
   });
 });

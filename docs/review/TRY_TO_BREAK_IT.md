@@ -16,9 +16,15 @@ A reproducible bypass is a valuable result. It must turn the affected qualificat
 red until the defect is fixed and the counterexample becomes a permanent regression
 test.
 
-## Current ADR-038 target and exact state
+EER-1 uses `RUNTIME_EXACT_SHA_EVIDENCE`: the checked-in package cannot contain
+its own future commit SHA. The authoritative candidate is supplied externally as
+the full exact SHA and must match the requested ref, checked-out SHA and
+`GITHUB_SHA` in each retained machine-readable platform artifact. The external
+review is not completed, and release or public exposure is not authorized.
 
-The current target is the complete ADR-038 supervised autonomous engineering
+## Historical ADR-038 target and exact state
+
+The historical target was the complete ADR-038 supervised autonomous engineering
 runtime at exact runtime completion SHA
 `2c0686288bdf7e156f37115c40de1e0fe3caedd7`, including Experience Green. R1
 through R7 are internal runtime checkpoints, not official ADR milestones.
@@ -28,9 +34,9 @@ The package preparation began at physical HEAD
 `1a9dd5aca16366c3a0f5525e8835e1c6b9f73ca9`. The qualified runtime is
 `26c3c5469433eb012f7d6370b0e3f67a7c2d4a46`, qualified by Exact-SHA control
 `2611eea9b2e99cbe74e5753f314c443f103b3ccd` in run `33795522712` on Ubuntu,
-macOS and Windows. The composed package commit receives its own SHA only after
-this commit. The candidate is immutable and frozen for review. No external
-review has occurred, and no public exposure is authorized.
+macOS and Windows. That historical package recorded its candidate as frozen for
+its own review stage; it is not the current EER-1 candidate or evidence. No
+external review has occurred, and no public exposure is authorized.
 
 The claim to falsify is that the deterministic Gateway → Orchestrator boundary
 keeps task-specific mission and task-specific plan execution inside bounded
@@ -83,12 +89,10 @@ minimal report contract.
 
 ## Reproduce the future review candidate
 
-Do not begin an external review until
-`currentAdr038ReviewTarget.packagePreparation.reviewShaFrozen` is `true` and
-`reviewCandidateCommit` contains the real 40-hex Git SHA observed after commit.
-At this preparation state both conditions intentionally fail. Once a human has
-recorded and frozen that physical SHA, use its clean detached checkout with
-Node.js `>=24.18.0`:
+Do not begin an external review until the human freeze decision supplies the
+external tuple of full candidate SHA, exact-ref run ID and three valid retained
+artifacts. Do not derive a future SHA from the checked-in manifest. Use a clean
+detached checkout of that externally supplied SHA with Node.js `>=24.18.0`:
 
 ```bash
 npm ci
