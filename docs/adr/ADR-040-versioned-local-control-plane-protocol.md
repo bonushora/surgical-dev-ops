@@ -35,9 +35,13 @@ The facade uses injected registry, clock, identity factory and an optional injec
 
 A deliberately injected non-physical test gateway may be observed only after version, schema, identity, authority, workspace, repository, CAS, capability and registry preconditions pass. A gateway failure after registry ownership becomes `indeterminate`; it is not success and does not permit retry.
 
-## Registry, restart and rollout
+## Durable registry, restart and rollout
 
-The deterministic in-memory registry is a conformance implementation only. It does not claim durable cross-process acceptance. A production frontier requires a separately qualified persistent registry, split-brain policy and paired restart/reconciliation model. Restart must never restore spent authority, infer external success, or resubmit an ambiguous operation.
+The durable registry persists one closed `sdo.control_plane_submission_registry` envelope at schema version `1`. Its canonical SHA-256 integrity digest binds the exact protocol version, monotonically increasing registry generation and operation-sorted entries. Each entry binds request, operation, idempotency, intent, principal, authority/delegation, workspace, repository, external execution identity, current observation state, monotonic sequence and observation time. Credential and arbitrary transport payload fields remain forbidden.
+
+Publication uses a bounded sibling file created exclusively, file-data flush, atomic replacement and directory durability confirmation. Every mutation compares the last loaded generation and digest with the committed envelope before publication. A stale generation, malformed or truncated file, unsupported schema, digest mismatch, write failure or durability failure is never acceptance. Failure before replacement preserves the last known good envelope and removes only the writer's own temporary file.
+
+Creating a new registry object over the same trusted store reconstructs logical ownership and replay bindings after restart. Identical replay converges on the same `externalExecutionId`; conflicts and identity/authority/workspace substitutions remain rejected; observation sequences remain monotonic; terminal results do not regress; and replay never invokes the non-physical gateway again. This qualification does not prove simultaneous multi-process writers, split-brain ownership or a concrete inter-process transport.
 
 Static fixtures in both repositories cover negotiation, closed validation, credential exclusion, capability discovery, canonical submit/rejection, replay conflicts, identity and workspace substitution, unknown and ambiguous results, monotonic observation and unsupported cancellation. The shared schema digest is `6bdbd49023e0c76f8dff28fbb22bd905bba35823347cc5e4453d14570de401d4`. Incompatible evolution requires a new version and decision.
 
@@ -56,16 +60,18 @@ Surgical Kernel is outside qualified scope. No Kernel event, journal entry, auth
 - injected non-physical facade and Control Plane adapter;
 - deterministic fixtures and compatibility digest;
 - in-memory non-physical replay protection;
+- durable registry schema version 1 with canonical SHA-256 integrity;
+- restart-safe logical acceptance, replay/idempotency binding and external identity;
+- monotonic durable observations and fail-closed corruption detection;
 - recursive credential exclusion;
 - disabled-by-default physical dispatch.
 
 ## Unqualified and non-goals
 
 - concrete transport or authenticated OS peer;
-- durable cross-process registry;
 - real physical dispatch, event streaming, reconnect or resume;
 - safe interruption of active mutation;
-- split-brain ownership or paired process restart;
+- simultaneous multi-process writers, split-brain ownership or paired process restart;
 - Linux transport integration, macOS or Windows qualification;
 - Surgical Kernel integration or production enablement;
 - remote service, database, queue, credential or shared package.
