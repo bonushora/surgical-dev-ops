@@ -1,0 +1,74 @@
+{
+  "protocolVersion": "sacp.sdo-local/v1",
+  "schemaDigest": "6bdbd49023e0c76f8dff28fbb22bd905bba35823347cc5e4453d14570de401d4",
+  "negotiation": {
+    "compatible": {
+      "protocolVersion": "sacp.sdo-local/v1",
+      "requestId": "request-negotiate-compatible",
+      "supportedVersions": ["sacp.sdo-local/v1"]
+    },
+    "incompatible": {
+      "protocolVersion": "sacp.sdo-local/v2",
+      "requestId": "request-negotiate-incompatible",
+      "supportedVersions": ["sacp.sdo-local/v2"]
+    },
+    "missing": {
+      "requestId": "request-negotiate-missing",
+      "supportedVersions": ["sacp.sdo-local/v1"]
+    }
+  },
+  "capabilities": ["cancel", "inspect", "reconcile", "submit"],
+  "canonicalSubmit": {
+    "protocolVersion": "sacp.sdo-local/v1",
+    "requestId": "request-canonical-submit",
+    "operationId": "operation-canonical-submit",
+    "idempotencyKey": "idempotency-canonical-submit",
+    "intentFingerprint": "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+    "principal": {
+      "type": "agent",
+      "id": "agent-canonical"
+    },
+    "authority": {
+      "reference": "authority-canonical",
+      "delegationReference": "delegation-canonical"
+    },
+    "requestedCapability": "mutation.propose",
+    "workspace": {
+      "path": "/workspace/project",
+      "physicalIdentity": "bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb"
+    },
+    "repository": {
+      "id": "repository-canonical",
+      "head": "cccccccccccccccccccccccccccccccccccccccc"
+    },
+    "expectedState": {
+      "repositoryHead": "cccccccccccccccccccccccccccccccccccccccc",
+      "worktreeFingerprint": "dddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddd",
+      "cas": "eeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeee"
+    },
+    "approvalReference": "approval-canonical",
+    "submittedAt": "2030-01-01T00:00:00.000Z"
+  },
+  "canonicalRejection": {
+    "classification": "protocol_failure",
+    "code": "UNSUPPORTED_PROTOCOL_VERSION"
+  },
+  "cases": [
+    "compatible_negotiation",
+    "incompatible_version",
+    "missing_version",
+    "closed_field_rejection",
+    "recursive_credential_rejection",
+    "capability_discovery",
+    "canonical_submit_request",
+    "canonical_rejection",
+    "identical_replay",
+    "conflicting_idempotency_reuse",
+    "principal_substitution",
+    "workspace_repository_mismatch",
+    "unknown_observation",
+    "ambiguous_submission",
+    "monotonic_observation_sequence",
+    "unsupported_cancellation"
+  ]
+}

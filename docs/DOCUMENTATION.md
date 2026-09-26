@@ -53,6 +53,7 @@ Start with:
 - [ADR-037 — Integrated Governed Agent Gateway and Conversational Control Surface](./adr/ADR-037-integrated-governed-agent-gateway-and-conversational-control-surface.md)
 - [ADR-038 — NATURAL Supervised Autonomous Engineering](./adr/ADR-038-natural-supervised-autonomous-engineering.md)
 - [ADR-039 — Private Web Administration Dashboard Supersession](./adr/ADR-039-private-web-administration-dashboard-supersession.md)
+- [ADR-040 — Versioned Local Control Plane Protocol](./adr/ADR-040-versioned-local-control-plane-protocol.md)
 
 ## Manual acceptance
 
