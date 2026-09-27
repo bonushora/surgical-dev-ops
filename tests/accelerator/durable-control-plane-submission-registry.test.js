@@ -19,7 +19,8 @@ function copy(value) {
 }
 
 function registryRoot(t) {
-  const root = fs.mkdtempSync(path.join(os.tmpdir(), 'sdo-protocol-registry-'));
+  const lexicalRoot = fs.mkdtempSync(path.join(os.tmpdir(), 'sdo-protocol-registry-'));
+  const root = fs.realpathSync(lexicalRoot);
   t.after(() => fs.rmSync(root, { recursive: true, force: true }));
   return root;
 }

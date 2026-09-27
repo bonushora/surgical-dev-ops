@@ -26,6 +26,7 @@ const {
 
 const NOW = '2030-01-01T00:00:00.000Z';
 const TRANSPORT_VERSION = 'sacp.sdo-local-ipc/v1';
+let endpointSequence = 0;
 
 function service(registry = createInMemoryControlPlaneSubmissionRegistry()) {
   return {
@@ -39,9 +40,17 @@ function service(registry = createInMemoryControlPlaneSubmissionRegistry()) {
 }
 
 async function listener(t, options = {}) {
-  const runtimeDirectory = await fsp.mkdtemp(path.join(os.tmpdir(), 'sdo-local-ipc-'));
-  await fsp.chmod(runtimeDirectory, 0o700);
-  const endpointPath = path.join(runtimeDirectory, 'control-plane.sock');
+  let runtimeDirectory = null;
+  let endpointPath;
+  if (process.platform === 'win32') {
+    endpointSequence += 1;
+    endpointPath = `\\\\.\\pipe\\sdo-local-ipc-${process.pid}-${endpointSequence}`;
+  } else {
+    const lexicalDirectory = await fsp.mkdtemp(path.join(os.tmpdir(), 'sdo-ipc-'));
+    await fsp.chmod(lexicalDirectory, 0o700);
+    runtimeDirectory = await fsp.realpath(lexicalDirectory);
+    endpointPath = path.join(runtimeDirectory, 's');
+  }
   const currentService = options.service || service();
   const server = createControlPlaneLocalIpcServer({
     service: currentService.value,
@@ -50,7 +59,9 @@ async function listener(t, options = {}) {
   const descriptor = await server.start();
   t.after(async () => {
     await server.close();
-    await fsp.rm(runtimeDirectory, { recursive: true, force: true });
+    if (runtimeDirectory !== null) {
+      await fsp.rm(runtimeDirectory, { recursive: true, force: true });
+    }
   });
   return { runtimeDirectory, endpointPath, server, descriptor, ...currentService };
 }
@@ -145,12 +156,14 @@ test('listener refuses platform emulation as physical transport evidence', async
   );
 });
 
-test('private Unix listener serves one persistent non-physical session and cleans its endpoint', async (t) => {
+test('native local listener serves one persistent non-physical session and cleans its endpoint', async (t) => {
   const current = await listener(t);
-  assert.equal(current.descriptor.endpointKind, 'UNIX_DOMAIN_SOCKET');
+  assert.equal(current.descriptor.endpointKind, endpointKind(process.platform));
   assert.equal(current.descriptor.physicalDispatchEnabled, false);
   assert.equal(current.descriptor.peerProcessIdentityAuthenticated, false);
-  assert.equal(fs.statSync(current.endpointPath).mode & 0o777, 0o600);
+  if (process.platform !== 'win32') {
+    assert.equal(fs.statSync(current.endpointPath).mode & 0o777, 0o600);
+  }
 
   const client = await peer(t, current.endpointPath);
   await validateSession(client);
@@ -276,10 +289,13 @@ test('malformed oversized truncated and invalid UTF-8 connections fail closed', 
   assert.equal(current.registry.inspect().length, 0);
 });
 
-test('stale endpoint is never removed to make listener startup succeed', async (t) => {
-  const runtimeDirectory = await fsp.mkdtemp(path.join(os.tmpdir(), 'sdo-local-ipc-stale-'));
-  await fsp.chmod(runtimeDirectory, 0o700);
-  const endpointPath = path.join(runtimeDirectory, 'control-plane.sock');
+test('stale endpoint is never removed to make listener startup succeed', {
+  skip: process.platform === 'win32',
+}, async (t) => {
+  const lexicalDirectory = await fsp.mkdtemp(path.join(os.tmpdir(), 'sdo-ipc-stale-'));
+  await fsp.chmod(lexicalDirectory, 0o700);
+  const runtimeDirectory = await fsp.realpath(lexicalDirectory);
+  const endpointPath = path.join(runtimeDirectory, 's');
   await fsp.writeFile(endpointPath, 'foreign endpoint');
   t.after(() => fsp.rm(runtimeDirectory, { recursive: true, force: true }));
   const current = service();
@@ -288,10 +304,13 @@ test('stale endpoint is never removed to make listener startup succeed', async (
   assert.equal(await fsp.readFile(endpointPath, 'utf8'), 'foreign endpoint');
 });
 
-test('listener rejects a non-private runtime directory without creating an endpoint', async (t) => {
-  const runtimeDirectory = await fsp.mkdtemp(path.join(os.tmpdir(), 'sdo-local-ipc-public-'));
-  await fsp.chmod(runtimeDirectory, 0o755);
-  const endpointPath = path.join(runtimeDirectory, 'control-plane.sock');
+test('listener rejects a non-private runtime directory without creating an endpoint', {
+  skip: process.platform === 'win32',
+}, async (t) => {
+  const lexicalDirectory = await fsp.mkdtemp(path.join(os.tmpdir(), 'sdo-ipc-public-'));
+  await fsp.chmod(lexicalDirectory, 0o755);
+  const runtimeDirectory = await fsp.realpath(lexicalDirectory);
+  const endpointPath = path.join(runtimeDirectory, 's');
   t.after(() => fsp.rm(runtimeDirectory, { recursive: true, force: true }));
   const current = service();
   const server = createControlPlaneLocalIpcServer({ service: current.value, endpointPath });
