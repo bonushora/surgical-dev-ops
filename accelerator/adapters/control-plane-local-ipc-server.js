@@ -4,14 +4,7 @@ const fs = require('node:fs');
 const net = require('node:net');
 const path = require('node:path');
 
-const {
-  PROTOCOL_VERSION,
-  SCHEMA_DIGEST,
-  ProtocolError,
-  assertCredentialFree,
-  deepFreezeCopy,
-  exactFields,
-} = require('../core/control-plane-protocol');
+const defaultProtocol = require('../core/control-plane-protocol');
 const {
   DEFAULT_MAX_FRAME_BYTES,
   createLengthPrefixedFrameDecoder,
@@ -25,7 +18,7 @@ const OPERATIONS = new Set([
 const REQUEST_FIELDS = Object.freeze(['transportVersion', 'messageId', 'operation', 'payload']);
 const OPTION_FIELDS = new Set([
   'service', 'endpointPath', 'platform', 'filesystem', 'serverFactory',
-  'maxFrameBytes', 'monotonicNow',
+  'maxFrameBytes', 'monotonicNow', 'protocol', 'faultInjection',
 ]);
 
 class LocalIpcServerError extends Error {
@@ -94,12 +87,26 @@ function createControlPlaneLocalIpcServer(options) {
     || Reflect.ownKeys(options).some((key) => typeof key !== 'string' || !OPTION_FIELDS.has(key))) {
     throw new TypeError('Local IPC listener options are invalid');
   }
+  const protocol = options.protocol || defaultProtocol;
+  const {
+    PROTOCOL_VERSION,
+    SCHEMA_DIGEST,
+    ProtocolError,
+    assertCredentialFree,
+    deepFreezeCopy,
+    exactFields,
+  } = protocol;
+  if (!protocol || typeof PROTOCOL_VERSION !== 'string' || typeof SCHEMA_DIGEST !== 'string'
+    || typeof ProtocolError !== 'function' || typeof assertCredentialFree !== 'function'
+    || typeof deepFreezeCopy !== 'function' || typeof exactFields !== 'function') {
+    throw new TypeError('Local IPC logical protocol is invalid');
+  }
   const requiredMethods = ['negotiate', 'capabilities', 'submit', 'reconcile', 'inspect', 'cancel'];
   if (!options.service
     || options.service.protocolVersion !== PROTOCOL_VERSION
-    || options.service.physicalDispatchEnabled !== false
+    || typeof options.service.physicalDispatchEnabled !== 'boolean'
     || requiredMethods.some((method) => typeof options.service[method] !== 'function')) {
-    throw new TypeError('Local IPC listener requires a non-physical protocol service');
+    throw new TypeError('Local IPC listener requires an exact protocol service');
   }
   const platform = options.platform || process.platform;
   const filesystem = options.filesystem || fs;
@@ -122,6 +129,12 @@ function createControlPlaneLocalIpcServer(options) {
     || typeof options.endpointPath !== 'string') {
     throw new TypeError('Local IPC listener dependencies are invalid');
   }
+  if (options.faultInjection !== undefined
+    && (!isPlainObject(options.faultInjection)
+      || Reflect.ownKeys(options.faultInjection).some((key) => key !== 'afterDispatchBeforeResponse')
+      || typeof options.faultInjection.afterDispatchBeforeResponse !== 'function')) {
+    throw new TypeError('Local IPC listener fault injection is invalid');
+  }
 
   let server = null;
   let started = false;
@@ -134,6 +147,7 @@ function createControlPlaneLocalIpcServer(options) {
     responsesPublished: 0,
     malformedConnections: 0,
     listenerFailures: 0,
+    responsePublicationFaults: 0,
     operationDispatches: {
       negotiate: 0, capabilities: 0, submit: 0, reconcile: 0, inspect: 0, cancel: 0,
     },
@@ -260,7 +274,7 @@ function createControlPlaneLocalIpcServer(options) {
         } else if (envelope.operation === 'capabilities') {
           if (result.classification !== 'accepted'
             || result.schemaDigest !== SCHEMA_DIGEST
-            || result.physicalDispatchEnabled !== false) {
+            || result.physicalDispatchEnabled !== options.service.physicalDispatchEnabled) {
             throw new ProtocolError(
               'protocol_failure',
               'INVALID_SESSION_CAPABILITIES',
@@ -269,6 +283,15 @@ function createControlPlaneLocalIpcServer(options) {
           }
           capabilities = [...result.capabilities];
           stage = 'VALIDATED';
+        }
+        if (options.faultInjection
+          && options.faultInjection.afterDispatchBeforeResponse({
+            operation: envelope.operation,
+            result: deepFreezeCopy(result),
+          }) === 'DROP_CONNECTION') {
+          metrics.responsePublicationFaults += 1;
+          socket.destroy();
+          return;
         }
         publish({
           transportVersion: TRANSPORT_VERSION,
@@ -401,7 +424,7 @@ function createControlPlaneLocalIpcServer(options) {
       protocolVersion: PROTOCOL_VERSION,
       endpointPath: options.endpointPath,
       endpointKind: validatedEndpoint.kind,
-      physicalDispatchEnabled: false,
+      physicalDispatchEnabled: options.service.physicalDispatchEnabled,
       peerProcessIdentityAuthenticated: false,
     });
   }
@@ -440,6 +463,7 @@ function createControlPlaneLocalIpcServer(options) {
       responsesPublished: metrics.responsesPublished,
       malformedConnections: metrics.malformedConnections,
       listenerFailures: metrics.listenerFailures,
+      responsePublicationFaults: metrics.responsePublicationFaults,
       operationDispatches: metrics.operationDispatches,
       dispatchNanoseconds: metrics.dispatchNanoseconds.toString(),
       decodeNanoseconds: metrics.decodeNanoseconds.toString(),

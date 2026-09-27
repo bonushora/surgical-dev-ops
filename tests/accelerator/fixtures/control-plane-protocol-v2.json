@@ -1,0 +1,11 @@
+{
+  "protocolVersion": "sacp.sdo-local/v2",
+  "schemaDigest": "0276897c7e22dc2cc77f049a4a329842abff50290ada1f946bce9747660d31e4",
+  "capabilities": [
+    "inspect",
+    "mutation.applyConditional",
+    "reconcile",
+    "submit"
+  ],
+  "physicalDispatchDefault": false
+}
