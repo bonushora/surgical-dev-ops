@@ -36,7 +36,7 @@ const PROGRESS = Object.freeze({
   rejected: 3,
 });
 const OPTION_FIELDS = new Set([
-  'storageRoot', 'filesystem', 'durabilityAdapter', 'maxRegistryBytes',
+  'storageRoot', 'filesystem', 'durabilityAdapter', 'maxRegistryBytes', 'monotonicNow',
 ]);
 const ENVELOPE_FIELDS = new Set([
   'schema', 'schemaVersion', 'protocolVersion', 'generation', 'entries',
@@ -273,6 +273,33 @@ function createDurableControlPlaneSubmissionRegistry(options) {
   }
   const storageRoot = validateStorageRoot(options.storageRoot, filesystem);
   const registryPath = path.join(storageRoot, REGISTRY_FILENAME);
+  const monotonicNow = options.monotonicNow || process.hrtime.bigint;
+  if (typeof monotonicNow !== 'function') {
+    throw new TypeError('Durable registry monotonic clock is invalid');
+  }
+  const latency = {
+    claimCount: 0,
+    durableWriteCount: 0,
+    claimNanoseconds: 0n,
+  };
+
+  function readMonotonicTime() {
+    const value = monotonicNow();
+    if (typeof value !== 'bigint') {
+      throw registryError('internal_failure', 'REGISTRY_MONOTONIC_CLOCK_FAILURE');
+    }
+    return value;
+  }
+
+  function recordClaimLatency(startedAt, durableWrite) {
+    const finishedAt = readMonotonicTime();
+    if (finishedAt < startedAt) {
+      throw registryError('internal_failure', 'REGISTRY_MONOTONIC_CLOCK_FAILURE');
+    }
+    latency.claimCount += 1;
+    if (durableWrite) latency.durableWriteCount += 1;
+    latency.claimNanoseconds += finishedAt - startedAt;
+  }
 
   function readCommitted() {
     let descriptor;
@@ -434,6 +461,7 @@ function createDurableControlPlaneSubmissionRegistry(options) {
   }
 
   function claim(input) {
+    const startedAt = readMonotonicTime();
     exactFields(input, ['request', 'externalExecutionId', 'observedAt']);
     assertCredentialFree(input);
     const request = validateRequest('submit', input.request);
@@ -445,6 +473,7 @@ function createDurableControlPlaneSubmissionRegistry(options) {
     const existingKey = byIdempotency.get(request.idempotencyKey);
     if (existingKey) {
       if (same(requestFromRecord(existingKey), request)) {
+        recordClaimLatency(startedAt, false);
         return deepFreezeCopy({ created: false, entry: entryFromRecord(existingKey) });
       }
       throw registryError('protocol_failure', 'IDEMPOTENCY_CONFLICT');
@@ -472,6 +501,7 @@ function createDurableControlPlaneSubmissionRegistry(options) {
       input.observedAt,
     ));
     persist([...committed.entries, record]);
+    recordClaimLatency(startedAt, true);
     return deepFreezeCopy({ created: true, entry: entryFromRecord(record) });
   }
 
@@ -543,6 +573,14 @@ function createDurableControlPlaneSubmissionRegistry(options) {
     }
   }
 
+  function inspectLatency() {
+    return deepFreezeCopy({
+      claimCount: latency.claimCount,
+      durableWriteCount: latency.durableWriteCount,
+      claimNanoseconds: latency.claimNanoseconds.toString(),
+    });
+  }
+
   return Object.freeze({
     protocolVersion: PROTOCOL_VERSION,
     schemaVersion: REGISTRY_SCHEMA_VERSION,
@@ -550,6 +588,7 @@ function createDurableControlPlaneSubmissionRegistry(options) {
     get,
     observe,
     inspect,
+    inspectLatency,
     cleanupTemporaryArtifacts,
   });
 }

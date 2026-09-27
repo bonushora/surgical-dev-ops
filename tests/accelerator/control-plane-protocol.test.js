@@ -115,6 +115,26 @@ test('submission registry establishes ownership before acceptance and identical 
   assert.equal(current.registry.inspect().length, 1);
 });
 
+test('reconcile recovers an ambiguous first submission by durable bindings without external identity', async () => {
+  const current = service();
+  const accepted = await current.service.submit(fixture.canonicalSubmit);
+  const recovered = await current.service.reconcile({
+    protocolVersion: fixture.protocolVersion,
+    requestId: 'request-reconcile-ambiguous-submit',
+    operationId: fixture.canonicalSubmit.operationId,
+    idempotencyKey: fixture.canonicalSubmit.idempotencyKey,
+    intentFingerprint: fixture.canonicalSubmit.intentFingerprint,
+    principal: fixture.canonicalSubmit.principal,
+    authority: fixture.canonicalSubmit.authority,
+    workspace: fixture.canonicalSubmit.workspace,
+    repository: fixture.canonicalSubmit.repository,
+    afterObservationSequence: accepted.observationSequence,
+  });
+  assert.equal(recovered.classification, 'unknown');
+  assert.equal(recovered.externalExecutionId, accepted.externalExecutionId);
+  assert.equal(current.registry.inspect().length, 1);
+});
+
 test('registry failure is not acceptance and remains sanitized', async () => {
   const registry = Object.freeze({
     claim() { throw new Error('database password leaked'); },

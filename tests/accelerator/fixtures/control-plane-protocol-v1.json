@@ -1,6 +1,6 @@
 {
   "protocolVersion": "sacp.sdo-local/v1",
-  "schemaDigest": "6bdbd49023e0c76f8dff28fbb22bd905bba35823347cc5e4453d14570de401d4",
+  "schemaDigest": "cd4e3fa7d7086f78291ef35b87e1b450be15bc77cb6ae8527e299101e5a11935",
   "negotiation": {
     "compatible": {
       "protocolVersion": "sacp.sdo-local/v1",

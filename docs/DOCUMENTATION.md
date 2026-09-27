@@ -54,6 +54,7 @@ Start with:
 - [ADR-038 — NATURAL Supervised Autonomous Engineering](./adr/ADR-038-natural-supervised-autonomous-engineering.md)
 - [ADR-039 — Private Web Administration Dashboard Supersession](./adr/ADR-039-private-web-administration-dashboard-supersession.md)
 - [ADR-040 — Versioned Local Control Plane Protocol](./adr/ADR-040-versioned-local-control-plane-protocol.md)
+- [ADR-041 — Low-Latency Persistent Local IPC Transport](./adr/ADR-041-low-latency-local-ipc-transport.md)
 
 ## Manual acceptance
 

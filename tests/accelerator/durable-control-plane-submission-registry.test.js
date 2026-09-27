@@ -107,6 +107,27 @@ test('identical replay converges and conflicting idempotency fails before restar
   );
 });
 
+test('durable claim latency is monotonic structural evidence and is never persisted', (t) => {
+  const root = registryRoot(t);
+  const ticks = [100n, 125n, 200n, 205n];
+  const {
+    createDurableControlPlaneSubmissionRegistry,
+  } = require('../../accelerator/adapters/durable-control-plane-submission-registry');
+  const registry = createDurableControlPlaneSubmissionRegistry({
+    storageRoot: root,
+    monotonicNow: () => ticks.shift(),
+  });
+  claim(registry);
+  claim(registry, copy(fixture.canonicalSubmit));
+
+  assert.deepEqual(registry.inspectLatency(), {
+    claimCount: 2,
+    durableWriteCount: 1,
+    claimNanoseconds: '30',
+  });
+  assert.doesNotMatch(fs.readFileSync(registryFile(root), 'utf8'), /Nanoseconds|latency/i);
+});
+
 test('corrupted durable registry fails closed', (t) => {
   const root = registryRoot(t);
   claim(durableRegistry(root));

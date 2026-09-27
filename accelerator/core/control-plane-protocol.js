@@ -31,7 +31,7 @@ const REQUEST_FIELDS = Object.freeze({
   reconcile: Object.freeze([
     'protocolVersion', 'requestId', 'operationId', 'idempotencyKey',
     'intentFingerprint', 'principal', 'authority', 'workspace', 'repository',
-    'externalExecutionId', 'afterObservationSequence',
+    'afterObservationSequence',
   ]),
   cancel: Object.freeze([
     'protocolVersion', 'requestId', 'operationId', 'idempotencyKey',
@@ -51,6 +51,9 @@ const SCHEMA_DOCUMENT = Object.freeze({
   resultClassifications: RESULT_CLASSIFICATIONS,
   protocolCapabilities: PROTOCOL_CAPABILITIES,
   requests: REQUEST_FIELDS,
+  optionalRequestFields: Object.freeze({
+    reconcile: Object.freeze(['externalExecutionId']),
+  }),
   submitBindings: Object.freeze([
     'protocolVersion', 'requestId', 'operationId', 'idempotencyKey',
     'intentFingerprint', 'principal', 'authority', 'requestedCapability',
@@ -240,7 +243,11 @@ function validateRequest(operation, input) {
   if (!Object.hasOwn(REQUEST_FIELDS, operation)) {
     throw failure('protocol_failure', 'MALFORMED_PROTOCOL_MESSAGE');
   }
-  exactFields(input, REQUEST_FIELDS[operation]);
+  exactFields(
+    input,
+    REQUEST_FIELDS[operation],
+    operation === 'reconcile' ? ['externalExecutionId'] : [],
+  );
   requireIdentifier(input.requestId);
   if (operation === 'negotiate') {
     assertDenseArray(input.supportedVersions);
@@ -257,7 +264,9 @@ function validateRequest(operation, input) {
       requireIdentifier(input.approvalReference);
       requireTimestamp(input.submittedAt);
     } else {
-      requireIdentifier(input.externalExecutionId);
+      if (operation !== 'reconcile' || Object.hasOwn(input, 'externalExecutionId')) {
+        requireIdentifier(input.externalExecutionId);
+      }
       requireSequence(input.afterObservationSequence);
     }
   }
