@@ -22,6 +22,8 @@ const { requireDurabilityReceipt } = require('../core/mutation-durability');
 
 const SCHEMA = 'sdo.control_plane_physical_submission_registry.v1';
 const FILENAME = 'control-plane-physical-submission-registry.json';
+const WRITER_LOCK_FILENAME = 'control-plane-physical-submission-registry.writer-lock';
+const WRITER_LOCK_SCHEMA = 'sdo.control_plane_physical_registry_writer.v1';
 const ENVELOPE_FIELDS = ['schema', 'protocolVersion', 'generation', 'entries', 'integrityAlgorithm', 'integrityDigest'];
 const ENTRY_FIELDS = [
   'request', 'operationId', 'idempotencyKey', 'intentFingerprint', 'principal',
@@ -156,6 +158,106 @@ function createDurableControlPlanePhysicalSubmissionRegistry(options = {}) {
     throw registryError('internal_failure', 'REGISTRY_STORAGE_FAILURE');
   }
   const registryPath = path.join(storageRoot, FILENAME);
+  const writerLockPath = path.join(storageRoot, WRITER_LOCK_FILENAME);
+  const metrics = {
+    durableWrites: 0,
+    zeroWriteReplays: 0,
+    fileFlushes: 0,
+    directorySyncs: 0,
+    writerLockAcquisitions: 0,
+    writerLockContentions: 0,
+    writerLockReleases: 0,
+  };
+
+  function writerMetadata() {
+    return deepFreezeCopy({
+      schema: WRITER_LOCK_SCHEMA,
+      protocolVersion: PROTOCOL_VERSION,
+      ownerToken: crypto.randomBytes(32).toString('hex'),
+      ownerProcess: `${process.pid}:${crypto.randomUUID()}`,
+    });
+  }
+
+  function validateWriterLock(value, expected = null) {
+    const fields = ['schema', 'protocolVersion', 'ownerToken', 'ownerProcess'];
+    if (!exact(value, fields) || value.schema !== WRITER_LOCK_SCHEMA
+      || value.protocolVersion !== PROTOCOL_VERSION
+      || !/^[a-f0-9]{64}$/.test(value.ownerToken || '')
+      || typeof value.ownerProcess !== 'string' || value.ownerProcess.length < 8
+      || (expected && canonicalSerialize(value) !== canonicalSerialize(expected))) {
+      throw registryError('internal_failure', 'REGISTRY_WRITER_LOCK_CORRUPT');
+    }
+    return deepFreezeCopy(value);
+  }
+
+  function readWriterLock() {
+    let metadata;
+    let raw;
+    try {
+      metadata = filesystem.lstatSync(writerLockPath);
+      if (!metadata.isFile() || metadata.isSymbolicLink() || metadata.size < 2 || metadata.size > 4096) {
+        throw registryError('internal_failure', 'REGISTRY_WRITER_LOCK_CORRUPT');
+      }
+      raw = filesystem.readFileSync(writerLockPath, 'utf8');
+    } catch (caught) {
+      if (caught instanceof ProtocolError) throw caught;
+      throw registryError('internal_failure', 'REGISTRY_WRITER_LOCK_CORRUPT');
+    }
+    try { return validateWriterLock(JSON.parse(raw)); }
+    catch (caught) {
+      if (caught instanceof ProtocolError) throw caught;
+      throw registryError('internal_failure', 'REGISTRY_WRITER_LOCK_CORRUPT');
+    }
+  }
+
+  function acquireWriterLock() {
+    const lock = writerMetadata();
+    let descriptor;
+    try {
+      descriptor = filesystem.openSync(
+        writerLockPath,
+        fs.constants.O_WRONLY | fs.constants.O_CREAT | fs.constants.O_EXCL,
+        0o600,
+      );
+      filesystem.writeFileSync(descriptor, `${canonicalSerialize(lock)}\n`, 'utf8');
+      requireDurabilityReceipt(
+        durability.flushFile(descriptor, `physical-registry-writer:${lock.ownerToken}`),
+        'FLUSH_FILE_DATA',
+      );
+      filesystem.closeSync(descriptor);
+      descriptor = undefined;
+      requireDurabilityReceipt(durability.confirmLock(storageRoot), 'DURABLE_LOCK_BOUNDARY');
+      metrics.writerLockAcquisitions += 1;
+      return lock;
+    } catch (caught) {
+      if (descriptor !== undefined) {
+        try { filesystem.closeSync(descriptor); } catch {}
+      }
+      if (caught && caught.code === 'EEXIST') {
+        metrics.writerLockContentions += 1;
+        readWriterLock();
+        throw registryError('stale_state', 'REGISTRY_WRITE_CONTENDED');
+      }
+      try {
+        const current = readWriterLock();
+        if (current.ownerToken === lock.ownerToken) filesystem.unlinkSync(writerLockPath);
+      } catch {}
+      if (caught instanceof ProtocolError) throw caught;
+      throw registryError('internal_failure', 'REGISTRY_STORAGE_FAILURE');
+    }
+  }
+
+  function releaseWriterLock(lock) {
+    validateWriterLock(readWriterLock(), lock);
+    try {
+      filesystem.unlinkSync(writerLockPath);
+      requireDurabilityReceipt(durability.confirmLock(storageRoot), 'DURABLE_LOCK_BOUNDARY');
+      metrics.writerLockReleases += 1;
+    } catch (caught) {
+      if (caught instanceof ProtocolError) throw caught;
+      throw registryError('internal_failure', 'REGISTRY_WRITER_RELEASE_AMBIGUOUS');
+    }
+  }
 
   function read() {
     let metadata;
@@ -179,37 +281,46 @@ function createDurableControlPlanePhysicalSubmissionRegistry(options = {}) {
 
   let committed = read();
   let poisoned = false;
-  const memory = createInMemoryControlPlanePhysicalSubmissionRegistry();
-  for (const persisted of committed.entries) {
-    const claimed = memory.claim({
-      request: persisted.request,
-      externalExecutionId: persisted.externalExecutionId,
-      observedAt: persisted.observedAt,
-    });
-    let current = claimed.entry;
-    while (current.observationSequence < persisted.observationSequence) {
-      current = memory.observe({
-        request: observationRequest(persisted, current.observationSequence),
-        classification: persisted.currentObservationState,
-        code: persisted.lastCode,
+  function hydrate(envelope) {
+    const hydrated = createInMemoryControlPlanePhysicalSubmissionRegistry();
+    for (const persisted of envelope.entries) {
+      const claimed = hydrated.claim({
+        request: persisted.request,
+        externalExecutionId: persisted.externalExecutionId,
         observedAt: persisted.observedAt,
-        ...(persisted.physicalEvidence ? { physicalEvidence: persisted.physicalEvidence } : {}),
       });
+      let current = claimed.entry;
+      while (current.observationSequence < persisted.observationSequence) {
+        current = hydrated.observe({
+          request: observationRequest(persisted, current.observationSequence),
+          classification: persisted.currentObservationState,
+          code: persisted.lastCode,
+          observedAt: persisted.observedAt,
+          ...(persisted.physicalEvidence ? { physicalEvidence: persisted.physicalEvidence } : {}),
+        });
+      }
     }
+    return hydrated;
   }
-  const metrics = { durableWrites: 0, zeroWriteReplays: 0, fileFlushes: 0, directorySyncs: 0 };
+  let memory = hydrate(committed);
 
   function requireHealthy() {
     if (poisoned) throw registryError('internal_failure', 'REGISTRY_REOPEN_REQUIRED');
   }
 
-  function persist() {
+  function refresh() {
     requireHealthy();
     const current = read();
-    if (current.generation !== committed.generation || current.integrityDigest !== committed.integrityDigest) {
-      poisoned = true;
-      throw registryError('stale_state', 'STALE_REGISTRY_GENERATION');
+    if (current.generation !== committed.generation
+      || current.integrityDigest !== committed.integrityDigest) {
+      committed = current;
+      memory = hydrate(current);
     }
+  }
+
+  function persist() {
+    requireHealthy();
+    const writerLock = acquireWriterLock();
     const envelope = {
       schema: SCHEMA,
       protocolVersion: PROTOCOL_VERSION,
@@ -225,6 +336,10 @@ function createDurableControlPlanePhysicalSubmissionRegistry(options = {}) {
     let descriptor;
     let renamed = false;
     try {
+      const current = read();
+      if (current.generation !== committed.generation || current.integrityDigest !== committed.integrityDigest) {
+        throw registryError('stale_state', 'STALE_REGISTRY_GENERATION');
+      }
       descriptor = filesystem.openSync(temporaryPath, fs.constants.O_WRONLY | fs.constants.O_CREAT | fs.constants.O_EXCL, 0o600);
       filesystem.writeFileSync(descriptor, bytes);
       requireDurabilityReceipt(durability.flushFile(descriptor, `physical-registry:${validated.generation}`), 'FLUSH_FILE_DATA');
@@ -247,11 +362,14 @@ function createDurableControlPlanePhysicalSubmissionRegistry(options = {}) {
       if (!renamed) { try { filesystem.unlinkSync(temporaryPath); } catch {} }
       if (caught instanceof ProtocolError) throw caught;
       throw registryError('internal_failure', 'REGISTRY_STORAGE_FAILURE');
+    } finally {
+      releaseWriterLock(writerLock);
     }
   }
 
   function claim(input) {
     requireHealthy();
+    refresh();
     const value = memory.claim(input);
     if (value.created) persist();
     else metrics.zeroWriteReplays += 1;
@@ -260,6 +378,7 @@ function createDurableControlPlanePhysicalSubmissionRegistry(options = {}) {
 
   function observe(input) {
     requireHealthy();
+    refresh();
     const value = memory.observe(input);
     persist();
     return value;
@@ -267,9 +386,9 @@ function createDurableControlPlanePhysicalSubmissionRegistry(options = {}) {
 
   return Object.freeze({
     claim,
-    get(input) { requireHealthy(); return memory.get(input); },
+    get(input) { requireHealthy(); refresh(); return memory.get(input); },
     observe,
-    inspect() { requireHealthy(); return memory.inspect(); },
+    inspect() { requireHealthy(); refresh(); return memory.inspect(); },
     inspectMetrics: () => deepFreezeCopy(metrics),
   });
 }
@@ -277,5 +396,6 @@ function createDurableControlPlanePhysicalSubmissionRegistry(options = {}) {
 module.exports = Object.freeze({
   REGISTRY_SCHEMA: SCHEMA,
   REGISTRY_FILENAME: FILENAME,
+  REGISTRY_WRITER_LOCK_FILENAME: WRITER_LOCK_FILENAME,
   createDurableControlPlanePhysicalSubmissionRegistry,
 });

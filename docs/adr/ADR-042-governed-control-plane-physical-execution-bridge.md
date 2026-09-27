@@ -1,6 +1,6 @@
 # ADR-042 — Governed Control Plane Physical Execution Bridge
 
-- Status: PROPOSED
+- Status: ACCEPTED / FROZEN
 - Date: 2026-09-27
 - Logical protocol: `sacp.sdo-local/v2`
 - Transport envelope: `sacp.sdo-local-ipc/v1`
@@ -46,4 +46,4 @@ Qualification uses isolated temporary Git repositories only. It must prove exact
 
 This decision does not authorize production enablement, arbitrary production workspace mutation, human approval UI integration, safe interruption of an active non-interruptible mutation, stronger OS peer authentication, simultaneous split-brain writers, merge/release/deploy authority or Surgical Kernel integration.
 
-ADR-042 remains **PROPOSED**.
+ADR-042 is **ACCEPTED / FROZEN**.

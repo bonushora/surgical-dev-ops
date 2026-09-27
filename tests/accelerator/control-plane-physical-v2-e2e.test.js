@@ -74,6 +74,9 @@ test('real governed v2 fixture mutation is durable replay-safe and restart-safe'
     zeroWriteReplays: 1,
     fileFlushes: 2,
     directorySyncs: 2,
+    writerLockAcquisitions: 2,
+    writerLockContentions: 0,
+    writerLockReleases: 2,
   });
 
   const reopenedRegistry = createDurableControlPlanePhysicalSubmissionRegistry({
