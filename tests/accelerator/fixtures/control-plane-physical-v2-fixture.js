@@ -250,9 +250,14 @@ function createPhysicalV2Fixture() {
   let lastPhysicalEvidence = null;
   let lastManagedProjection = null;
 
-  function createExecutor() {
+  function resolveAuthorizedExecution() {
+    return freeze({ binding, mission, naturalDevelopment });
+  }
+
+  function createExecutor(options = {}) {
     return createGovernedPhysicalExecutor({
-      resolveAuthorizedExecution: async () => freeze({ binding, mission, naturalDevelopment }),
+      resolveAuthorizedExecution: options.resolveAuthorizedExecution
+        || (async () => resolveAuthorizedExecution()),
       reconcilePhysicalEvidence: async () => lastPhysicalEvidence
         ? freeze({ classification: 'succeeded', code: 'PHYSICAL_MUTATION_RECOVERED', physicalEvidence: lastPhysicalEvidence })
         : freeze({ classification: 'unknown', code: 'PHYSICAL_EVIDENCE_UNKNOWN' }),
@@ -283,6 +288,7 @@ function createPhysicalV2Fixture() {
     physicalExecution,
     artifacts,
     createExecutor,
+    resolveAuthorizedExecution,
     readRecoveredEvidence: () => lastPhysicalEvidence,
     readManagedProjection: () => lastManagedProjection,
     cleanup: () => fs.rmSync(root, { recursive: true, force: true }),

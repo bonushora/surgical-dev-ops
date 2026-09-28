@@ -10,12 +10,32 @@ Classification is deterministic. A checked item must cite evidence at the exact 
 - [x] Local split-brain campaign proves at most one same-domain physical effect and fail-closed ownership substitution.
 - [ ] Crash/recovery campaign covers every published fault boundary without an unresolved automatic-recovery gap.
 - [x] Production physical mode is disabled by default.
-- [ ] Explicit production enablement distinguishes implementation, v2 availability, configured mode, and current human authority without changing a frozen protocol silently.
+- [x] Explicit production enablement distinguishes implementation availability,
+  configured deployment eligibility, operation eligibility, current Surgical
+  authority, and exact-operation readiness without changing frozen v1/v2.
+- [x] Configuration, environment, discovery, workspace opening, and Control
+  Plane approval cannot grant physical authority.
+- [x] Orphan registry-writer recovery is evidence-driven, one-shot-authorized,
+  exclusively claimed, exact-CAS protected, and durably published without
+  timeout/PID takeover.
 - [x] Operator guarantees and non-guarantees are documented.
 - [x] Package dry-run completes without publishing.
 - [ ] Credential and generated-artifact scans are clean at final SHA.
 - [ ] Both final worktrees are clean and exact remote SHAs match.
 
-Current deterministic classification: **NOT COMMERCIAL-BETA READY**.
+Hard blockers for opening productization are exact Surgical-owned physical
+authority, explicit safe production configuration, exact operation authority,
+deterministic authorized writer recovery, zero-effect replay, cross-platform
+protocol qualification, and absence of an unauthorized physical-effect path.
 
-Blocking items include final native qualification and the unqualified production-enablement/orphan-registry-lock recovery boundaries. This is not a GA or production-ready claim.
+Allowed Commercial Beta limitations are active in-flight atomic cancellation,
+universal power-loss immunity beyond qualified platform primitives, stronger
+future host/process authentication, and the absence of push/merge/release/deploy
+authority.
+
+Current deterministic classification remains **NOT COMMERCIAL-BETA READY**
+until the unchecked exact-final-SHA local/native/publication evidence above is
+physically GREEN.
+
+The remaining unchecked items are evidence gates, not permission for customer
+productization. This is not a GA or production-ready claim.

@@ -4,6 +4,7 @@ on:
   push:
     branches:
       - main
+      - feature/control-plane-commercial-beta-gate-v1
     tags:
       - 'v*'
   pull_request:

@@ -216,6 +216,7 @@ and [ADR-018](./docs/adr/ADR-018-immutable-protocol-raw-and-international-docume
 - [NATURAL Governed Agentic Experience — ADR-036](./docs/adr/ADR-036-natural-agentic-governed-experience.md)
 - [Integrated Governed Agent Gateway — ADR-037](./docs/adr/ADR-037-integrated-governed-agent-gateway-and-conversational-control-surface.md)
 - [Governed Control Plane Physical Execution — ADR-042](./docs/adr/ADR-042-governed-control-plane-physical-execution-bridge.md)
+- [Commercial Beta Production Gate and Writer Recovery — ADR-043](./docs/adr/ADR-043-commercial-beta-production-enablement-and-writer-recovery.md)
 - [Physical Execution Operator Contract](./docs/operations/control-plane-production-readiness-v2.md)
 - [Commercial Beta Engineering Checklist](./docs/operations/commercial-beta-checklist.md)
 

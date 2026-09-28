@@ -23,7 +23,8 @@ const { requireDurabilityReceipt } = require('../core/mutation-durability');
 const SCHEMA = 'sdo.control_plane_physical_submission_registry.v1';
 const FILENAME = 'control-plane-physical-submission-registry.json';
 const WRITER_LOCK_FILENAME = 'control-plane-physical-submission-registry.writer-lock';
-const WRITER_LOCK_SCHEMA = 'sdo.control_plane_physical_registry_writer.v1';
+const WRITER_LOCK_SCHEMA = 'sdo.control_plane_physical_registry_writer.v2';
+const LEGACY_WRITER_LOCK_SCHEMA = 'sdo.control_plane_physical_registry_writer.v1';
 const ENVELOPE_FIELDS = ['schema', 'protocolVersion', 'generation', 'entries', 'integrityAlgorithm', 'integrityDigest'];
 const ENTRY_FIELDS = [
   'request', 'operationId', 'idempotencyKey', 'intentFingerprint', 'principal',
@@ -169,18 +170,41 @@ function createDurableControlPlanePhysicalSubmissionRegistry(options = {}) {
     writerLockReleases: 0,
   };
 
-  function writerMetadata() {
+  function writerMetadata(context, intended) {
     return deepFreezeCopy({
       schema: WRITER_LOCK_SCHEMA,
       protocolVersion: PROTOCOL_VERSION,
       ownerToken: crypto.randomBytes(32).toString('hex'),
       ownerProcess: `${process.pid}:${crypto.randomUUID()}`,
+      operationId: context.request.operationId,
+      externalExecutionId: context.externalExecutionId,
+      workspace: context.request.workspace,
+      repository: context.request.repository,
+      physicalExecution: context.request.physicalExecution,
+      observedGeneration: committed.generation,
+      observedIntegrityDigest: committed.integrityDigest,
+      intendedGeneration: intended.generation,
+      mutationKind: context.mutationKind,
     });
   }
 
   function validateWriterLock(value, expected = null) {
-    const fields = ['schema', 'protocolVersion', 'ownerToken', 'ownerProcess'];
-    if (!exact(value, fields) || value.schema !== WRITER_LOCK_SCHEMA
+    const legacyFields = ['schema', 'protocolVersion', 'ownerToken', 'ownerProcess'];
+    const fields = [
+      ...legacyFields, 'operationId', 'externalExecutionId', 'workspace', 'repository',
+      'physicalExecution', 'observedGeneration', 'observedIntegrityDigest',
+      'intendedGeneration', 'mutationKind',
+    ];
+    const legacy = exact(value, legacyFields) && value.schema === LEGACY_WRITER_LOCK_SCHEMA;
+    const current = exact(value, fields) && value.schema === WRITER_LOCK_SCHEMA
+      && typeof value.operationId === 'string' && value.operationId.length >= 8
+      && typeof value.externalExecutionId === 'string' && value.externalExecutionId.length >= 8
+      && value.workspace && value.repository && value.physicalExecution
+      && Number.isSafeInteger(value.observedGeneration) && value.observedGeneration >= 0
+      && (value.observedIntegrityDigest === null || /^[a-f0-9]{64}$/.test(value.observedIntegrityDigest))
+      && value.intendedGeneration === value.observedGeneration + 1
+      && ['CLAIM', 'OBSERVE'].includes(value.mutationKind);
+    if ((!legacy && !current)
       || value.protocolVersion !== PROTOCOL_VERSION
       || !/^[a-f0-9]{64}$/.test(value.ownerToken || '')
       || typeof value.ownerProcess !== 'string' || value.ownerProcess.length < 8
@@ -210,8 +234,8 @@ function createDurableControlPlanePhysicalSubmissionRegistry(options = {}) {
     }
   }
 
-  function acquireWriterLock() {
-    const lock = writerMetadata();
+  function acquireWriterLock(context, intended) {
+    const lock = writerMetadata(context, intended);
     let descriptor;
     try {
       descriptor = filesystem.openSync(
@@ -318,9 +342,8 @@ function createDurableControlPlanePhysicalSubmissionRegistry(options = {}) {
     }
   }
 
-  function persist() {
+  function persist(context) {
     requireHealthy();
-    const writerLock = acquireWriterLock();
     const envelope = {
       schema: SCHEMA,
       protocolVersion: PROTOCOL_VERSION,
@@ -330,6 +353,7 @@ function createDurableControlPlanePhysicalSubmissionRegistry(options = {}) {
     };
     envelope.integrityDigest = digest(envelope);
     const validated = validateEnvelope(envelope);
+    const writerLock = acquireWriterLock(context, validated);
     const bytes = Buffer.from(`${canonicalSerialize(validated)}\n`, 'utf8');
     if (bytes.length > maxBytes) throw registryError('internal_failure', 'REGISTRY_STORAGE_FAILURE');
     const temporaryPath = path.join(storageRoot, `.physical-registry.${validated.generation}.${process.pid}.${crypto.randomUUID()}.tmp`);
@@ -371,7 +395,11 @@ function createDurableControlPlanePhysicalSubmissionRegistry(options = {}) {
     requireHealthy();
     refresh();
     const value = memory.claim(input);
-    if (value.created) persist();
+    if (value.created) persist({
+      request: input.request,
+      externalExecutionId: input.externalExecutionId,
+      mutationKind: 'CLAIM',
+    });
     else metrics.zeroWriteReplays += 1;
     return value;
   }
@@ -380,7 +408,11 @@ function createDurableControlPlanePhysicalSubmissionRegistry(options = {}) {
     requireHealthy();
     refresh();
     const value = memory.observe(input);
-    persist();
+    persist({
+      request: input.request,
+      externalExecutionId: input.request.externalExecutionId,
+      mutationKind: 'OBSERVE',
+    });
     return value;
   }
 

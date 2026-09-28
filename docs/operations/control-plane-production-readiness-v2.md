@@ -1,6 +1,6 @@
 # Governed Control Plane physical execution: operator contract
 
-Status: **engineering qualification in progress; production dispatch remains disabled**.
+Status: **production enablement is implemented fail-closed; exact-SHA native qualification is required before opening productization**.
 
 This document describes only behavior supported by physical evidence. It does not authorize a production workspace, release, deployment, publication, generic filesystem mutation, shell execution, push, merge, or tag.
 
@@ -15,13 +15,23 @@ The supported logical protocols are:
 
 The transport is the persistent local `sacp.sdo-local-ipc/v1` session. It uses a Unix-domain socket on Linux/macOS and a named pipe on Windows. There is no HTTP or TCP fallback. A cold connection performs one negotiation and one capability discovery. A hot operation performs one request frame and one response frame, with no per-operation negotiation or discovery.
 
-There is currently no production startup composition that injects the physical executor. Ordinary product startup therefore remains closed. Test and native qualification compositions use isolated temporary Git repositories only.
+The production composition is explicit and internal to Surgical DevOps. It
+requires a canonical allowlisted workspace plus an operation-time inspection;
+opening a workspace does not grant authority. Test and native qualification
+compositions continue to use isolated temporary Git repositories only.
 
 ## Authority and enablement
 
 Configuration, an environment variable, endpoint availability, code availability, a Control Plane approval reference, and a Control Plane checkpoint are not Surgical authority. The only accepted physical path resolves an existing local Surgical human authorization and binds it to the exact operation, canonical workspace, repository HEAD, clean worktree fingerprint, target, before hash, replacement hash, and CAS.
 
-Production-capable enablement is not qualified. The frozen v2 capability request has no operation/authority binding, so it cannot truthfully report “current human authority valid” during discovery. Adding that distinction to the wire contract would change the frozen v2 schema digest and requires a separate architectural decision. Until that decision exists, production dispatch must remain disabled.
+The frozen v2 capability response means only that the implementation supports
+the physical capability. It never asserts current authority. Submission-time
+evaluation separately exposes `IMPLEMENTATION_AVAILABLE`,
+`PRODUCTION_CONFIGURED`, `OPERATION_INELIGIBLE`, `AUTHORITY_REQUIRED`,
+`AUTHORITY_VALID`, and `READY_FOR_EXACT_PHYSICAL_OPERATION`; only the last may
+reach the governed executor. No v3 is needed because v2 submit already carries
+the complete operation binding. Environment-only and configuration-only
+attempts stop before dispatch.
 
 ## State directories
 
@@ -44,7 +54,12 @@ Two layers protect different ownership domains:
 
 The exact target is the narrow authority scope of `mutation.applyConditional`; independent targets are not silently treated as one authority. A stale owner cannot delete a replacement owner record. No fencing generation is claimed: a newer mutation owner cannot lawfully acquire the same target while the prior lock exists, and takeover based only on time, PID, or process existence is forbidden.
 
-An orphan Control Plane registry-writer record is inspectable fail-closed evidence, but automated recovery of that record is not implemented. Removing it is a destructive recovery action and requires separately authorized operator evidence. This is a current Commercial Beta blocker.
+An orphan Control Plane registry-writer record is recovered only through the
+ADR-043 protocol: exact owner/generation inspection, correlated Surgical
+journal/recovery evidence, an exclusive recovery claim, one-shot local human
+recovery authority, a final exact CAS, durable removal, and durable result
+publication. Legacy unbound owner records remain `INDETERMINATE`; there is no
+timeout/PID takeover or blind unlink.
 
 ## Crash and recovery truth table
 
@@ -103,10 +118,11 @@ Close clients before listeners. Listener shutdown destroys accepted sockets and 
 
 ## Current limitations
 
-- No production physical startup composition or production workspace allowlist is qualified.
-- Capability discovery cannot express operation-bound current human authority without a new protocol decision.
-- Orphan registry-writer recovery is manual and destructive; no automated takeover is authorized.
-- No fencing generation is claimed because same-domain takeover is forbidden while ownership evidence exists.
+- Production configuration is deployment eligibility only; every operation
+  still requires current exact Surgical authority and CAS.
+- Capability discovery is static and never claims current operation authority.
+- Orphan recovery requires explicit one-shot local human authority and exact
+  physical evidence; ambiguous or legacy ownership remains fail-closed.
 - Active physical cancellation is unsupported.
 - Stronger local peer-process authentication is not qualified.
 - Universal power-loss immunity is not claimed.
