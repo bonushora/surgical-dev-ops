@@ -5,6 +5,7 @@ on:
     branches:
       - main
       - feature/control-plane-commercial-beta-gate-v1
+      - feature/customer-operable-runtime-v1
     tags:
       - 'v*'
   pull_request:
@@ -158,6 +159,50 @@ jobs:
           canonical_test_exit_code=$?
           echo "exit_code=$canonical_test_exit_code" >> "$GITHUB_OUTPUT"
           exit "$canonical_test_exit_code"
+
+      - name: Inspect customer package contents
+        if: steps.conformance.outcome == 'success'
+        shell: bash
+        run: npm pack --dry-run --json > customer-pack-dry-run.json
+
+      - name: Build customer artifact and supply-chain inventory
+        if: steps.conformance.outcome == 'success'
+        shell: bash
+        run: |
+          npm pack --json > customer-pack.json
+          node accelerator/ci/customer-supply-chain.js > customer-supply-chain.json
+          node -e "const fs=require('fs');const path=require('path');const p=JSON.parse(fs.readFileSync('customer-pack.json','utf8'))[0].filename;fs.renameSync(p,'surgical-customer-runtime.tgz');console.log(path.resolve('surgical-customer-runtime.tgz'));"
+          node accelerator/ci/customer-artifact-manifest.js "$(node -e "console.log(require('path').resolve('surgical-customer-runtime.tgz'))")" > customer-artifact-manifest.json
+
+      - name: Exercise installed customer artifact
+        if: steps.conformance.outcome == 'success'
+        shell: bash
+        run: |
+          install_root="$(node -e "console.log(require('fs').mkdtempSync(require('path').join(require('os').tmpdir(),'surgical-artifact-install-')))")"
+          npm install --ignore-scripts --omit=optional --no-audit --no-fund --offline --package-lock=false --prefix "$install_root" ./surgical-customer-runtime.tgz
+          if [ "$RUNNER_OS" = "Windows" ]; then
+            installed_cli="$install_root/node_modules/surgical-dev-ops/accelerator/cli/surgical.js"
+          else
+            installed_cli="$install_root/node_modules/surgical-dev-ops/accelerator/cli/surgical.js"
+          fi
+          SURGICAL_INSTALLED_CLI="$installed_cli" \
+          SURGICAL_INSTALLED_PACKAGE_ROOT="$install_root/node_modules/surgical-dev-ops" \
+          node accelerator/ci/customer-product-acceptance.js > customer-product-acceptance.json
+          node -e "require('fs').rmSync(process.argv[1],{recursive:true,force:true})" "$install_root"
+
+      - name: Retain customer product evidence
+        if: always() && steps.conformance.outcome == 'success'
+        uses: actions/upload-artifact@v4
+        with:
+          name: customer-product-${{ matrix.os }}-${{ github.run_id }}-${{ github.sha }}
+          path: |
+            surgical-customer-runtime.tgz
+            customer-artifact-manifest.json
+            customer-pack-dry-run.json
+            customer-supply-chain.json
+            customer-product-acceptance.json
+          if-no-files-found: error
+          retention-days: 30
 
       - name: Observe targeted P.3 native contract
         if: always()

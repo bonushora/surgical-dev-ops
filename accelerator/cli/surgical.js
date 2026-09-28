@@ -708,6 +708,9 @@ function printHelp() {
 
 Usage:
   surgical [options]
+  surgical init|start|stop|restart|status|doctor|open
+  surgical configure provider|evidence|recovery|version|demo
+  surgical backup|restore|upgrade|uninstall
 
 Options:
   --help                 Show this help / Mostrar esta ajuda
@@ -4741,6 +4744,20 @@ async function main(
   argv = process.argv.slice(2),
   options = {}
 ) {
+  if (
+    argv.length > 0 &&
+    require('../product/customer-cli').COMMANDS.has(argv[0])
+  ) {
+    await require('../product/customer-cli').runCustomerCommand(
+      argv,
+      {
+        stdout: options.output || process.stdout,
+        stdin: options.input || process.stdin
+      }
+    );
+    return;
+  }
+
   if (argv.includes('--version')) {
     printVersion();
     return;

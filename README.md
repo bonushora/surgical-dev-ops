@@ -19,13 +19,13 @@ operational system around the model explicit, bounded, auditable, and fail-close
 
 | Evidence | Value |
 | --- | --- |
-| Release line | Surgical DevOps v2.6.0-rc.6 |
-| Latest physically verified baseline commit | `24f0f1946eb795b3464b2846953e191755b9c8c3` |
+| Release line | Surgical AI Control Plane product v0.1.0-beta.1 on Surgical DevOps v2.6.0-rc.6 |
+| Qualified architectural parent | `ecc87210f0ab3aee93064bba917d859e7028e706` |
+| Historical release-candidate baseline | `24f0f1946eb795b3464b2846953e191755b9c8c3`; preserved for the rc.6 evidence chain |
 | Historical exact-ref qualification | Accelerator Conformance `34860826996`; Ubuntu, macOS, and Windows: **PASS** |
 | Historical main-push qualification | Accelerator Conformance `34862373028`; same SHA and native matrix: **PASS** |
-| Historical artifact limitation | Zero retained artifacts; canonical totals were not retained machine-readably |
-| Current review binding policy | `RUNTIME_EXACT_SHA_EVIDENCE`; the final SHA/run/artifact tuple is produced externally by CI |
-| External engineering review | **NOT COMPLETED**; release is not authorized |
+| Review binding policy | `RUNTIME_EXACT_SHA_EVIDENCE`; CI produces the exact SHA/run/artifact tuple |
+| Product qualification | Exact feature-branch SHA, native runs, and artifact hashes are recorded by CI; no public release is authorized |
 | Active normative protocols | BH-SEP v2.3 + BH-SDP v2.3 |
 
 The complete trail, including runs that failed before the green baseline, is in
@@ -115,12 +115,18 @@ operation.
 
 Declared runtime: Node.js `>=24.18.0`.
 
+Install the supplied beta artifact; no development source checkout is required:
+
 ```bash
-npm install -g surgical-dev-ops
-surgical-devops --version
-surgical-devops --help
-surgical-devops
+npm install -g ./surgical-dev-ops-2.6.0-rc.6.tgz
+surgical init --profile developer
+surgical doctor
+surgical start
+surgical demo
 ```
+
+See the [customer documentation](./docs/customer/README.md) for repository
+onboarding, authority, evidence, recovery, upgrade, and removal.
 
 To run the governed Codex SDK integration with the same command on Linux,
 macOS, and Windows:
@@ -172,7 +178,8 @@ npm test
 ## Normative protocols and immutable RAW artifacts
 
 Protocol versions are independent from the Surgical DevOps software release;
-`v2.6.0-rc.6` identifies the software, while BH-SEP and BH-SDP v2.3 govern the
+`v2.6.0-rc.6` identifies the Surgical runtime, while product v0.1.0-beta.1
+identifies the customer surface and BH-SEP and BH-SDP v2.3 govern the
 current runtime.
 
 ### v2.2 — historical and preserved

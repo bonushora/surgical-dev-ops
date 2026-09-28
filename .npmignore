@@ -1,0 +1,8 @@
+accelerator/ci/
+accelerator/evaluation/
+tests/
+.github/
+.agents/
+qualification-evidence.json
+native-test.log
+*.log

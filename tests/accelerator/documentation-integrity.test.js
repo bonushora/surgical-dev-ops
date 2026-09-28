@@ -269,7 +269,9 @@ test('npm package preserves both public languages and no reconstruction artifact
   assert.equal(packageDefinition.files.includes('README_EN.md'), false);
   assert.ok(packageDefinition.files.includes('README_PT-BR.md'));
   assert.ok(packageDefinition.files.includes('SECURITY.md'));
-  assert.ok(packageDefinition.files.includes('docs/'));
-  assert.ok(packageDefinition.files.includes('examples/'));
+  assert.ok(packageDefinition.files.includes('docs/customer/'));
+  assert.equal(packageDefinition.files.includes('docs/'), false);
+  assert.equal(packageDefinition.files.includes('examples/'), false);
+  assert.ok(packageDefinition.files.includes('accelerator/product/'));
   assert.equal(fs.existsSync(path.join(ROOT, '[Reconstrução')), false);
 });

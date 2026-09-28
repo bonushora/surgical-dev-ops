@@ -5,7 +5,8 @@
     "start:codex": "node accelerator/cli/surgical.js --interaction NATURAL --codex",
     "evaluate:natural:contract": "node examples/natural-conversational-evaluation-demo.js",
     "evaluate:natural:stream-contract": "node examples/natural-presentation-stream-demo.js",
-    "evaluate:natural:evidence-index": "node examples/natural-project-evidence-index-demo.js"
+    "evaluate:natural:evidence-index": "node examples/natural-project-evidence-index-demo.js",
+    "test:customer-product": "node --test --test-concurrency=1 tests/accelerator/customer-product-*.test.js"
   },
   "bin": {
     "surgical": "accelerator/cli/surgical.js",
@@ -22,9 +23,17 @@
     "url": "git+https://github.com/bonushora/surgical-dev-ops.git"
   },
   "files": [
-    "accelerator/",
-    "docs/",
-    "examples/",
+    "accelerator/adapters/",
+    "accelerator/cli/",
+    "accelerator/core/",
+    "accelerator/native/",
+    "accelerator/product/",
+    "accelerator/reconstruction/",
+    "accelerator/telemetry/",
+    "docs/customer/",
+    "docs/adr/ADR-042-governed-control-plane-physical-execution-bridge.md",
+    "docs/adr/ADR-043-commercial-beta-production-enablement-and-writer-recovery.md",
+    "docs/adr/ADR-044-customer-product-runtime-and-distribution-boundary.md",
     "protocols/",
     "README.md",
     "README_PT-BR.md",

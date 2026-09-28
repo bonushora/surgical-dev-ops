@@ -48,11 +48,20 @@ test(
       )
     );
 
+    for (const required of [
+      'accelerator/cli/',
+      'accelerator/core/',
+      'accelerator/telemetry/'
+    ]) {
+      assert.equal(
+        pkg.files.includes(required),
+        true
+      );
+    }
+
     assert.equal(
-      pkg.files.includes(
-        'accelerator/'
-      ),
-      true
+      pkg.files.includes('accelerator/ci/'),
+      false
     );
   }
 );

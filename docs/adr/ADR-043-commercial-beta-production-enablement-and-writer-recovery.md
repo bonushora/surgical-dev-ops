@@ -1,6 +1,6 @@
 # ADR-043 — Commercial Beta production enablement and registry-writer recovery
 
-- Status: ACCEPTED
+- Status: ACCEPTED / FROZEN
 - Date: 2026-09-28
 - Logical protocols: `sacp.sdo-local/v1` and `sacp.sdo-local/v2` unchanged
 - Related: ADR-006, ADR-007, ADR-009, ADR-010, ADR-040, ADR-041, ADR-042
