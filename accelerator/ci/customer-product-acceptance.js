@@ -30,7 +30,7 @@ async function main() {
   if (!fs.existsSync(path.join(packageRoot, 'package.json')) || !fs.existsSync(CLI)) {
     throw new Error('Acceptance must execute from an installed package');
   }
-  const root = fs.realpathSync(fs.mkdtempSync(path.join(os.tmpdir(), 'surgical-installed-acceptance-')));
+  const root = fs.realpathSync(fs.mkdtempSync(path.join(os.tmpdir(), 'sdo-a-')));
   const stateRoot = path.join(root, 'state');
   let stopped = false;
   try {

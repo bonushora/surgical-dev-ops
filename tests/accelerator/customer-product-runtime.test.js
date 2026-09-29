@@ -26,7 +26,7 @@ const {
 } = require('../../accelerator/product/customer-runtime');
 
 function fixture() {
-  const root = fs.realpathSync(fs.mkdtempSync(path.join(os.tmpdir(), 'surgical-product-runtime-')));
+  const root = fs.realpathSync(fs.mkdtempSync(path.join(os.tmpdir(), 'sdo-r-')));
   const stateRoot = path.join(root, 'state');
   return { root, stateRoot };
 }

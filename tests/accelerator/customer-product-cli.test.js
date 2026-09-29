@@ -19,7 +19,7 @@ function run(stateRoot, args, extra = {}) {
 }
 
 test('customer CLI performs init doctor lifecycle demo evidence and safe removal', async (t) => {
-  const root = fs.realpathSync(fs.mkdtempSync(path.join(os.tmpdir(), 'surgical-customer-cli-')));
+  const root = fs.realpathSync(fs.mkdtempSync(path.join(os.tmpdir(), 'sdo-c-')));
   const stateRoot = path.join(root, 'state');
   t.after(() => {
     run(stateRoot, ['stop']);
@@ -71,7 +71,7 @@ test('customer CLI performs init doctor lifecycle demo evidence and safe removal
 });
 
 test('product lifecycle rejects malformed state second instance and unsafe operations', (t) => {
-  const root = fs.realpathSync(fs.mkdtempSync(path.join(os.tmpdir(), 'surgical-customer-adversarial-')));
+  const root = fs.realpathSync(fs.mkdtempSync(path.join(os.tmpdir(), 'sdo-x-')));
   const stateRoot = path.join(root, 'state');
   t.after(() => {
     run(stateRoot, ['stop']);
@@ -94,7 +94,7 @@ test('product lifecycle rejects malformed state second instance and unsafe opera
 });
 
 test('customer product surfaces fail closed on absent approval corrupt state and stale endpoint', (t) => {
-  const root = fs.realpathSync(fs.mkdtempSync(path.join(os.tmpdir(), 'surgical-customer-fail-closed-')));
+  const root = fs.realpathSync(fs.mkdtempSync(path.join(os.tmpdir(), 'sdo-f-')));
   const stateRoot = path.join(root, 'state');
   t.after(() => {
     run(stateRoot, ['stop']);
