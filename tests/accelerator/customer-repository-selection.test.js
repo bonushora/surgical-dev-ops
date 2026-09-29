@@ -131,7 +131,7 @@ test('open selects the exact repository in an already READY runtime without auth
 });
 
 test('NATURAL composition, governed evidence, and proposal preparation bind only to the selected repository', async (t) => {
-  const root = fs.realpathSync(fs.mkdtempSync(path.join(os.tmpdir(), 'sdo-natural-selection-')));
+  const root = fs.realpathSync(fs.mkdtempSync(path.join(os.tmpdir(), 'sdo-sel-n-')));
   const stateRoot = path.join(root, 'state');
   const repositoryA = repository(root, 'repository-a');
   const repositoryB = repository(root, 'repository-b');
@@ -171,7 +171,7 @@ test('NATURAL composition, governed evidence, and proposal preparation bind only
 });
 
 test('switching repositories after proposal preparation makes the repository and HEAD binding stale', async (t) => {
-  const root = fs.realpathSync(fs.mkdtempSync(path.join(os.tmpdir(), 'sdo-stale-selection-')));
+  const root = fs.realpathSync(fs.mkdtempSync(path.join(os.tmpdir(), 'sdo-sel-s-')));
   const stateRoot = path.join(root, 'state');
   const repositoryA = repository(root, 'repository-a');
   const repositoryB = repository(root, 'repository-b');
@@ -208,7 +208,7 @@ test('switching repositories after proposal preparation makes the repository and
 });
 
 test('the production NATURAL approval seam closes an A proposal after the runtime selects B', async (t) => {
-  const root = fs.realpathSync(fs.mkdtempSync(path.join(os.tmpdir(), 'sdo-stale-approval-')));
+  const root = fs.realpathSync(fs.mkdtempSync(path.join(os.tmpdir(), 'sdo-sel-a-')));
   const stateRoot = path.join(root, 'state');
   const repositoryA = repository(root, 'repository-a');
   const repositoryB = repository(root, 'repository-b');
