@@ -53,13 +53,15 @@ function createFailingCalculatorRepository() {
     ['commit', '-qm', 'failing calculator fixture']
   ]) execFileSync('git', args, { cwd: repository });
 
-  const failing = spawnSync('npm', ['test'], {
+  const npmExecutable = process.platform === 'win32' ? 'npm.cmd' : 'npm';
+  const failing = spawnSync(npmExecutable, ['test'], {
     cwd: repository,
     encoding: 'utf8',
     timeout: 10_000
   });
+  assert.equal(failing.error, undefined);
   assert.notEqual(failing.status, 0);
-  assert.match(failing.stderr + failing.stdout, /-1[\s\S]*5|actual: -1[\s\S]*expected: 5/);
+  assert.match((failing.stderr || '') + (failing.stdout || ''), /-1[\s\S]*5|actual: -1[\s\S]*expected: 5/);
 
   return {
     root,
