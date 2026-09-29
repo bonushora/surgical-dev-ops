@@ -4,6 +4,7 @@ const crypto = require('node:crypto');
 const fs = require('node:fs');
 const os = require('node:os');
 const path = require('node:path');
+const vm = require('node:vm');
 const { execFileSync, spawnSync } = require('node:child_process');
 
 const {
@@ -415,15 +416,18 @@ function runCustomerDemo({ stateRoot, approved }) {
       && first.execution.durability.materialization.projection;
     const materializedContent = typeof materialized === 'string' && fs.existsSync(materialized)
       ? fs.readFileSync(materialized, 'utf8') : null;
-    const syntax = spawnSync(process.execPath, ['--check', '-'], {
-      encoding: 'utf8', input: materializedContent || '',
-    });
+    let syntaxStatus = 'GREEN';
+    try {
+      new vm.Script(materializedContent || '', { filename: 'demo.js' });
+    } catch {
+      syntaxStatus = 'FAILED';
+    }
     if (first.orchestration.status !== 'COMPLETED'
       || !['COMPLETED', 'FAILED'].includes(replay.orchestration.status)
       || first.execution.outcome !== 'APPLIED'
       || typeof materialized !== 'string'
       || materializedContent !== 'const governed = true;\n'
-      || afterFirst !== 'const governed = false;\n' || afterReplay !== afterFirst || syntax.status !== 0) {
+      || afterFirst !== 'const governed = false;\n' || afterReplay !== afterFirst || syntaxStatus !== 'GREEN') {
       throw new Error('Isolated governed demo failed closed');
     }
     evidence = {
@@ -439,7 +443,7 @@ function runCustomerDemo({ stateRoot, approved }) {
       physicalResult: 'COMPLETED',
       physicalProjection: 'CONTENT_ADDRESSED_MANIFEST',
       ordinaryWorktreeAuthoritative: false,
-      tests: { status: 'GREEN', command: 'node --check demo.js' },
+      tests: { status: 'GREEN', command: 'node:vm.Script demo.js' },
       replay: { secondPhysicalEffect: false, result: replay.orchestration.status },
       authorityReusable: false,
       demoIsolated: true,
