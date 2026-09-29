@@ -53,11 +53,16 @@ function createFailingCalculatorRepository() {
     ['commit', '-qm', 'failing calculator fixture']
   ]) execFileSync('git', args, { cwd: repository });
 
-  const npmExecutable = process.platform === 'win32' ? 'npm.cmd' : 'npm';
-  const failing = spawnSync(npmExecutable, ['test'], {
+  const npmCli = process.env.npm_execpath;
+  const npmExecutable = npmCli
+    ? process.execPath
+    : process.platform === 'win32' ? 'npm.cmd' : 'npm';
+  const npmArguments = npmCli ? [npmCli, 'test'] : ['test'];
+  const failing = spawnSync(npmExecutable, npmArguments, {
     cwd: repository,
     encoding: 'utf8',
-    timeout: 10_000
+    timeout: 10_000,
+    shell: !npmCli && process.platform === 'win32'
   });
   assert.equal(failing.error, undefined);
   assert.notEqual(failing.status, 0);
