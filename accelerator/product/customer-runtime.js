@@ -121,7 +121,12 @@ function initializeCustomerState({ stateRoot, profile = 'developer' }) {
     installedAt: new Date().toISOString(),
     authorityCreated: false,
   });
-  writeExclusive(paths.repositories, { schema: REPOSITORIES_SCHEMA, generation: 1, repositories: [] });
+  writeExclusive(paths.repositories, {
+    schema: REPOSITORIES_SCHEMA,
+    generation: 1,
+    currentRepositoryId: null,
+    repositories: [],
+  });
   return immutable({ classification: 'INITIALIZED', stateRoot: root, configuration });
 }
 
@@ -145,15 +150,27 @@ function inspectCustomerState({ stateRoot }) {
   assertKnownRootEntries(root);
   const configuration = readConfiguration(root);
   const repositories = parseJsonFile(rootPaths(root).repositories, 'Repository registry');
-  if (repositories.schema !== REPOSITORIES_SCHEMA || !Array.isArray(repositories.repositories)) {
+  if (repositories.schema !== REPOSITORIES_SCHEMA || !Number.isSafeInteger(repositories.generation)
+    || !Array.isArray(repositories.repositories)
+    || (repositories.currentRepositoryId !== undefined
+      && repositories.currentRepositoryId !== null
+      && typeof repositories.currentRepositoryId !== 'string')) {
     throw new Error('Repository registry is incompatible');
+  }
+  const currentRepositoryId = repositories.currentRepositoryId || null;
+  if (currentRepositoryId !== null
+    && !repositories.repositories.some((entry) => entry.id === currentRepositoryId)) {
+    throw new Error('Repository registry current selection is incompatible');
   }
   return immutable({
     schema: 'surgical.customer_state_inspection.v1',
     productVersion: PRODUCT_VERSION,
     profile: configuration.profile,
     runtime: runtimeState(root),
-    repositories,
+    repositories: {
+      ...repositories,
+      currentRepositoryId,
+    },
     authorityState: 'AUTHORITY_UNAVAILABLE',
     productionEligibility: configuration.production.eligible ? 'PRODUCTION_CONFIGURED' : 'PRODUCTION_DISABLED',
   });
@@ -232,10 +249,20 @@ function onboardRepository({ stateRoot, repositoryPath }) {
   const target = rootPaths(root).repositories;
   const current = parseJsonFile(target, 'Repository registry');
   if (current.schema !== REPOSITORIES_SCHEMA || !Number.isSafeInteger(current.generation)
-    || !Array.isArray(current.repositories)) throw new Error('Repository registry is incompatible');
+    || !Array.isArray(current.repositories)
+    || (current.currentRepositoryId !== undefined
+      && current.currentRepositoryId !== null
+      && typeof current.currentRepositoryId !== 'string')) {
+    throw new Error('Repository registry is incompatible');
+  }
   const repositories = current.repositories.filter((entry) => entry.id !== record.id);
   repositories.push(record);
-  replaceFile(target, { schema: REPOSITORIES_SCHEMA, generation: current.generation + 1, repositories });
+  replaceFile(target, {
+    schema: REPOSITORIES_SCHEMA,
+    generation: current.generation + 1,
+    currentRepositoryId: record.id,
+    repositories,
+  });
   return record;
 }
 

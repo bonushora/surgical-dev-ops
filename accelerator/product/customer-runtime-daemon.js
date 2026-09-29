@@ -7,7 +7,14 @@ const path = require('node:path');
 const crypto = require('node:crypto');
 
 const { PRODUCT_VERSION } = require('./customer-configuration');
-const { canonicalRoot, rootPaths, inspectCustomerState, doctorCustomerState, replaceFile } = require('./customer-runtime');
+const {
+  canonicalRoot,
+  rootPaths,
+  inspectCustomerState,
+  doctorCustomerState,
+  onboardRepository,
+  replaceFile,
+} = require('./customer-runtime');
 const { endpointFor, writeStoppedState } = require('./customer-lifecycle');
 
 function argument(name) {
@@ -27,6 +34,11 @@ async function main() {
     throw new Error('Stale runtime endpoint requires explicit recovery');
   }
   const startupId = crypto.randomUUID();
+  const selectedRepository = inspection.repositories.currentRepositoryId === null
+    ? null
+    : inspection.repositories.repositories.find(
+      (entry) => entry.id === inspection.repositories.currentRepositoryId
+    );
   const state = {
     schema: 'surgical.customer_runtime_state.v1',
     status: 'READY',
@@ -37,7 +49,10 @@ async function main() {
     startedAt: new Date().toISOString(),
     productionEligibility: inspection.productionEligibility,
     providerStatus: doctor.provider.configured ? 'CONFIGURED' : 'NOT_CONFIGURED',
-    currentRepository: inspection.repositories.repositories.at(-1)?.path || null,
+    currentRepository: selectedRepository?.path || null,
+    currentRepositoryId: selectedRepository?.id || null,
+    currentRepositoryHead: selectedRepository?.head || null,
+    repositoryGeneration: inspection.repositories.generation,
   };
   let endpointIdentity = null;
   let stopping = false;
@@ -52,7 +67,50 @@ async function main() {
       try { request = JSON.parse(input.slice(0, newline)); } catch { return socket.destroy(); }
       if (!request || request.schema !== 'surgical.customer_control_request.v1') return socket.destroy();
       if (request.operation === 'status' && !stopping) {
-        socket.end(`${JSON.stringify({ status: 'READY', productVersion: PRODUCT_VERSION, startupId })}\n`);
+        socket.end(`${JSON.stringify({
+          status: 'READY',
+          productVersion: PRODUCT_VERSION,
+          startupId,
+          currentRepository: state.currentRepository,
+          currentRepositoryId: state.currentRepositoryId,
+          currentRepositoryHead: state.currentRepositoryHead,
+          repositoryGeneration: state.repositoryGeneration,
+        })}\n`);
+        return;
+      }
+      if (request.operation === 'openRepository' && request.startupId === startupId && !stopping) {
+        try {
+          const repository = onboardRepository({
+            stateRoot: root,
+            repositoryPath: request.repositoryPath,
+          });
+          const selected = inspectCustomerState({ stateRoot: root }).repositories;
+          if (selected.currentRepositoryId !== repository.id) {
+            throw new Error('Repository registry did not commit the exact selection');
+          }
+          state.currentRepository = repository.path;
+          state.currentRepositoryId = repository.id;
+          state.currentRepositoryHead = repository.head;
+          state.repositoryGeneration = selected.generation;
+          replaceFile(rootPaths(root).runtimeState, state);
+          socket.end(`${JSON.stringify({
+            status: 'READY',
+            startupId,
+            currentRepository: state.currentRepository,
+            currentRepositoryId: state.currentRepositoryId,
+            currentRepositoryHead: state.currentRepositoryHead,
+            repositoryGeneration: state.repositoryGeneration,
+            authorityState: 'AUTHORITY_UNAVAILABLE',
+            repository,
+          })}\n`);
+        } catch {
+          socket.end(`${JSON.stringify({
+            status: 'FAILED',
+            startupId,
+            classification: 'REPOSITORY_SELECTION_FAILED',
+            authorityState: 'AUTHORITY_UNAVAILABLE',
+          })}\n`);
+        }
         return;
       }
       if (request.operation === 'stop' && request.startupId === startupId && !stopping) {

@@ -3339,6 +3339,9 @@ function createInteractiveSession(
               pendingDevelopment = null;
 
               try {
+                if (typeof options.validateRepositoryBinding === 'function') {
+                  await options.validateRepositoryBinding(exactPending);
+                }
                 const patchOptions =
                   options.patchOptions ||
                   patchOptionsFromEnvironment();
@@ -4781,6 +4784,33 @@ function activateInteractive(repositoryPath = process.cwd()) {
   return activation;
 }
 
+async function resolveCustomerInteractiveBinding(argv) {
+  const indexes = argv.reduce((values, value, index) => {
+    if (value === '--state-root') values.push(index);
+    return values;
+  }, []);
+  if (indexes.length > 1) throw new Error('--state-root cannot be repeated');
+  let stateRoot;
+  if (indexes.length === 1) {
+    const value = argv[indexes[0] + 1];
+    if (!value || value.startsWith('--')) throw new Error('--state-root requires a value');
+    stateRoot = path.resolve(value);
+  } else {
+    stateRoot = require('../product/customer-runtime').defaultCustomerStateRoot();
+  }
+  if (!fs.existsSync(stateRoot)) {
+    return Object.freeze({ repositoryPath: process.cwd(), stateRoot: null });
+  }
+  const status = await require('../product/customer-lifecycle').probeCustomerRuntime({ stateRoot });
+  if (status.runtimeStatus === 'READY' && typeof status.currentRepository === 'string') {
+    return Object.freeze({ repositoryPath: status.currentRepository, stateRoot });
+  }
+  if (!['READY', 'STOPPED'].includes(status.runtimeStatus)) {
+    throw new Error('Customer runtime repository selection is not coherent');
+  }
+  return Object.freeze({ repositoryPath: process.cwd(), stateRoot: null });
+}
+
 async function main(
   argv = process.argv.slice(2),
   options = {}
@@ -4927,9 +4957,16 @@ async function main(
     }
   }
 
+  const customerBinding =
+    ['NATURAL', 'ENGINEER'].includes(
+      createInteractionMode(interactionMode).mode
+    )
+      ? await resolveCustomerInteractiveBinding(argv)
+      : Object.freeze({ repositoryPath: process.cwd(), stateRoot: null });
+
   const activation =
     await createInteractiveActivationAsync(
-      process.cwd(),
+      customerBinding.repositoryPath,
       interactionMode,
       language
     );
@@ -4968,6 +5005,16 @@ async function main(
         null,
       patchOptions:
         patchOptionsFromEnvironment(),
+      cognitiveSession:
+        options.cognitiveSession,
+      validateRepositoryBinding:
+        customerBinding.stateRoot
+          ? (pending) => require('../product/customer-lifecycle').assertCustomerRepositoryBinding({
+              stateRoot: customerBinding.stateRoot,
+              repositoryPath: pending.repositoryPath,
+              repositoryHead: pending.contract.repositoryHead
+            })
+          : null,
       codex,
       codexOptions:
         codexAuthentication && codexAuthentication.codexOptions,

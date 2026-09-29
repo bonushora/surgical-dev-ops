@@ -8,12 +8,13 @@ const readline = require('node:readline/promises');
 const { PRODUCT_VERSION } = require('./customer-configuration');
 const {
   V1_DIGEST, V2_DIGEST, initializeCustomerState, inspectCustomerState,
-  doctorCustomerState, onboardRepository, createSupportBundle,
+  doctorCustomerState, createSupportBundle,
   backupCustomerState, restoreCustomerState, uninstallCustomerRuntime,
   runCustomerDemo, listEvidence, defaultCustomerStateRoot, configureCustomerProvider,
 } = require('./customer-runtime');
 const {
   startCustomerRuntime, stopCustomerRuntime, restartCustomerRuntime, probeCustomerRuntime,
+  openCustomerRepository,
 } = require('./customer-lifecycle');
 
 const COMMANDS = new Set([
@@ -95,7 +96,7 @@ async function runCustomerCommand(argv, { stdout = process.stdout, stdin = proce
     }
   } else if (command === 'open') {
     if (!argv[1] || argv[1].startsWith('--')) throw new Error('open requires a repository path');
-    result = onboardRepository({ stateRoot: root, repositoryPath: path.resolve(argv[1]) });
+    result = await openCustomerRepository({ stateRoot: root, repositoryPath: path.resolve(argv[1]) });
   } else if (command === 'configure') {
     if (argv[1] !== 'provider') throw new Error('configure supports only the provider boundary');
     result = configureCustomerProvider({

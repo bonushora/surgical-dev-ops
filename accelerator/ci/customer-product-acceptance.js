@@ -61,6 +61,11 @@ async function main() {
     const secondOpened = invoke(stateRoot, ['open', fs.realpathSync(secondRepository)]);
     assert.notEqual(secondOpened.id, opened.id);
     assert.equal(secondOpened.authorityGranted, false);
+    const selectedStatus = invoke(stateRoot, ['status']);
+    assert.equal(selectedStatus.runtimeStatus, 'READY');
+    assert.equal(selectedStatus.startupId, started.startupId);
+    assert.equal(selectedStatus.currentRepository, fs.realpathSync(secondRepository));
+    assert.equal(selectedStatus.authorityState, 'AUTHORITY_UNAVAILABLE');
     const demo = invoke(stateRoot, ['demo', '--approve-exact-demo']);
     assert.equal(demo.physicalEffectCount, 1);
     assert.equal(demo.replayEffectCount, 0);
@@ -109,6 +114,7 @@ async function main() {
       repositoryOnboarding: 'GREEN', physicalEffectCount: 1, replayEffectCount: 0,
       evidence: 'GREEN', restartReconcile: 'GREEN', backupAuthorityIncluded: false,
       upgradeCheck: 'GREEN', providerAuthorityGranted: false,
+      repositorySelectionWithoutRestart: 'GREEN',
       supportBundleSanitization: 'GREEN', multiRepositoryIsolation: 'GREEN',
       restoreAuthorityRestored: false, uninstallPreservedEvidence: true,
       artifactRemoval: 'GREEN', cleanup: 'GREEN',

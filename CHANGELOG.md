@@ -2,6 +2,12 @@
 
 ## Unreleased
 
+- Repair live customer repository selection so `surgical open` updates the
+  explicit registry selection and the already-READY runtime through one
+  acknowledged IPC transition. Status, NATURAL evidence, proposal preparation,
+  and exact approval now share the selected physical repository and HEAD;
+  switching repositories invalidates stale proposals without granting or
+  inheriting authority.
 - Repair NATURAL mission cancellation so ordinary Portuguese and English
   requests cross the existing deterministic `MISSION_CANCELLED` lifecycle
   boundary before generic provider cognition. `/status` now proves `CANCELLED`,

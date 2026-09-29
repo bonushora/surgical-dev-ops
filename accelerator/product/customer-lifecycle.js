@@ -4,10 +4,18 @@ const crypto = require('node:crypto');
 const fs = require('node:fs');
 const net = require('node:net');
 const path = require('node:path');
-const { spawn } = require('node:child_process');
+const { execFileSync, spawn } = require('node:child_process');
 
 const { PRODUCT_VERSION } = require('./customer-configuration');
-const { canonicalRoot, rootPaths, runtimeState, replaceFile } = require('./customer-runtime');
+const {
+  canonicalRoot,
+  rootPaths,
+  runtimeState,
+  replaceFile,
+  onboardRepository,
+  inspectCustomerState,
+} = require('./customer-runtime');
+const { samePhysicalWorkspaceIdentity } = require('../core/workspace-boundary');
 
 function endpointFor(root) {
   if (process.platform === 'win32') {
@@ -58,6 +66,19 @@ async function probeCustomerRuntime({ stateRoot }) {
     const response = await request(endpointFor(root), { schema: 'surgical.customer_control_request.v1', operation: 'status' });
     if (response.status !== 'READY' || response.startupId !== state.startupId
       || response.productVersion !== PRODUCT_VERSION) return Object.freeze({ runtimeStatus: 'INCOMPATIBLE_VERSION' });
+    const registry = inspectCustomerState({ stateRoot: root }).repositories;
+    const selected = registry.currentRepositoryId === null
+      ? null
+      : registry.repositories.find((entry) => entry.id === registry.currentRepositoryId);
+    if (response.repositoryGeneration !== registry.generation
+      || response.currentRepositoryId !== (selected?.id || null)
+      || response.currentRepository !== (selected?.path || null)
+      || response.currentRepositoryHead !== (selected?.head || null)) {
+      return Object.freeze({
+        runtimeStatus: 'DEGRADED',
+        recoveryRequirement: 'REPOSITORY_SELECTION_COHERENCE_REQUIRED',
+      });
+    }
     return Object.freeze({
       runtimeStatus: 'READY',
       productVersion: PRODUCT_VERSION,
@@ -65,7 +86,10 @@ async function probeCustomerRuntime({ stateRoot }) {
       pid: state.pid,
       authorityState: 'AUTHORITY_UNAVAILABLE',
       productionEligibility: state.productionEligibility,
-      currentRepository: state.currentRepository || null,
+      currentRepository: response.currentRepository || null,
+      currentRepositoryId: response.currentRepositoryId || null,
+      currentRepositoryHead: response.currentRepositoryHead || null,
+      repositoryGeneration: response.repositoryGeneration || null,
       activeMission: null,
       currentPhase: 'IDLE',
       pendingApproval: false,
@@ -76,6 +100,57 @@ async function probeCustomerRuntime({ stateRoot }) {
   } catch {
     return Object.freeze({ runtimeStatus: 'DEGRADED', recoveryRequirement: 'INSPECT_STALE_RUNTIME_STATE' });
   }
+}
+
+async function openCustomerRepository({ stateRoot, repositoryPath }) {
+  const root = canonicalRoot(stateRoot);
+  const state = runtimeState(root);
+  if (state.status === 'STOPPED') return onboardRepository({ stateRoot: root, repositoryPath });
+  if (state.status !== 'READY' || typeof state.startupId !== 'string') {
+    throw new Error('Repository selection is blocked while runtime recovery is required');
+  }
+  let response;
+  try {
+    response = await request(endpointFor(root), {
+      schema: 'surgical.customer_control_request.v1',
+      operation: 'openRepository',
+      startupId: state.startupId,
+      repositoryPath,
+    });
+  } catch (error) {
+    throw new Error(`Repository selection failed closed (${error.message})`);
+  }
+  if (!response || response.status !== 'READY' || response.startupId !== state.startupId
+    || response.currentRepository !== repositoryPath || !response.repository
+    || response.repository.path !== repositoryPath || response.repository.authorityGranted !== false) {
+    throw new Error('Repository selection evidence is invalid');
+  }
+  return Object.freeze(response.repository);
+}
+
+async function assertCustomerRepositoryBinding({ stateRoot, repositoryPath, repositoryHead }) {
+  const status = await probeCustomerRuntime({ stateRoot });
+  let physicalHead = null;
+  try {
+    physicalHead = execFileSync('git', ['rev-parse', 'HEAD'], {
+      cwd: repositoryPath,
+      encoding: 'utf8',
+      stdio: ['ignore', 'pipe', 'pipe'],
+    }).trim();
+  } catch {
+    throw new Error('Pending proposal repository identity cannot be revalidated');
+  }
+  if (status.runtimeStatus !== 'READY' || typeof status.currentRepository !== 'string'
+    || !samePhysicalWorkspaceIdentity(status.currentRepository, repositoryPath)
+    || status.currentRepositoryHead !== repositoryHead || physicalHead !== repositoryHead) {
+    throw new Error('Current repository selection or HEAD differs from the exact pending proposal');
+  }
+  return Object.freeze({
+    currentRepository: status.currentRepository,
+    currentRepositoryId: status.currentRepositoryId,
+    currentRepositoryHead: status.currentRepositoryHead,
+    authorityState: 'AUTHORITY_UNAVAILABLE',
+  });
 }
 
 async function startCustomerRuntime({ stateRoot }) {
@@ -161,5 +236,7 @@ module.exports = Object.freeze({
   startCustomerRuntime,
   stopCustomerRuntime,
   restartCustomerRuntime,
+  openCustomerRepository,
+  assertCustomerRepositoryBinding,
   writeStoppedState,
 });

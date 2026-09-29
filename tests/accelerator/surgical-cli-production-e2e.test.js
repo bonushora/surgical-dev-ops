@@ -289,7 +289,10 @@ test(
       process.chdir(state.repo);
       try {
         await surgicalCli.main(
-          ['--interaction', 'NATURAL', '--codex'],
+          [
+            '--interaction', 'NATURAL', '--codex',
+            '--state-root', path.join(state.root, 'absent-customer-state')
+          ],
           { input, output }
         );
       } finally {
