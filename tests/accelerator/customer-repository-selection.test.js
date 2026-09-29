@@ -70,6 +70,10 @@ function sink() {
   return Object.freeze({ write() { return true; } });
 }
 
+function jsonStringContent(value) {
+  return JSON.stringify(value).slice(1, -1);
+}
+
 function proposalProvider(repository, observations = []) {
   const before = fs.readFileSync(path.join(repository, 'identity.js'));
   return Object.freeze({
@@ -164,8 +168,8 @@ test('NATURAL composition, governed evidence, and proposal preparation bind only
   for (const observation of observations) {
     assert.equal(observation.repositoryPath, repositoryB);
   }
-  assert.match(observations[0].context, new RegExp(repositoryB.replace(/[.*+?^${}()|[\]\\]/g, '\\$&')));
-  assert.doesNotMatch(observations[0].context, new RegExp(repositoryA.replace(/[.*+?^${}()|[\]\\]/g, '\\$&')));
+  assert.ok(observations[0].context.includes(jsonStringContent(repositoryB)));
+  assert.ok(!observations[0].context.includes(jsonStringContent(repositoryA)));
   assert.equal((await probeCustomerRuntime({ stateRoot })).authorityState, 'AUTHORITY_UNAVAILABLE');
   input.end('cancel\nexit\n');
 });
