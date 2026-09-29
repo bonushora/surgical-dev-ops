@@ -163,6 +163,11 @@ const {
 } = require('./natural-development-interactive');
 
 const {
+  prepareNaturalCustomerDevelopment,
+  approveNaturalCustomerDevelopment
+} = require('./natural-customer-development');
+
+const {
   createNaturalGovernedRepairLoop,
   investigateNaturalGovernedRepairFailure,
   authorizeNaturalGovernedRepairMission,
@@ -333,7 +338,14 @@ function formatNaturalDevelopmentCompletion(completed, activation) {
       activation,
       'A autorização foi consumida e não pode ser reutilizada.\n',
       'The authorization was consumed and cannot be reused.\n'
-    )
+    ) +
+    (completed.customerQualification
+      ? humanText(
+          activation,
+          `Qualificação do teste do projeto: ${completed.customerQualification.status}.\n`,
+          `Project test qualification: ${completed.customerQualification.status}.\n`
+        )
+      : '')
   );
 }
 
@@ -3330,11 +3342,17 @@ function createInteractiveSession(
                 const patchOptions =
                   options.patchOptions ||
                   patchOptionsFromEnvironment();
-                const completed = await approveInteractiveNaturalDevelopment({
-                  pending: exactPending,
-                  approvedProposalFingerprint: fingerprint,
-                  ...patchOptions
-                });
+                const completed = exactPending.diagnostic
+                  ? await approveNaturalCustomerDevelopment({
+                      pending: exactPending,
+                      approvedProposalFingerprint: fingerprint,
+                      ...patchOptions
+                    })
+                  : await approveInteractiveNaturalDevelopment({
+                      pending: exactPending,
+                      approvedProposalFingerprint: fingerprint,
+                      ...patchOptions
+                    });
 
                 if (
                   runnerRuntime &&
@@ -3776,7 +3794,10 @@ function createInteractiveSession(
                   `Runtime state: ${runner.state}\n` +
                   `Boundary: ${runner.boundary}\n`
                 );
-              } else if (controlled.action === 'DEVELOPMENT_REQUEST') {
+              } else if (
+                controlled.action === 'DEVELOPMENT_REQUEST' ||
+                controlled.action === 'CUSTOMER_DEVELOPMENT_REQUEST'
+              ) {
                 try {
                   output.write(
                     humanText(
@@ -3785,14 +3806,21 @@ function createInteractiveSession(
                       'Collecting governed evidence and preparing an exact proposal...\n'
                     )
                   );
-                  pendingDevelopment =
-                    await prepareInteractiveNaturalDevelopment({
-                      request: controlled.request,
-                      activation,
-                      cognitiveSession,
-                      dispatchEvidence: options.dispatchEvidence,
-                      workMode: sessionControl.currentWorkMode()
-                    });
+                  pendingDevelopment = controlled.action ===
+                      'CUSTOMER_DEVELOPMENT_REQUEST'
+                    ? await prepareNaturalCustomerDevelopment({
+                        objective: controlled.request.objective,
+                        activation,
+                        cognitiveSession,
+                        workMode: sessionControl.currentWorkMode()
+                      })
+                    : await prepareInteractiveNaturalDevelopment({
+                        request: controlled.request,
+                        activation,
+                        cognitiveSession,
+                        dispatchEvidence: options.dispatchEvidence,
+                        workMode: sessionControl.currentWorkMode()
+                      });
                   const proposal = pendingDevelopment.patchProposal;
                   if (
                     runnerRuntime &&
@@ -3809,9 +3837,19 @@ function createInteractiveSession(
                       'Proposta exata pronta para revisão humana. Nenhuma alteração foi executada.\n',
                       'Exact proposal ready for human review. No change was executed.\n'
                     ) +
+                    `Objective: ${proposal.objective}\n` +
+                    `Operation: mutation.applyConditional\n` +
+                    `Reason: ${proposal.reason}\n` +
                     `Target: ${proposal.target}\n` +
+                    `Workspace: ${pendingDevelopment.repositoryPath}\n` +
+                    `Repository HEAD: ${pendingDevelopment.contract.repositoryHead}\n` +
                     `BEFORE SHA256: ${proposal.beforeSha256}\n` +
                     `AFTER SHA256: ${proposal.replacementSha256}\n` +
+                    `Risk: R3\n` +
+                    `Authority owner: Surgical DevOps / exact local human decision\n` +
+                    `Duration: single governed execution\n` +
+                    `Scope: ONE_SHOT exact full-file replacement\n` +
+                    `Excluded powers: arbitrary shell, arbitrary filesystem access, push, merge, release, publish, deploy\n` +
                     `Proposal: ${proposal.proposalFingerprint}\n` +
                     humanText(
                       activation,
@@ -3830,6 +3868,9 @@ function createInteractiveSession(
                       options.onDevelopmentFailure(Object.freeze({
                         schema: 'sdo.natural_development_failure.v1',
                         code: failureCode,
+                        reason: error && typeof error.message === 'string'
+                          ? error.message
+                          : 'Development preparation failed safely.',
                         operationalAuthority: false,
                         mutationAuthority: false
                       }));

@@ -970,6 +970,28 @@ function detectBoundedRepairLoopRequest(value) {
   });
 }
 
+function detectCustomerEngineeringObjective(value) {
+  const objective = String(value || '').trim();
+  const tokens = new Set(
+    [...naturalSemanticTokens(objective)]
+      .map((token) => token.replace(/^[./-]+|[./-]+$/g, ''))
+      .filter(Boolean)
+  );
+  const mutation = [
+    'corrija', 'corrigir', 'conserte', 'repare', 'resolva',
+    'fix', 'repair', 'solve'
+  ].some((token) => tokens.has(token));
+  const testObjective = [
+    'teste', 'testes', 'test', 'tests'
+  ].some((token) => tokens.has(token));
+  const observedFailure = [
+    'falha', 'falhas', 'falhando', 'failed', 'failing',
+    'erro', 'erros', 'error', 'errors', 'bug', 'defeito', 'defect'
+  ].some((token) => tokens.has(token));
+  if (!mutation || !testObjective || !observedFailure) return null;
+  return Object.freeze({ objective, authorityExpansion: false });
+}
+
 function formatBoundedMutationBoundary(request, preferredLanguage = null) {
   if (preferredLanguage ? isEnglish(preferredLanguage) : request.language === 'en') {
     return (
@@ -1557,6 +1579,17 @@ function createNaturalSessionControl(
               mutationRequest,
               preferredLanguage
             )
+        });
+      }
+
+      const customerEngineeringObjective =
+        detectCustomerEngineeringObjective(input);
+
+      if (customerEngineeringObjective) {
+        return Object.freeze({
+          matched: true,
+          action: 'CUSTOMER_DEVELOPMENT_REQUEST',
+          request: customerEngineeringObjective
         });
       }
     }
