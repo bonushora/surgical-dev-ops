@@ -214,7 +214,7 @@ function onboardRepository({ stateRoot, repositoryPath }) {
   if (!stat.isDirectory() || stat.isSymbolicLink() || fs.realpathSync(repositoryPath) !== repositoryPath) {
     throw new Error('Repository must be a canonical physical directory, not a symlink');
   }
-  const physicalRoot = git(repositoryPath, ['rev-parse', '--show-toplevel']);
+  const physicalRoot = fs.realpathSync(git(repositoryPath, ['rev-parse', '--show-toplevel']));
   if (physicalRoot !== repositoryPath) throw new Error('Repository path must identify the physical Git root');
   const record = immutable({
     id: crypto.createHash('sha256').update(repositoryPath).digest('hex'),

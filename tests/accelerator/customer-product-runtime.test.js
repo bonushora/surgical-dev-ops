@@ -26,7 +26,7 @@ const {
 } = require('../../accelerator/product/customer-runtime');
 
 function fixture() {
-  const root = fs.mkdtempSync(path.join(os.tmpdir(), 'surgical-product-runtime-'));
+  const root = fs.realpathSync(fs.mkdtempSync(path.join(os.tmpdir(), 'surgical-product-runtime-')));
   const stateRoot = path.join(root, 'state');
   return { root, stateRoot };
 }
@@ -85,7 +85,7 @@ test('initialization is private restart-safe and cannot overwrite unexplained st
   t.after(() => fs.rmSync(state.root, { recursive: true, force: true }));
   const first = initializeCustomerState({ stateRoot: state.stateRoot, profile: 'developer' });
   assert.equal(first.classification, 'INITIALIZED');
-  assert.equal(fs.statSync(state.stateRoot).mode & 0o077, 0);
+  if (process.platform !== 'win32') assert.equal(fs.statSync(state.stateRoot).mode & 0o077, 0);
   const second = initializeCustomerState({ stateRoot: state.stateRoot, profile: 'developer' });
   assert.equal(second.classification, 'ALREADY_INITIALIZED');
   fs.writeFileSync(path.join(state.stateRoot, 'unexplained'), 'x');

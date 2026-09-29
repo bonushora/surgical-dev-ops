@@ -236,13 +236,19 @@ function createDurableControlPlanePhysicalSubmissionRegistry(options = {}) {
 
   function acquireWriterLock(context, intended) {
     const lock = writerMetadata(context, intended);
+    const temporaryLockPath = path.join(
+      storageRoot,
+      `.physical-registry-writer-lock.${process.pid}.${crypto.randomUUID()}.tmp`,
+    );
     let descriptor;
+    let temporaryExists = false;
     try {
       descriptor = filesystem.openSync(
-        writerLockPath,
+        temporaryLockPath,
         fs.constants.O_WRONLY | fs.constants.O_CREAT | fs.constants.O_EXCL,
         0o600,
       );
+      temporaryExists = true;
       filesystem.writeFileSync(descriptor, `${canonicalSerialize(lock)}\n`, 'utf8');
       requireDurabilityReceipt(
         durability.flushFile(descriptor, `physical-registry-writer:${lock.ownerToken}`),
@@ -250,12 +256,18 @@ function createDurableControlPlanePhysicalSubmissionRegistry(options = {}) {
       );
       filesystem.closeSync(descriptor);
       descriptor = undefined;
+      filesystem.linkSync(temporaryLockPath, writerLockPath);
+      filesystem.unlinkSync(temporaryLockPath);
+      temporaryExists = false;
       requireDurabilityReceipt(durability.confirmLock(storageRoot), 'DURABLE_LOCK_BOUNDARY');
       metrics.writerLockAcquisitions += 1;
       return lock;
     } catch (caught) {
       if (descriptor !== undefined) {
         try { filesystem.closeSync(descriptor); } catch {}
+      }
+      if (temporaryExists) {
+        try { filesystem.unlinkSync(temporaryLockPath); } catch {}
       }
       if (caught && caught.code === 'EEXIST') {
         metrics.writerLockContentions += 1;
