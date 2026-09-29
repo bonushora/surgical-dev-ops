@@ -13,6 +13,7 @@ const {
   validateConfiguration,
 } = require('./customer-configuration');
 const { provisionLocalOfflineHumanAuthority } = require('../core/local-offline-human-authority-store');
+const { samePhysicalWorkspaceIdentity } = require('../core/workspace-boundary');
 const { createGovernedPatchRequest } = require('../cli/governed-patch-dispatch');
 const { orchestrate } = require('../core/surgical-orchestrator');
 
@@ -215,7 +216,9 @@ function onboardRepository({ stateRoot, repositoryPath }) {
     throw new Error('Repository must be a canonical physical directory, not a symlink');
   }
   const physicalRoot = fs.realpathSync(git(repositoryPath, ['rev-parse', '--show-toplevel']));
-  if (physicalRoot !== repositoryPath) throw new Error('Repository path must identify the physical Git root');
+  if (!samePhysicalWorkspaceIdentity(physicalRoot, repositoryPath)) {
+    throw new Error('Repository path must identify the physical Git root');
+  }
   const record = immutable({
     id: crypto.createHash('sha256').update(repositoryPath).digest('hex'),
     path: repositoryPath,
