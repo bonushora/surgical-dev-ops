@@ -28,6 +28,7 @@ const ALLOWED_REQUEST_KEYS =
     'stream',
     'temperature',
     'maxOutputTokens',
+    'format',
     'messages'
   ]);
 
@@ -148,6 +149,27 @@ function validateMessages(
   }
 }
 
+function validateFormat(format) {
+  if (format === 'json') return;
+  if (
+    !format || typeof format !== 'object' || Array.isArray(format) ||
+    format.type !== 'object' || format.additionalProperties !== false ||
+    !Array.isArray(format.required) || format.required.length === 0 ||
+    !format.properties || typeof format.properties !== 'object' ||
+    Array.isArray(format.properties) ||
+    Object.keys(format).some((key) =>
+      !['type', 'additionalProperties', 'required', 'properties'].includes(key)
+    ) ||
+    format.required.some((key) =>
+      typeof key !== 'string' || !Object.hasOwn(format.properties, key)
+    ) ||
+    Object.keys(format.properties).some((key) => !format.required.includes(key)) ||
+    Buffer.byteLength(JSON.stringify(format)) > 16 * 1024
+  ) {
+    throw new Error('Local Ollama structured output schema is malformed.');
+  }
+}
+
 function validateRequest(
   request
 ) {
@@ -211,6 +233,8 @@ function validateRequest(
       'Local Ollama transport output budget is not qualified.'
     );
   }
+
+  validateFormat(request.format);
 
   validateMessages(
     request.messages
@@ -383,7 +407,7 @@ function createLocalOllamaTransport(
           false,
 
         format:
-          'json',
+          request.format,
 
         keep_alive:
           NATURAL_LOCAL_INFERENCE_PROFILE

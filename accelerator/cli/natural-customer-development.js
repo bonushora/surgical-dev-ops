@@ -22,6 +22,9 @@ const {
   inspectSensitiveContent
 } = require('../core/sensitive-content-boundary');
 const {
+  materializeGovernedEngineeringProposal
+} = require('../core/governed-engineering-proposal');
+const {
   createGovernedReadOnlyRequest
 } = require('./governed-readonly-dispatch');
 const {
@@ -162,6 +165,12 @@ function diagnosticContext(diagnostic) {
   return `GOVERNED_CUSTOMER_DIAGNOSTIC:\n${serialized}`;
 }
 
+function classifiedDevelopmentFailure(code, message) {
+  const error = new Error(message);
+  error.code = code;
+  return error;
+}
+
 async function prepareNaturalCustomerDevelopment({
   objective,
   activation,
@@ -265,15 +274,33 @@ async function prepareNaturalCustomerDevelopment({
   const governedProposal = await cognitiveSession.proposePatch(
     objective.trim(),
     activation,
-    diagnosticContext(diagnostic)
+    diagnosticContext(diagnostic),
+    deepFreeze({
+      schema: 'sdo.evidence_bound_proposal_boundary.v1',
+      governedEvidence: dependencyEvidence.map((item) => ({
+        target: item.target,
+        sha256: item.sha256
+      }))
+    })
   );
   const selected = dependencyEvidence.find((item) =>
-    item.target === governedProposal.target &&
-    item.sha256 === governedProposal.beforeSha256
+    item.target === governedProposal.target
   );
   if (!selected) {
-    throw new Error('Cognitive proposal widened or lost the governed BEFORE scope.');
+    throw classifiedDevelopmentFailure(
+      'COGNITIVE_TARGET_OUTSIDE_GOVERNED_EVIDENCE',
+      'Cognitive proposal target is outside governed evidence.'
+    );
   }
+  const evidenceBoundProposal = materializeGovernedEngineeringProposal({
+    schema: 'sdo.ai_engineering_patch_proposal.v1',
+    objective: objective.trim(),
+    target: governedProposal.target,
+    beforeSha256: selected.sha256,
+    replacementBase64: governedProposal.replacementBase64,
+    reason: governedProposal.reason,
+    validationKind: governedProposal.validationKind
+  });
 
   let planningStep = 0;
   const boundedCognition = Object.freeze({
@@ -298,7 +325,7 @@ async function prepareNaturalCustomerDevelopment({
           });
     },
     async proposePatch() {
-      return governedProposal;
+      return evidenceBoundProposal;
     }
   });
 

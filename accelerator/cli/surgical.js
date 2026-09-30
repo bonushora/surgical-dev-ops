@@ -303,6 +303,33 @@ function usesEnglish(activation) {
   ) === 'en';
 }
 
+function normalizeInteractiveSessionInput(input, activation) {
+  const normalized =
+    typeof input === 'string'
+      ? input.trim()
+      : '';
+
+  const naturalMode =
+    activation &&
+    activation.interactionMode &&
+    activation.interactionMode.mode === 'NATURAL';
+
+  const language = normalizeHumanLanguage(
+    activation && activation.language,
+    naturalMode ? 'pt-BR' : 'en'
+  );
+
+  if (
+    naturalMode &&
+    language === 'pt-BR' &&
+    normalized.toLowerCase() === 'sair'
+  ) {
+    return 'exit';
+  }
+
+  return normalized;
+}
+
 function formatNaturalDevelopmentCompletion(completed, activation) {
   const managedProjection =
     completed.validation.authoritativeProjection;
@@ -893,7 +920,7 @@ function formatSessionHelp(language = 'en') {
                          Leitura governada do repositório
   patch <arquivo> --content-base64 <dados>
                          Patch governado R3 de arquivo único
-  exit | quit            Encerrar a sessão Surgical
+  sair | exit | quit     Encerrar a sessão Surgical
 `
     );
   }
@@ -924,9 +951,10 @@ function handleInteractiveCommand(input, activation) {
   }
 
   const raw =
-    typeof input === 'string'
-      ? input.trim()
-      : '';
+    normalizeInteractiveSessionInput(
+      input,
+      activation
+    );
 
   const separator =
     raw.search(/\s/);
@@ -3115,7 +3143,11 @@ function createInteractiveSession(
     processing =
       processing
         .then(async () => {
-          const normalizedLine = String(line || '').trim();
+          const normalizedLine =
+            normalizeInteractiveSessionInput(
+              line,
+              activation
+            );
 
           const pendingHelpRequest =
             (
@@ -3132,7 +3164,7 @@ function createInteractiveSession(
                 )
               )
             )
-              ? resolveNaturalHelpRequest(line)
+              ? resolveNaturalHelpRequest(normalizedLine)
               : null;
 
           if (pendingHelpRequest) {
@@ -3422,11 +3454,11 @@ function createInteractiveSession(
           if (sessionControl) {
             let controlled =
               sessionControl.handle(
-                line
+                normalizedLine
               );
 
             const repeatedGovernedTask =
-              detectNaturalGovernedTask(line);
+              detectNaturalGovernedTask(normalizedLine);
 
             const authorizedReuse =
               controlled.action === 'CONTINUE' &&
@@ -4655,7 +4687,7 @@ function createInteractiveSession(
 
           const result =
             handleInteractiveCommand(
-              line,
+              normalizedLine,
               activation
             );
 
@@ -4753,6 +4785,26 @@ function createInteractiveSession(
 
     interactiveRequestInFlight =
       false;
+
+    pendingDevelopment =
+      null;
+
+    pendingRepairLoop =
+      null;
+
+    if (
+      sessionControl &&
+      typeof sessionControl.close === 'function'
+    ) {
+      sessionControl.close();
+    }
+
+    if (
+      runnerRuntime &&
+      typeof runnerRuntime.stop === 'function'
+    ) {
+      runnerRuntime.stop();
+    }
 
     if (cognitiveSession && typeof cognitiveSession.close === 'function') {
       try {

@@ -364,9 +364,11 @@ test(
       false
     );
 
+    assert.equal(proposalBody.format.type, 'object');
+    assert.equal(proposalBody.format.additionalProperties, false);
     assert.equal(
-      proposalBody.format,
-      'json'
+      proposalBody.format.properties.schema.const,
+      'sdo.ai_engineering_patch_proposal.v1'
     );
 
     assert.match(
@@ -377,6 +379,127 @@ test(
     );
   }
 );
+
+test('NATURAL evidence-bound proposal leaves objective identity hashing and encoding to Surgical', async () => {
+  let proposalBody = null;
+  const beforeSha256 = 'b'.repeat(64);
+  const session = createNaturalCognitiveSession({
+    fetchImplementation: async (url, options) => {
+      if (url.endsWith('/api/tags')) {
+        return response({ models: [{ name: 'qwen3:8b', model: 'qwen3:8b' }] });
+      }
+      proposalBody = JSON.parse(options.body);
+      return response({
+        message: {
+          role: 'assistant',
+          content: JSON.stringify({
+            schema: 'sdo.ai_engineering_patch_semantics.v1',
+            target: 'calculator.js',
+            replacement: 'module.exports = { add: (a, b) => a + b };\n',
+            reason: 'Correct the bounded arithmetic defect.',
+            validationKind: 'VALIDATE_JS'
+          })
+        }
+      });
+    }
+  });
+  const governedEvidence = Object.freeze([
+    Object.freeze({ target: 'calculator.js', sha256: beforeSha256 })
+  ]);
+
+  const proposal = await session.proposePatch(
+    'Corrija os testes que estão falhando.',
+    activation(),
+    'GOVERNED_CUSTOMER_DIAGNOSTIC',
+    Object.freeze({
+      schema: 'sdo.evidence_bound_proposal_boundary.v1',
+      governedEvidence
+    })
+  );
+
+  assert.equal(proposal.objective, 'Corrija os testes que estão falhando.');
+  assert.equal(proposal.beforeSha256, beforeSha256);
+  assert.equal(
+    Buffer.from(proposal.replacementBase64, 'base64').toString('utf8'),
+    'module.exports = { add: (a, b) => a + b };\n'
+  );
+  assert.equal(proposal.operationalAuthority, false);
+  assert.equal(proposal.mutationAuthority, false);
+  assert.equal(proposalBody.format.type, 'object');
+  assert.equal(proposalBody.format.additionalProperties, false);
+  assert.equal(
+    proposalBody.format.properties.schema.const,
+    'sdo.ai_engineering_patch_semantics.v1'
+  );
+  assert.deepEqual(
+    proposalBody.format.properties.target.enum,
+    ['calculator.js']
+  );
+  assert.deepEqual(proposalBody.format.required.sort(), [
+    'reason', 'replacement', 'schema', 'target', 'validationKind'
+  ]);
+  assert.doesNotMatch(JSON.stringify(proposalBody.format), /beforeSha256|replacementBase64|objective/);
+});
+
+test('NATURAL evidence-bound proposal rejects malformed provider output deterministically', async () => {
+  const malformedOutputs = [
+    {
+      schema: 'sdo.ai_engineering_patch_semantics.v1',
+      target: 'calculator.js',
+      replacement: 'module.exports = { add: (a, b) => a + b };\n',
+      reason: 'Correct the bounded arithmetic defect.',
+      validationKind: 'VALIDATE_JS',
+      beforeSha256: '0'.repeat(64)
+    },
+    {
+      schema: 'sdo.ai_engineering_patch_semantics.v1',
+      target: 'calculator.js',
+      reason: 'Missing replacement.',
+      validationKind: 'VALIDATE_JS'
+    },
+    {
+      schema: 'sdo.ai_engineering_patch_semantics.v1',
+      target: 'outside.js',
+      replacement: 'module.exports = {};\n',
+      reason: 'Widen the target.',
+      validationKind: 'VALIDATE_JS'
+    }
+  ];
+
+  for (const output of malformedOutputs) {
+    const session = createNaturalCognitiveSession({
+      fetchImplementation: async (url) => {
+        if (url.endsWith('/api/tags')) {
+          return response({ models: [{ name: 'qwen3:8b', model: 'qwen3:8b' }] });
+        }
+        return response({
+          message: {
+            role: 'assistant',
+            content: JSON.stringify(output)
+          }
+        });
+      }
+    });
+
+    await assert.rejects(
+      session.proposePatch(
+        'Corrija os testes que estão falhando.',
+        activation(),
+        'GOVERNED_CUSTOMER_DIAGNOSTIC',
+        Object.freeze({
+          schema: 'sdo.evidence_bound_proposal_boundary.v1',
+          governedEvidence: Object.freeze([
+            Object.freeze({
+              target: 'calculator.js',
+              sha256: 'b'.repeat(64)
+            })
+          ])
+        })
+      ),
+      /canonical|replacement|outside governed evidence/
+    );
+  }
+});
 
 test(
   'NATURAL refuses engineering proposal without governed evidence',

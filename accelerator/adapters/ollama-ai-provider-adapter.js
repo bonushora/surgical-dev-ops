@@ -39,6 +39,55 @@ function deepFreeze(value) {
   return Object.freeze(value);
 }
 
+const LEGACY_PROPOSAL_FORMAT = deepFreeze({
+  type: 'object',
+  additionalProperties: false,
+  required: [
+    'schema', 'objective', 'target', 'beforeSha256',
+    'replacementBase64', 'reason', 'validationKind'
+  ],
+  properties: {
+    schema: { type: 'string', const: 'sdo.ai_engineering_patch_proposal.v1' },
+    objective: { type: 'string' },
+    target: { type: 'string' },
+    beforeSha256: { type: 'string' },
+    replacementBase64: { type: 'string' },
+    reason: { type: 'string' },
+    validationKind: { type: 'string', enum: ['NONE', 'VALIDATE_JS'] }
+  }
+});
+
+function evidenceBoundSemanticFormat(targets) {
+  if (
+    !Array.isArray(targets) || targets.length === 0 || targets.length > 8 ||
+    targets.some((target) =>
+      typeof target !== 'string' || !target || target.length > 1024 || target.includes('\0')
+    )
+  ) {
+    throw new Error('Governed proposal target set is malformed.');
+  }
+  return deepFreeze({
+    type: 'object',
+    additionalProperties: false,
+    required: ['schema', 'target', 'replacement', 'reason', 'validationKind'],
+    properties: {
+      schema: { type: 'string', const: 'sdo.ai_engineering_patch_semantics.v1' },
+      target: { type: 'string', enum: [...targets] },
+      replacement: { type: 'string' },
+      reason: { type: 'string' },
+      validationKind: { type: 'string', enum: ['NONE', 'VALIDATE_JS'] }
+    }
+  });
+}
+
+function responseFormatFor(request) {
+  if (request.capability !== 'PROPOSE') return 'json';
+  return request.context &&
+    request.context.proposalContract === 'EVIDENCE_BOUND_SEMANTIC_V1'
+    ? evidenceBoundSemanticFormat(request.context.allowedProposalTargets)
+    : LEGACY_PROPOSAL_FORMAT;
+}
+
 function requireText(value, name) {
   if (
     typeof value !== 'string' ||
@@ -134,6 +183,9 @@ function createTransportRequest(
       outputTokensFor(
         request.capability
       ),
+
+    format:
+      responseFormatFor(request),
 
     messages:
       createMessages(request, model)

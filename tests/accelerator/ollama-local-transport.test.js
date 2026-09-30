@@ -29,6 +29,9 @@ function canonicalRequest(
     maxOutputTokens:
       512,
 
+    format:
+      'json',
+
     messages:
       Object.freeze([
         Object.freeze({

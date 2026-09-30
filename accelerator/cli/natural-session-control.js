@@ -2057,6 +2057,10 @@ function createNaturalSessionControl(
     reuseAuthorizedGovernedTask,
     currentWorkMode,
 
+    close() {
+      pendingTask = null;
+    },
+
     experienceState() {
       return Object.freeze({
         workMode,

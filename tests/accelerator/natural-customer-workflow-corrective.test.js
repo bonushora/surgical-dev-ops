@@ -261,7 +261,7 @@ test('equivalent engineering objective is classified without phrase or filename 
   input.end('cancel\nexit\n');
 });
 
-test('stale BEFORE, widened target, traversal, and nonconforming provider output fail closed', async (t) => {
+test('widened target, traversal, and nonconforming provider output fail closed', async (t) => {
   const fixture = createFailingCalculatorRepository();
   t.after(fixture.cleanup);
   const activation = createInteractiveActivation(fixture.repository, 'NATURAL', 'en');
@@ -283,16 +283,9 @@ test('stale BEFORE, widened target, traversal, and nonconforming provider output
   await assert.rejects(
     prepareNaturalCustomerDevelopment({
       objective: 'Fix the failing tests.', activation,
-      cognitiveSession: proposal('calculator.js', '0'.repeat(64))
-    }),
-    /widened or lost the governed BEFORE scope/
-  );
-  await assert.rejects(
-    prepareNaturalCustomerDevelopment({
-      objective: 'Fix the failing tests.', activation,
       cognitiveSession: proposal('calculator.test.js', sha256(fs.readFileSync(path.join(fixture.repository, 'calculator.test.js'))))
     }),
-    /widened or lost the governed BEFORE scope/
+    /outside governed evidence/
   );
   await assert.rejects(
     prepareNaturalCustomerDevelopment({
@@ -309,4 +302,87 @@ test('stale BEFORE, widened target, traversal, and nonconforming provider output
     /widened or lost|proposal/i
   );
   assert.equal(fs.readFileSync(path.join(fixture.repository, 'calculator.js'), 'utf8'), before.toString());
+});
+
+test('interactive failure seam classifies governed target scope without exposing evidence', async (t) => {
+  const fixture = createFailingCalculatorRepository();
+  t.after(fixture.cleanup);
+  const before = fs.readFileSync(path.join(fixture.repository, 'calculator.js'));
+  const input = new PassThrough();
+  const output = new PassThrough();
+  let failure = null;
+  const cognitiveSession = Object.freeze({
+    async proposePatch(objective) {
+      return materializeGovernedEngineeringProposal({
+        schema: 'sdo.ai_engineering_patch_proposal.v1',
+        objective,
+        target: 'calculator.test.js',
+        beforeSha256: sha256(fs.readFileSync(path.join(fixture.repository, 'calculator.test.js'))),
+        replacementBase64: Buffer.from(
+          'function add(a, b) {\n  return a + b;\n}\n\nmodule.exports = { add };\n'
+        ).toString('base64'),
+        reason: 'Correct the bounded arithmetic defect.',
+        validationKind: 'VALIDATE_JS'
+      });
+    }
+  });
+
+  createInteractiveSession(
+    createInteractiveActivation(fixture.repository, 'NATURAL', 'pt-BR'),
+    {
+      input, output, terminal: false, cognitiveSession,
+      onDevelopmentFailure(value) { failure = value; }
+    }
+  );
+  input.write('Corrija os testes que estão falhando.\n');
+  await waitFor(() => failure !== null);
+
+  assert.deepEqual(Object.keys(failure).sort(), [
+    'code', 'mutationAuthority', 'operationalAuthority', 'reason', 'schema'
+  ]);
+  assert.equal(failure.code, 'COGNITIVE_TARGET_OUTSIDE_GOVERNED_EVIDENCE');
+  assert.equal(failure.reason, 'Cognitive proposal target is outside governed evidence.');
+  assert.equal(failure.operationalAuthority, false);
+  assert.equal(failure.mutationAuthority, false);
+  assert.doesNotMatch(JSON.stringify(failure), /calculator|[a-f0-9]{64}|function add/);
+  assert.equal(fs.readFileSync(path.join(fixture.repository, 'calculator.js'), 'utf8'), before.toString());
+  assert.equal(execFileSync('git', ['status', '--porcelain'], {
+    cwd: fixture.repository, encoding: 'utf8'
+  }), '');
+  input.end('exit\n');
+});
+
+test('customer boundary owns authoritative BEFORE identity instead of trusting the provider echo', async (t) => {
+  const fixture = createFailingCalculatorRepository();
+  t.after(fixture.cleanup);
+  const before = fs.readFileSync(path.join(fixture.repository, 'calculator.js'));
+  const pending = await prepareNaturalCustomerDevelopment({
+    objective: 'Corrija os testes que estão falhando.',
+    activation: createInteractiveActivation(fixture.repository, 'NATURAL', 'pt-BR'),
+    cognitiveSession: Object.freeze({
+      async proposePatch(objective) {
+        return materializeGovernedEngineeringProposal({
+          schema: 'sdo.ai_engineering_patch_proposal.v1',
+          objective,
+          target: 'calculator.js',
+          beforeSha256: '0'.repeat(64),
+          replacementBase64: Buffer.from(
+            'function add(a, b) {\n  return a + b;\n}\n\nmodule.exports = { add };\n'
+          ).toString('base64'),
+          reason: 'Correct the bounded arithmetic defect.',
+          validationKind: 'VALIDATE_JS'
+        });
+      }
+    })
+  });
+
+  assert.equal(pending.state, 'EXACT_HUMAN_REVIEW_REQUIRED');
+  assert.equal(pending.patchProposal.beforeSha256, sha256(before));
+  assert.notEqual(pending.patchProposal.beforeSha256, '0'.repeat(64));
+  assert.equal(pending.patchProposal.operationalAuthority, false);
+  assert.equal(pending.patchProposal.mutationAuthority, false);
+  assert.equal(fs.readFileSync(path.join(fixture.repository, 'calculator.js'), 'utf8'), before.toString());
+  assert.equal(execFileSync('git', ['status', '--porcelain'], {
+    cwd: fixture.repository, encoding: 'utf8'
+  }), '');
 });

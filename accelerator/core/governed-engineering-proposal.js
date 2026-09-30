@@ -14,6 +14,9 @@ const path = require('node:path');
 const INPUT_SCHEMA =
   'sdo.ai_engineering_patch_proposal.v1';
 
+const SEMANTIC_INPUT_SCHEMA =
+  'sdo.ai_engineering_patch_semantics.v1';
+
 const OUTPUT_SCHEMA =
   'sdo.governed_engineering_proposal.v1';
 
@@ -284,9 +287,66 @@ function materializeGovernedEngineeringProposal(
   });
 }
 
+function materializeEvidenceBoundEngineeringProposal({
+  input,
+  objective,
+  governedEvidence
+} = {}) {
+  if (
+    !input || typeof input !== 'object' || Array.isArray(input)
+  ) {
+    throw new Error('Untrusted AI engineering semantics are required.');
+  }
+  exactKeys(input, [
+    'schema', 'target', 'replacement', 'reason', 'validationKind'
+  ]);
+  if (input.schema !== SEMANTIC_INPUT_SCHEMA) {
+    throw new Error('AI engineering semantic schema is not supported.');
+  }
+
+  const target = canonicalTarget(input.target);
+  if (!Array.isArray(governedEvidence) || !Object.isFrozen(governedEvidence)) {
+    throw new Error('Immutable governed BEFORE evidence is required.');
+  }
+  const selected = governedEvidence.find((item) =>
+    item && item.target === target &&
+    typeof item.sha256 === 'string'
+  );
+  if (!selected) {
+    throw new Error('AI engineering semantic target is outside governed evidence.');
+  }
+  const beforeSha256 = canonicalSha256(selected.sha256);
+
+  if (
+    typeof input.replacement !== 'string' ||
+    input.replacement.length === 0 ||
+    input.replacement.includes('\0')
+  ) {
+    throw new Error('Engineering proposal replacement is malformed.');
+  }
+  const replacement = Buffer.from(input.replacement, 'utf8');
+  if (
+    replacement.length === 0 ||
+    replacement.length > MAX_REPLACEMENT_BYTES
+  ) {
+    throw new Error('Engineering proposal replacement is outside the bounded contract.');
+  }
+
+  return materializeGovernedEngineeringProposal({
+    schema: INPUT_SCHEMA,
+    objective: boundedText(objective, 'Engineering objective', 4096),
+    target,
+    beforeSha256,
+    replacementBase64: replacement.toString('base64'),
+    reason: input.reason,
+    validationKind: input.validationKind
+  });
+}
+
 module.exports =
   Object.freeze({
     MAX_REPLACEMENT_BYTES,
     VALIDATION_KINDS,
-    materializeGovernedEngineeringProposal
+    materializeGovernedEngineeringProposal,
+    materializeEvidenceBoundEngineeringProposal
   });
