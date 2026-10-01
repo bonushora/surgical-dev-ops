@@ -73,7 +73,9 @@ function git(repository, args) {
 }
 
 function createCalculatorFixture() {
-  const root = fs.mkdtempSync(path.join(os.tmpdir(), 'sdo-customer-state-approval-'));
+  const root = fs.realpathSync(
+    fs.mkdtempSync(path.join(os.tmpdir(), 'sdo-customer-state-approval-'))
+  );
   const repository = path.join(root, 'repository');
   const stateRoot = path.join(root, 'customer-state');
   fs.mkdirSync(repository);
