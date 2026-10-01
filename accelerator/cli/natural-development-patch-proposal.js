@@ -152,6 +152,11 @@ function materializeNaturalDevelopmentPatchProposal({
     );
   }
 
+  const validationKind =
+    governedProposal.validationKind === 'NONE'
+      ? contract.validationKinds[0]
+      : governedProposal.validationKind;
+
   const boundary = evaluateNaturalDevelopmentTaskBoundary(
     contract,
     Object.freeze({
@@ -162,10 +167,7 @@ function materializeNaturalDevelopmentPatchProposal({
       target:
         governedProposal.target,
       risk: 'R3',
-      validationKind:
-        governedProposal.validationKind === 'NONE'
-          ? null
-          : governedProposal.validationKind,
+      validationKind,
       evidenceStep: 1,
       patchAttempt,
       mutating: true,
@@ -219,7 +221,7 @@ function materializeNaturalDevelopmentPatchProposal({
     replacementBytes: governedProposal.replacementBytes,
     replacementSha256: governedProposal.replacementSha256,
     reason: governedProposal.reason,
-    validationKind: governedProposal.validationKind,
+    validationKind,
     patchAttempt,
     exactDiff,
     state: 'HUMAN_REVIEW_REQUIRED',

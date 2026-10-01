@@ -126,6 +126,14 @@ function validateStorageRoot(configuredRoot) {
   if (typeof process.getuid === 'function' && stat.uid !== process.getuid()) {
     throw new Error('Trusted mutation journal root is not owned by the current user.');
   }
+  if (process.platform !== 'win32' && (stat.mode & 0o200) === 0) {
+    throw new Error('Trusted mutation journal root is not writable by its owner.');
+  }
+  try {
+    fs.accessSync(configuredRoot, fs.constants.W_OK);
+  } catch {
+    throw new Error('Trusted mutation journal root is not writable.');
+  }
   return canonical;
 }
 

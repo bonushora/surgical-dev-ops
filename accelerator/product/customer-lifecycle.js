@@ -84,7 +84,8 @@ async function probeCustomerRuntime({ stateRoot }) {
       productVersion: PRODUCT_VERSION,
       startupId: state.startupId,
       pid: state.pid,
-      authorityState: 'AUTHORITY_UNAVAILABLE',
+      authorityState: inspectCustomerState({ stateRoot: root }).authorityState,
+      mutationAuthorityGranted: false,
       productionEligibility: state.productionEligibility,
       currentRepository: response.currentRepository || null,
       currentRepositoryId: response.currentRepositoryId || null,
@@ -149,7 +150,8 @@ async function assertCustomerRepositoryBinding({ stateRoot, repositoryPath, repo
     currentRepository: status.currentRepository,
     currentRepositoryId: status.currentRepositoryId,
     currentRepositoryHead: status.currentRepositoryHead,
-    authorityState: 'AUTHORITY_UNAVAILABLE',
+    authorityState: status.authorityState,
+    mutationAuthorityGranted: false,
   });
 }
 

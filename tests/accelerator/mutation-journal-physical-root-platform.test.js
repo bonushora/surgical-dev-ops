@@ -167,3 +167,31 @@ test(
     });
   }
 );
+
+test('journal rejects a missing storage root', () => {
+  const missing = path.join(
+    fs.realpathSync(os.tmpdir()),
+    `sdo-journal-missing-${process.pid}-${Date.now()}`
+  );
+  assert.throws(
+    () => createMutationJournalAdapter({ storageRoot: missing, durabilityAdapter }),
+    /cannot be resolved/i
+  );
+});
+
+test('journal rejects an owner-unwritable storage root', {
+  skip: process.platform === 'win32' ? 'POSIX journal permissions.' : false
+}, (t) => {
+  const base = fs.mkdtempSync(
+    path.join(fs.realpathSync(os.tmpdir()), 'sdo-journal-unwritable-')
+  );
+  t.after(() => {
+    fs.chmodSync(base, 0o700);
+    fs.rmSync(base, { recursive: true, force: true });
+  });
+  fs.chmodSync(base, 0o500);
+  assert.throws(
+    () => createMutationJournalAdapter({ storageRoot: base, durabilityAdapter }),
+    /writable/i
+  );
+});

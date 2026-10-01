@@ -11,7 +11,8 @@ const test = require('node:test');
 
 const {
   createInteractiveActivation,
-  createInteractiveSession
+  createInteractiveSession,
+  classifyNaturalDevelopmentFailure
 } = require('../../accelerator/cli/surgical');
 const {
   materializeGovernedEngineeringProposal
@@ -27,6 +28,47 @@ const {
 function sha256(value) {
   return crypto.createHash('sha256').update(value).digest('hex');
 }
+
+function physicalFileSnapshot(root) {
+  const records = [];
+  function visit(directory, prefix = '') {
+    for (const name of fs.readdirSync(directory).sort()) {
+      const target = path.join(directory, name);
+      const relative = path.join(prefix, name);
+      const stat = fs.lstatSync(target, { bigint: true });
+      if (stat.isDirectory()) {
+        records.push({ relative, type: 'directory' });
+        visit(target, relative);
+      } else {
+        records.push({
+          relative,
+          type: 'file',
+          size: stat.size,
+          mtimeNs: stat.mtimeNs,
+          sha256: sha256(fs.readFileSync(target))
+        });
+      }
+    }
+  }
+  visit(root);
+  return records;
+}
+
+test('customer failure observability exposes only bounded sanitized classifications', () => {
+  const cases = [
+    ['authority root is missing at /sensitive/customer/path', 'LOCAL_AUTHORITY_UNAVAILABLE'],
+    ['mutation journal storage root is not writable', 'JOURNAL_STATE_UNAVAILABLE'],
+    ['repository HEAD differs from exact proposal', 'STALE_PROPOSAL'],
+    ['human authority signature verification failed', 'AUTHORITY_VERIFICATION_FAILED'],
+    ['project test qualification failed', 'POST_APPROVAL_QUALIFICATION_FAILED'],
+    ['unexpected governed adapter failure', 'GOVERNED_MUTATION_FAILED'],
+  ];
+  for (const [message, expected] of cases) {
+    const classification = classifyNaturalDevelopmentFailure(new Error(message));
+    assert.equal(classification, expected);
+    assert.doesNotMatch(classification, /sensitive|PRIVATE KEY|credential|\/customer\//i);
+  }
+});
 
 function createFailingCalculatorRepository() {
   const root = fs.mkdtempSync(path.join(os.tmpdir(), 'sdo-natural-customer-red-'));
@@ -234,9 +276,25 @@ test('exact approval produces one governed effect, GREEN project qualification, 
   );
   assert.equal(fs.readFileSync(path.join(fixture.repository, 'calculator.js'), 'utf8'), before.toString());
 
+  const journalBeforeReplay = physicalFileSnapshot(journalStorageRoot);
+  const projectionBeforeReplay = fs.readFileSync(completed.validation.authoritativeProjection);
+  const projectionStatBeforeReplay = fs.statSync(
+    completed.validation.authoritativeProjection,
+    { bigint: true }
+  );
+
   await assert.rejects(
     approveNaturalCustomerDevelopment(approval),
     /already claimed|already consumed|replay|denied|requires completed R3 journal|Prepared R3 authority differs/i
+  );
+  assert.deepEqual(physicalFileSnapshot(journalStorageRoot), journalBeforeReplay);
+  assert.deepEqual(
+    fs.readFileSync(completed.validation.authoritativeProjection),
+    projectionBeforeReplay
+  );
+  assert.equal(
+    fs.statSync(completed.validation.authoritativeProjection, { bigint: true }).mtimeNs,
+    projectionStatBeforeReplay.mtimeNs
   );
   assert.equal(fs.readFileSync(path.join(fixture.repository, 'calculator.js'), 'utf8'), before.toString());
 });

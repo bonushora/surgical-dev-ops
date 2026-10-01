@@ -94,7 +94,10 @@ function validateTaskAnchors(
       repositoryHead: repository.repository.commit,
       target: proposal.target,
       risk: 'R3',
-      validationKind: proposal.validationKind,
+      validationKind:
+        proposal.validationKind === 'NONE'
+          ? null
+          : proposal.validationKind,
       evidenceStep: 1,
       patchAttempt: proposal.patchAttempt,
       mutating: true,

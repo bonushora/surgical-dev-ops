@@ -128,7 +128,8 @@ test('open selects the exact repository in an already READY runtime without auth
   );
   assert.equal(status.startupId, started.startupId, 'repository selection must not restart the runtime');
   assert.equal(status.currentRepository, repositoryB);
-  assert.equal(status.authorityState, 'AUTHORITY_UNAVAILABLE');
+  assert.equal(status.authorityState, 'AUTHORITY_INFRASTRUCTURE_QUALIFIED');
+  assert.equal(status.mutationAuthorityGranted, false);
   assert.equal(inspection.repositories.repositories[0].authorityGranted, false);
   assert.equal(inspection.repositories.repositories[1].authorityGranted, false);
   assert.equal(inspection.repositories.currentRepositoryId, inspection.repositories.repositories[1].id);
@@ -170,7 +171,10 @@ test('NATURAL composition, governed evidence, and proposal preparation bind only
   }
   assert.ok(observations[0].context.includes(jsonStringContent(repositoryB)));
   assert.ok(!observations[0].context.includes(jsonStringContent(repositoryA)));
-  assert.equal((await probeCustomerRuntime({ stateRoot })).authorityState, 'AUTHORITY_UNAVAILABLE');
+  assert.equal(
+    (await probeCustomerRuntime({ stateRoot })).authorityState,
+    'AUTHORITY_INFRASTRUCTURE_QUALIFIED'
+  );
   input.end('cancel\nexit\n');
 });
 
@@ -206,7 +210,8 @@ test('switching repositories after proposal preparation makes the repository and
   );
   const status = await probeCustomerRuntime({ stateRoot });
   assert.equal(status.currentRepository, repositoryB);
-  assert.equal(status.authorityState, 'AUTHORITY_UNAVAILABLE');
+  assert.equal(status.authorityState, 'AUTHORITY_INFRASTRUCTURE_QUALIFIED');
+  assert.equal(status.mutationAuthorityGranted, false);
   assert.equal(fs.readFileSync(path.join(repositoryA, 'identity.js'), 'utf8'), 'module.exports = () => -1;\n');
   assert.equal(fs.readFileSync(path.join(repositoryB, 'identity.js'), 'utf8'), 'module.exports = () => -1;\n');
 });

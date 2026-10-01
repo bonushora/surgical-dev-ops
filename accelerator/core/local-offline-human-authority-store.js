@@ -10,6 +10,12 @@ const {
   '../adapters/local-offline-human-signer'
 );
 
+const AUTHORITY_FILES = Object.freeze([
+  'authority.json',
+  'private-key.pem',
+  'public-key.pem'
+]);
+
 function requireText(value, label) {
   if (
     typeof value !== 'string' ||
@@ -87,7 +93,101 @@ function requirePhysicalAuthorityRoot(
     );
   }
 
+  if (
+    typeof process.getuid === 'function' &&
+    (
+      physicalStat.uid !== process.getuid() ||
+      (physicalStat.mode & 0o077) !== 0
+    )
+  ) {
+    throw new Error(
+      'Authority root permissions or ownership are unsafe.'
+    );
+  }
+
   return physical;
+}
+
+function requirePrivateAuthorityFile(root, name) {
+  const target = path.join(root, name);
+  let item;
+  try {
+    item = fs.lstatSync(target);
+  } catch {
+    throw new Error('Authority storage contains unknown or missing state.');
+  }
+  if (
+    !item.isFile() ||
+    item.isSymbolicLink() ||
+    fs.realpathSync(target) !== target ||
+    path.dirname(target) !== root
+  ) {
+    throw new Error('Authority storage contains unsafe files.');
+  }
+  if (
+    typeof process.getuid === 'function' &&
+    (
+      item.uid !== process.getuid() ||
+      (item.mode & 0o077) !== 0
+    )
+  ) {
+    throw new Error('Authority file permissions or ownership are unsafe.');
+  }
+  return target;
+}
+
+function validatedAuthorityMaterial(authorityRoot) {
+  const root = requirePhysicalAuthorityRoot(authorityRoot);
+  const entries = fs.readdirSync(root).sort();
+  if (JSON.stringify(entries) !== JSON.stringify(AUTHORITY_FILES)) {
+    throw new Error('Authority storage contains unknown or missing state.');
+  }
+  const privateKeyPath = requirePrivateAuthorityFile(root, 'private-key.pem');
+  const publicKeyPath = requirePrivateAuthorityFile(root, 'public-key.pem');
+  const metadataPath = requirePrivateAuthorityFile(root, 'authority.json');
+  let metadata;
+  try {
+    metadata = JSON.parse(fs.readFileSync(metadataPath, 'utf8'));
+  } catch {
+    throw new Error('Authority metadata is malformed.');
+  }
+  if (
+    !metadata ||
+    Object.getPrototypeOf(metadata) !== Object.prototype ||
+    JSON.stringify(Object.keys(metadata).sort()) !==
+      JSON.stringify(['algorithm', 'issuer', 'schema', 'subjectId']) ||
+    metadata.schema !== 'sdo.local_offline_human_authority.v1' ||
+    metadata.algorithm !== 'Ed25519'
+  ) {
+    throw new Error('Authority metadata is malformed.');
+  }
+  const issuer = requireText(metadata.issuer, 'metadata.issuer');
+  const subjectId = requireText(metadata.subjectId, 'metadata.subjectId');
+  const privateKeyPem = fs.readFileSync(privateKeyPath, 'utf8');
+  const publicKeyPem = fs.readFileSync(publicKeyPath, 'utf8');
+  let privateKey;
+  let publicKey;
+  try {
+    privateKey = crypto.createPrivateKey(privateKeyPem);
+    publicKey = crypto.createPublicKey(publicKeyPem);
+  } catch {
+    throw new Error('Local human authority key material is malformed.');
+  }
+  if (
+    privateKey.asymmetricKeyType !== 'ed25519' ||
+    publicKey.asymmetricKeyType !== 'ed25519' ||
+    !crypto.createPublicKey(privateKey).export({ type: 'spki', format: 'der' })
+      .equals(publicKey.export({ type: 'spki', format: 'der' }))
+  ) {
+    throw new Error('Local human signer and public authority are mismatched.');
+  }
+  return Object.freeze({
+    root,
+    privateKeyPem,
+    publicKeyPem,
+    issuer,
+    subjectId
+  });
 }
 
 function writeExclusive(
@@ -209,7 +309,7 @@ function provisionLocalOfflineHumanAuthority({
     writeExclusive(
       publicKeyPath,
       publicKeyPem,
-      0o644
+      0o600
     );
 
     writeExclusive(
@@ -268,160 +368,40 @@ function provisionLocalOfflineHumanAuthority({
 function loadLocalOfflineHumanSigner({
   authorityRoot
 } = {}) {
-  const root =
-    requirePhysicalAuthorityRoot(
-      authorityRoot
-    );
-
-  const privateKeyPath =
-    path.join(
-      root,
-      'private-key.pem'
-    );
-
-  const metadataPath =
-    path.join(
-      root,
-      'authority.json'
-    );
-
-  for (const target of [
-    privateKeyPath,
-    metadataPath
-  ]) {
-    const item =
-      fs.lstatSync(target);
-
-    if (
-      !item.isFile() ||
-      item.isSymbolicLink()
-    ) {
-      throw new Error(
-        'Authority storage contains unsafe files.'
-      );
-    }
-  }
-
-  const metadata =
-    JSON.parse(
-      fs.readFileSync(
-        metadataPath,
-        'utf8'
-      )
-    );
-
-  if (
-    !metadata ||
-    metadata.schema !==
-      'sdo.local_offline_human_authority.v1' ||
-    metadata.algorithm !==
-      'Ed25519'
-  ) {
-    throw new Error(
-      'Authority metadata is malformed.'
-    );
-  }
-
-  const privateKeyPem =
-    fs.readFileSync(
-      privateKeyPath,
-      'utf8'
-    );
+  const material = validatedAuthorityMaterial(authorityRoot);
 
   return createLocalOfflineHumanSigner({
-    privateKeyPem,
-    issuer:
-      requireText(
-        metadata.issuer,
-        'metadata.issuer'
-      ),
-    subjectId:
-      requireText(
-        metadata.subjectId,
-        'metadata.subjectId'
-      )
+    privateKeyPem: material.privateKeyPem,
+    issuer: material.issuer,
+    subjectId: material.subjectId
   });
 }
 
 function readLocalOfflineHumanPublicAuthority({
   authorityRoot
 } = {}) {
-  const root =
-    requirePhysicalAuthorityRoot(
-      authorityRoot
-    );
-
-  const publicKeyPath =
-    path.join(
-      root,
-      'public-key.pem'
-    );
-
-  const metadataPath =
-    path.join(
-      root,
-      'authority.json'
-    );
-
-  const publicStat =
-    fs.lstatSync(publicKeyPath);
-
-  const metadataStat =
-    fs.lstatSync(metadataPath);
-
-  if (
-    !publicStat.isFile() ||
-    publicStat.isSymbolicLink() ||
-    !metadataStat.isFile() ||
-    metadataStat.isSymbolicLink()
-  ) {
-    throw new Error(
-      'Public authority storage is unsafe.'
-    );
-  }
-
-  const metadata =
-    JSON.parse(
-      fs.readFileSync(
-        metadataPath,
-        'utf8'
-      )
-    );
-
-  if (
-    metadata.schema !==
-      'sdo.local_offline_human_authority.v1' ||
-    metadata.algorithm !==
-      'Ed25519'
-  ) {
-    throw new Error(
-      'Public authority metadata is malformed.'
-    );
-  }
+  const material = validatedAuthorityMaterial(authorityRoot);
 
   return Object.freeze({
-    publicKeyPem:
-      fs.readFileSync(
-        publicKeyPath,
-        'utf8'
-      ),
+    publicKeyPem: material.publicKeyPem,
+    issuer: material.issuer,
+    subjectId: material.subjectId
+  });
+}
 
-    issuer:
-      requireText(
-        metadata.issuer,
-        'metadata.issuer'
-      ),
-
-    subjectId:
-      requireText(
-        metadata.subjectId,
-        'metadata.subjectId'
-      )
+function validateLocalOfflineHumanAuthority({ authorityRoot } = {}) {
+  const material = validatedAuthorityMaterial(authorityRoot);
+  return Object.freeze({
+    authorityRoot: material.root,
+    issuer: material.issuer,
+    subjectId: material.subjectId,
+    algorithm: 'Ed25519'
   });
 }
 
 module.exports = Object.freeze({
   provisionLocalOfflineHumanAuthority,
   loadLocalOfflineHumanSigner,
-  readLocalOfflineHumanPublicAuthority
+  readLocalOfflineHumanPublicAuthority,
+  validateLocalOfflineHumanAuthority
 });

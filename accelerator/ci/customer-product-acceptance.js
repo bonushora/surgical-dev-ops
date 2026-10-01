@@ -16,7 +16,13 @@ function invoke(stateRoot, args) {
     encoding: 'utf8', timeout: 30_000, env: { ...process.env, SURGICAL_PRODUCT_ACCEPTANCE: '1' },
   });
   if (result.status !== 0) throw new Error(`Customer command failed: ${args[0]}: ${result.stderr.trim()}`);
-  return JSON.parse(result.stdout);
+  try {
+    return JSON.parse(result.stdout);
+  } catch {
+    throw new Error(
+      `Customer command returned malformed JSON: ${args[0]}: ${JSON.stringify(result.stdout)}`
+    );
+  }
 }
 
 function git(repo, args) {
@@ -65,7 +71,8 @@ async function main() {
     assert.equal(selectedStatus.runtimeStatus, 'READY');
     assert.equal(selectedStatus.startupId, started.startupId);
     assert.equal(selectedStatus.currentRepository, fs.realpathSync(secondRepository));
-    assert.equal(selectedStatus.authorityState, 'AUTHORITY_UNAVAILABLE');
+    assert.equal(selectedStatus.authorityState, 'AUTHORITY_INFRASTRUCTURE_QUALIFIED');
+    assert.equal(selectedStatus.mutationAuthorityGranted, false);
     const demo = invoke(stateRoot, ['demo', '--approve-exact-demo']);
     assert.equal(demo.physicalEffectCount, 1);
     assert.equal(demo.replayEffectCount, 0);
@@ -75,7 +82,8 @@ async function main() {
     assert.equal(restarted.status, 'READY');
     const status = invoke(stateRoot, ['status']);
     assert.equal(status.runtimeStatus, 'READY');
-    assert.equal(status.authorityState, 'AUTHORITY_UNAVAILABLE');
+    assert.equal(status.authorityState, 'AUTHORITY_INFRASTRUCTURE_QUALIFIED');
+    assert.equal(status.mutationAuthorityGranted, false);
     assert.equal(status.productionEligibility, 'PRODUCTION_DISABLED');
     const stoppedResult = invoke(stateRoot, ['stop']);
     assert.equal(stoppedResult.status, 'STOPPED');

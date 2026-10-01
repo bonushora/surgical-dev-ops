@@ -182,6 +182,20 @@ test(
 );
 
 test(
+  'G3 cannot let cognitive NONE weaken the contract validation kind',
+  () => {
+    const activeContract = contract();
+    const result = materializeNaturalDevelopmentPatchProposal({
+      contract: activeContract,
+      planningResult: planning(activeContract),
+      governedProposal: proposal({ validationKind: 'NONE' })
+    });
+    assert.equal(result.validationKind, 'VALIDATE_JS');
+    assert.deepEqual(activeContract.validationKinds, ['VALIDATE_JS']);
+  }
+);
+
+test(
   'objective target BEFORE and contract substitution fail closed',
   () => {
     const activeContract = contract();

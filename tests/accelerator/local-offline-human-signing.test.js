@@ -586,3 +586,89 @@ test(
     );
   }
 );
+
+test('authority qualification rejects missing and corrupt state', (t) => {
+  const root = fixture();
+  t.after(() => cleanup(root));
+  const authorityRoot = path.join(root, 'authority');
+  provisionLocalOfflineHumanAuthority({
+    authorityRoot,
+    issuer: 'local:negative-state',
+    subjectId: 'negative-human'
+  });
+  fs.rmSync(path.join(authorityRoot, 'public-key.pem'));
+  assert.throws(
+    () => readLocalOfflineHumanPublicAuthority({ authorityRoot }),
+    /missing|unknown/i
+  );
+  fs.writeFileSync(path.join(authorityRoot, 'public-key.pem'), 'not a public key', {
+    mode: 0o600
+  });
+  assert.throws(
+    () => readLocalOfflineHumanPublicAuthority({ authorityRoot }),
+    /malformed/i
+  );
+  fs.writeFileSync(path.join(authorityRoot, 'unknown-state'), 'unknown\n', {
+    mode: 0o600
+  });
+  assert.throws(
+    () => readLocalOfflineHumanPublicAuthority({ authorityRoot }),
+    /missing|unknown/i
+  );
+});
+
+test('authority qualification rejects unsafe permissions and symlink files', {
+  skip: process.platform === 'win32' ? 'POSIX authority confinement.' : false
+}, (t) => {
+  const root = fixture();
+  t.after(() => cleanup(root));
+  const authorityRoot = path.join(root, 'authority');
+  provisionLocalOfflineHumanAuthority({
+    authorityRoot,
+    issuer: 'local:negative-confinement',
+    subjectId: 'negative-human'
+  });
+  const metadata = path.join(authorityRoot, 'authority.json');
+  fs.chmodSync(metadata, 0o644);
+  assert.throws(
+    () => loadLocalOfflineHumanSigner({ authorityRoot }),
+    /permissions|ownership/i
+  );
+  fs.chmodSync(metadata, 0o600);
+  const privateKey = path.join(authorityRoot, 'private-key.pem');
+  const outsideKey = path.join(root, 'outside-private-key.pem');
+  fs.renameSync(privateKey, outsideKey);
+  fs.symlinkSync(outsideKey, privateKey);
+  assert.throws(
+    () => loadLocalOfflineHumanSigner({ authorityRoot }),
+    /unsafe/i
+  );
+});
+
+test('authority qualification rejects signer and public key mismatch', (t) => {
+  const root = fixture();
+  t.after(() => cleanup(root));
+  const authorityRoot = path.join(root, 'authority-a');
+  const otherRoot = path.join(root, 'authority-b');
+  provisionLocalOfflineHumanAuthority({
+    authorityRoot,
+    issuer: 'local:mismatch-a',
+    subjectId: 'human-a'
+  });
+  provisionLocalOfflineHumanAuthority({
+    authorityRoot: otherRoot,
+    issuer: 'local:mismatch-b',
+    subjectId: 'human-b'
+  });
+  fs.copyFileSync(
+    path.join(otherRoot, 'public-key.pem'),
+    path.join(authorityRoot, 'public-key.pem')
+  );
+  if (process.platform !== 'win32') {
+    fs.chmodSync(path.join(authorityRoot, 'public-key.pem'), 0o600);
+  }
+  assert.throws(
+    () => loadLocalOfflineHumanSigner({ authorityRoot }),
+    /mismatched/i
+  );
+});

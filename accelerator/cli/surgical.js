@@ -1226,6 +1226,39 @@ function patchOptionsFromEnvironment(
   });
 }
 
+function classifyNaturalDevelopmentFailure(error) {
+  const message = error && typeof error.message === 'string'
+    ? error.message
+    : '';
+  if (/journal|durability|storage root|SDO_MUTATION_JOURNAL_ROOT/i.test(message)) {
+    return 'JOURNAL_STATE_UNAVAILABLE';
+  }
+  if (/authority root|authority storage|private key|public key|key material|signer|SDO_HUMAN_AUTHORITY_ROOT/i.test(message)) {
+    return /mismatch|signature|verify|verified|malformed/i.test(message)
+      ? 'AUTHORITY_VERIFICATION_FAILED'
+      : 'LOCAL_AUTHORITY_UNAVAILABLE';
+  }
+  if (/stale|repository HEAD|BEFORE|proposal fingerprint|repository selection|does not select|binding.*(?:head|before|proposal)/i.test(message)) {
+    return 'STALE_PROPOSAL';
+  }
+  if (/authorization|approval|identity assertion|signature|human authority/i.test(message)) {
+    return 'AUTHORITY_VERIFICATION_FAILED';
+  }
+  if (/qualification|validation|test.*(?:failed|red)|authoritative projection/i.test(message)) {
+    return 'POST_APPROVAL_QUALIFICATION_FAILED';
+  }
+  return 'GOVERNED_MUTATION_FAILED';
+}
+
+function sanitizedNaturalDevelopmentFailure(error) {
+  const classification = classifyNaturalDevelopmentFailure(error);
+  const failure = new Error(
+    `Customer governed operation failed closed [${classification}].`
+  );
+  failure.code = classification;
+  return failure;
+}
+
 function createCodexCredentialProvider(environment = process.env) {
   return () => environment.OPENAI_API_KEY;
 }
@@ -3405,7 +3438,10 @@ function createInteractiveSession(
                     activation
                   )
                 );
-              } catch {
+              } catch (error) {
+                if (typeof options.onDevelopmentFailure === 'function') {
+                  options.onDevelopmentFailure(error);
+                }
                 if (runnerRuntime) {
                   runnerRuntime.failClosed(
                     'Governed mutation or validation failed closed.'
@@ -3414,8 +3450,8 @@ function createInteractiveSession(
                 output.write(
                   humanText(
                     activation,
-                    'A execução governada falhou de forma segura. A proposta foi encerrada e nenhuma autorização reutilizável permaneceu.\n',
-                    'Governed execution failed closed. The proposal was closed and no reusable authorization remained.\n'
+                    `A execução governada falhou de forma segura [${classifyNaturalDevelopmentFailure(error)}]. A proposta foi encerrada e nenhuma autorização reutilizável permaneceu.\n`,
+                    `Governed execution failed closed [${classifyNaturalDevelopmentFailure(error)}]. The proposal was closed and no reusable authorization remained.\n`
                   )
                 );
               }
@@ -4842,6 +4878,7 @@ async function resolveCustomerInteractiveBinding(argv) {
     return values;
   }, []);
   if (indexes.length > 1) throw new Error('--state-root cannot be repeated');
+  const explicitStateRoot = indexes.length === 1;
   let stateRoot;
   if (indexes.length === 1) {
     const value = argv[indexes[0] + 1];
@@ -4853,11 +4890,20 @@ async function resolveCustomerInteractiveBinding(argv) {
   if (!fs.existsSync(stateRoot)) {
     return Object.freeze({ repositoryPath: process.cwd(), stateRoot: null });
   }
-  const status = await require('../product/customer-lifecycle').probeCustomerRuntime({ stateRoot });
+  let status;
+  try {
+    status = await require('../product/customer-lifecycle').probeCustomerRuntime({ stateRoot });
+  } catch (error) {
+    if (explicitStateRoot) throw error;
+    return Object.freeze({ repositoryPath: process.cwd(), stateRoot: null });
+  }
   if (status.runtimeStatus === 'READY' && typeof status.currentRepository === 'string') {
     return Object.freeze({ repositoryPath: status.currentRepository, stateRoot });
   }
   if (!['READY', 'STOPPED'].includes(status.runtimeStatus)) {
+    if (!explicitStateRoot) {
+      return Object.freeze({ repositoryPath: process.cwd(), stateRoot: null });
+    }
     throw new Error('Customer runtime repository selection is not coherent');
   }
   return Object.freeze({ repositoryPath: process.cwd(), stateRoot: null });
@@ -5009,12 +5055,26 @@ async function main(
     }
   }
 
-  const customerBinding =
-    ['NATURAL', 'ENGINEER'].includes(
-      createInteractionMode(interactionMode).mode
-    )
-      ? await resolveCustomerInteractiveBinding(argv)
-      : Object.freeze({ repositoryPath: process.cwd(), stateRoot: null });
+  let customerBinding;
+  let customerPatchOptions;
+  try {
+    customerBinding =
+      ['NATURAL', 'ENGINEER'].includes(
+        createInteractionMode(interactionMode).mode
+      )
+        ? await resolveCustomerInteractiveBinding(argv)
+        : Object.freeze({ repositoryPath: process.cwd(), stateRoot: null });
+
+    customerPatchOptions = customerBinding.stateRoot
+      ? require('../product/customer-runtime').customerPatchOptions({
+          stateRoot: customerBinding.stateRoot,
+          repositoryPath: customerBinding.repositoryPath,
+          environment: process.env
+        })
+      : patchOptionsFromEnvironment();
+  } catch (error) {
+    throw sanitizedNaturalDevelopmentFailure(error);
+  }
 
   const activation =
     await createInteractiveActivationAsync(
@@ -5056,9 +5116,11 @@ async function main(
         process.env.SDO_NATURAL_MISSION_STATE_ROOT ||
         null,
       patchOptions:
-        patchOptionsFromEnvironment(),
+        customerPatchOptions,
       cognitiveSession:
         options.cognitiveSession,
+      onDevelopmentFailure:
+        options.onDevelopmentFailure,
       validateRepositoryBinding:
         customerBinding.stateRoot
           ? (pending) => require('../product/customer-lifecycle').assertCustomerRepositoryBinding({
@@ -5099,5 +5161,6 @@ module.exports = {
   createCodexAuthenticationOptions,
   dispatchInteractiveIntent,
   patchOptionsFromEnvironment,
+  classifyNaturalDevelopmentFailure,
   createCodexCredentialProvider
 };

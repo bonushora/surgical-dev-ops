@@ -42,7 +42,8 @@ test('customer CLI performs init doctor lifecycle demo evidence and safe removal
   assert.equal(result.status, 0, result.stderr);
   const status = JSON.parse(result.stdout);
   assert.equal(status.runtimeStatus, 'READY');
-  assert.equal(status.authorityState, 'AUTHORITY_UNAVAILABLE');
+  assert.equal(status.authorityState, 'AUTHORITY_INFRASTRUCTURE_QUALIFIED');
+  assert.equal(status.mutationAuthorityGranted, false);
   assert.equal(status.productionEligibility, 'PRODUCTION_DISABLED');
 
   result = run(stateRoot, ['demo', '--approve-exact-demo', '--json']);

@@ -100,7 +100,8 @@ async function main() {
             currentRepositoryId: state.currentRepositoryId,
             currentRepositoryHead: state.currentRepositoryHead,
             repositoryGeneration: state.repositoryGeneration,
-            authorityState: 'AUTHORITY_UNAVAILABLE',
+            authorityState: inspection.authorityState,
+            mutationAuthorityGranted: false,
             repository,
           })}\n`);
         } catch {
@@ -108,7 +109,8 @@ async function main() {
             status: 'FAILED',
             startupId,
             classification: 'REPOSITORY_SELECTION_FAILED',
-            authorityState: 'AUTHORITY_UNAVAILABLE',
+            authorityState: inspection.authorityState,
+            mutationAuthorityGranted: false,
           })}\n`);
         }
         return;

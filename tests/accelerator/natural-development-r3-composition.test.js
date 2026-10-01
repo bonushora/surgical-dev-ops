@@ -136,6 +136,7 @@ function artifacts(state, {
   authorizedAt = new Date().toISOString(),
   expiresAt = null,
   replacement = after,
+  validationKind = 'VALIDATE_JS',
   patchAttempt = 1,
   patchAttemptCeiling = 2
 } = {}) {
@@ -187,7 +188,7 @@ function artifacts(state, {
     beforeSha256: sha(before),
     replacementBase64: Buffer.from(replacement).toString('base64'),
     reason: 'Apply the exact reviewed correction.',
-    validationKind: 'VALIDATE_JS'
+    validationKind
   });
 
   const patchProposal = materializeNaturalDevelopmentPatchProposal({
@@ -314,6 +315,19 @@ test('G5 composes G1-G4 through existing R3 journal and Manifest CAS', () => {
       validation.nextState,
       'READY_FOR_G7_ANTI_REPLAY_QUALIFICATION'
     );
+  } finally {
+    fs.rmSync(state.root, { recursive: true, force: true });
+  }
+});
+
+test('G5 preserves G3 contract validation normalization for cognitive NONE', () => {
+  const state = fixture();
+  try {
+    const values = artifacts(state, { validationKind: 'NONE' });
+    const result = dispatch(state, values);
+    assert.equal(values.patchProposal.validationKind, 'VALIDATE_JS');
+    assert.equal(result.status, 'COMPLETED');
+    assert.equal(result.authorizationUseRecorded, true);
   } finally {
     fs.rmSync(state.root, { recursive: true, force: true });
   }

@@ -13,7 +13,10 @@ const {
   createDefaultConfiguration,
   validateConfiguration,
 } = require('./customer-configuration');
-const { provisionLocalOfflineHumanAuthority } = require('../core/local-offline-human-authority-store');
+const {
+  provisionLocalOfflineHumanAuthority,
+  validateLocalOfflineHumanAuthority,
+} = require('../core/local-offline-human-authority-store');
 const { samePhysicalWorkspaceIdentity } = require('../core/workspace-boundary');
 const { createGovernedPatchRequest } = require('../cli/governed-patch-dispatch');
 const { orchestrate } = require('../core/surgical-orchestrator');
@@ -24,8 +27,9 @@ const BACKUP_SCHEMA = 'surgical.customer_backup.v1';
 const EVIDENCE_SCHEMA = 'surgical.customer_evidence.v1';
 const ALLOWED_ROOT_ENTRIES = new Set([
   'configuration.json', 'installation.json', 'repositories.json',
-  'evidence', 'journal', 'runtime', 'logs', 'backups',
+  'authority', 'evidence', 'journal', 'runtime', 'logs', 'backups',
 ]);
+const AUTHORITY_INFRASTRUCTURE_QUALIFIED = 'AUTHORITY_INFRASTRUCTURE_QUALIFIED';
 const V1_DIGEST = 'cd4e3fa7d7086f78291ef35b87e1b450be15bc77cb6ae8527e299101e5a11935';
 const V2_DIGEST = '0276897c7e22dc2cc77f049a4a329842abff50290ada1f946bce9747660d31e4';
 
@@ -83,12 +87,104 @@ function rootPaths(root) {
     configuration: path.join(root, 'configuration.json'),
     installation: path.join(root, 'installation.json'),
     repositories: path.join(root, 'repositories.json'),
+    authority: path.join(root, 'authority'),
     evidence: path.join(root, 'evidence'),
     journal: path.join(root, 'journal'),
     runtime: path.join(root, 'runtime'),
     logs: path.join(root, 'logs'),
     backups: path.join(root, 'backups'),
     runtimeState: path.join(root, 'runtime', 'runtime-state.json'),
+  });
+}
+
+function requirePrivatePhysicalDirectory(target, label, { writable = false } = {}) {
+  let stat;
+  let physical;
+  try {
+    stat = fs.lstatSync(target);
+    physical = fs.realpathSync(target);
+  } catch {
+    throw new Error(`${label} is missing or cannot be resolved`);
+  }
+  if (!stat.isDirectory() || stat.isSymbolicLink() || physical !== target) {
+    throw new Error(`${label} must be a private physical directory`);
+  }
+  if (process.platform !== 'win32') {
+    if (typeof process.getuid === 'function' && stat.uid !== process.getuid()) {
+      throw new Error(`${label} is not owned by the current user`);
+    }
+    if ((stat.mode & 0o077) !== 0) throw new Error(`${label} permissions are unsafe`);
+    if (writable && (stat.mode & 0o200) === 0) throw new Error(`${label} is not writable`);
+  }
+  if (writable) {
+    try { fs.accessSync(target, fs.constants.W_OK); }
+    catch { throw new Error(`${label} is not writable`); }
+  }
+  return physical;
+}
+
+function qualifyCustomerAuthorityInfrastructure({ stateRoot }) {
+  const root = canonicalRoot(stateRoot);
+  const paths = rootPaths(root);
+  const authority = validateLocalOfflineHumanAuthority({ authorityRoot: paths.authority });
+  const journalStorageRoot = requirePrivatePhysicalDirectory(
+    paths.journal,
+    'Customer mutation journal root',
+    { writable: true },
+  );
+  return immutable({
+    authorityState: AUTHORITY_INFRASTRUCTURE_QUALIFIED,
+    mutationAuthorityGranted: false,
+    authorityRoot: authority.authorityRoot,
+    journalStorageRoot,
+  });
+}
+
+function requireCompatiblePathOverride(environment, name, expected) {
+  if (!Object.prototype.hasOwnProperty.call(environment, name)
+    || environment[name] === undefined) return;
+  const candidate = environment[name];
+  if (typeof candidate !== 'string' || candidate !== expected) {
+    throw new Error(`${name} disagrees with the active customer state root`);
+  }
+}
+
+function customerPatchOptions({
+  stateRoot,
+  repositoryPath,
+  environment = process.env,
+} = {}) {
+  if (!environment || typeof environment !== 'object') {
+    throw new TypeError('Customer patch environment must be an object');
+  }
+  const root = canonicalRoot(stateRoot);
+  const infrastructure = qualifyCustomerAuthorityInfrastructure({ stateRoot: root });
+  const inspection = inspectCustomerState({ stateRoot: root });
+  const selected = inspection.repositories.repositories.find(
+    (entry) => entry.id === inspection.repositories.currentRepositoryId,
+  );
+  if (!selected || selected.path !== repositoryPath) {
+    throw new Error('Customer state root does not select the active repository');
+  }
+  const tenantId = `customer-state:${crypto.createHash('sha256').update(root).digest('hex')}`;
+  const projectId = `customer-project:${selected.id}`;
+  requireCompatiblePathOverride(
+    environment,
+    'SDO_HUMAN_AUTHORITY_ROOT',
+    infrastructure.authorityRoot,
+  );
+  requireCompatiblePathOverride(
+    environment,
+    'SDO_MUTATION_JOURNAL_ROOT',
+    infrastructure.journalStorageRoot,
+  );
+  requireCompatiblePathOverride(environment, 'SDO_TENANT_ID', tenantId);
+  requireCompatiblePathOverride(environment, 'SDO_PROJECT_ID', projectId);
+  return immutable({
+    authorityRoot: infrastructure.authorityRoot,
+    journalStorageRoot: infrastructure.journalStorageRoot,
+    tenantId,
+    projectId,
   });
 }
 
@@ -107,6 +203,7 @@ function initializeCustomerState({ stateRoot, profile = 'developer' }) {
     assertKnownRootEntries(root);
     const configuration = validateConfiguration(parseJsonFile(paths.configuration, 'Customer configuration'));
     if (configuration.profile !== profile) throw new Error('Existing deployment profile cannot be overwritten by initialization');
+    qualifyCustomerAuthorityInfrastructure({ stateRoot: root });
     return immutable({ classification: 'ALREADY_INITIALIZED', stateRoot: root, configuration });
   }
   if (existed && fs.readdirSync(root).length > 0) throw new Error('Initialization refuses to overwrite unexplained state');
@@ -114,12 +211,17 @@ function initializeCustomerState({ stateRoot, profile = 'developer' }) {
   for (const directory of [paths.evidence, paths.journal, paths.runtime, paths.logs, paths.backups]) {
     fs.mkdirSync(directory, { mode: 0o700 });
   }
+  provisionLocalOfflineHumanAuthority({
+    authorityRoot: paths.authority,
+    issuer: `local:surgical-customer:${crypto.randomUUID()}`,
+    subjectId: `surgical-customer-human:${crypto.randomUUID()}`,
+  });
   writeExclusive(paths.configuration, configuration);
   writeExclusive(paths.installation, {
     schema: INSTALLATION_SCHEMA,
     productVersion: PRODUCT_VERSION,
     installedAt: new Date().toISOString(),
-    authorityCreated: false,
+    authorityCreated: true,
   });
   writeExclusive(paths.repositories, {
     schema: REPOSITORIES_SCHEMA,
@@ -148,6 +250,7 @@ function runtimeState(root) {
 function inspectCustomerState({ stateRoot }) {
   const root = canonicalRoot(stateRoot);
   assertKnownRootEntries(root);
+  const infrastructure = qualifyCustomerAuthorityInfrastructure({ stateRoot: root });
   const configuration = readConfiguration(root);
   const repositories = parseJsonFile(rootPaths(root).repositories, 'Repository registry');
   if (repositories.schema !== REPOSITORIES_SCHEMA || !Number.isSafeInteger(repositories.generation)
@@ -171,7 +274,8 @@ function inspectCustomerState({ stateRoot }) {
       ...repositories,
       currentRepositoryId,
     },
-    authorityState: 'AUTHORITY_UNAVAILABLE',
+    authorityState: infrastructure.authorityState,
+    mutationAuthorityGranted: false,
     productionEligibility: configuration.production.eligible ? 'PRODUCTION_CONFIGURED' : 'PRODUCTION_DISABLED',
   });
 }
@@ -202,7 +306,11 @@ function doctorCustomerState({ stateRoot }) {
     git: { available: git.status === 0, version: git.status === 0 ? git.stdout.trim() : null },
     stateRoot: { path: root, private: true, writable },
     ipc: { supported: ['linux', 'darwin', 'win32'].includes(process.platform) },
-    authority: { status: inspection.authorityState, inspectionOnly: true },
+    authority: {
+      status: inspection.authorityState,
+      inspectionOnly: true,
+      mutationAuthorityGranted: false,
+    },
     production: { status: inspection.productionEligibility, configurationIsAuthority: false },
     provider: {
       configured: configuration.provider.kind !== null,
@@ -280,10 +388,17 @@ function sanitize(value) {
 function createSupportBundle({ stateRoot, recentErrors = [] }) {
   const root = canonicalRoot(stateRoot);
   if (!Array.isArray(recentErrors)) throw new TypeError('Recent errors must be bounded');
+  const doctor = doctorCustomerState({ stateRoot: root });
   return immutable({
     schema: 'surgical.customer_support_bundle.v1',
     generatedAt: new Date().toISOString(),
-    doctor: doctorCustomerState({ stateRoot: root }),
+    doctor: sanitize({
+      ...doctor,
+      stateRoot: {
+        private: doctor.stateRoot.private,
+        writable: doctor.stateRoot.writable,
+      },
+    }),
     runtime: runtimeState(root),
     configuration: sanitize(readConfiguration(root)),
     recentErrorClassifications: sanitize(recentErrors.slice(-20)),
@@ -529,8 +644,11 @@ module.exports = Object.freeze({
   EVIDENCE_SCHEMA,
   V1_DIGEST,
   V2_DIGEST,
+  AUTHORITY_INFRASTRUCTURE_QUALIFIED,
   rootPaths,
   canonicalRoot,
+  qualifyCustomerAuthorityInfrastructure,
+  customerPatchOptions,
   initializeCustomerState,
   inspectCustomerState,
   doctorCustomerState,

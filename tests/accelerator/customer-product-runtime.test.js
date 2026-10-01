@@ -23,6 +23,7 @@ const {
   restoreCustomerState,
   uninstallCustomerRuntime,
   configureCustomerProvider,
+  customerPatchOptions,
 } = require('../../accelerator/product/customer-runtime');
 
 function fixture() {
@@ -86,6 +87,14 @@ test('initialization is private restart-safe and cannot overwrite unexplained st
   const first = initializeCustomerState({ stateRoot: state.stateRoot, profile: 'developer' });
   assert.equal(first.classification, 'INITIALIZED');
   if (process.platform !== 'win32') assert.equal(fs.statSync(state.stateRoot).mode & 0o077, 0);
+  assert.equal(
+    JSON.parse(fs.readFileSync(path.join(state.stateRoot, 'installation.json'), 'utf8')).authorityCreated,
+    true
+  );
+  assert.deepEqual(
+    fs.readdirSync(path.join(state.stateRoot, 'authority')).sort(),
+    ['authority.json', 'private-key.pem', 'public-key.pem']
+  );
   const second = initializeCustomerState({ stateRoot: state.stateRoot, profile: 'developer' });
   assert.equal(second.classification, 'ALREADY_INITIALIZED');
   fs.writeFileSync(path.join(state.stateRoot, 'unexplained'), 'x');
@@ -103,11 +112,75 @@ test('doctor is inspection-only and distinguishes readiness from authority', (t)
   const report = doctorCustomerState({ stateRoot: state.stateRoot });
   const after = inspectCustomerState({ stateRoot: state.stateRoot });
   assert.equal(report.overall, 'PASS_WITH_LIMITATIONS');
-  assert.equal(report.authority.status, 'AUTHORITY_UNAVAILABLE');
+  assert.equal(report.authority.status, 'AUTHORITY_INFRASTRUCTURE_QUALIFIED');
+  assert.equal(report.authority.mutationAuthorityGranted, false);
   assert.equal(report.production.status, 'PRODUCTION_DISABLED');
   assert.equal(report.protocols.v1.digest, 'cd4e3fa7d7086f78291ef35b87e1b450be15bc77cb6ae8527e299101e5a11935');
   assert.equal(report.protocols.v2.digest, '0276897c7e22dc2cc77f049a4a329842abff50290ada1f946bce9747660d31e4');
   assert.deepEqual(after, before);
+});
+
+test('customer patch wiring is state-root scoped and rejects every override disagreement', (t) => {
+  const first = fixture();
+  const second = fixture();
+  t.after(() => {
+    fs.rmSync(first.root, { recursive: true, force: true });
+    fs.rmSync(second.root, { recursive: true, force: true });
+  });
+  initializeCustomerState({ stateRoot: first.stateRoot, profile: 'developer' });
+  initializeCustomerState({ stateRoot: second.stateRoot, profile: 'developer' });
+  const firstRepository = repository(first.root, 'first-repository');
+  const secondRepository = repository(second.root, 'second-repository');
+  onboardRepository({ stateRoot: first.stateRoot, repositoryPath: firstRepository });
+  onboardRepository({ stateRoot: second.stateRoot, repositoryPath: secondRepository });
+
+  const derived = customerPatchOptions({
+    stateRoot: first.stateRoot,
+    repositoryPath: firstRepository,
+    environment: {}
+  });
+  assert.equal(derived.authorityRoot, path.join(first.stateRoot, 'authority'));
+  assert.equal(derived.journalStorageRoot, path.join(first.stateRoot, 'journal'));
+  assert.match(derived.tenantId, /^customer-state:[a-f0-9]{64}$/);
+  assert.match(derived.projectId, /^customer-project:[a-f0-9]{64}$/);
+  assert.deepEqual(
+    customerPatchOptions({
+      stateRoot: first.stateRoot,
+      repositoryPath: firstRepository,
+      environment: {
+        SDO_HUMAN_AUTHORITY_ROOT: derived.authorityRoot,
+        SDO_MUTATION_JOURNAL_ROOT: derived.journalStorageRoot,
+        SDO_TENANT_ID: derived.tenantId,
+        SDO_PROJECT_ID: derived.projectId,
+      },
+    }),
+    derived
+  );
+
+  assert.throws(
+    () => customerPatchOptions({
+      stateRoot: first.stateRoot,
+      repositoryPath: secondRepository,
+      environment: {}
+    }),
+    /does not select/i
+  );
+
+  for (const [name, expected] of [
+    ['SDO_HUMAN_AUTHORITY_ROOT', derived.authorityRoot],
+    ['SDO_MUTATION_JOURNAL_ROOT', derived.journalStorageRoot],
+    ['SDO_TENANT_ID', derived.tenantId],
+    ['SDO_PROJECT_ID', derived.projectId]
+  ]) {
+    assert.throws(
+      () => customerPatchOptions({
+        stateRoot: first.stateRoot,
+        repositoryPath: firstRepository,
+        environment: { [name]: `${expected}-disagreement` }
+      }),
+      new RegExp(`${name} disagrees`, 'i')
+    );
+  }
 });
 
 test('repository onboarding uses physical Git evidence and grants no authority', (t) => {
@@ -144,6 +217,8 @@ test('support bundle sanitizes hostile content and excludes source authority and
   assert.equal(Object.hasOwn(bundle, 'repositorySource'), false);
   assert.equal(Object.hasOwn(bundle, 'authorityMaterial'), false);
   assert.equal(bundle.doctor.stateRoot.writable, true);
+  assert.equal(Object.hasOwn(bundle.doctor.stateRoot, 'path'), false);
+  assert.equal(serialized.includes(state.stateRoot), false);
 });
 
 test('backup restore and uninstall preserve evidence and never resurrect authority', (t) => {
