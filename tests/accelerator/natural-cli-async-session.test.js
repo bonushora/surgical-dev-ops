@@ -46,6 +46,12 @@ const {
   '../../accelerator/cli/natural-session-control'
 );
 
+const {
+  createHermeticGitRepository
+} = require(
+  './helpers/hermetic-git-repository'
+);
+
 test(
   'NATURAL exposes and resets bounded conversation state without cognition',
   async () => {
@@ -420,13 +426,15 @@ test(
   }
 );
 
-function naturalActivation() {
+function naturalActivation(
+  repositoryPath = path.resolve(
+    __dirname,
+    '../..'
+  )
+) {
   return Object.freeze({
     repositoryPath:
-      path.resolve(
-        __dirname,
-        '../..'
-      ),
+      repositoryPath,
 
     workspace:
       'surgical-dev-ops',
@@ -1780,17 +1788,83 @@ test(
 
 test(
   'NATURAL CLI reports provider failure separately after governed evidence acquisition',
-  async () => {
+  async (context) => {
     const input = new PassThrough();
     const output = new PassThrough();
     let observed = '';
+
+    const fixture =
+      createHermeticGitRepository();
+
+    context.after(
+      () => fixture.cleanup()
+    );
+
+    fs.mkdirSync(
+      path.join(
+        fixture.repository,
+        'docs'
+      )
+    );
+
+    fs.writeFileSync(
+      path.join(
+        fixture.repository,
+        'README.md'
+      ),
+      '# Qualified customer repository\n',
+      'utf8'
+    );
+
+    fs.writeFileSync(
+      path.join(
+        fixture.repository,
+        'docs',
+        'ENGINEERING_EVIDENCE.md'
+      ),
+      '# Engineering evidence\n\nCanonical qualification is pending.\n',
+      'utf8'
+    );
+
+    fs.writeFileSync(
+      path.join(
+        fixture.repository,
+        'ROADMAP.md'
+      ),
+      '# Roadmap\n\nRun the next canonical qualification.\n',
+      'utf8'
+    );
+
+    childProcess.execFileSync(
+      'git',
+      ['add', '.'],
+      {
+        cwd:
+          fixture.repository
+      }
+    );
+
+    childProcess.execFileSync(
+      'git',
+      [
+        'commit',
+        '-m',
+        'project analysis fixture'
+      ],
+      {
+        cwd:
+          fixture.repository
+      }
+    );
 
     output.on('data', (chunk) => {
       observed += chunk.toString();
     });
 
     const activation =
-      naturalActivation();
+      naturalActivation(
+        fixture.repository
+      );
 
     cli.createInteractiveSession(
       activation,
