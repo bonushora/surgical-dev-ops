@@ -3488,6 +3488,22 @@ function createInteractiveSession(
             return;
           }
 
+          const closedPatchApproval = normalizedLine.match(
+            /^(?:aprovar|approve) patch ([a-f0-9]{64})$/i
+          );
+
+          if (closedPatchApproval) {
+            output.write(
+              humanText(
+                activation,
+                'Nenhuma proposta exata está pendente para esta aprovação. O comando foi rejeitado deterministicamente e não foi enviado à cognição. Nenhuma autoridade foi concedida.\n',
+                'No exact proposal is pending for this approval. The command was rejected deterministically and was not sent to cognition. No authority was granted.\n'
+              )
+            );
+            resumeAndPrompt();
+            return;
+          }
+
           if (sessionControl) {
             let controlled =
               sessionControl.handle(

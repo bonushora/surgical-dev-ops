@@ -222,8 +222,10 @@ test('normal customer state root supplies local authority and journal only after
     true
   );
 
+  let cognitiveAskCalls = 0;
   const cognitiveSession = Object.freeze({
     async ask() {
+      cognitiveAskCalls += 1;
       throw new Error('Free-form cognition is outside this regression.');
     },
     async proposePatch(objective) {
@@ -296,6 +298,16 @@ test('normal customer state root supplies local authority and journal only after
   await waitFor(
     () => observed.length > observedBeforeReplay,
     () => observed
+  );
+  const replayOutput = observed.slice(observedBeforeReplay);
+  assert.equal(
+    cognitiveAskCalls,
+    0,
+    `Consumed exact approval must never reach free-form cognition: ${replayOutput}`
+  );
+  assert.match(
+    replayOutput,
+    /Nenhuma proposta exata está pendente para esta aprovação\. O comando foi rejeitado deterministicamente e não foi enviado à cognição\. Nenhuma autoridade foi concedida\./
   );
   assert.deepEqual(
     physicalSnapshot(path.join(fixture.stateRoot, 'journal')),
