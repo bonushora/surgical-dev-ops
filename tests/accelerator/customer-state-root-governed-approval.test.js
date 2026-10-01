@@ -74,10 +74,10 @@ function git(repository, args) {
 
 function createCalculatorFixture() {
   const root = fs.realpathSync(
-    fs.mkdtempSync(path.join(os.tmpdir(), 'sdo-customer-state-approval-'))
+    fs.mkdtempSync(path.join(os.tmpdir(), 'sdo-csa-'))
   );
   const repository = path.join(root, 'repository');
-  const stateRoot = path.join(root, 'customer-state');
+  const stateRoot = path.join(root, 's');
   fs.mkdirSync(repository);
   fs.writeFileSync(
     path.join(repository, 'package.json'),
