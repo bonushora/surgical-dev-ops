@@ -80,13 +80,16 @@ and its session is removed on reset, close and failure.
 
 Codex uses a local SDK subprocess, but its cognition is an external service.
 On qualified Linux hosts, a session-scoped native relay exposes one fixed
-loopback endpoint inside the private namespace. An Orchestrator-owned,
-credential-blind Unix-socket broker accepts only the fixed Codex provider
-protocol paths and connects only to the provider selected by trusted
-authentication configuration. Arbitrary Internet, host-network, localhost and
-proxy access remain denied. Broker absence, malformed requests, invalid endpoint
-permissions and upstream failure remain fail-closed with no shared-network
-fallback.
+loopback endpoint inside the private namespace. An Orchestrator-owned
+Unix-socket broker validates a non-privileged session identity, accepts only the
+fixed HTTP Codex provider paths, and injects the privileged API key only on the
+host side for the fixed provider destination. The agent does not receive that
+key. WebSocket is rejected before upgrade because this runtime has no qualified
+message parser; `CONNECT` is denied. Arbitrary Internet, host-network, localhost and
+proxy access remain denied. Existing Codex-login `auth.json` mode is explicitly
+blocked in this profile until equivalent host mediation exists. Broker absence,
+malformed requests, invalid endpoint permissions and upstream failure remain
+fail-closed with no shared-network fallback.
 
 There is no read-only fallback. When native containment is absent or has not
 been physically qualified, Codex remains unavailable with
@@ -105,3 +108,7 @@ adversarial/native qualification must become green before that claim is made.
 The real network-backed Codex executable is intentionally not exercised by the
 offline containment suite; it uses a local protocol-compatible executable to
 verify process isolation and streaming without credentials or network access.
+Therefore safe HTTP operation with fictitious credentials is qualified, while
+real account login, real paid inference, WebSocket-dependent Codex operation,
+and end-to-end provider functionality remain `NOT_EXECUTED` or `BLOCKED` as
+applicable.

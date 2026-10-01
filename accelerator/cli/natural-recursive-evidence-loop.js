@@ -278,11 +278,12 @@ function extractRecursiveEvidence(
           target:
             execution.target.requested,
           content:
-            execution.evidence.content
+            execution.evidence.content,
+          source: 'GOVERNED_WORKSPACE_READ'
         }
       );
 
-    if (!sensitive.providerSafe) {
+    if (!sensitive.providerSafe || sensitive.egressAuthorized !== true) {
       throw new Error(
         'Governed filesystem evidence is blocked by sensitive-content policy.'
       );
@@ -633,7 +634,9 @@ async function runNaturalRecursiveEvidenceLoop(
     evaluateEvidenceIntent = null,
     deterministicProjectGrounding = true,
     sensitiveContentPolicy =
-      createSensitiveContentPolicy()
+      createSensitiveContentPolicy({
+        authorizedEgressSources: ['GOVERNED_WORKSPACE_READ']
+      })
   } = {}
 ) {
   if (

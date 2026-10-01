@@ -464,7 +464,9 @@ function createNaturalCognitiveSession(
       createNaturalConversationalRuntime();
 
   const sensitiveContentPolicy =
-    createSensitiveContentPolicy();
+    createSensitiveContentPolicy({
+      authorizedEgressSources: ['GOVERNED_SESSION_EVIDENCE']
+    });
 
   if (
     !conversationalRuntime ||
@@ -669,10 +671,11 @@ function createNaturalCognitiveSession(
           sensitiveContentPolicy,
           {
             target: 'natural-governed-evidence',
-            content: governedEvidence
+            content: governedEvidence,
+            source: 'GOVERNED_SESSION_EVIDENCE'
           }
         );
-        if (!inspected.providerSafe) return fallbackMessage({ reason: 'Governed evidence was blocked by the sensitive-content boundary.' });
+        if (!inspected.providerSafe || inspected.egressAuthorized !== true) return fallbackMessage({ reason: 'Governed evidence was blocked by the sensitive-content boundary.' });
         safeGovernedEvidence = inspected.content;
       } catch {
         return fallbackMessage({ reason: 'Governed evidence could not be inspected safely.' });

@@ -1,6 +1,7 @@
 'use strict';
 
 const fs = require('node:fs');
+const crypto = require('node:crypto');
 const http = require('node:http');
 const https = require('node:https');
 const net = require('node:net');
@@ -62,24 +63,6 @@ const RESPONSE_HEADERS = new Set([
   'openai-processing-ms',
   'request-id',
   'x-request-id',
-]);
-
-const WEBSOCKET_REQUEST_HEADERS = new Set([
-  ...REQUEST_HEADERS,
-  'connection',
-  'sec-websocket-extensions',
-  'sec-websocket-key',
-  'sec-websocket-protocol',
-  'sec-websocket-version',
-  'upgrade',
-]);
-
-const WEBSOCKET_RESPONSE_HEADERS = new Set([
-  'connection',
-  'sec-websocket-accept',
-  'sec-websocket-extensions',
-  'sec-websocket-protocol',
-  'upgrade',
 ]);
 
 function fail(message) {
@@ -173,69 +156,11 @@ function writeSocketResponse(socket, statusCode) {
   );
 }
 
-function upgradeProvider({ provider, request, clientSocket, head, tunnels }) {
-  const headers = filterHeaders(request.headers, WEBSOCKET_REQUEST_HEADERS);
-  const upstreamRequest = https.request({
-    hostname: provider.hostname,
-    port: provider.port,
-    method: 'GET',
-    path: `${provider.pathPrefix}/responses`,
-    headers: { ...headers, host: provider.hostname },
-    agent: false,
-  });
-  let upgraded = false;
-  upstreamRequest.setTimeout(30_000, () => upstreamRequest.destroy());
-  upstreamRequest.once('upgrade', (response, upstreamSocket, upstreamHead) => {
-    upgraded = true;
-    tunnels.add(clientSocket);
-    tunnels.add(upstreamSocket);
-    const responseHeaders = filterHeaders(response.headers, WEBSOCKET_RESPONSE_HEADERS);
-    const headerLines = Object.entries(responseHeaders).map(
-      ([name, value]) => `${name}: ${value}`
-    );
-    clientSocket.write(
-      `HTTP/1.1 101 Switching Protocols\r\n${headerLines.join('\r\n')}\r\n\r\n`
-    );
-    if (head.length > 0) upstreamSocket.write(head);
-    if (upstreamHead.length > 0) clientSocket.write(upstreamHead);
-    clientSocket.pipe(upstreamSocket).pipe(clientSocket);
-    const closeTunnel = () => {
-      tunnels.delete(clientSocket);
-      tunnels.delete(upstreamSocket);
-      clientSocket.destroy();
-      upstreamSocket.destroy();
-    };
-    clientSocket.once('error', closeTunnel);
-    upstreamSocket.once('error', closeTunnel);
-    clientSocket.once('close', closeTunnel);
-    upstreamSocket.once('close', closeTunnel);
-  });
-  upstreamRequest.once('response', (response) => {
-    response.resume();
-    if (!upgraded) writeSocketResponse(clientSocket, response.statusCode || 502);
-  });
-  upstreamRequest.once('error', () => {
-    if (!upgraded) writeSocketResponse(clientSocket, 502);
-  });
-  upstreamRequest.end();
-}
-
-function validWebSocketUpgrade(request) {
-  return request.method === 'GET' && request.url === '/responses' &&
-    request.headers.host === PROVIDER_HOST &&
-    typeof request.headers.authorization === 'string' &&
-    request.headers.authorization.length > 0 &&
-    String(request.headers.upgrade || '').toLowerCase() === 'websocket' &&
-    String(request.headers.connection || '').toLowerCase().split(/\s*,\s*/).includes('upgrade') &&
-    typeof request.headers['sec-websocket-key'] === 'string' &&
-    request.headers['sec-websocket-version'] === '13';
-}
-
-function validateProviderRequest(request, body) {
+function validateProviderRequest(request, body, clientAuthorization) {
   if (request.headers.host !== PROVIDER_HOST) {
     return false;
   }
-  if (typeof request.headers.authorization !== 'string' || request.headers.authorization.length === 0) {
+  if (request.headers.authorization !== clientAuthorization) {
     return false;
   }
   if (request.method === 'GET' &&
@@ -272,16 +197,19 @@ function validateProviderRequest(request, body) {
 function createCodexProviderOnlyTransport({
   controlRoot,
   providerKind,
+  credentialProvider,
   upstreamRequest = requestProvider,
 }) {
   const provider = PROVIDERS[providerKind];
-  if (!provider || typeof upstreamRequest !== 'function') {
+  if (!provider || typeof credentialProvider !== 'function' || typeof upstreamRequest !== 'function') {
     throw fail('Codex provider transport configuration is invalid.');
   }
   const secureRoot = assertSecureControlRoot(controlRoot);
   const socketPath = path.join(secureRoot, 'provider.sock');
   const relayRoot = path.join(secureRoot, 'relay');
   const relaySocketPath = path.join(relayRoot, 'provider.sock');
+  const clientApiKey = `sdo-broker-${crypto.randomBytes(32).toString('hex')}`;
+  const clientAuthorization = `Bearer ${clientApiKey}`;
   if (fs.existsSync(socketPath) || fs.existsSync(relayRoot)) {
     throw fail('Codex provider transport endpoint already exists.');
   }
@@ -289,7 +217,6 @@ function createCodexProviderOnlyTransport({
   fs.chmodSync(relayRoot, 0o700);
 
   let disposed = false;
-  const tunnels = new Set();
   const relaySockets = new Set();
   const relayGates = new Set();
   const server = http.createServer(async (request, response) => {
@@ -300,35 +227,43 @@ function createCodexProviderOnlyTransport({
       rejectRequest(response, 400, 'Invalid provider request.');
       return;
     }
-    if (!validateProviderRequest(request, body)) {
+    if (!validateProviderRequest(request, body, clientAuthorization)) {
       rejectRequest(response, 400, 'Invalid provider request.');
       return;
     }
 
     try {
+      const credential = await credentialProvider();
+      if (typeof credential !== 'string' || !credential.trim() || credential !== credential.trim() ||
+          credential.length > 8192 || /[\0\r\n]/.test(credential)) {
+        throw fail('Host credential is unavailable or malformed.');
+      }
       const upstream = await upstreamRequest({
         hostname: provider.hostname,
         port: provider.port,
         method: request.method,
         path: `${provider.pathPrefix}${request.url}`,
-        headers: filterHeaders(request.headers, REQUEST_HEADERS),
+        headers: {
+          ...filterHeaders(request.headers, REQUEST_HEADERS),
+          authorization: `Bearer ${credential}`,
+        },
         body,
       });
       const responseHeaders = filterHeaders(upstream.headers || {}, RESPONSE_HEADERS);
       response.writeHead(upstream.statusCode, responseHeaders);
+      response.once('close', () => {
+        if (!response.writableEnded && upstream.body &&
+            typeof upstream.body.destroy === 'function') {
+          upstream.body.destroy();
+        }
+      });
       upstream.body.on('error', () => response.destroy());
       upstream.body.pipe(response);
     } catch {
       rejectRequest(response, 502, 'Configured Codex provider transport failed.');
     }
   });
-  server.on('upgrade', (request, socket, head) => {
-    if (!validWebSocketUpgrade(request)) {
-      writeSocketResponse(socket, 400);
-      return;
-    }
-    upgradeProvider({ provider, request, clientSocket: socket, head, tunnels });
-  });
+  server.on('upgrade', (_request, socket) => writeSocketResponse(socket, 426));
   server.on('connect', (_request, socket) => socket.destroy());
   server.on('clientError', (_error, socket) => {
     socket.end('HTTP/1.1 400 Bad Request\r\nConnection: close\r\n\r\n');
@@ -408,6 +343,18 @@ function createCodexProviderOnlyTransport({
     hostNetworkFallback: false,
     credentialPersistence: false,
     credentialLogging: false,
+    privilegedCredentialExposedToAgent: false,
+    agentAuthorizationForwarded: false,
+    brokerIdentitySessionScoped: true,
+    webSocketPolicy: 'BLOCKED_BEFORE_UPGRADE',
+    allowedHttpOperations: Object.freeze([
+      'GET /models[?client_version]',
+      'POST /responses',
+      'POST /responses/compact',
+    ]),
+    maxRequestBytes: MAX_REQUEST_BYTES,
+    upstreamTimeoutMs: 120_000,
+    redirectsFollowed: false,
     socketOwnerUid: process.getuid(),
     socketMode: '0600',
     providerHost: PROVIDER_HOST,
@@ -420,6 +367,8 @@ function createCodexProviderOnlyTransport({
     relaySocketPath,
     providerBaseUrl: `http://${PROVIDER_HOST}`,
     providerPort: PROVIDER_PORT,
+    clientApiKey,
+    clientAuthorization,
     attestation,
     dispose() {
       if (disposed) {
@@ -429,8 +378,6 @@ function createCodexProviderOnlyTransport({
       if (typeof server.closeAllConnections === 'function') {
         server.closeAllConnections();
       }
-      for (const tunnel of tunnels) tunnel.destroy();
-      tunnels.clear();
       for (const socket of relaySockets) socket.destroy();
       relaySockets.clear();
       for (const gate of relayGates) gate.close();

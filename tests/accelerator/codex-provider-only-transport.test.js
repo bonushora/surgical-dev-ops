@@ -6,7 +6,7 @@ const fs = require('node:fs');
 const http = require('node:http');
 const os = require('node:os');
 const path = require('node:path');
-const { Readable } = require('node:stream');
+const { PassThrough, Readable } = require('node:stream');
 const test = require('node:test');
 const {
   CODEX_NETWORK_RELAY,
@@ -15,10 +15,23 @@ const {
 
 const TRANSPORT_MODULE = '../../accelerator/adapters/codex-provider-only-transport';
 const PROVIDER_HOST = '127.0.0.1:43127';
+const HOST_CREDENTIAL = 'host-only-fixture-credential';
+const clientAuthorizations = new Map();
 const linuxTest = process.platform === 'linux' ? test : test.skip;
 
 function loadTransport() {
-  return require(TRANSPORT_MODULE);
+  const transportModule = require(TRANSPORT_MODULE);
+  return {
+    ...transportModule,
+    createCodexProviderOnlyTransport(options) {
+      const transport = transportModule.createCodexProviderOnlyTransport({
+        ...options,
+        credentialProvider: async () => HOST_CREDENTIAL,
+      });
+      clientAuthorizations.set(transport.socketPath, transport.clientAuthorization);
+      return transport;
+    },
+  };
 }
 
 function createControlRoot() {
@@ -40,7 +53,7 @@ function requestSocket(socketPath, {
       path: requestPath,
       headers: {
         host: PROVIDER_HOST,
-        authorization: 'Bearer directed-test-secret',
+        authorization: clientAuthorizations.get(socketPath) || 'Bearer invalid-client-identity',
         'content-type': 'application/json',
         'content-length': Buffer.byteLength(body),
         ...headers,
@@ -50,6 +63,7 @@ function requestSocket(socketPath, {
       response.on('data', (chunk) => chunks.push(chunk));
       response.on('end', () => resolve({
         statusCode: response.statusCode,
+        headers: response.headers,
         body: Buffer.concat(chunks).toString('utf8'),
       }));
     });
@@ -105,6 +119,10 @@ linuxTest('provider-only transport makes only the configured OpenAI Responses pa
   assert.equal(transport.providerBaseUrl, `http://${PROVIDER_HOST}`);
   assert.equal(transport.attestation.destinationFixed, true);
   assert.equal(transport.attestation.genericProxyUnavailable, true);
+  assert.equal(observedRequest.headers.authorization, `Bearer ${HOST_CREDENTIAL}`);
+  assert.notEqual(observedRequest.headers.authorization, transport.clientAuthorization);
+  assert.equal(transport.attestation.privilegedCredentialExposedToAgent, false);
+  assert.equal(transport.attestation.agentAuthorizationForwarded, false);
 });
 
 linuxTest('caller-controlled provider destinations and generic proxy methods fail closed', async () => {
@@ -272,6 +290,115 @@ linuxTest('malformed provider requests fail closed before external transport', a
   assert.equal(upstreamCalls, 0);
 });
 
+linuxTest('WebSocket is rejected before upgrade or prohibited application bytes reach upstream', async () => {
+  const { createCodexProviderOnlyTransport } = loadTransport();
+  const controlRoot = createControlRoot();
+  let upstreamCalls = 0;
+  const transport = createCodexProviderOnlyTransport({
+    controlRoot,
+    providerKind: 'OPENAI_API',
+    upstreamRequest: async () => {
+      upstreamCalls += 1;
+      return fixedResponse();
+    },
+  });
+  disposals.push(transport.dispose);
+
+  const response = await new Promise((resolve, reject) => {
+    const socket = require('node:net').createConnection(transport.socketPath);
+    const chunks = [];
+    socket.once('connect', () => {
+      socket.write([
+        'GET /responses HTTP/1.1',
+        `Host: ${PROVIDER_HOST}`,
+        `Authorization: ${transport.clientAuthorization}`,
+        'Connection: Upgrade',
+        'Upgrade: websocket',
+        'Sec-WebSocket-Version: 13',
+        'Sec-WebSocket-Key: Zml4dHVyZS1ub3QtYS1zZWNyZXQ=',
+        '',
+        ''
+      ].join('\r\n'));
+      socket.write(Buffer.from('{"tools":[{"type":"web_search"}]}', 'utf8'));
+    });
+    socket.on('data', (chunk) => chunks.push(chunk));
+    socket.once('error', reject);
+    socket.once('end', () => resolve(Buffer.concat(chunks).toString('utf8')));
+  });
+
+  assert.match(response, /^HTTP\/1\.1 426 /);
+  assert.equal(upstreamCalls, 0);
+  assert.equal(transport.attestation.webSocketPolicy, 'BLOCKED_BEFORE_UPGRADE');
+});
+
+linuxTest('redirects are not followed and unlisted response headers are removed', async () => {
+  const { createCodexProviderOnlyTransport } = loadTransport();
+  const controlRoot = createControlRoot();
+  const transport = createCodexProviderOnlyTransport({
+    controlRoot,
+    providerKind: 'OPENAI_API',
+    upstreamRequest: async () => ({
+      statusCode: 302,
+      headers: {
+        location: 'https://example.invalid/escape',
+        'set-cookie': 'secret=fixture',
+        'content-type': 'application/json'
+      },
+      body: Readable.from(['{}'])
+    }),
+  });
+  disposals.push(transport.dispose);
+
+  const response = await requestSocket(transport.socketPath);
+
+  assert.equal(response.statusCode, 302);
+  assert.equal(response.headers.location, undefined);
+  assert.equal(response.headers['set-cookie'], undefined);
+  assert.equal(response.headers['content-type'], 'application/json');
+  assert.equal(transport.attestation.redirectsFollowed, false);
+});
+
+linuxTest('client cancellation destroys the bounded upstream response stream', async () => {
+  const { createCodexProviderOnlyTransport } = loadTransport();
+  const controlRoot = createControlRoot();
+  const upstreamBody = new PassThrough();
+  let markUpstreamReady;
+  const upstreamReady = new Promise((resolve) => { markUpstreamReady = resolve; });
+  const transport = createCodexProviderOnlyTransport({
+    controlRoot,
+    providerKind: 'OPENAI_API',
+    upstreamRequest: async () => {
+      markUpstreamReady();
+      return {
+        statusCode: 200,
+        headers: { 'content-type': 'application/json' },
+        body: upstreamBody
+      };
+    },
+  });
+  disposals.push(transport.dispose);
+
+  const closed = new Promise((resolve) => upstreamBody.once('close', resolve));
+  const body = JSON.stringify({ model: 'fixture', input: 'fixture', stream: true });
+  const socket = require('node:net').createConnection(transport.socketPath);
+  socket.once('connect', () => {
+    socket.write([
+      'POST /responses HTTP/1.1',
+      `Host: ${PROVIDER_HOST}`,
+      `Authorization: ${transport.clientAuthorization}`,
+      'Content-Type: application/json',
+      `Content-Length: ${Buffer.byteLength(body)}`,
+      '',
+      body
+    ].join('\r\n'));
+  });
+  socket.once('data', () => socket.destroy());
+  await upstreamReady;
+  upstreamBody.write('{"partial":');
+  await closed;
+  assert.equal(upstreamBody.destroyed, true);
+});
+
 linuxTest('provider errors and attestation never emit authorization secrets', async () => {
   const { createCodexProviderOnlyTransport } = loadTransport();
   const controlRoot = createControlRoot();
@@ -333,6 +460,12 @@ linuxTest('private loopback relay reaches only a sealed provider broker session'
   const relay = path.join(controlRoot, 'provider-relay');
   fs.copyFileSync(CODEX_NETWORK_RELAY, relay);
   fs.chmodSync(relay, 0o500);
+  const transport = loadTransport().createCodexProviderOnlyTransport({
+    controlRoot,
+    providerKind: 'OPENAI_API',
+    upstreamRequest: async () => fixedResponse('{"relayed":true}'),
+  });
+  disposals.push(transport.dispose);
   const probe = path.join(controlRoot, 'relay-probe.js');
   fs.writeFileSync(probe, [
     "'use strict';",
@@ -343,7 +476,7 @@ linuxTest('private loopback relay reaches only a sealed provider broker session'
     "const body = JSON.stringify({ model: 'test-model', input: 'hello', stream: true });",
     "const request = http.request({ host: '127.0.0.1', port: 43127, method: 'POST',",
     "  path: '/responses', headers: { host: '127.0.0.1:43127',",
-    "  authorization: 'Bearer contained-test', 'content-type': 'application/json',",
+    `  authorization: ${JSON.stringify(transport.clientAuthorization)}, 'content-type': 'application/json',`,
     "  'content-length': Buffer.byteLength(body) } }, (response) => {",
     "  const chunks = []; response.on('data', (chunk) => chunks.push(chunk));",
     "  response.on('end', () => process.stdout.write(JSON.stringify({",
@@ -354,12 +487,6 @@ linuxTest('private loopback relay reaches only a sealed provider broker session'
     "}, 100);",
     '',
   ].join('\n'), { mode: 0o600 });
-  const transport = loadTransport().createCodexProviderOnlyTransport({
-    controlRoot,
-    providerKind: 'OPENAI_API',
-    upstreamRequest: async () => fixedResponse('{"relayed":true}'),
-  });
-  disposals.push(transport.dispose);
   const spec = createLinuxCodexCognitiveLaunchSpec({
     cognitiveRoot,
     codexExecutable: process.execPath,
@@ -374,6 +501,7 @@ linuxTest('private loopback relay reaches only a sealed provider broker session'
     providerTransportAttestation: transport.attestation,
     providerRelayExecutable: relay,
     providerBaseUrl: transport.providerBaseUrl,
+    clientApiKey: transport.clientApiKey,
   });
   const executableFd = fs.openSync(process.execPath, 'r');
   const result = await new Promise((resolve, reject) => {

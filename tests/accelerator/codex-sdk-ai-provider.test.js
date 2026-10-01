@@ -135,6 +135,7 @@ function fakeContainment(observations = {}, controls = {
     launcherPath: '/isolated/control/codex-contained-launcher',
     sdkWorkingDirectory: '/cognitive/workspace',
     providerBaseUrl: 'http://127.0.0.1:43127',
+    clientApiKey: 'non-privileged-broker-client-fixture',
     attestation: Object.freeze({
       schema: 'sdo.codex_cognitive_containment_attestation.v1',
       decision: 'ENFORCED',
@@ -679,7 +680,7 @@ test('Codex receives authorized evidence only after deterministic sanitization',
   assert.equal(observations.prompt.context.workspace, 'fixture');
 });
 
-test('CLI Codex credential boundary reaches the full composition only as apiKey', async () => {
+test('CLI Codex credential remains host-side and SDK receives only broker identity', async () => {
   const observations = {};
   const marker = 'cli-boundary-secret';
   const environment = {
@@ -698,13 +699,14 @@ test('CLI Codex credential boundary reaches the full composition only as apiKey'
   assert.equal((await session.describe()).active, true);
   const response = await session.ask('Explique.', { workspace: 'fixture', interactionMode: { mode: 'NATURAL' } });
   assert.equal(response, 'bounded\n');
-  assert.equal(observations.codexOptions.apiKey, marker);
+  assert.equal(observations.codexOptions.apiKey, 'non-privileged-broker-client-fixture');
+  assert.notEqual(observations.codexOptions.apiKey, marker);
   assert.deepEqual(Object.keys(observations.codexOptions.env).sort(), ['HOME', 'LANG', 'PATH', 'TMPDIR']);
   assert.equal(JSON.stringify(response).includes(marker), false);
   assert.equal(JSON.stringify(observations.started).includes(marker), false);
 });
 
-test('existing Codex login remains owned by Codex and is never parsed or copied', {
+test('existing Codex login remains unparsed and is explicitly blocked without mediated auth', {
   skip: process.platform !== 'linux'
 }, async (t) => {
   const loginHome = fs.mkdtempSync(path.join(os.tmpdir(), 'sdo-codex-login-test-'));
@@ -724,34 +726,17 @@ test('existing Codex login remains owned by Codex and is never parsed or copied'
   assert.equal(authentication.credentialProvider, null);
   assert.equal(JSON.stringify(authentication).includes(marker), false);
 
-  const observations = {};
-  let containmentInput;
-  const adapter = createCodexSDKAIProviderAdapter({
+  let containmentCalls = 0;
+  let sdkLoads = 0;
+  assert.throws(() => createCodexSDKAIProviderAdapter({
     authenticationMode: 'CODEX_LOGIN',
     codexAuthPath: authPath,
-    containmentFactory: (input) => {
-      containmentInput = input;
-      return fakeContainment({}, {
-        originalWorkspaceDenied: true,
-        networkDenied: false,
-        genericNetworkDenied: true,
-        cognitiveServiceNetworkQualified: true,
-        providerOnlyTransport: true,
-        hostNetworkShared: false
-      });
-    },
-    sdkLoader: async () => fakeSDK({ answer: 'bounded login' }, observations)
-  });
-  assert.deepEqual(await adapter.invoke(cognitiveRequest()), { answer: 'bounded login' });
-  assert.deepEqual(containmentInput, {
-    authenticationMode: 'CODEX_LOGIN',
-    codexAuthPath: authPath
-  });
-  assert.equal(Object.hasOwn(observations.codexOptions, 'apiKey'), false);
-  assert.equal(observations.codexOptions.baseUrl, 'http://127.0.0.1:43127');
-  assert.equal(observations.codexOptions.config.web_search, 'disabled');
-  assert.equal(observations.codexOptions.config.features.plugins, false);
-  adapter.dispose();
+    containmentFactory: () => { containmentCalls += 1; return fakeContainment(); },
+    sdkLoader: async () => { sdkLoads += 1; return fakeSDK(); }
+  }), /host-mediated Codex API-key authentication/i);
+  assert.equal(containmentCalls, 0);
+  assert.equal(sdkLoads, 0);
+  assert.equal(fs.readFileSync(authPath, 'utf8'), JSON.stringify({ auth_mode: marker }));
 });
 
 test('Codex canonical deadline covers SDK loading without waiting in real time', async () => {

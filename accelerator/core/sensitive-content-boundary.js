@@ -5,6 +5,11 @@ const crypto = require('node:crypto');
 const POLICY_SCHEMA = 'sdo.sensitive_content_policy.v1';
 const RESULT_SCHEMA = 'sdo.sensitive_content_result.v1';
 const MAX_INSPECTION_BYTES = 64 * 1024;
+const AUTHORIZED_EGRESS_SOURCES = Object.freeze([
+  'GOVERNED_PROCESS_OUTPUT',
+  'GOVERNED_SESSION_EVIDENCE',
+  'GOVERNED_WORKSPACE_READ'
+]);
 
 const DEFAULT_EXCLUDED_SEGMENTS = Object.freeze([
   '.git', '.npm', '.ssh', 'node_modules', '.surgical-secrets'
@@ -16,6 +21,7 @@ const CONTENT_RULES = Object.freeze([
   Object.freeze({ id: 'CLOUD_CREDENTIAL', action: 'BLOCK', pattern: /\b(?:AKIA|ASIA)[A-Z0-9]{16}\b/ }),
   Object.freeze({ id: 'BEARER_TOKEN', action: 'REDACT', pattern: /\bBearer\s+[A-Za-z0-9._~+\/-]{12,}/gi }),
   Object.freeze({ id: 'ASSIGNMENT_SECRET', action: 'REDACT', pattern: /\b(?:api[_-]?key|access[_-]?token|auth[_-]?token|client[_-]?secret|password|passwd)\s*[:=]\s*([^\s,;]+)/gi }),
+  Object.freeze({ id: 'OPERATIONAL_SECRET', action: 'REDACT', pattern: /\b(?:segredo(?:[_-]?operacional)?|operational[_-]?secret)\s*[:=]\s*([^\s,;]+)/gi }),
   Object.freeze({ id: 'KNOWN_TOKEN', action: 'REDACT', pattern: /\b(?:gh[pousr]_[A-Za-z0-9]{20,}|sk-[A-Za-z0-9_-]{20,}|npm_[A-Za-z0-9]{20,})\b/g })
 ]);
 
@@ -34,23 +40,34 @@ function canonicalTarget(value) {
   return target;
 }
 
-function createSensitiveContentPolicy({ excludedSegments = DEFAULT_EXCLUDED_SEGMENTS } = {}) {
+function createSensitiveContentPolicy({
+  excludedSegments = DEFAULT_EXCLUDED_SEGMENTS,
+  authorizedEgressSources = []
+} = {}) {
   if (!Array.isArray(excludedSegments) || excludedSegments.some((item) => typeof item !== 'string' || !item.trim() || item.includes('/'))) {
     throw new Error('Sensitive-content exclusions must be canonical path segments.');
   }
+  if (!Array.isArray(authorizedEgressSources) || authorizedEgressSources.some((source) =>
+    !AUTHORIZED_EGRESS_SOURCES.includes(source))) {
+    throw new Error('Sensitive-content egress sources are not qualified.');
+  }
   const normalized = [...new Set(excludedSegments.map((item) => item.trim()))].sort();
+  const authorized = [...new Set(authorizedEgressSources)].sort();
   return deepFreeze({
     schema: POLICY_SCHEMA,
     excludedSegments: normalized,
+    authorizedEgressSources: authorized,
     maxInspectionBytes: MAX_INSPECTION_BYTES,
     filenamePatternsSufficient: false,
     contentInspectionRequired: true,
+    classificationScope: 'BOUNDED_DETERMINISTIC_PATTERNS_NOT_UNIVERSAL_SECRET_DETECTION',
+    classificationComplete: false,
     operationalAuthority: false,
     mutationAuthority: false
   });
 }
 
-function inspectSensitiveContent(policy, { target, content } = {}) {
+function inspectSensitiveContent(policy, { target, content, source = null } = {}) {
   if (!policy || policy.schema !== POLICY_SCHEMA || !Object.isFrozen(policy)) {
     throw new Error('Immutable sensitive-content policy is required.');
   }
@@ -63,7 +80,7 @@ function inspectSensitiveContent(policy, { target, content } = {}) {
   const segments = canonical.split('/');
   const excluded = segments.find((segment) => policy.excludedSegments.includes(segment));
   if (excluded) {
-    return deepFreeze({ schema: RESULT_SCHEMA, decision: 'BLOCKED', reason: 'EXCLUDED_PATH', rules: [`PATH:${excluded}`], target: canonical, content: null, contentSha256, bytes, redacted: false, providerSafe: false, operationalAuthority: false, mutationAuthority: false });
+    return deepFreeze({ schema: RESULT_SCHEMA, decision: 'BLOCKED', reason: 'EXCLUDED_PATH', rules: [`PATH:${excluded}`], target: canonical, source, content: null, contentSha256, bytes, redacted: false, egressAuthorized: false, providerSafe: false, classificationScope: policy.classificationScope, classificationComplete: false, operationalAuthority: false, mutationAuthority: false });
   }
 
   const matched = CONTENT_RULES.filter((rule) => {
@@ -71,7 +88,7 @@ function inspectSensitiveContent(policy, { target, content } = {}) {
     return rule.pattern.test(content);
   });
   if (matched.some((rule) => rule.action === 'BLOCK')) {
-    return deepFreeze({ schema: RESULT_SCHEMA, decision: 'BLOCKED', reason: 'SENSITIVE_CONTENT', rules: matched.map((rule) => rule.id).sort(), target: canonical, content: null, contentSha256, bytes, redacted: false, providerSafe: false, operationalAuthority: false, mutationAuthority: false });
+    return deepFreeze({ schema: RESULT_SCHEMA, decision: 'BLOCKED', reason: 'SENSITIVE_CONTENT', rules: matched.map((rule) => rule.id).sort(), target: canonical, source, content: null, contentSha256, bytes, redacted: false, egressAuthorized: false, providerSafe: false, classificationScope: policy.classificationScope, classificationComplete: false, operationalAuthority: false, mutationAuthority: false });
   }
 
   let safe = content;
@@ -79,17 +96,42 @@ function inspectSensitiveContent(policy, { target, content } = {}) {
     rule.pattern.lastIndex = 0;
     safe = safe.replace(rule.pattern, `[REDACTED_BY_SURGICAL_DEVOPS:${rule.id}]`);
   }
+  const egressAuthorized = policy.authorizedEgressSources.includes(source);
+  if (!egressAuthorized) {
+    return deepFreeze({
+      schema: RESULT_SCHEMA,
+      decision: 'BLOCKED',
+      reason: 'EGRESS_SOURCE_UNAUTHORIZED',
+      rules: matched.map((rule) => rule.id).sort(),
+      target: canonical,
+      source,
+      content: null,
+      contentSha256,
+      bytes,
+      redacted: matched.length > 0,
+      egressAuthorized: false,
+      providerSafe: false,
+      classificationScope: policy.classificationScope,
+      classificationComplete: false,
+      operationalAuthority: false,
+      mutationAuthority: false
+    });
+  }
   return deepFreeze({
     schema: RESULT_SCHEMA,
     decision: matched.length ? 'REDACTED' : 'ALLOWED',
     reason: matched.length ? 'DETERMINISTIC_REDACTION' : null,
     rules: matched.map((rule) => rule.id).sort(),
     target: canonical,
+    source,
     content: safe,
     contentSha256,
     bytes,
     redacted: matched.length > 0,
+    egressAuthorized: true,
     providerSafe: true,
+    classificationScope: policy.classificationScope,
+    classificationComplete: false,
     operationalAuthority: false,
     mutationAuthority: false
   });
@@ -99,6 +141,7 @@ module.exports = Object.freeze({
   POLICY_SCHEMA,
   RESULT_SCHEMA,
   MAX_INSPECTION_BYTES,
+  AUTHORIZED_EGRESS_SOURCES,
   DEFAULT_EXCLUDED_SEGMENTS,
   createSensitiveContentPolicy,
   inspectSensitiveContent

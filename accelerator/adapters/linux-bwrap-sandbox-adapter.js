@@ -71,10 +71,17 @@ function codexNetworkNamespaceArguments(
   providerSocket,
   runtimeBindings,
   codexAuthPath,
+  clientApiKey,
   containedExecutable,
   containedArguments,
   executablePath = null
 ) {
+  if (codexAuthPath !== null) {
+    throw new Error('Codex auth.json mounts are not qualified for contained sessions.');
+  }
+  if (clientApiKey !== null && !/^sdo-broker-[a-f0-9]{64}$/.test(clientApiKey)) {
+    throw new Error('Codex broker client identity is malformed.');
+  }
   const arguments_ = [
     '--unshare-user', '--uid', '0', '--gid', '0', '--unshare-net',
     '--unshare-pid', '--unshare-ipc', '--unshare-uts',
@@ -98,9 +105,6 @@ function codexNetworkNamespaceArguments(
   arguments_.push(
     '--dir', '/cognitive',
     '--bind', cognitiveRoot, '/cognitive',
-    ...(codexAuthPath
-      ? ['--ro-bind', codexAuthPath, '/cognitive/home/.codex/auth.json']
-      : []),
     '--proc', '/proc', '--dev', '/dev', '--tmpfs', '/tmp',
     ...(runtimeBindings.some((binding) => binding.target === '/usr/lib')
       ? ['--symlink', 'usr/lib', '/lib'] : []),
@@ -112,6 +116,7 @@ function codexNetworkNamespaceArguments(
     '--setenv', 'HOME', '/cognitive/home',
     '--setenv', 'TMPDIR', '/cognitive/tmp',
     '--setenv', 'LANG', 'C.UTF-8',
+    ...(clientApiKey ? ['--setenv', 'CODEX_API_KEY', clientApiKey] : []),
     '/runtime/provider-relay', providerSocket ? CODEX_PROVIDER_SOCKET : '--probe', '--',
     containedExecutable, ...containedArguments
   );
@@ -154,7 +159,11 @@ function qualifiedProviderTransport(providerSocketPath, providerTransportAttesta
       providerTransportAttestation.kind !== 'CODEX_PROVIDER_ONLY_TRANSPORT' ||
       !providerTransportAttestation.destinationFixed ||
       !providerTransportAttestation.genericProxyUnavailable ||
-      providerTransportAttestation.hostNetworkFallback !== false) {
+      providerTransportAttestation.hostNetworkFallback !== false ||
+      providerTransportAttestation.privilegedCredentialExposedToAgent !== false ||
+      providerTransportAttestation.agentAuthorizationForwarded !== false ||
+      providerTransportAttestation.brokerIdentitySessionScoped !== true ||
+      providerTransportAttestation.webSocketPolicy !== 'BLOCKED_BEFORE_UPGRADE') {
     throw new Error('Codex provider-only transport is not qualified.');
   }
   const endpoint = fs.lstatSync(providerSocketPath);
@@ -166,13 +175,7 @@ function qualifiedProviderTransport(providerSocketPath, providerTransportAttesta
 
 function qualifiedCodexAuthPath(codexAuthPath) {
   if (codexAuthPath === null) return null;
-  const authPath = fs.realpathSync(codexAuthPath);
-  const status = fs.lstatSync(authPath);
-  if (!status.isFile() || status.isSymbolicLink() || status.uid !== process.getuid() ||
-      (status.mode & 0o077) !== 0) {
-    throw new Error('Existing Codex authentication boundary is not qualified.');
-  }
-  return authPath;
+  throw new Error('Codex auth.json mounts are not qualified for contained sessions.');
 }
 
 function attestLinuxCodexContainment(cognitiveRoot, observedAt, {
@@ -204,6 +207,7 @@ function attestLinuxCodexContainment(cognitiveRoot, observedAt, {
       { source: '/usr/lib64', target: '/usr/lib64' }
     ],
     authenticationPath,
+    null,
     '/runtime/node',
     ['/runtime/probe.js']
   );
@@ -263,6 +267,10 @@ function attestLinuxCodexContainment(cognitiveRoot, observedAt, {
       providerOnlyTransport: true,
       providerDestinationFixed: true,
       providerBrokerHidden: true,
+      hostCredentialMediated: true,
+      webSocketDeniedBeforeUpgrade: true,
+      codexLoginQualified: false,
+      codexEndToEndFunctionalityQualified: false,
       hostNetworkShared: false,
       secretAccessDenied: true
     },
@@ -280,6 +288,7 @@ function createLinuxCodexCognitiveLaunchSpec({
   providerTransportAttestation,
   providerRelayExecutable,
   codexAuthPath = null,
+  clientApiKey,
   providerBaseUrl
 }) {
   const root = qualifiedCodexRoot(cognitiveRoot);
@@ -303,6 +312,9 @@ function createLinuxCodexCognitiveLaunchSpec({
     throw new Error('Codex provider-only base URL is not qualified.');
   }
   const authenticationPath = qualifiedCodexAuthPath(codexAuthPath);
+  if (!/^sdo-broker-[a-f0-9]{64}$/.test(clientApiKey)) {
+    throw new Error('Codex broker client identity is not qualified.');
+  }
   const attestation = attestLinuxCodexContainment(root, observedAt, {
     providerSocketPath,
     providerTransportAttestation,
@@ -322,6 +334,7 @@ function createLinuxCodexCognitiveLaunchSpec({
         ...qualifiedBindings
       ],
       authenticationPath,
+      clientApiKey,
       '/runtime/codex',
       codexExecutableArguments,
       executable

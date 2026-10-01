@@ -198,6 +198,17 @@ governam o runtime atual.
 - [BH-SEP + BH-SDP v2.3 — cópia combinada PT-BR](./protocols/v2.3/BH-PROTOCOLS.md)
 - [BH-SEP + BH-SDP v2.3 — tradução inglesa combinada](./protocols/v2.3/BH-PROTOCOLS_EN.md)
 
+#### Perfil operacional BH-CONTAINMENT
+
+- [Ponto de entrada operacional — PT-BR](./protocols/v2.3/BH-CONTAINMENT-PROFILE.md)
+- [Operational entry point — English](./protocols/v2.3/BH-CONTAINMENT-PROFILE_EN.md)
+- [Extensão BH-CONTAINMENT — PT-BR](./protocols/v2.3/BH-CONTAINMENT.md)
+- [BH-CONTAINMENT extension — English](./protocols/v2.3/BH-CONTAINMENT_EN.md)
+
+O perfil protegido ativo é BH-SEP v2.3 + BH-SDP v2.3 + BH-CONTAINMENT. Um RAW
+legado isolado não inclui a extensão e não pode servir como fallback menos
+restritivo para uma sessão contida.
+
 Versões futuras devem usar novos caminhos versionados e não podem sobrescrever ou
 redirecionar os RAW originais. Consulte [Preservação dos Protocolos](./protocols/README.md)
 e a [ADR-018](./docs/adr/ADR-018-immutable-protocol-raw-and-international-documentation.md).

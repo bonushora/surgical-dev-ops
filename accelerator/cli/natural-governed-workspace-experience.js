@@ -75,7 +75,9 @@ function openNaturalGovernedWorkspaceExperience({ session, revalidation, governe
     session,
     binding: deepFreeze(binding),
     discoveryIndex,
-    sensitiveContentPolicy: createSensitiveContentPolicy(),
+    sensitiveContentPolicy: createSensitiveContentPolicy({
+      authorizedEgressSources: ['GOVERNED_WORKSPACE_READ']
+    }),
     qualifiedCommandCatalog: createQualifiedCommandCatalog(),
     audit,
     providerDirectFilesystem: false,
@@ -190,10 +192,11 @@ function qualifyNaturalWorkspaceFileEvidenceForCognition(experience, evidence) {
     experience.sensitiveContentPolicy,
     {
       target,
-      content: evidence.content
+      content: evidence.content,
+      source: 'GOVERNED_WORKSPACE_READ'
     }
   );
-  if (!sensitive.providerSafe) {
+  if (!sensitive.providerSafe || sensitive.egressAuthorized !== true) {
     throw new Error('Governed file evidence is blocked by sensitive-content policy.');
   }
   const base = {
@@ -207,6 +210,7 @@ function qualifyNaturalWorkspaceFileEvidenceForCognition(experience, evidence) {
     sensitiveDecision: sensitive.decision,
     sensitiveRules: sensitive.rules,
     providerSafe: true,
+    egressAuthorized: true,
     operationalAuthority: false,
     mutationAuthority: false
   };

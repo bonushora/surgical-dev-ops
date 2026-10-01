@@ -68,6 +68,21 @@ normative Portuguese text.
 - [BH-SEP + BH-SDP v2.3 — cópia combinada PT-BR](./v2.3/BH-PROTOCOLS.md)
 - [BH-SEP + BH-SDP v2.3 — tradução inglesa combinada](./v2.3/BH-PROTOCOLS_EN.md)
 
+#### BH-CONTAINMENT additive profile
+
+The containment extension is additive and does not modify the v2.3 RAW or
+derived copies above. Protected runtime sessions use the bilingual versioned
+entry points and reject a legacy-only fallback:
+
+- [Ponto de entrada operacional — PT-BR](./v2.3/BH-CONTAINMENT-PROFILE.md)
+- [Operational entry point — English](./v2.3/BH-CONTAINMENT-PROFILE_EN.md)
+- [Extensão BH-CONTAINMENT — PT-BR](./v2.3/BH-CONTAINMENT.md)
+- [BH-CONTAINMENT extension — English](./v2.3/BH-CONTAINMENT_EN.md)
+
+The trusted host loader pins these paths and SHA-256 values independently of
+agent-writable state. A snapshot or manifest records state but creates no
+authority and cannot restore an earlier authorization.
+
 ## Future protocol versions
 
 Future versions must be introduced at new versioned paths, for example:

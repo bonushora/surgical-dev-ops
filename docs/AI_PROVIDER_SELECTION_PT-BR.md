@@ -82,12 +82,16 @@ sessão é removida em reset, encerramento e falha.
 Codex usa um subprocesso SDK local, mas sua cognição é um serviço externo. Em
 hosts Linux qualificados, um relay nativo com ciclo de vida limitado à sessão
 expõe um único endpoint loopback fixo dentro do namespace privado. Um broker
-Unix-socket do Orchestrator, cego a credenciais, aceita somente os caminhos fixos
-do protocolo do provider Codex e se conecta somente ao provider selecionado pela
-configuração confiável de autenticação. Internet arbitrária, rede do host,
-localhost e acesso de proxy permanecem negados. Ausência do broker, requests
-malformados, permissões inválidas do endpoint e falha upstream permanecem
-fail-closed, sem fallback para rede compartilhada.
+Unix-socket do Orchestrator valida uma identidade não privilegiada da sessão,
+aceita somente os caminhos HTTP fixos do provider Codex e injeta a API key
+privilegiada apenas no hospedeiro e para o destino fixado. O agente não recebe
+essa chave. WebSocket é recusado antes do upgrade porque este runtime não possui
+parser de mensagens qualificado; `CONNECT`, Internet arbitrária, rede do host,
+localhost e acesso de proxy permanecem negados. O modo existente de login Codex
+por `auth.json` fica explicitamente bloqueado neste perfil até existir mediação
+equivalente no hospedeiro. Ausência do broker, requests malformados, permissões
+inválidas do endpoint e falha upstream permanecem fail-closed, sem fallback para
+rede compartilhada.
 
 Não existe fallback read-only. Se a contenção nativa estiver ausente ou ainda
 não tiver qualificação física, o Codex permanece indisponível com
@@ -107,3 +111,7 @@ adversarial/nativa final precisam ficar verdes antes dessa alegação.
 O executável Codex real dependente de rede não é exercitado pela suíte offline
 de contenção; ela usa um executável local compatível com o protocolo para validar
 isolamento de processo e streaming sem credenciais ou acesso à rede.
+Assim, a operação HTTP segura com credenciais fictícias está qualificada, mas
+login de conta real, inferência real paga, operação Codex dependente de
+WebSocket e funcionalidade ponta a ponta do provider permanecem
+`NÃO_EXECUTADO` ou `BLOCKED`, conforme a dimensão.

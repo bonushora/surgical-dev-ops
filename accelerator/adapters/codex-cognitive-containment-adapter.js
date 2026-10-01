@@ -17,6 +17,11 @@ const {
 const {
   createCodexProviderOnlyTransport
 } = require('./codex-provider-only-transport');
+const {
+  PROFILE_ID,
+  PROFILE_SCHEMA,
+  loadContainmentProfile
+} = require('../core/containment-profile-loader');
 
 const TARGETS = Object.freeze({
   'linux:x64': Object.freeze({
@@ -125,9 +130,7 @@ function launcherSource(spec) {
     "const { spawn } = require('node:child_process');",
     `const configuration = Object.freeze(${configuration});`,
     "const forwardedEnvironment = {};",
-    "for (const key of ['CODEX_API_KEY', 'CODEX_INTERNAL_ORIGINATOR_OVERRIDE', 'LANG']) {",
-    "  if (typeof process.env[key] === 'string') forwardedEnvironment[key] = process.env[key];",
-    '}',
+    "if (typeof process.env.LANG === 'string') forwardedEnvironment.LANG = process.env.LANG;",
     'let executableDescriptor = null;',
     'const stdio = [\'inherit\', \'inherit\', \'inherit\'];',
     'let arguments_ = [...configuration.nativeArguments];',
@@ -170,6 +173,9 @@ function createCodexCognitiveContainment({
   runtimeBindings = [],
   authenticationMode = 'API_KEY',
   codexAuthPath = null,
+  credentialProvider = null,
+  containmentProfileLoader = loadContainmentProfile,
+  containmentProfileRoot = undefined,
   nativeFactories = NATIVE_FACTORIES,
   registerSignalHandlers = true,
   now = () => new Date().toISOString()
@@ -177,6 +183,19 @@ function createCodexCognitiveContainment({
   const nativeFactory = nativeFactories[platform];
   if (typeof nativeFactory !== 'function') {
     throw unavailable(`no native adapter exists for ${platform}.`);
+  }
+  let containmentProfile;
+  try {
+    containmentProfile = containmentProfileLoader({
+      ...(containmentProfileRoot ? { repositoryRoot: containmentProfileRoot } : {})
+    });
+  } catch {
+    throw unavailable('the required BH-SEP v2.3 + BH-SDP v2.3 + BH-CONTAINMENT profile is invalid.');
+  }
+  if (!containmentProfile || containmentProfile.schema !== PROFILE_SCHEMA ||
+      containmentProfile.profileId !== PROFILE_ID || containmentProfile.state !== 'VERIFIED' ||
+      !Object.isFrozen(containmentProfile)) {
+    throw unavailable('the required containment profile was not verified by the trusted loader.');
   }
   const executable = codexExecutable || resolveCodexExecutable(platform, arch);
   const sessionRoot = fs.mkdtempSync(path.join(os.tmpdir(), 'sdo-codex-cognitive-'));
@@ -186,13 +205,10 @@ function createCodexCognitiveContainment({
   secureDirectory(cognitiveRoot, 'workspace');
   const cognitiveHome = secureDirectory(cognitiveRoot, 'home');
   secureDirectory(cognitiveRoot, 'tmp');
-  if (!['API_KEY', 'CODEX_LOGIN'].includes(authenticationMode) ||
-      (authenticationMode === 'CODEX_LOGIN' && typeof codexAuthPath !== 'string')) {
+  if (authenticationMode !== 'API_KEY' || typeof credentialProvider !== 'function' ||
+      codexAuthPath !== null) {
     fs.rmSync(sessionRoot, { recursive: true, force: true });
-    throw unavailable('Codex authentication mode is not qualified.');
-  }
-  if (authenticationMode === 'CODEX_LOGIN') {
-    secureDirectory(cognitiveHome, '.codex');
+    throw unavailable('only host-mediated API-key authentication is qualified; Codex login remains blocked.');
   }
 
   let disposed = false;
@@ -230,9 +246,8 @@ function createCodexCognitiveContainment({
     if (platform === 'linux') {
       providerTransport = createCodexProviderOnlyTransport({
         controlRoot,
-        providerKind: authenticationMode === 'CODEX_LOGIN'
-          ? 'CHATGPT_LOGIN'
-          : 'OPENAI_API'
+        providerKind: 'OPENAI_API',
+        credentialProvider
       });
     }
     const spec = nativeFactory({
@@ -244,7 +259,8 @@ function createCodexCognitiveContainment({
       providerTransportAttestation: providerTransport && providerTransport.attestation,
       providerRelayExecutable,
       providerBaseUrl: providerTransport && providerTransport.providerBaseUrl,
-      codexAuthPath: authenticationMode === 'CODEX_LOGIN' ? codexAuthPath : null,
+      clientApiKey: providerTransport && providerTransport.clientApiKey,
+      codexAuthPath: null,
       observedAt: now()
     });
     if (!spec || spec.schema !== 'sdo.codex_cognitive_launch_spec.v1' ||
@@ -257,7 +273,11 @@ function createCodexCognitiveContainment({
     const launcherPath = path.join(controlRoot, platform === 'win32'
       ? 'codex-contained-launcher.cmd'
       : 'codex-contained-launcher');
-    fs.writeFileSync(launcherPath, launcherSource(spec), { mode: 0o700, flag: 'wx' });
+    fs.writeFileSync(
+      launcherPath,
+      launcherSource(spec),
+      { mode: 0o700, flag: 'wx' }
+    );
     fs.chmodSync(launcherPath, 0o700);
 
     if (registerSignalHandlers) {
@@ -286,6 +306,8 @@ function createCodexCognitiveContainment({
       sessionRoot,
       cognitiveRoot,
       providerBaseUrl: spec.providerBaseUrl || null,
+      clientApiKey: providerTransport && providerTransport.clientApiKey,
+      containmentProfile,
       attestation: spec.attestation,
       dispose,
       isDisposed: () => disposed

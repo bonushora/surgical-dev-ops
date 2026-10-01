@@ -726,7 +726,8 @@ function formatQualifiedFileEvidenceForCognition(
 ) {
   if (!evidence || !Object.isFrozen(evidence) ||
       evidence.schema !== 'sdo.natural_governed_workspace_provider_file_evidence.v1' ||
-      evidence.providerSafe !== true || typeof evidence.content !== 'string') {
+      evidence.providerSafe !== true || evidence.egressAuthorized !== true ||
+      typeof evidence.content !== 'string') {
     throw new Error('Qualified provider-safe file evidence is required for cognition.');
   }
   return (

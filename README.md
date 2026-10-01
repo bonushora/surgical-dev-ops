@@ -203,6 +203,17 @@ current runtime.
 - [BH-SEP + BH-SDP v2.3 — combined PT-BR copy](./protocols/v2.3/BH-PROTOCOLS.md)
 - [BH-SEP + BH-SDP v2.3 — combined English translation](./protocols/v2.3/BH-PROTOCOLS_EN.md)
 
+#### BH-CONTAINMENT operational profile
+
+- [Operational entry point — English](./protocols/v2.3/BH-CONTAINMENT-PROFILE_EN.md)
+- [Ponto de entrada operacional — PT-BR](./protocols/v2.3/BH-CONTAINMENT-PROFILE.md)
+- [BH-CONTAINMENT extension — English](./protocols/v2.3/BH-CONTAINMENT_EN.md)
+- [Extensão BH-CONTAINMENT — PT-BR](./protocols/v2.3/BH-CONTAINMENT.md)
+
+The active protected profile is BH-SEP v2.3 + BH-SDP v2.3 + BH-CONTAINMENT.
+A legacy RAW file alone does not include the extension and cannot be used as a
+less restrictive fallback for a contained session.
+
 Future versions must use new versioned paths and must not overwrite or redirect
 the original RAW artifacts. See [Protocol Preservation](./protocols/README.md)
 and [ADR-018](./docs/adr/ADR-018-immutable-protocol-raw-and-international-documentation.md).

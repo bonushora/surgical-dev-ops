@@ -161,14 +161,11 @@ function createCodexSDKAIProviderAdapter({
   if (typeof containmentFactory !== 'function') {
     throw new Error('Codex cognitive containment factory is required.');
   }
-  if (!['API_KEY', 'CODEX_LOGIN'].includes(authenticationMode)) {
-    throw new Error('Codex authentication mode is not qualified.');
+  if (authenticationMode !== 'API_KEY' || codexAuthPath !== null) {
+    throw new Error('Only host-mediated Codex API-key authentication is qualified.');
   }
-  if (authenticationMode === 'API_KEY' && typeof credentialProvider !== 'function') {
+  if (typeof credentialProvider !== 'function') {
     throw new Error('Codex credential boundary is required.');
-  }
-  if (authenticationMode === 'CODEX_LOGIN' && typeof codexAuthPath !== 'string') {
-    throw new Error('Existing Codex login boundary is required.');
   }
   if (onPresentationEvent !== null && typeof onPresentationEvent !== 'function') {
     throw new Error('Codex presentation event sink is malformed.');
@@ -181,11 +178,21 @@ function createCodexSDKAIProviderAdapter({
     throw new Error('Codex cognitive deadline scheduler is required.');
   }
 
-  const containment = containmentFactory({ authenticationMode, codexAuthPath });
+  let credentialPromise = null;
+  const brokerCredentialProvider = () => {
+    if (!credentialPromise) credentialPromise = readCodexCredential(credentialProvider);
+    return credentialPromise;
+  };
+  const containment = containmentFactory({
+    authenticationMode,
+    codexAuthPath,
+    credentialProvider: brokerCredentialProvider
+  });
   if (!containment || containment.schema !== 'sdo.codex_cognitive_containment.v1' ||
       containment.state !== 'ENFORCED' || typeof containment.launcherPath !== 'string' ||
       typeof containment.sdkWorkingDirectory !== 'string' ||
       containment.providerBaseUrl !== 'http://127.0.0.1:43127' ||
+      typeof containment.clientApiKey !== 'string' || !containment.clientApiKey ||
       typeof containment.dispose !== 'function' || typeof containment.isDisposed !== 'function' ||
       !containment.attestation || containment.attestation.decision !== 'ENFORCED') {
     const error = new Error(
@@ -198,7 +205,6 @@ function createCodexSDKAIProviderAdapter({
   let logicalThreadId = resumeId;
   let sdkPromise = null;
   let logicalCodexInstance = null;
-  let credentialPromise = null;
   let activeTurn = null;
   let containmentClosed = false;
 
@@ -240,7 +246,7 @@ function createCodexSDKAIProviderAdapter({
     if (authenticationMode === 'API_KEY' && !credentialPromise) {
       credentialPromise = readCodexCredential(credentialProvider);
     }
-    const credential = authenticationMode === 'API_KEY' ? await credentialPromise : null;
+    await brokerCredentialProvider();
     turn.assertBeforeDeadline();
     if (!sdkPromise) {
       sdkPromise = Promise.resolve().then(() => sdkLoader()).catch(() => {
@@ -271,7 +277,7 @@ function createCodexSDKAIProviderAdapter({
             },
             web_search: 'disabled'
           },
-          ...(credential ? { apiKey: credential } : {})
+          apiKey: containment.clientApiKey
         });
       } catch {
         throw new Error('Codex SDK initialization failed safely.');

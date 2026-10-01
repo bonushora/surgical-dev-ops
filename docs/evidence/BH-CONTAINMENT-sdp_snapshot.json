@@ -1,0 +1,50 @@
+{
+  "nome_do_projeto": "bonushora/surgical-dev-ops",
+  "versao_do_protocolo": "BH-SDP-v2.3 / BH-SEP-v2.3 + BH-CONTAINMENT-v1",
+  "tipo_de_arquitetura": "Runner único com loader normativo, broker de provider e contenção nativa",
+  "meta_de_custo": "Sem inferência paga, sem credenciais reais e sem publicação",
+  "fase_atual": "PATCH local revisável concluído; revisão humana pendente",
+  "nivel_de_risco": "ALTO",
+  "contagem_de_gates": 1,
+  "tentativas_equivalentes": 0,
+  "acoes_manuais": [
+    "Aprovação de leitura remota de refs/heads/main pelo mecanismo de sandbox"
+  ],
+  "ambiente": "localhost",
+  "destino_fisico": {
+    "url": "https://github.com/bonushora/surgical-dev-ops.git",
+    "branch": "feature/customer-operable-runtime-v1",
+    "sha_antes": "a7cdad1c1e42e9a58f3d93cf7385c6bf229b5024",
+    "sha_depois": "a7cdad1c1e42e9a58f3d93cf7385c6bf229b5024"
+  },
+  "estado_green": {
+    "codigo": "PASSOU",
+    "backend": "PASSOU",
+    "interface": "NOT_APPLICABLE",
+    "operacao": "NÃO_EXECUTADO",
+    "implantacao": "NOT_APPLICABLE",
+    "publicacao": "NOT_APPLICABLE",
+    "experiencia_humana": "NÃO_EXECUTADO"
+  },
+  "itens_deferred": [
+    "Mediação host-side do modo Codex login/auth.json",
+    "Transporte WebSocket somente se houver parser maduro e qualificação completa",
+    "Qualificação nativa Codex streaming em macOS e Windows",
+    "Homologação opcional futura com conta real, custo e autoridade humana específicos"
+  ],
+  "ancoras_fisicas": {
+    "hash_do_commit": "a7cdad1c1e42e9a58f3d93cf7385c6bf229b5024",
+    "status_dos_testes": "PASSOU",
+    "ultimas_linhas_inspecionadas": "npm test: 1592 tests; 1583 pass; 0 fail; 9 skip; npm pack --dry-run: 219 entries; git diff --check: PASS"
+  },
+  "componentes_validados": [
+    "perfil BH-SEP v2.3 + BH-SDP v2.3 + BH-CONTAINMENT",
+    "loader e âncoras SHA-256 do host",
+    "transporte HTTP provider-only e recusa WebSocket",
+    "mediação de API key e bloqueio de auth.json",
+    "classificação heurística e autorização explícita de saída",
+    "Bubblewrap/relay Linux",
+    "documentação PT/EN e pacote npm dry-run"
+  ],
+  "proximo_passo": "Revisar o diff local preservando o trabalho concorrente; qualquer homologação real de login/provider exige nova autoridade específica."
+}

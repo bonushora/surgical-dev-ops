@@ -7,6 +7,10 @@ const fs = require('node:fs');
 const path = require('node:path');
 
 const ROOT = path.resolve(__dirname, '../..');
+const {
+  COMPONENTS: CONTAINMENT_COMPONENTS,
+  PROFILE_ID
+} = require('../../accelerator/core/containment-profile-loader');
 
 function read(relative) {
   return fs.readFileSync(path.join(ROOT, relative), 'utf8');
@@ -97,6 +101,22 @@ test('one-byte v2.3 RAW mutation fails the fixed SHA-256 gate', () => {
   );
 });
 
+test('additive bilingual containment entry points match trusted runtime anchors', () => {
+  const attributes = read('.gitattributes');
+  for (const [relative, expected] of Object.entries(CONTAINMENT_COMPONENTS)) {
+    assertArtifactIntegrity(relative, expected);
+    assertLfArtifact(relative, attributes);
+  }
+  for (const relative of [
+    'protocols/v2.3/BH-CONTAINMENT-PROFILE.md',
+    'protocols/v2.3/BH-CONTAINMENT-PROFILE_EN.md'
+  ]) {
+    const source = read(relative);
+    assert.match(source, new RegExp(PROFILE_ID.replaceAll('+', '\\+')));
+    assert.match(source, /legacy RAW|RAW legado/i);
+  }
+});
+
 test('LF policy parsing tolerates the native checkout spelling of metadata', () => {
   assert.doesNotThrow(() => assertLfArtifact(
     'protocols/BH-SEP.md',
@@ -114,7 +134,8 @@ test('English and Portuguese entry points agree on protocol and software version
     for (const relative of [
       ...Object.keys(HISTORICAL_RAW),
       ...Object.keys(ACTIVE_RAW),
-      ...Object.keys(DERIVED_V23)
+      ...Object.keys(DERIVED_V23),
+      ...Object.keys(CONTAINMENT_COMPONENTS).filter((relative) => relative.includes('CONTAINMENT'))
     ]) {
       assert.ok(source.includes(relative), `${relative} must be linked from both READMEs`);
     }
@@ -162,6 +183,10 @@ test('international documentation has no unresolved local Markdown targets', () 
     'docs/DOCUMENTATION.md',
     'docs/DOCUMENTATION.md',
     'protocols/README.md',
+    'protocols/v2.3/BH-CONTAINMENT.md',
+    'protocols/v2.3/BH-CONTAINMENT_EN.md',
+    'protocols/v2.3/BH-CONTAINMENT-PROFILE.md',
+    'protocols/v2.3/BH-CONTAINMENT-PROFILE_EN.md',
     'docs/adr/ADR-018-immutable-protocol-raw-and-international-documentation.md'
   ];
   const unresolved = [];

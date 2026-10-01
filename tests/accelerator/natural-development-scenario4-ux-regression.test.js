@@ -34,6 +34,7 @@ function codexContainment() {
     launcherPath: '/isolated/control/codex-contained-launcher',
     sdkWorkingDirectory: '/cognitive/workspace',
     providerBaseUrl: 'http://127.0.0.1:43127',
+    clientApiKey: 'non-privileged-broker-client-fixture',
     attestation: Object.freeze({
       schema: 'sdo.codex_cognitive_containment_attestation.v1',
       decision: 'ENFORCED',

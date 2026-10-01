@@ -97,9 +97,10 @@ function readProviderSafeFile(repositoryPath, target, policy) {
   }
   const inspected = inspectSensitiveContent(policy, {
     target,
-    content: execution.evidence.content
+    content: execution.evidence.content,
+    source: 'GOVERNED_WORKSPACE_READ'
   });
-  if (!inspected.providerSafe) {
+  if (!inspected.providerSafe || inspected.egressAuthorized !== true) {
     throw new Error('Customer development evidence was blocked by sensitive-content policy.');
   }
   return deepFreeze({
@@ -199,7 +200,12 @@ async function prepareNaturalCustomerDevelopment({
     throw new Error('A tracked package.json is required for project-native test discovery.');
   }
 
-  const policy = createSensitiveContentPolicy();
+  const policy = createSensitiveContentPolicy({
+    authorizedEgressSources: [
+      'GOVERNED_PROCESS_OUTPUT',
+      'GOVERNED_WORKSPACE_READ'
+    ]
+  });
   const packageEvidence = readProviderSafeFile(
     repository.repository.path,
     'package.json',
@@ -242,9 +248,10 @@ async function prepareNaturalCustomerDevelopment({
   const failureText = `${validation.validation.stdout}\n${validation.validation.stderr}`;
   const safeFailure = inspectSensitiveContent(policy, {
     target: test.target,
-    content: failureText.slice(0, policy.maxInspectionBytes)
+    content: failureText.slice(0, policy.maxInspectionBytes),
+    source: 'GOVERNED_PROCESS_OUTPUT'
   });
-  if (!safeFailure.providerSafe) {
+  if (!safeFailure.providerSafe || safeFailure.egressAuthorized !== true) {
     throw new Error('Project test output was blocked by sensitive-content policy.');
   }
   const diagnostic = deepFreeze({

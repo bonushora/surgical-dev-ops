@@ -694,13 +694,16 @@ function normalizeRead(orchestration) {
   }
   const execution = orchestration.execution;
   const sensitive = inspectSensitiveContent(
-    createSensitiveContentPolicy(),
+    createSensitiveContentPolicy({
+      authorizedEgressSources: ['GOVERNED_WORKSPACE_READ']
+    }),
     {
       target: execution.target.requested,
-      content: execution.evidence.content
+      content: execution.evidence.content,
+      source: 'GOVERNED_WORKSPACE_READ'
     }
   );
-  if (!sensitive.providerSafe) {
+  if (!sensitive.providerSafe || sensitive.egressAuthorized !== true) {
     return {
       classification: 'DENIED',
       reason: 'Governed evidence was blocked by the sensitive-content boundary.',
@@ -711,6 +714,7 @@ function normalizeRead(orchestration) {
         sha256: execution.evidence.sha256,
         sensitiveDecision: sensitive.decision,
         providerSafe: false,
+        egressAuthorized: false,
         content: null
       })
     };
@@ -726,6 +730,7 @@ function normalizeRead(orchestration) {
       sensitiveDecision: sensitive.decision,
       sensitiveRules: sensitive.rules,
       providerSafe: true,
+      egressAuthorized: true,
       content: sensitive.content,
       originalContentSha256: sensitive.contentSha256,
       orchestratorStatus: orchestration.orchestration.status

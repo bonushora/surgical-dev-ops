@@ -8,7 +8,7 @@ const path = require('node:path');
 const test = require('node:test');
 
 const {
-  createCodexCognitiveContainment
+  createCodexCognitiveContainment: createRawCodexCognitiveContainment
 } = require('../../accelerator/adapters/codex-cognitive-containment-adapter');
 const {
   CODEX_NETWORK_RELAY
@@ -19,6 +19,14 @@ const {
 } = require('../../accelerator/adapters/codex-sdk-ai-provider-adapter');
 
 const PHYSICAL = process.platform === 'linux' && fs.existsSync('/usr/bin/bwrap');
+const HOST_CREDENTIAL = 'host-only-containment-fixture';
+
+function createCodexCognitiveContainment(options = {}) {
+  return createRawCodexCognitiveContainment({
+    credentialProvider: async () => HOST_CREDENTIAL,
+    ...options
+  });
+}
 
 function tempEntries() {
   return new Set(fs.readdirSync(os.tmpdir()).filter((entry) =>
@@ -79,7 +87,9 @@ function fakeCodexSource({
     '    sensitiveReadable: readable(sensitivePath),',
     '    gitReadable: readable(gitPath),',
     '    externalWritable: writable(externalWritePath),',
-    "    network, cwd: process.cwd(), home: process.env.HOME",
+    "    network, cwd: process.cwd(), home: process.env.HOME,",
+    "    environmentKeys: Object.keys(process.env).sort(),",
+    "    environmentValues: Object.values(process.env)",
     '  };',
     "  fs.appendFileSync('/cognitive/tmp/physical-observations.jsonl', JSON.stringify(observation) + '\\n');",
     "  process.stdout.write(JSON.stringify({ type: 'thread.started', thread_id: 'thread-contained-1' }) + '\\n');",
@@ -182,10 +192,17 @@ test('Linux Codex launcher physically denies original workspace reads writes and
   assert.equal(launcher.includes(originalWorkspace), false);
   assert.equal(launcher.includes(process.cwd()), false);
   assert.equal(launcher.includes('--unshare-net'), true);
+  assert.equal(launcher.includes('/cognitive/home/.codex/auth.json'), false);
+  assert.equal(launcher.includes(HOST_CREDENTIAL), false);
+  assert.equal(launcher.includes('test-only-contained-credential'), false);
   assert.equal(containment.providerBaseUrl, 'http://127.0.0.1:43127');
   assert.equal(containment.attestation.controls.cognitiveServiceNetworkQualified, true);
   assert.equal(containment.attestation.controls.providerOnlyTransport, true);
   assert.equal(containment.attestation.controls.providerBrokerHidden, true);
+  assert.equal(containment.attestation.controls.hostCredentialMediated, true);
+  assert.equal(containment.attestation.controls.webSocketDeniedBeforeUpgrade, true);
+  assert.equal(containment.attestation.controls.codexLoginQualified, false);
+  assert.equal(containment.attestation.controls.codexEndToEndFunctionalityQualified, false);
   assert.equal(containment.attestation.controls.genericNetworkDenied, true);
   assert.equal(containment.attestation.controls.hostNetworkShared, false);
   assert.equal(containment.attestation.probe.alternateLocalDenied, true);
@@ -224,6 +241,11 @@ test('Linux Codex launcher physically denies original workspace reads writes and
     assert.notEqual(observation.network, 'TIMEOUT');
     assert.equal(observation.cwd, '/cognitive/workspace');
     assert.equal(observation.home, '/cognitive/home');
+    assert.deepEqual(observation.environmentKeys.sort(), [
+      'CODEX_API_KEY', 'HOME', 'LANG', 'PATH', 'PWD', 'TMPDIR'
+    ]);
+    assert.equal(observation.environmentValues.includes(HOST_CREDENTIAL), false);
+    assert.equal(observation.environmentValues.includes('test-only-contained-credential'), false);
     assert.match(
       observation.prompt,
       /\[REDACTED_BY_SURGICAL_DEVOPS:ASSIGNMENT_SECRET\]/
@@ -231,6 +253,8 @@ test('Linux Codex launcher physically denies original workspace reads writes and
     assert.doesNotMatch(observation.prompt, new RegExp(sensitiveMarker));
     assert.equal(observation.prompt.includes(originalWorkspace), false);
     assert.equal(observation.prompt.includes(process.cwd()), false);
+    assert.equal(JSON.stringify(observation).includes(HOST_CREDENTIAL), false);
+    assert.equal(JSON.stringify(observation).includes('test-only-contained-credential'), false);
   }
   assert.equal(observations[0].args.includes('resume'), false);
   const resumeIndex = observations[1].args.indexOf('resume');

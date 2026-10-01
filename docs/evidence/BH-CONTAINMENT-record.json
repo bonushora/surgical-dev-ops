@@ -1,0 +1,76 @@
+{
+  "schema": "sdo.bh_containment_qualification.v1",
+  "profileId": "BH-SEP-v2.3+BH-SDP-v2.3+BH-CONTAINMENT-v1",
+  "observedAt": "2026-09-30",
+  "repository": {
+    "physicalRoot": "/home/usuario/Desenvolvimento/bonushora/surgical-dev-ops",
+    "origin": "https://github.com/bonushora/surgical-dev-ops.git",
+    "branch": "feature/customer-operable-runtime-v1",
+    "head": "a7cdad1c1e42e9a58f3d93cf7385c6bf229b5024",
+    "remoteMainObserved": "24f0f1946eb795b3464b2846953e191755b9c8c3"
+  },
+  "environment": {
+    "node": "v24.18.0",
+    "npm": "11.16.0",
+    "os": "Linux",
+    "kernel": "6.8.0-65-generic",
+    "architecture": "x86_64",
+    "bubblewrap": "/usr/bin/bwrap",
+    "effectiveCapabilities": "0000000000000000",
+    "noNewPrivileges": "1",
+    "seccomp": "2"
+  },
+  "preexistingWorkingTree": {
+    "aggregateDiffSha256": "4d357529fe42a2122f5956bb391730829a0c71d1b007ff24bf2ebea4d9bae33b",
+    "files": {
+      "accelerator/adapters/mutation-journal-adapter.js": "478189368c864040fd07f062938af3451acb5a65ad82425ff7d028b601ea349d",
+      "accelerator/ci/customer-product-acceptance.js": "88118508725aec1bd17815c019368f4890a820fbdc331d23f9fcd0a379def34f",
+      "accelerator/cli/natural-development-patch-proposal.js": "e587169b1380344cebf9d2db0d00d8b9517e251bd3b1e9c5970314c94b695a08",
+      "accelerator/cli/natural-development-r3-composition.js": "b9deb383d1ad674cb3eacc70275521bb4c3b0ca2502bee1845ca3727e89b77b8",
+      "accelerator/cli/surgical.js": "49b4e092c40146295195166410b290004ca3aa6eb1b974de277d819b8e9e7a26",
+      "accelerator/core/local-offline-human-authority-store.js": "fd097c021e77e7642fd045e87399b0aa0044887ecb0f6ed0eadff2255bc362a1",
+      "accelerator/product/customer-lifecycle.js": "6027304e24973690aaf0717ad9515a87b370556d6f1552d5236475b7a63a1cb9",
+      "accelerator/product/customer-runtime-daemon.js": "3c145882d8b3af1b8e4a7ca926cf028092da2dcc585b4838bb4030045074763f",
+      "accelerator/product/customer-runtime.js": "ffb811249a39f7a2223d141963cb565db73511b277c8000add1cd0580d2f33f4",
+      "tests/accelerator/customer-product-cli.test.js": "04bae641ed7059261148fa2acf8db0ddba57218daf9d9e7fe0ea2edfd6e019f2",
+      "tests/accelerator/customer-product-runtime.test.js": "fa8334f5a7f956525ae967fa2fab30a3dade65a05e8181ac61b899a1779a5b8a",
+      "tests/accelerator/customer-repository-selection.test.js": "4a2e7ce0063ef5e2516088886853fc4288aaba7cae1d8ed00c42107ed26eb689",
+      "tests/accelerator/local-offline-human-signing.test.js": "5814604c891e33ce250724d582536b14f4bfca406dac702e9c2ff5bd2e9b0130",
+      "tests/accelerator/mutation-journal-physical-root-platform.test.js": "c79a73383c474356054df745a2d5029a6503692b6784f7df48d09935c7e0f527",
+      "tests/accelerator/natural-customer-workflow-corrective.test.js": "26fd04e92076d86ee2bd67a0c42be0fb24f79463cf4faab8f31a4dc708a2b9bd",
+      "tests/accelerator/natural-development-patch-proposal.test.js": "4a9a93153008b4cdd62dfc73818e67ca76d4c1f0054b1c081c07fd77574cc9f0",
+      "tests/accelerator/natural-development-r3-composition.test.js": "c299b534f28e3390614a658021db4c8e506f1c65e5e857befc487b5ce63d6691",
+      "tests/accelerator/customer-state-root-governed-approval.test.js": "5cd7b91ad2dd533b98b5793bfe2f88a77091dad64fc7c60ead49049f78a58fb5"
+    }
+  },
+  "qualification": {
+    "baselineAnchorTests": { "passed": 33, "failed": 0 },
+    "baselineWebSocketGap": {
+      "httpStatus": 400,
+      "httpUpstreamCalls": 0,
+      "webSocketUpstreamCalls": 1,
+      "upstream": "FICTITIOUS"
+    },
+    "finalFullSuite": { "tests": 1592, "passed": 1583, "failed": 0, "skipped": 9 },
+    "diffCheck": "PASS",
+    "npmPackDryRun": { "status": "PASS", "entries": 219, "published": false }
+  },
+  "dimensions": {
+    "safeRefusal": "PASS",
+    "mediatedApiKeyWithFixtures": "PASS",
+    "realProviderFunctionality": "NOT_EXECUTED",
+    "codexLogin": "BLOCKED",
+    "webSocketDependentOperation": "BLOCKED",
+    "linuxNativeIsolation": "PASS",
+    "macosNativeIsolation": "NOT_EXECUTED",
+    "windowsNativeIsolation": "NOT_EXECUTED",
+    "deployment": "NOT_APPLICABLE",
+    "publication": "NOT_APPLICABLE"
+  },
+  "documentalDelivery": {
+    "status": "NOT_EXECUTED",
+    "reason": "The contractual documental/ directory was absent from this checkout."
+  },
+  "createsAuthority": false,
+  "claimsUniversalAiContainment": false
+}
