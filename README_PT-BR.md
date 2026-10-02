@@ -218,9 +218,10 @@ O perfil protegido ativo é BH-SEP v2.4 + BH-SDP v2.4, com contenção incorpora
 - [Extensão BH-CONTAINMENT — PT-BR](./protocols/v2.3/BH-CONTAINMENT.md)
 - [BH-CONTAINMENT extension — English](./protocols/v2.3/BH-CONTAINMENT_EN.md)
 
-O perfil protegido ativo é BH-SEP v2.3 + BH-SDP v2.3 + BH-CONTAINMENT. Um RAW
-legado isolado não inclui a extensão e não pode servir como fallback menos
-restritivo para uma sessão contida.
+O perfil protegido histórico v2.3 é BH-SEP v2.3 + BH-SDP v2.3 +
+BH-CONTAINMENT. Ele permanece preservado como evidência histórica imutável e
+não pode servir como fallback menos restritivo para o perfil contido ativo
+v2.4.
 
 Versões futuras devem usar novos caminhos versionados e não podem sobrescrever ou
 redirecionar os RAW originais. Consulte [Preservação dos Protocolos](./protocols/README.md)

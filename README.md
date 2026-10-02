@@ -223,9 +223,10 @@ The active protected profile is BH-SEP v2.4 + BH-SDP v2.4 with containment integ
 - [BH-CONTAINMENT extension — English](./protocols/v2.3/BH-CONTAINMENT_EN.md)
 - [Extensão BH-CONTAINMENT — PT-BR](./protocols/v2.3/BH-CONTAINMENT.md)
 
-The active protected profile is BH-SEP v2.3 + BH-SDP v2.3 + BH-CONTAINMENT.
-A legacy RAW file alone does not include the extension and cannot be used as a
-less restrictive fallback for a contained session.
+The historical v2.3 protected profile is BH-SEP v2.3 + BH-SDP v2.3 +
+BH-CONTAINMENT. It remains preserved as immutable historical evidence and must
+not be used as a less restrictive fallback for the active v2.4 contained
+profile.
 
 Future versions must use new versioned paths and must not overwrite or redirect
 the original RAW artifacts. See [Protocol Preservation](./protocols/README.md)
