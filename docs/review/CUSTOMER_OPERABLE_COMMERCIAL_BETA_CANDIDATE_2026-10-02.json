@@ -1,0 +1,90 @@
+{
+  "schema": "sdo.customer_operable_commercial_beta_candidate.v1",
+  "classification": "CUSTOMER_OPERABLE_COMMERCIAL_BETA_CANDIDATE",
+  "date": "2026-10-02",
+  "humanAcceptance": {
+    "classification": "GREEN",
+    "automationSigned": false,
+    "steps": {
+      "1": "GREEN",
+      "2": "GREEN",
+      "3": "GREEN",
+      "4": "GREEN",
+      "5": "GREEN",
+      "6": "GREEN",
+      "7": "GREEN",
+      "8": "GREEN",
+      "9": "GREEN",
+      "10": "GREEN",
+      "11": "GREEN",
+      "12": "GREEN"
+    }
+  },
+  "candidate": {
+    "surgicalDevOps": {
+      "version": "2.6.0-rc.6",
+      "sourceCommit": "2b735ceb67512f0ecfca951ced69b91ad3b64e31",
+      "artifactSha256": "d65cf44eb7368bda565e6e5594ba46fb496d22e944c80ede01adca1e41ff2045",
+      "artifactBytes": 804153,
+      "artifactFiles": 219
+    },
+    "surgicalAiControlPlane": {
+      "version": "0.1.0-beta.1",
+      "sourceCommit": "6fc4baf4fd022fff9070d20d11be7c5f53cca024",
+      "artifactSha256": "66b652706ec6c41ad60ab206a2df18be13f1798f7dd50bd0980708bcc2bba46b",
+      "artifactBytes": 53247,
+      "artifactFiles": 36
+    }
+  },
+  "manualPhysicalEvidence": {
+    "proposalFingerprint": "ee28b5c77ffddd4251626b32fb2f331db55941e7a9e352d2405b9c455c52404d",
+    "transactionId": "39d8591f5eef6348bca6a1b5202f835aa6aeddce8d1b51c4c2f51a214091c3b6",
+    "sourceBeforeSha256": "572da4b03d73a6d67bf9effcb363c5885f2ce5557ea0280df5e831294fc1c4b9",
+    "authoritativeProjectionAfterSha256": "95b2d074cdfb139e37fa38565f5b6078499afcf3f1b97aa19d33f10887cc0f3b",
+    "mutationJournalRecords": 9,
+    "authorizationConsumptionRecords": 1,
+    "physicalEffects": 1,
+    "replayPhysicalEffects": 0,
+    "worktreeAfterReplay": "CLEAN",
+    "restartRecovery": "GREEN",
+    "authorityResurrectedAfterRestart": false,
+    "uninstallClassification": "RUNTIME_REMOVED",
+    "uninstallEvidencePreserved": true,
+    "uninstallRepositoriesUntouched": true
+  },
+  "automatedQualification": {
+    "surgicalDevOps": {
+      "testsDiscovered": 1592,
+      "testsPassed": 1583,
+      "testsFailed": 0,
+      "testsSkipped": 9
+    },
+    "surgicalAiControlPlane": {
+      "testsDiscovered": 237,
+      "testsPassed": 237,
+      "testsFailed": 0
+    },
+    "crossRepositoryPhysicalV2": "GREEN",
+    "crossRepositoryCommercialBeta": "GREEN",
+    "customerProductNative": "GREEN"
+  },
+  "qualifiedClaims": {
+    "customerOperableCommercialBetaCandidate": true,
+    "oneShotPhysicalEnforcement": true,
+    "consumedApprovalNeverRoutesToCognition": true,
+    "replaySecondPhysicalEffect": false,
+    "restartWithoutAuthorityResurrection": true,
+    "nonDestructiveUninstallPreservesEvidence": true
+  },
+  "explicitNonClaims": {
+    "productionEnabled": false,
+    "generalAvailability": false,
+    "stableReleaseAuthorized": false,
+    "externalReviewCompleted": false,
+    "independentAuditCompleted": false,
+    "publicExposureAuthorized": false,
+    "absoluteSecurity": false,
+    "regulatoryCertification": false
+  },
+  "nextGate": "EXTERNAL_ENGINEERING_AND_ADVERSARIAL_REVIEW"
+}
