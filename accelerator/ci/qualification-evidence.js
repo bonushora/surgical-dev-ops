@@ -120,8 +120,8 @@ function validateQualificationEvidence(evidence) {
   const target = fullSha(evidence.git.expectedTargetSha, 'expected target SHA');
   const checkedOut = fullSha(evidence.git.checkedOutSha, 'checked-out SHA');
   const github = fullSha(evidence.git.githubSha, 'GitHub SHA');
-  if (target !== checkedOut || target !== github) {
-    fail('target SHA, checked-out SHA and GitHub SHA must match');
+  if (target !== checkedOut) {
+    fail('target SHA and checked-out SHA must match');
   }
   if (evidence.workflow.event === 'workflow_dispatch') {
     const requested = fullSha(
@@ -129,8 +129,15 @@ function validateQualificationEvidence(evidence) {
       'requested qualification ref'
     );
     if (requested !== target) fail('requested qualification ref does not match target SHA');
-  } else if (evidence.workflow.requestedQualificationRef !== null) {
-    fail('requested qualification ref must be null outside workflow_dispatch');
+    // githubSha is the workflow trigger/ref identity and may legitimately
+    // differ from the explicitly checked-out qualification target.
+  } else {
+    if (evidence.workflow.requestedQualificationRef !== null) {
+      fail('requested qualification ref must be null outside workflow_dispatch');
+    }
+    if (github !== target) {
+      fail('GitHub SHA must match target SHA outside workflow_dispatch');
+    }
   }
 
   exactKeys(evidence.runner, ['label', 'os', 'platform', 'architecture'], 'runner');

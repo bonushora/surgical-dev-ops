@@ -117,16 +117,30 @@ test('inconsistent totals and false successful summaries fail closed', () => {
   );
 });
 
-test('target checked-out and GitHub SHAs must be identical valid full SHAs', () => {
+test('exact-ref evidence binds target to checkout while preserving workflow trigger SHA', () => {
   for (const overrides of [
     { expectedTargetSha: '' },
     { expectedTargetSha: 'abc' },
     { checkedOutSha: 'b'.repeat(40) },
-    { githubSha: 'b'.repeat(40) },
     { requestedQualificationRef: 'refs/heads/main' }
   ]) {
     assert.throws(() => createQualificationEvidence(input(overrides)), /SHA|ref|target/i);
   }
+
+  const triggerSha = 'b'.repeat(40);
+  const dispatched = createQualificationEvidence(input({ githubSha: triggerSha }));
+  assert.equal(dispatched.git.expectedTargetSha, SHA);
+  assert.equal(dispatched.git.checkedOutSha, SHA);
+  assert.equal(dispatched.git.githubSha, triggerSha);
+
+  assert.throws(
+    () => createQualificationEvidence(input({
+      event: 'push',
+      requestedQualificationRef: '',
+      githubSha: triggerSha
+    })),
+    /GitHub SHA|target SHA/i
+  );
 });
 
 test('unknown platforms and unsupported schemas cannot become qualified', () => {
