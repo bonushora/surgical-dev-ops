@@ -41,7 +41,7 @@ test('trusted loader records every required profile path and anchored SHA-256', 
 
 test('missing and byte-altered profile components fail closed', (t) => {
   const missing = profileFixture(t);
-  fs.unlinkSync(path.join(missing, 'protocols/v2.3/BH-CONTAINMENT.md'));
+  fs.unlinkSync(path.join(missing, 'protocols/v2.4/BH-SEP.md'));
   assert.throws(
     () => loadContainmentProfile({ repositoryRoot: missing }),
     /missing or unreadable/i
@@ -49,7 +49,7 @@ test('missing and byte-altered profile components fail closed', (t) => {
 
   const altered = profileFixture(t);
   fs.appendFileSync(
-    path.join(altered, 'protocols/v2.3/BH-CONTAINMENT-PROFILE_EN.md'),
+    path.join(altered, 'protocols/v2.4/BH-CONTAINMENT-PROFILE_EN.md'),
     '\nchanged\n'
   );
   assert.throws(

@@ -26,7 +26,7 @@ sistema operacional ao redor do modelo explícito, limitado, auditável e fail-c
 | Limitação histórica dos artefatos | Zero artefatos retidos; os totais canônicos não foram retidos de forma legível por máquina |
 | Política atual de binding da revisão | `RUNTIME_EXACT_SHA_EVIDENCE`; a tupla final SHA/run/artefatos é produzida externamente pelo CI |
 | Revisão externa de engenharia | **NÃO CONCLUÍDA**; release não está autorizado |
-| Protocolos normativos ativos | BH-SEP v2.3 + BH-SDP v2.3 |
+| Protocolos normativos ativos | BH-SEP v2.4 + BH-SDP v2.4; contenção integrada ao RAW |
 
 A trilha completa, incluindo os runs que falharam antes do baseline verde, está em
 [Evidências de Engenharia](./docs/ENGINEERING_EVIDENCE.md).
@@ -186,7 +186,7 @@ governam o runtime atual.
 - [BH-SEP v2.2 — tradução inglesa](./protocols/BH-SEP_EN.md)
 - [BH-SDP v2.2 — tradução inglesa](./protocols/BH-SDP_EN.md)
 
-### v2.3 — atual
+### v2.3 — histórica e preservada
 
 - [BH-SEP v2.3 — RAW original](./protocols/v2.3/BH-SEP.md)
 - [BH-SDP v2.3 — RAW original](./protocols/v2.3/BH-SDP.md)
@@ -198,7 +198,20 @@ governam o runtime atual.
 - [BH-SEP + BH-SDP v2.3 — cópia combinada PT-BR](./protocols/v2.3/BH-PROTOCOLS.md)
 - [BH-SEP + BH-SDP v2.3 — tradução inglesa combinada](./protocols/v2.3/BH-PROTOCOLS_EN.md)
 
-#### Perfil operacional BH-CONTAINMENT
+### v2.4 — atual com contenção integrada ao RAW
+
+- [BH-SEP v2.4 — RAW original](./protocols/v2.4/BH-SEP.md)
+- [BH-SDP v2.4 — RAW original](./protocols/v2.4/BH-SDP.md)
+- [BH-SEP v2.4 — tradução inglesa](./protocols/v2.4/BH-SEP_EN.md)
+- [BH-SDP v2.4 — tradução inglesa](./protocols/v2.4/BH-SDP_EN.md)
+- [BH-SEP + BH-SDP v2.4 — cópia combinada PT-BR](./protocols/v2.4/BH-PROTOCOLS.md)
+- [BH-SEP + BH-SDP v2.4 — tradução inglesa combinada](./protocols/v2.4/BH-PROTOCOLS_EN.md)
+- [Perfil de contenção integrada — PT-BR](./protocols/v2.4/BH-CONTAINMENT-PROFILE.md)
+- [Perfil de contenção integrada — English](./protocols/v2.4/BH-CONTAINMENT-PROFILE_EN.md)
+
+O perfil protegido ativo é BH-SEP v2.4 + BH-SDP v2.4, com contenção incorporada diretamente aos RAW normativos. A v2.3 permanece como evidência histórica imutável.
+
+#### Perfil operacional BH-CONTAINMENT v2.3 — histórico
 
 - [Ponto de entrada operacional — PT-BR](./protocols/v2.3/BH-CONTAINMENT-PROFILE.md)
 - [Operational entry point — English](./protocols/v2.3/BH-CONTAINMENT-PROFILE_EN.md)

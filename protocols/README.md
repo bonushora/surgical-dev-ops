@@ -18,7 +18,7 @@ Stable RAW URLs:
 Internationalization does not authorize modifying, translating in place,
 renaming, deleting, or repurposing those artifacts.
 
-The Portuguese v2.3 artifacts are the active normative originals. They use
+The Portuguese v2.3 artifacts are preserved normative originals from the prior active version. They use
 versioned stable paths and the same byte-level SHA-256 and LF gate:
 
 | Artifact | Stable path | SHA-256 |
@@ -56,7 +56,7 @@ normative Portuguese text.
 - [BH-SEP v2.2 — EN translation](./BH-SEP_EN.md)
 - [BH-SDP v2.2 — EN translation](./BH-SDP_EN.md)
 
-### v2.3 — atual
+### v2.3 — histórica e preservada
 
 - [BH-SEP v2.3 — RAW original](./v2.3/BH-SEP.md)
 - [BH-SDP v2.3 — RAW original](./v2.3/BH-SDP.md)
@@ -99,3 +99,8 @@ URL serve different normative content.
 
 This policy is approved and frozen by
 [ADR-018](../docs/adr/ADR-018-immutable-protocol-raw-and-international-documentation.md).
+
+
+## v2.4 — current containment-integrated normative RAW
+
+BH-SEP v2.4 and BH-SDP v2.4 are new versioned normative RAW artifacts. They do not overwrite or redirect v2.2 or v2.3. The active profile is `BH-SEP-v2.4+BH-SDP-v2.4+BH-CONTAINMENT-integrated-v1`.

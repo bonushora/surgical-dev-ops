@@ -4,12 +4,12 @@ const crypto = require('node:crypto');
 const fs = require('node:fs');
 const path = require('node:path');
 
-const PROFILE_ID = 'BH-SEP-v2.3+BH-SDP-v2.3+BH-CONTAINMENT-v1';
+const PROFILE_ID = 'BH-SEP-v2.4+BH-SDP-v2.4+BH-CONTAINMENT-integrated-v1';
 const PROFILE_SCHEMA = 'sdo.containment_profile.v1';
 const REPOSITORY_ROOT = path.resolve(__dirname, '../..');
-const MANIFEST_PATH = 'protocols/v2.3/BH-CONTAINMENT-MANIFEST.json';
-const MANIFEST_SHA256 = 'c3df0eab9b3f2a43372b77be9674b2eeaf9ce4079640350d824072af030ad53b';
-const MINIMUM_GENERATION = 2;
+const MANIFEST_PATH = 'protocols/v2.4/BH-CONTAINMENT-MANIFEST.json';
+const MANIFEST_SHA256 = '9100f46f924247a003881e9bccc3802574b139553e9a716c8d3922197ba124c2';
+const MINIMUM_GENERATION = 3;
 
 function loadTrustedManifest(root) {
   const candidate = path.join(root, MANIFEST_PATH);

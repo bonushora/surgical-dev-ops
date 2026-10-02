@@ -1,0 +1,23 @@
+{
+  "schema": "sdo.containment_profile_manifest.v2",
+  "profileId": "BH-SEP-v2.4+BH-SDP-v2.4+BH-CONTAINMENT-integrated-v1",
+  "generation": 3,
+  "minimumRuntime": "2.6.0-rc.6",
+  "webSocketPolicy": "BLOCKED_BEFORE_UPGRADE",
+  "components": {
+    "protocols/v2.4/BH-SEP.md": "37fc8a3d114d0150ab5d5e107e3ccce239873b5ff73a5fb3184f67ee2219e963",
+    "protocols/v2.4/BH-SDP.md": "e1c606178fab7116ab4ea83361f4cd77b3430418fae57ae15ce2ac9aaa4fbf20",
+    "protocols/v2.4/BH-SEP_EN.md": "e0dfbf04e2fcc9a7e38a2fd57759ef88f405547433f9610d48b4de27b4a2acbc",
+    "protocols/v2.4/BH-SDP_EN.md": "fb671d04c4039c4096a3b830cdc7acd4a18582fefc88bba1bad9c5c847e94fd8",
+    "protocols/v2.4/BH-PROTOCOLS.md": "24fbf31213f3cab4a50c33fc85801ba0a7b90dbcc955f575815821b6cc946a80",
+    "protocols/v2.4/BH-PROTOCOLS_EN.md": "fd3acd391e00d94cc490fa1b30b0b8ca1200ea998585fcf72285c2e5856d9a09",
+    "protocols/v2.4/BH-CONTAINMENT-PROFILE.md": "2ed90c3d1da42d962d43f681aa7eec76668373684c8314dca3314e741015d2f9",
+    "protocols/v2.4/BH-CONTAINMENT-PROFILE_EN.md": "44369d98bb88e0da6bf86e79e4c062b13a2f90af428fee2bfcc488fb63749d03"
+  },
+  "qualificationClaims": {
+    "realProviderEndToEnd": "NOT_EXECUTED",
+    "linuxNativeIsolation": "PASS",
+    "macosNativeIsolation": "NOT_EXECUTED",
+    "windowsNativeIsolation": "NOT_EXECUTED"
+  }
+}

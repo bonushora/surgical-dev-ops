@@ -49,6 +49,22 @@ const DERIVED_V23 = Object.freeze({
     'fdfa13cc39eb36a7f07129398d8600887babf6535d0292bc561e960d0792055e'
 });
 
+const HISTORICAL_V23_CONTAINMENT = Object.freeze({
+  'protocols/v2.3/BH-CONTAINMENT.md':
+    '74746a4835d4abf4c0875b17458603d7902eecdeadf7264993ecac18718fa563',
+  'protocols/v2.3/BH-CONTAINMENT_EN.md':
+    '1f96e23ce5ed3aec787d75b35dbb7ddb26b9ad27ea2b982d8c329f05cd9d2735',
+  'protocols/v2.3/BH-CONTAINMENT-PROFILE.md':
+    '5c65181797fb3b5b7c95f49b1c3e87134e234c139690be60127f2f7b19fe41c2',
+  'protocols/v2.3/BH-CONTAINMENT-PROFILE_EN.md':
+    '39441b4cb3331f5ce3ad65dd2385216113b8882b21019c1823b93db43339e661',
+  'protocols/v2.3/BH-CONTAINMENT-MANIFEST.json':
+    'c3df0eab9b3f2a43372b77be9674b2eeaf9ce4079640350d824072af030ad53b'
+});
+
+const HISTORICAL_V23_PROFILE_ID =
+  'BH-SEP-v2.3+BH-SDP-v2.3+BH-CONTAINMENT-v1';
+
 function assertArtifactIntegrity(relative, expected, bytes = readBytes(relative)) {
   assert.equal(digest(bytes), expected, `${relative} changed at byte level`);
 }
@@ -101,19 +117,40 @@ test('one-byte v2.3 RAW mutation fails the fixed SHA-256 gate', () => {
   );
 });
 
-test('additive bilingual containment entry points match trusted runtime anchors', () => {
+test('active v2.4 containment profile matches trusted runtime anchors and v2.3 remains historical', () => {
   const attributes = read('.gitattributes');
+
   for (const [relative, expected] of Object.entries(CONTAINMENT_COMPONENTS)) {
     assertArtifactIntegrity(relative, expected);
     assertLfArtifact(relative, attributes);
+    assert.ok(
+      relative.startsWith('protocols/v2.4/'),
+      `${relative} must belong to the active v2.4 profile`
+    );
   }
+
+  for (const relative of [
+    'protocols/v2.4/BH-CONTAINMENT-PROFILE.md',
+    'protocols/v2.4/BH-CONTAINMENT-PROFILE_EN.md'
+  ]) {
+    const source = read(relative);
+    assert.match(source, new RegExp(PROFILE_ID.replaceAll('+', '\\+')));
+    assert.match(source, /legacy v2\.3 RAW|RAW legado v2\.3/i);
+  }
+
+  for (const [relative, expected] of Object.entries(HISTORICAL_V23_CONTAINMENT)) {
+    assertArtifactIntegrity(relative, expected);
+    assertLfArtifact(relative, attributes);
+  }
+
   for (const relative of [
     'protocols/v2.3/BH-CONTAINMENT-PROFILE.md',
     'protocols/v2.3/BH-CONTAINMENT-PROFILE_EN.md'
   ]) {
-    const source = read(relative);
-    assert.match(source, new RegExp(PROFILE_ID.replaceAll('+', '\\+')));
-    assert.match(source, /legacy RAW|RAW legado/i);
+    assert.match(
+      read(relative),
+      new RegExp(HISTORICAL_V23_PROFILE_ID.replaceAll('+', '\\+'))
+    );
   }
 });
 
@@ -128,20 +165,31 @@ test('English and Portuguese entry points agree on protocol and software version
   const english = read('README.md');
   const portuguese = read('README_PT-BR.md');
   for (const source of [english, portuguese]) {
-    assert.match(source, /BH-SEP v2\.3 \+ BH-SDP v2\.3/);
+    assert.match(source, /BH-SEP v2\.4 \+ BH-SDP v2\.4/);
+    assert.match(source, /v2\.3[^\n]*(?:historical|histórica)/i);
     assert.match(source, /v2\.2[^\n]*(?:historical|histórica)/i);
     assert.match(source, /v2\.6\.0-rc\.6/);
     for (const relative of [
       ...Object.keys(HISTORICAL_RAW),
       ...Object.keys(ACTIVE_RAW),
       ...Object.keys(DERIVED_V23),
-      ...Object.keys(CONTAINMENT_COMPONENTS).filter((relative) => relative.includes('CONTAINMENT'))
+      ...Object.keys(HISTORICAL_V23_CONTAINMENT).filter(
+        (relative) => !relative.endsWith('BH-CONTAINMENT-MANIFEST.json')
+      ),
+      ...Object.keys(CONTAINMENT_COMPONENTS)
     ]) {
       assert.ok(source.includes(relative), `${relative} must be linked from both READMEs`);
     }
   }
   assert.doesNotMatch(english, /v2\.6\.0-rc\.6[^\n]*(?:BH-SEP|BH-SDP) v2\.6/i);
   assert.doesNotMatch(portuguese, /v2\.6\.0-rc\.6[^\n]*(?:BH-SEP|BH-SDP) v2\.6/i);
+
+  // Trusted manifests are machine-readable integrity artifacts. Their bytes and
+  // hashes are qualified separately; they are not required as public README links.
+  assertArtifactIntegrity(
+    'protocols/v2.3/BH-CONTAINMENT-MANIFEST.json',
+    HISTORICAL_V23_CONTAINMENT['protocols/v2.3/BH-CONTAINMENT-MANIFEST.json']
+  );
 });
 
 test('English and Portuguese entry points expose equivalent qualified baseline facts', () => {
@@ -158,7 +206,11 @@ test('English and Portuguese entry points expose equivalent qualified baseline f
     'protocols/v2.3/BH-SEP.md',
     'protocols/v2.3/BH-SDP.md',
     'protocols/v2.3/BH-PROTOCOLS.md',
-    'protocols/v2.3/BH-PROTOCOLS_EN.md'
+    'protocols/v2.3/BH-PROTOCOLS_EN.md',
+    'protocols/v2.4/BH-SEP.md',
+    'protocols/v2.4/BH-SDP.md',
+    'protocols/v2.4/BH-PROTOCOLS.md',
+    'protocols/v2.4/BH-PROTOCOLS_EN.md'
   ];
   for (const fact of facts) {
     assert.match(english, new RegExp(fact));
@@ -187,7 +239,16 @@ test('international documentation has no unresolved local Markdown targets', () 
     'protocols/v2.3/BH-CONTAINMENT_EN.md',
     'protocols/v2.3/BH-CONTAINMENT-PROFILE.md',
     'protocols/v2.3/BH-CONTAINMENT-PROFILE_EN.md',
-    'docs/adr/ADR-018-immutable-protocol-raw-and-international-documentation.md'
+    'protocols/v2.4/BH-SEP.md',
+    'protocols/v2.4/BH-SDP.md',
+    'protocols/v2.4/BH-SEP_EN.md',
+    'protocols/v2.4/BH-SDP_EN.md',
+    'protocols/v2.4/BH-PROTOCOLS.md',
+    'protocols/v2.4/BH-PROTOCOLS_EN.md',
+    'protocols/v2.4/BH-CONTAINMENT-PROFILE.md',
+    'protocols/v2.4/BH-CONTAINMENT-PROFILE_EN.md',
+    'docs/adr/ADR-018-immutable-protocol-raw-and-international-documentation.md',
+    'docs/adr/ADR-045-bh-v2.4-integrated-containment-raw.md'
   ];
   const unresolved = [];
   for (const relative of files) {

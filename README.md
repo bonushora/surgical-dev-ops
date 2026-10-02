@@ -26,7 +26,7 @@ operational system around the model explicit, bounded, auditable, and fail-close
 | Historical main-push qualification | Accelerator Conformance `34862373028`; same SHA and native matrix: **PASS** |
 | Review binding policy | `RUNTIME_EXACT_SHA_EVIDENCE`; CI produces the exact SHA/run/artifact tuple |
 | Product qualification | Exact feature-branch SHA, native runs, and artifact hashes are recorded by CI; no public release is authorized |
-| Active normative protocols | BH-SEP v2.3 + BH-SDP v2.3 |
+| Active normative protocols | BH-SEP v2.4 + BH-SDP v2.4; containment integrated in RAW |
 
 The complete trail, including runs that failed before the green baseline, is in
 [Engineering Evidence](./docs/ENGINEERING_EVIDENCE.md).
@@ -191,7 +191,7 @@ current runtime.
 - [BH-SEP v2.2 — English translation](./protocols/BH-SEP_EN.md)
 - [BH-SDP v2.2 — English translation](./protocols/BH-SDP_EN.md)
 
-### v2.3 — current
+### v2.3 — historical and preserved
 
 - [BH-SEP v2.3 — original RAW](./protocols/v2.3/BH-SEP.md)
 - [BH-SDP v2.3 — original RAW](./protocols/v2.3/BH-SDP.md)
@@ -203,7 +203,20 @@ current runtime.
 - [BH-SEP + BH-SDP v2.3 — combined PT-BR copy](./protocols/v2.3/BH-PROTOCOLS.md)
 - [BH-SEP + BH-SDP v2.3 — combined English translation](./protocols/v2.3/BH-PROTOCOLS_EN.md)
 
-#### BH-CONTAINMENT operational profile
+### v2.4 — current containment-integrated RAW
+
+- [BH-SEP v2.4 — original RAW](./protocols/v2.4/BH-SEP.md)
+- [BH-SDP v2.4 — original RAW](./protocols/v2.4/BH-SDP.md)
+- [BH-SEP v2.4 — English translation](./protocols/v2.4/BH-SEP_EN.md)
+- [BH-SDP v2.4 — English translation](./protocols/v2.4/BH-SDP_EN.md)
+- [BH-SEP + BH-SDP v2.4 — combined PT-BR copy](./protocols/v2.4/BH-PROTOCOLS.md)
+- [BH-SEP + BH-SDP v2.4 — combined English translation](./protocols/v2.4/BH-PROTOCOLS_EN.md)
+- [Integrated containment profile — PT-BR](./protocols/v2.4/BH-CONTAINMENT-PROFILE.md)
+- [Integrated containment profile — English](./protocols/v2.4/BH-CONTAINMENT-PROFILE_EN.md)
+
+The active protected profile is BH-SEP v2.4 + BH-SDP v2.4 with containment integrated directly into the normative RAW. v2.3 remains immutable historical evidence.
+
+#### Historical v2.3 BH-CONTAINMENT operational profile
 
 - [Operational entry point — English](./protocols/v2.3/BH-CONTAINMENT-PROFILE_EN.md)
 - [Ponto de entrada operacional — PT-BR](./protocols/v2.3/BH-CONTAINMENT-PROFILE.md)

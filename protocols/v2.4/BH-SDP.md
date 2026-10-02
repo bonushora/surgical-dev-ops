@@ -1,0 +1,59 @@
+# BH-SDP v2.4 — Snapshot & Delivery Protocol
+
+## 🎯 Objetivo
+Preservar o estado operacional entre sessões por meio de snapshots verificáveis e proporcionais ao risco. O snapshot é um contrato de continuidade, não um ritual obrigatório para cada resposta.
+
+## 📋 Schema do Snapshot (`sdp_snapshot`)
+
+```json
+{
+  "nome_do_projeto": "string",
+  "versao_do_protocolo": "string",
+  "tipo_de_arquitetura": "string",
+  "meta_de_custo": "string",
+  "fase_atual": "string",
+  "nivel_de_risco": "BAIXO | MÉDIO | ALTO",
+  "contagem_de_gates": "inteiro não negativo",
+  "tentativas_equivalentes": "inteiro não negativo",
+  "acoes_manuais": [
+    "string"
+  ],
+  "ambiente": "localhost | Preview | Production",
+  "destino_fisico": {
+    "url": "string",
+    "branch": "string",
+    "sha_antes": "string",
+    "sha_depois": "string"
+  },
+  "estado_green": {
+    "codigo": "PASSOU | FALHOU | NÃO_EXECUTADO | DEFERRED | NOT_APPLICABLE",
+    "backend": "PASSOU | FALHOU | NÃO_EXECUTADO | DEFERRED | NOT_APPLICABLE",
+    "interface": "PASSOU | FALHOU | NÃO_EXECUTADO | DEFERRED | NOT_APPLICABLE",
+    "operacao": "PASSOU | FALHOU | NÃO_EXECUTADO | DEFERRED | NOT_APPLICABLE",
+    "implantacao": "PASSOU | FALHOU | NÃO_EXECUTADO | DEFERRED | NOT_APPLICABLE",
+    "publicacao": "PASSOU | FALHOU | NÃO_EXECUTADO | DEFERRED | NOT_APPLICABLE",
+    "experiencia_humana": "PASSOU | FALHOU | NÃO_EXECUTADO | DEFERRED | NOT_APPLICABLE"
+  },
+  "itens_deferred": [
+    "string"
+  ],
+  "ancoras_fisicas": {
+    "hash_do_commit": "string",
+    "status_dos_testes": "PASSOU | FALHOU | NÃO_EXECUTADO",
+    "ultimas_linhas_inspecionadas": "string"
+  },
+  "componentes_validados": [
+    "string"
+  ],
+  "proximo_passo": "string"
+}
+```
+
+## 🛡️ Regras de continuidade da contenção
+
+1. O snapshot deve registrar o `profile_id`, o SHA-256 do manifesto confiável, a geração observada, a política WebSocket e o estado de qualificação por plataforma quando essas evidências existirem.
+2. O registro de contenção no snapshot é apenas evidência de continuidade; ele nunca cria nem restaura autoridade.
+3. `profile_id`, manifesto, geração, componentes e ambiente devem ser revalidados fisicamente pelo runtime confiável antes de reutilização.
+4. Estado `NÃO_EXECUTADO` não pode ser promovido por inferência, por resultado de outro sistema operacional ou por CI genérico.
+5. Mudança de perfil, manifesto, geração, componente, hash ou ambiente invalida reutilização da evidência de contenção.
+6. Snapshot anterior não pode habilitar fallback, WebSocket, credencial, rede, mutação ou publicação que o perfil atual não qualifique explicitamente.
