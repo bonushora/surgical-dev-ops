@@ -7,14 +7,43 @@ const path = require('node:path');
 const PROFILE_ID = 'BH-SEP-v2.3+BH-SDP-v2.3+BH-CONTAINMENT-v1';
 const PROFILE_SCHEMA = 'sdo.containment_profile.v1';
 const REPOSITORY_ROOT = path.resolve(__dirname, '../..');
-const COMPONENTS = Object.freeze({
-  'protocols/v2.3/BH-SEP.md': '0360b145b4f1ba8cb211ffdb16cf5d70d47c7dc55a11395bd2afb9d5241eb4ee',
-  'protocols/v2.3/BH-SDP.md': '413b3613c75ce89defae4d49ad0b21d92f56519c14f5b32c8e8e152997887f47',
-  'protocols/v2.3/BH-CONTAINMENT.md': '74746a4835d4abf4c0875b17458603d7902eecdeadf7264993ecac18718fa563',
-  'protocols/v2.3/BH-CONTAINMENT_EN.md': '1f96e23ce5ed3aec787d75b35dbb7ddb26b9ad27ea2b982d8c329f05cd9d2735',
-  'protocols/v2.3/BH-CONTAINMENT-PROFILE.md': '5c65181797fb3b5b7c95f49b1c3e87134e234c139690be60127f2f7b19fe41c2',
-  'protocols/v2.3/BH-CONTAINMENT-PROFILE_EN.md': '39441b4cb3331f5ce3ad65dd2385216113b8882b21019c1823b93db43339e661'
-});
+const MANIFEST_PATH = 'protocols/v2.3/BH-CONTAINMENT-MANIFEST.json';
+const MANIFEST_SHA256 = 'c3df0eab9b3f2a43372b77be9674b2eeaf9ce4079640350d824072af030ad53b';
+const MINIMUM_GENERATION = 2;
+
+function loadTrustedManifest(root) {
+  const candidate = path.join(root, MANIFEST_PATH);
+  let status;
+  let bytes;
+  try {
+    status = fs.lstatSync(candidate);
+    if (!status.isFile() || status.isSymbolicLink()) {
+      throw profileFailure(`${MANIFEST_PATH} is not a regular trusted manifest.`);
+    }
+    bytes = fs.readFileSync(candidate);
+  } catch (error) {
+    if (error && error.code === 'CONTAINMENT_PROFILE_INVALID') throw error;
+    throw profileFailure(`${MANIFEST_PATH} is missing or unreadable.`);
+  }
+  const digest = crypto.createHash('sha256').update(bytes).digest('hex');
+  if (digest !== MANIFEST_SHA256) {
+    throw profileFailure(`${MANIFEST_PATH} does not match its trusted runtime anchor.`);
+  }
+  let manifest;
+  try { manifest = JSON.parse(bytes.toString('utf8')); }
+  catch { throw profileFailure(`${MANIFEST_PATH} is not valid JSON.`); }
+  if (!manifest || manifest.schema !== 'sdo.containment_profile_manifest.v2' ||
+      manifest.profileId !== PROFILE_ID ||
+      !Number.isInteger(manifest.generation) ||
+      manifest.generation < MINIMUM_GENERATION ||
+      manifest.webSocketPolicy !== 'BLOCKED_BEFORE_UPGRADE' ||
+      !manifest.components || typeof manifest.components !== 'object') {
+    throw profileFailure(`${MANIFEST_PATH} declares an incompatible or rolled-back profile.`);
+  }
+  return manifest;
+}
+
+const COMPONENTS = Object.freeze(loadTrustedManifest(REPOSITORY_ROOT).components);
 
 function profileFailure(reason) {
   const error = new Error(`CONTAINMENT_PROFILE_INVALID: ${reason}`);
@@ -30,8 +59,9 @@ function deepFreeze(value) {
 
 function loadContainmentProfile({ repositoryRoot = REPOSITORY_ROOT } = {}) {
   const root = fs.realpathSync(repositoryRoot);
+  const manifest = loadTrustedManifest(root);
   const components = [];
-  for (const [relativePath, expectedSha256] of Object.entries(COMPONENTS)) {
+  for (const [relativePath, expectedSha256] of Object.entries(manifest.components)) {
     const candidate = path.join(root, relativePath);
     let status;
     let bytes;
@@ -62,13 +92,24 @@ function loadContainmentProfile({ repositoryRoot = REPOSITORY_ROOT } = {}) {
     components,
     legacyRawIncludesContainment: false,
     createsAuthority: false,
-    trustedAnchor: 'HOST_RUNTIME_EMBEDDED_SHA256'
+    trustedAnchor: 'HOST_RUNTIME_EMBEDDED_MANIFEST_SHA256',
+    manifest: deepFreeze({
+      path: MANIFEST_PATH,
+      sha256: MANIFEST_SHA256,
+      generation: manifest.generation,
+      minimumRuntime: manifest.minimumRuntime,
+      webSocketPolicy: manifest.webSocketPolicy,
+      qualificationClaims: manifest.qualificationClaims
+    })
   });
 }
 
 module.exports = Object.freeze({
   PROFILE_ID,
   PROFILE_SCHEMA,
+  MANIFEST_PATH,
+  MANIFEST_SHA256,
+  MINIMUM_GENERATION,
   COMPONENTS,
   loadContainmentProfile
 });

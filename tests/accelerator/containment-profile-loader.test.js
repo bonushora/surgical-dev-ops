@@ -8,6 +8,7 @@ const test = require('node:test');
 const {
   COMPONENTS,
   PROFILE_ID,
+  MANIFEST_PATH,
   loadContainmentProfile
 } = require('../../accelerator/core/containment-profile-loader');
 const {
@@ -19,7 +20,7 @@ const ROOT = path.resolve(__dirname, '../..');
 function profileFixture(t) {
   const root = fs.mkdtempSync(path.join(os.tmpdir(), 'sdo-containment-profile-'));
   t.after(() => fs.rmSync(root, { recursive: true, force: true }));
-  for (const relative of Object.keys(COMPONENTS)) {
+  for (const relative of [MANIFEST_PATH, ...Object.keys(COMPONENTS)]) {
     const target = path.join(root, relative);
     fs.mkdirSync(path.dirname(target), { recursive: true });
     fs.copyFileSync(path.join(ROOT, relative), target);
