@@ -85,6 +85,13 @@ function r3Grant(overrides = {}, authorityOverrides = {}, clock = clockAt()) {
     tenantId: 'tenant-1', projectId: 'project-1', ...authorityOverrides }), clock);
 }
 
+const g4Derivation = Object.freeze({
+  authorityDerivation: 'DERIVED_FROM_G4',
+  parentAuthorizationFingerprint: 'a'.repeat(64),
+  parentContractFingerprint: 'b'.repeat(64),
+  parentAuthorizationExpiresAt: '2026-08-20T12:30:00.000Z'
+});
+
 test('default deny without authoritative policy', () => {
   assert.equal(evaluateCapabilityGrant(request()).decision, 'DENIED');
 });
@@ -144,6 +151,43 @@ test('valid R3 patch grant binds human approval authority', () => {
 test('R3 grant requires authoritative time and denies exact expiry', () => {
   assert.equal(r3Grant({}, {}, null).decision, 'DENIED');
   assert.equal(r3Grant({}, {}, clockAt('2026-08-20T13:00:00.000Z')).decision, 'DENIED');
+});
+
+test('derived R3 grant carries exact G4 provenance within parent expiry', () => {
+  const result = r3Grant({
+    ...g4Derivation,
+    expiresAt: g4Derivation.parentAuthorizationExpiresAt
+  }, g4Derivation);
+
+  assert.equal(result.decision, 'ALLOWED');
+  assert.equal(result.grant.authorityDerivation, 'DERIVED_FROM_G4');
+  assert.equal(
+    result.grant.parentAuthorizationFingerprint,
+    g4Derivation.parentAuthorizationFingerprint
+  );
+  assert.equal(
+    result.grant.parentContractFingerprint,
+    g4Derivation.parentContractFingerprint
+  );
+  assert.equal(
+    result.grant.parentAuthorizationExpiresAt,
+    g4Derivation.parentAuthorizationExpiresAt
+  );
+});
+
+test('derived R3 grant denies expiry broadening and parent provenance tampering', () => {
+  assert.equal(r3Grant({
+    ...g4Derivation,
+    expiresAt: '2026-08-20T12:30:00.001Z'
+  }, g4Derivation).decision, 'DENIED');
+
+  assert.equal(r3Grant({
+    ...g4Derivation,
+    expiresAt: g4Derivation.parentAuthorizationExpiresAt
+  }, {
+    ...g4Derivation,
+    parentContractFingerprint: 'c'.repeat(64)
+  }).decision, 'DENIED');
 });
 
 test('caller time cannot extend or rewrite an R3 grant validity decision', () => {

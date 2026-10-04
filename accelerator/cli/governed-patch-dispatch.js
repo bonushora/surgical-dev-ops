@@ -48,6 +48,7 @@ const {
 } = require('../core/local-offline-human-authority-store');
 
 const AUDIENCE = 'surgical-devops';
+const G4_DERIVATION = 'DERIVED_FROM_G4';
 
 function text(value, label) {
   if (
@@ -81,6 +82,70 @@ function freeze(value) {
   }
 
   return Object.freeze(value);
+}
+
+function canonicalTimestamp(value, label) {
+  if (
+    typeof value !== 'string' ||
+    !Number.isFinite(Date.parse(value)) ||
+    new Date(Date.parse(value)).toISOString() !== value
+  ) {
+    throw new Error(`${label} must be canonical ISO-8601.`);
+  }
+
+  return value;
+}
+
+function deriveParentAuthorization(parentAuthorization) {
+  if (parentAuthorization === undefined || parentAuthorization === null) {
+    return null;
+  }
+
+  if (
+    !parentAuthorization ||
+    typeof parentAuthorization !== 'object' ||
+    Array.isArray(parentAuthorization) ||
+    !Object.isFrozen(parentAuthorization) ||
+    parentAuthorization.schema !==
+      'sdo.natural_development_patch_authorization.v1' ||
+    parentAuthorization.state !== 'AUTHORIZED_FOR_R3_COMPOSITION' ||
+    parentAuthorization.singleUse !== true ||
+    parentAuthorization.reusableApproval !== false ||
+    parentAuthorization.operationalAuthority !== false ||
+    parentAuthorization.mutationAuthority !== false ||
+    parentAuthorization.approvalAuthority !== false ||
+    parentAuthorization.dispatchAuthority !== false
+  ) {
+    throw new Error(
+      'Immutable non-executable G4 parent authorization is required.'
+    );
+  }
+
+  const {
+    authorizationFingerprint,
+    ...binding
+  } = parentAuthorization;
+
+  if (
+    !/^[a-f0-9]{64}$/.test(authorizationFingerprint || '') ||
+    sha256(JSON.stringify(binding)) !== authorizationFingerprint ||
+    !/^[a-f0-9]{64}$/.test(
+      parentAuthorization.contractFingerprint || ''
+    )
+  ) {
+    throw new Error('G4 parent authorization binding is malformed.');
+  }
+
+  return freeze({
+    authorityDerivation: G4_DERIVATION,
+    parentAuthorizationFingerprint: authorizationFingerprint,
+    parentContractFingerprint:
+      parentAuthorization.contractFingerprint,
+    parentAuthorizationExpiresAt: canonicalTimestamp(
+      parentAuthorization.expiresAt,
+      'G4 parent authorization expiry'
+    )
+  });
 }
 
 function operationIdentity({
@@ -121,7 +186,8 @@ function createGovernedPatchRequest(
     authorityRoot,
     journalStorageRoot,
     tenantId = null,
-    projectId = null
+    projectId = null,
+    parentAuthorization = null
   }
 ) {
   const repository =
@@ -238,10 +304,26 @@ function createGovernedPatchRequest(
   const issuedAt =
     initialObservation.reading.wallTime;
 
-  const expiresAt =
+  const localDefaultExpiresAt =
     new Date(
       Date.parse(issuedAt) + 5 * 60_000
     ).toISOString();
+
+  const parentProvenance =
+    deriveParentAuthorization(parentAuthorization);
+
+  const expiresAt = parentProvenance
+    ? new Date(Math.min(
+        Date.parse(localDefaultExpiresAt),
+        Date.parse(parentProvenance.parentAuthorizationExpiresAt)
+      )).toISOString()
+    : localDefaultExpiresAt;
+
+  if (Date.parse(expiresAt) <= Date.parse(issuedAt)) {
+    throw new Error(
+      'G4 parent authorization is expired; derived R3 authority cannot be issued.'
+    );
+  }
 
   const operationDigest =
     operationIdentity({
@@ -507,7 +589,9 @@ function createGovernedPatchRequest(
     projectId:
       projectId === undefined
         ? null
-        : projectId
+        : projectId,
+
+    ...(parentProvenance || {})
   };
 
   const grantEvaluation =
@@ -583,6 +667,8 @@ function createGovernedPatchRequest(
           projectId === undefined
             ? null
             : projectId,
+
+        ...(parentProvenance || {}),
 
         events: [
           {
@@ -690,6 +776,8 @@ function createGovernedPatchRequest(
         ? null
         : projectId,
 
+    ...(parentProvenance || {}),
+
     rawIdentityAssertion:
       signedAssertion,
 
@@ -765,7 +853,9 @@ function createGovernedPatchRequest(
       replacementSha256:
         replacementHash,
 
-      expiresAt
+      expiresAt,
+
+      ...(parentProvenance || {})
     }
   });
 }

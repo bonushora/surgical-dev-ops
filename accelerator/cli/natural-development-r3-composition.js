@@ -179,6 +179,11 @@ function composeAndDispatchNaturalDevelopmentPatch({
 
   const replacement = replacementFromProposal(patchProposal);
 
+  _g9DenyDurableReplayBeforeR3Preparation({
+    journalStorageRoot,
+    patchAuthorization
+  });
+
   const prepared = createGovernedPatchRequest({
     repositoryPath: repository.repository.path,
     target: patchProposal.target,
@@ -186,7 +191,8 @@ function composeAndDispatchNaturalDevelopmentPatch({
     authorityRoot,
     journalStorageRoot,
     tenantId,
-    projectId
+    projectId,
+    parentAuthorization: patchAuthorization
   });
 
   if (
@@ -232,6 +238,25 @@ function composeAndDispatchNaturalDevelopmentPatch({
     );
   }
 
+  const derivedGrant =
+    prepared.request.execution.grantEvaluation.grant;
+
+  if (
+    derivedGrant.authorityDerivation !== 'DERIVED_FROM_G4' ||
+    derivedGrant.parentAuthorizationFingerprint !==
+      authorizationEvaluation.authorization.authorizationFingerprint ||
+    derivedGrant.parentContractFingerprint !==
+      authorizationEvaluation.authorization.contractFingerprint ||
+    derivedGrant.parentAuthorizationExpiresAt !==
+      authorizationEvaluation.authorization.expiresAt ||
+    Date.parse(derivedGrant.expiresAt) >
+      Date.parse(authorizationEvaluation.authorization.expiresAt)
+  ) {
+    throw new Error(
+      'Derived R3 authority is not exactly bounded by G4 authorization.'
+    );
+  }
+
   const g10ClaimContext =
     _g9ClaimBeforeRealG5Dispatch(arguments);
 
@@ -253,6 +278,16 @@ function composeAndDispatchNaturalDevelopmentPatch({
       'sdo.natural_development_production_effect_binding.v1',
     authorizationFingerprint:
       patchAuthorization.authorizationFingerprint,
+    authorityDerivation:
+      derivedGrant.authorityDerivation,
+    parentAuthorizationFingerprint:
+      derivedGrant.parentAuthorizationFingerprint,
+    parentContractFingerprint:
+      derivedGrant.parentContractFingerprint,
+    parentAuthorizationExpiresAt:
+      derivedGrant.parentAuthorizationExpiresAt,
+    r3ExpiresAt:
+      derivedGrant.expiresAt,
     operationId:
       prepared.authority.operationId,
     physicalWorkspaceIdentity,
@@ -321,6 +356,16 @@ function composeAndDispatchNaturalDevelopmentPatch({
     proposalFingerprint: patchProposal.proposalFingerprint,
     authorizationFingerprint:
       patchAuthorization.authorizationFingerprint,
+    authorityDerivation:
+      derivedGrant.authorityDerivation,
+    parentAuthorizationFingerprint:
+      derivedGrant.parentAuthorizationFingerprint,
+    parentContractFingerprint:
+      derivedGrant.parentContractFingerprint,
+    parentAuthorizationExpiresAt:
+      derivedGrant.parentAuthorizationExpiresAt,
+    r3ExpiresAt:
+      derivedGrant.expiresAt,
     diffFingerprint: patchProposal.exactDiff.diffFingerprint,
     workspace: repository.repository.path,
     physicalWorkspaceIdentity,
@@ -368,6 +413,9 @@ function composeAndDispatchNaturalDevelopmentPatch({
  */
 const _g9Path =
   require('node:path');
+
+const _g9Fs =
+  require('node:fs');
 
 const _g9Authorization =
   require(
@@ -456,6 +504,51 @@ function _g9PropertyValues(objects, keys, predicate = () => true) {
   }
 
   return output;
+}
+
+function _g9DenyDurableReplayBeforeR3Preparation({
+  journalStorageRoot,
+  patchAuthorization
+}) {
+  const root =
+    _g9Text(journalStorageRoot);
+
+  const authorizationFingerprint =
+    patchAuthorization &&
+    _g9CanonicalSha(
+      patchAuthorization.authorizationFingerprint
+    )
+      ? patchAuthorization.authorizationFingerprint
+      : null;
+
+  if (
+    !root ||
+    !_g9Path.isAbsolute(root) ||
+    !authorizationFingerprint
+  ) {
+    return;
+  }
+
+  const stateRoot =
+    _g9Path.join(
+      root,
+      '.natural-development-authorization-consumption'
+    );
+
+  if (!_g9Fs.existsSync(stateRoot)) return;
+
+  const durable =
+    _g9AuthorizationStore
+      .loadNaturalDevelopmentAuthorizationConsumption({
+        stateRoot,
+        authorizationFingerprint
+      });
+
+  if (durable) {
+    throw new Error(
+      'G9 durable prior claim blocks replay before R3 preparation; recovery cannot restore authority.'
+    );
+  }
 }
 
 function _g9AuthorizationEvidence(objects) {

@@ -29,6 +29,12 @@ const ADAPTER_ACTIONS = Object.freeze({
   PROCESS_VALIDATION: new Set(['NODE_SYNTAX_CHECK', 'NODE_TEST_FILE']),
   FILESYSTEM_PATCH: new Set(['PATCH_FILE'])
 });
+const DERIVATION_FIELDS = Object.freeze([
+  'authorityDerivation',
+  'parentAuthorizationFingerprint',
+  'parentContractFingerprint',
+  'parentAuthorizationExpiresAt'
+]);
 
 function deepFreeze(value) {
   if (!value || typeof value !== 'object' || Object.isFrozen(value)) return value;
@@ -53,6 +59,27 @@ function timestamp(value) {
   const parsed = Date.parse(value);
   if (!Number.isFinite(parsed) || new Date(parsed).toISOString() !== value) return null;
   return value;
+}
+
+function validateDerivedAuthority(input) {
+  const present = DERIVATION_FIELDS.filter((key) =>
+    Object.prototype.hasOwnProperty.call(input, key)
+  );
+
+  if (present.length === 0) return null;
+  if (
+    present.length !== DERIVATION_FIELDS.length ||
+    input.riskLevel !== 'R3' ||
+    input.capabilityType !== 'FILESYSTEM_PATCH' ||
+    input.authorityDerivation !== 'DERIVED_FROM_G4' ||
+    !/^[a-f0-9]{64}$/.test(input.parentAuthorizationFingerprint || '') ||
+    !/^[a-f0-9]{64}$/.test(input.parentContractFingerprint || '') ||
+    !timestamp(input.parentAuthorizationExpiresAt)
+  ) {
+    return 'Derived R3 parent provenance is malformed.';
+  }
+
+  return null;
 }
 
 function denied(violations) {
@@ -164,6 +191,8 @@ function createOperationRecord(input, authoritativeClock = null) {
   if (!RISKS.has(input.riskLevel)) violations.push('Risk level is missing or invalid.');
   if (!IDEMPOTENCY.has(input.idempotency)) violations.push('Idempotency classification is missing or invalid.');
   if (input.policyDecision === 'DENIED') violations.push('Policy denied the operation.');
+  const derivationError = validateDerivedAuthority(input);
+  if (derivationError) violations.push(derivationError);
 
   if (input.riskLevel === 'R3') {
     let observation = null;
@@ -226,6 +255,11 @@ function createOperationRecord(input, authoritativeClock = null) {
       capabilityType: input.riskLevel === 'R3' ? input.capabilityType : null,
       action: input.riskLevel === 'R3' ? input.action : null,
       scope: input.riskLevel === 'R3' ? input.scope : null,
+      ...(input.authorityDerivation === 'DERIVED_FROM_G4'
+        ? Object.fromEntries(
+            DERIVATION_FIELDS.map((key) => [key, input[key]])
+          )
+        : {}),
       events: input.events,
       adapterEvidence: [],
       mutationProviderEvidence: [],

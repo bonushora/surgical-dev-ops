@@ -17,6 +17,13 @@ const ALLOWED_TYPES = new Set([
 const GIT_READ_OPERATIONS = new Set(['status', 'diff', 'show', 'rev-parse', 'ls-files']);
 const VALIDATION_SELECTORS = new Set(['NODE_SYNTAX_CHECK', 'NODE_TEST_FILE']);
 const RISKS = new Set(['R0', 'R1', 'R2', 'R3']);
+const DERIVATION_MARKER = 'DERIVED_FROM_G4';
+const DERIVATION_FIELDS = Object.freeze([
+  'authorityDerivation',
+  'parentAuthorizationFingerprint',
+  'parentContractFingerprint',
+  'parentAuthorizationExpiresAt'
+]);
 
 function deepFreeze(value) {
   if (!value || typeof value !== 'object' || Object.isFrozen(value)) return value;
@@ -73,6 +80,38 @@ function isSubset(requested, authorized) {
 
 function sha256(value) {
   return typeof value === 'string' && /^[a-f0-9]{64}$/.test(value) ? value : null;
+}
+
+function derivedAuthority(source) {
+  const present = DERIVATION_FIELDS.filter((key) =>
+    Object.prototype.hasOwnProperty.call(source, key)
+  );
+
+  if (present.length === 0) return { binding: null };
+  if (present.length !== DERIVATION_FIELDS.length) {
+    return { error: 'Derived R3 parent provenance is incomplete.' };
+  }
+
+  const binding = {
+    authorityDerivation: source.authorityDerivation,
+    parentAuthorizationFingerprint:
+      sha256(source.parentAuthorizationFingerprint),
+    parentContractFingerprint:
+      sha256(source.parentContractFingerprint),
+    parentAuthorizationExpiresAt:
+      timestamp(source.parentAuthorizationExpiresAt)
+  };
+
+  if (
+    binding.authorityDerivation !== DERIVATION_MARKER ||
+    !binding.parentAuthorizationFingerprint ||
+    !binding.parentContractFingerprint ||
+    !binding.parentAuthorizationExpiresAt
+  ) {
+    return { error: 'Derived R3 parent provenance is malformed.' };
+  }
+
+  return { binding };
 }
 
 function canonicalize(value) {
@@ -234,6 +273,26 @@ function evaluateCapabilityGrant(request, authority, authoritativeClock = null) 
   }
 
   const r3Patch = capabilityType === 'FILESYSTEM_PATCH' && request.riskLevel === 'R3';
+  const requestDerivation = derivedAuthority(request);
+  const authorityDerivation = derivedAuthority(authority);
+
+  if (requestDerivation.error || authorityDerivation.error) {
+    return denied(
+      requestDerivation.error || authorityDerivation.error
+    );
+  }
+
+  if (
+    JSON.stringify(requestDerivation.binding) !==
+      JSON.stringify(authorityDerivation.binding)
+  ) {
+    return denied('Derived R3 parent provenance is mismatched.');
+  }
+
+  if (!r3Patch && requestDerivation.binding) {
+    return denied('Parent authorization derivation is valid only for R3 patches.');
+  }
+
   let approvalAuthority = null;
   let authoritativeReading = null;
   let temporalAuthority = null;
@@ -304,6 +363,14 @@ function evaluateCapabilityGrant(request, authority, authoritativeClock = null) 
   if (!expiresAt || !evaluatedAt || Date.parse(expiresAt) <= Date.parse(evaluatedAt)) {
     return denied('Capability grant is expired or has invalid expiry evidence.');
   }
+  if (
+    requestDerivation.binding &&
+    Date.parse(expiresAt) > Date.parse(
+      requestDerivation.binding.parentAuthorizationExpiresAt
+    )
+  ) {
+    return denied('Derived R3 expiry exceeds its G4 parent authorization.');
+  }
   if (r3Patch) {
     let grantExpiry;
     try {
@@ -362,7 +429,8 @@ function evaluateCapabilityGrant(request, authority, authoritativeClock = null) 
       projectId: approvalAuthority ? approvalAuthority.projectId : null,
       identityVerificationEvidenceFingerprint: approvalAuthority
         ? request.identityVerification.evidence.fingerprint : null,
-      temporalAuthority
+      temporalAuthority,
+      ...(requestDerivation.binding || {})
   };
   const grant = deepFreeze({
     ...grantFields,

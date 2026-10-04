@@ -100,6 +100,57 @@ function fingerprint(value) {
   return crypto.createHash('sha256').update(JSON.stringify(value)).digest('hex');
 }
 
+const DERIVED_AUTHORITY_FIELDS = Object.freeze([
+  'authorityDerivation',
+  'parentAuthorizationFingerprint',
+  'parentContractFingerprint',
+  'parentAuthorizationExpiresAt'
+]);
+
+function validateDerivedAuthorityBinding(request, grant, operationRecord, reading) {
+  const sources = [request, grant, operationRecord];
+  const presence = sources.map((source) =>
+    DERIVED_AUTHORITY_FIELDS.filter((key) =>
+      Object.prototype.hasOwnProperty.call(source, key)
+    )
+  );
+
+  if (presence.every((fields) => fields.length === 0)) return null;
+  if (presence.some((fields) => fields.length !== DERIVED_AUTHORITY_FIELDS.length)) {
+    return 'Derived R3 parent provenance is incomplete or detached.';
+  }
+
+  const expected = Object.fromEntries(
+    DERIVED_AUTHORITY_FIELDS.map((key) => [key, grant[key]])
+  );
+
+  if (
+    expected.authorityDerivation !== 'DERIVED_FROM_G4' ||
+    !/^[a-f0-9]{64}$/.test(expected.parentAuthorizationFingerprint || '') ||
+    !/^[a-f0-9]{64}$/.test(expected.parentContractFingerprint || '') ||
+    !Number.isFinite(Date.parse(expected.parentAuthorizationExpiresAt)) ||
+    new Date(Date.parse(expected.parentAuthorizationExpiresAt)).toISOString() !==
+      expected.parentAuthorizationExpiresAt ||
+    sources.some((source) =>
+      DERIVED_AUTHORITY_FIELDS.some((key) => source[key] !== expected[key])
+    ) ||
+    Date.parse(grant.expiresAt) >
+      Date.parse(expected.parentAuthorizationExpiresAt)
+  ) {
+    return 'Derived R3 parent provenance is malformed, tampered or broadened.';
+  }
+
+  if (
+    reading &&
+    Date.parse(reading.wallTime) >=
+      Date.parse(expected.parentAuthorizationExpiresAt)
+  ) {
+    return 'Parent G4 authorization is expired at physical execution.';
+  }
+
+  return null;
+}
+
 function replacementDigest(request) {
   if (!request || request.adapter !== 'FILESYSTEM_PATCH') return null;
   if (!(typeof request.replacement === 'string' || Buffer.isBuffer(request.replacement))) {
@@ -286,6 +337,15 @@ function validateControlledRequest(request, repositoryPath, expectedRisk, runtim
       if (!observation || observation.decision !== 'ALLOWED') {
         return executionDenial('Authoritative clock anomaly denied mutation dispatch.');
       }
+    }
+    const derivedAuthorityError = validateDerivedAuthorityBinding(
+      request,
+      grant,
+      operationRecord,
+      observation && observation.reading
+    );
+    if (derivedAuthorityError) {
+      return executionDenial(derivedAuthorityError);
     }
     const temporal = observation
       ? { reading: observation.reading, requireCurrent: true } : {};

@@ -51,6 +51,16 @@ const {
 );
 
 const {
+  createGovernedPatchRequest
+} = require(
+  '../../accelerator/cli/governed-patch-dispatch'
+);
+
+const {
+  orchestrate
+} = require('../../accelerator/core/surgical-orchestrator');
+
+const {
   runNaturalDevelopmentValidationLoop
 } = require(
   '../../accelerator/cli/natural-development-validation-loop'
@@ -260,6 +270,182 @@ function dispatch(state, values) {
   });
 }
 
+function prepareDerivedR3(state, values) {
+  return createGovernedPatchRequest({
+    repositoryPath: state.repo,
+    target: values.patchProposal.target,
+    replacement: Buffer.from(
+      values.patchProposal.replacementBase64,
+      'base64'
+    ).toString('utf8'),
+    authorityRoot: state.authorityRoot,
+    journalStorageRoot: state.journalStorageRoot,
+    tenantId: 'tenant-1',
+    projectId: 'project-1',
+    parentAuthorization: values.patchAuthorization
+  });
+}
+
+test('G5 derives immutable R3 provenance and caps expiry at G4', () => {
+  const state = fixture();
+
+  try {
+    const authorizedAt = new Date().toISOString();
+    const parentExpiry = new Date(
+      Date.parse(authorizedAt) + 60_000
+    ).toISOString();
+    const values = artifacts(state, {
+      authorizedAt,
+      expiresAt: parentExpiry
+    });
+    const prepared = prepareDerivedR3(state, values);
+    const grant = prepared.request.execution.grantEvaluation.grant;
+
+    assert.equal(grant.expiresAt, parentExpiry);
+    assert.equal(grant.authorityDerivation, 'DERIVED_FROM_G4');
+    assert.equal(
+      grant.parentAuthorizationFingerprint,
+      values.patchAuthorization.authorizationFingerprint
+    );
+    assert.equal(
+      grant.parentContractFingerprint,
+      values.contract.contractFingerprint
+    );
+    assert.equal(grant.parentAuthorizationExpiresAt, parentExpiry);
+    assert.equal(Object.isFrozen(grant), true);
+    assert.equal(Object.isFrozen(prepared.request.execution), true);
+
+    for (const forbidden of [
+      'command',
+      'args',
+      'executable',
+      'shell',
+      'process',
+      'network',
+      'provider',
+      'providerId',
+      'mutationProvider'
+    ]) {
+      assert.equal(
+        Object.prototype.hasOwnProperty.call(grant, forbidden),
+        false
+      );
+      assert.equal(
+        Object.prototype.hasOwnProperty.call(
+          prepared.request.execution,
+          forbidden
+        ),
+        false
+      );
+    }
+  } finally {
+    fs.rmSync(state.root, { recursive: true, force: true });
+  }
+});
+
+test('G5 composition reports the exact G4 parent provenance', () => {
+  const state = fixture();
+
+  try {
+    const values = artifacts(state);
+    const result = dispatch(state, values);
+
+    assert.equal(result.authorityDerivation, 'DERIVED_FROM_G4');
+    assert.equal(
+      result.parentAuthorizationFingerprint,
+      values.patchAuthorization.authorizationFingerprint
+    );
+    assert.equal(
+      result.parentContractFingerprint,
+      values.contract.contractFingerprint
+    );
+    assert.equal(
+      result.parentAuthorizationExpiresAt,
+      values.patchAuthorization.expiresAt
+    );
+    assert.ok(
+      Date.parse(result.r3ExpiresAt) <=
+        Date.parse(values.patchAuthorization.expiresAt)
+    );
+  } finally {
+    fs.rmSync(state.root, { recursive: true, force: true });
+  }
+});
+
+test('tampered G4 provenance fails closed before physical mutation', () => {
+  const state = fixture();
+
+  try {
+    const values = artifacts(state);
+    const prepared = prepareDerivedR3(state, values);
+    const tamperedRequest = deepFreeze({
+      ...prepared.request,
+      execution: {
+        ...prepared.request.execution,
+        parentContractFingerprint: 'f'.repeat(64)
+      }
+    });
+
+    const result = orchestrate(tamperedRequest, prepared.runtime);
+
+    assert.equal(result.orchestration.status, 'DENIED');
+    assert.equal(result.orchestration.executionAttempted, false);
+    assert.equal(
+      fs.readFileSync(path.join(state.repo, target), 'utf8'),
+      before
+    );
+    assert.deepEqual(fs.readdirSync(state.journalStorageRoot), []);
+  } finally {
+    fs.rmSync(state.root, { recursive: true, force: true });
+  }
+});
+
+test('expired G4 parent denies physical execution without R3 reissue', () => {
+  const state = fixture();
+
+  try {
+    const authorizedAt = new Date().toISOString();
+    const parentExpiry = new Date(
+      Date.parse(authorizedAt) + 60_000
+    ).toISOString();
+    const values = artifacts(state, {
+      authorizedAt,
+      expiresAt: parentExpiry
+    });
+    const prepared = prepareDerivedR3(state, values);
+    const expiredRuntime = {
+      ...prepared.runtime,
+      authoritativeClock: createAuthoritativeClock({
+        port: {
+          read: () => ({
+            schema: 'sdo.system_clock_observation.v1',
+            availability: 'AVAILABLE',
+            source: 'TEST',
+            wallTime: parentExpiry,
+            monotonicNanoseconds: '9000000000'
+          })
+        }
+      })
+    };
+
+    const result = orchestrate(prepared.request, expiredRuntime);
+
+    assert.equal(result.orchestration.status, 'DENIED');
+    assert.equal(result.orchestration.executionAttempted, false);
+    assert.equal(
+      prepared.request.execution.grantEvaluation.grant.expiresAt,
+      parentExpiry
+    );
+    assert.equal(
+      fs.readFileSync(path.join(state.repo, target), 'utf8'),
+      before
+    );
+    assert.deepEqual(fs.readdirSync(state.journalStorageRoot), []);
+  } finally {
+    fs.rmSync(state.root, { recursive: true, force: true });
+  }
+});
+
 test('G5 composes G1-G4 through existing R3 journal and Manifest CAS', () => {
   const state = fixture();
 
@@ -296,7 +482,7 @@ test('G5 composes G1-G4 through existing R3 journal and Manifest CAS', () => {
 
     assert.throws(
       () => dispatch(state, values),
-      /Prepared R3 authority differs from exact G3 content/i
+      /durable prior claim blocks replay before R3 preparation/i
     );
 
     const validation = runNaturalDevelopmentValidationLoop({

@@ -65,6 +65,26 @@ function validateGrant(evaluation) {
   }
   const grant = evaluation.grant;
   const target = grant.scope && grant.scope.target;
+  const derivationFields = [
+    'authorityDerivation',
+    'parentAuthorizationFingerprint',
+    'parentContractFingerprint',
+    'parentAuthorizationExpiresAt'
+  ];
+  const derivationPresence = derivationFields.filter((key) =>
+    Object.prototype.hasOwnProperty.call(grant, key)
+  );
+  const derivedAuthorityInvalid = derivationPresence.length > 0 && (
+    derivationPresence.length !== derivationFields.length ||
+    grant.authorityDerivation !== 'DERIVED_FROM_G4' ||
+    !/^[a-f0-9]{64}$/.test(grant.parentAuthorizationFingerprint || '') ||
+    !/^[a-f0-9]{64}$/.test(grant.parentContractFingerprint || '') ||
+    !Number.isFinite(Date.parse(grant.parentAuthorizationExpiresAt)) ||
+    new Date(Date.parse(grant.parentAuthorizationExpiresAt)).toISOString() !==
+      grant.parentAuthorizationExpiresAt ||
+    Date.parse(grant.expiresAt) >
+      Date.parse(grant.parentAuthorizationExpiresAt)
+  );
   if (grant.capabilityType !== 'FILESYSTEM_PATCH' || grant.policyDecision !== 'ALLOWED' ||
       grant.underlyingPolicyDecision !== 'APPROVAL_REQUIRED' || grant.riskLevel !== 'R3' ||
       !/^[a-f0-9]{64}$/.test(grant.approvalAuthorityFingerprint || '') ||
@@ -73,6 +93,7 @@ function validateGrant(evaluation) {
       !/^[a-f0-9]{64}$/.test(grant.fingerprint || '') ||
       deriveCapabilityGrantFingerprint(grant) !== grant.fingerprint ||
       !grant.temporalAuthority ||
+      derivedAuthorityInvalid ||
       grant.lifecycleState !== 'PENDING' ||
       grant.idempotency !== 'IDEMPOTENT' || !target ||
       typeof target.path !== 'string' || !target.path ||
