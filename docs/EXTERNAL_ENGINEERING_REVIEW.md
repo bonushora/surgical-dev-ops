@@ -30,13 +30,22 @@ machine-readable artifact. Neither run can qualify a later EER-1 commit.
 
 ### Review status and non-claims
 
-No external review has occurred; the external review is not completed. The
-final review SHA is not frozen by this repository content. Release, merge,
-publication and public exposure are not authorized. CI is not proof of absolute
-security. Physical sudden-power-loss safety and strict pathname
-physical-identity CAS remain unqualified. Linux, macOS and Windows use different
-native isolation mechanisms; qualification does not claim those primitives are
-identical.
+An independent external security and architecture review has been performed by
+Boris Abuzov and is considered substantially complete at the current agreed
+depth of review. Two previously identified qualification points remain open.
+The review produced architecture questions that led to concrete hardening and
+additional qualification work.
+
+This review is not a universal security certification, formal audit opinion or
+claim that all defects or attack paths have been identified. The final review
+SHA is not frozen by this repository content. Release, merge, publication and
+public exposure are not authorized. CI is not proof of absolute security.
+Physical sudden-power-loss safety and strict pathname physical-identity CAS
+remain unqualified. Linux, macOS and Windows use different native isolation
+mechanisms; qualification does not claim those primitives are identical.
+
+The review contribution is formally acknowledged in
+[`review/EXTERNAL_REVIEW_ACKNOWLEDGEMENTS.md`](review/EXTERNAL_REVIEW_ACKNOWLEDGEMENTS.md).
 
 ### Reproduction and exact identity verification
 
@@ -124,7 +133,11 @@ of progress fails closed instead of manufacturing GREEN.
 
 ### Current non-claims and next boundary
 
-No external review has occurred. This package makes no absolute-security claim.
+The current external review is substantially complete at its agreed depth, with
+two previously identified qualification points still remaining. This package
+makes no absolute-security claim and does not promote the review into a
+certification or formal audit opinion.
+
 It does not claim that the final review SHA is frozen or that public exposure
 is authorized. Local mutation grants no Git or remote authority. The composed
 candidate must be requalified by exact SHA before a human separately freezes
