@@ -86,6 +86,24 @@ function fixture(t) {
   return { root, repositoryA, repositoryB };
 }
 
+function physicalContainmentEvidence(parent, child) {
+  const canonicalParent = fs.realpathSync(parent);
+  const canonicalChild = fs.realpathSync(child);
+  const relative = path.relative(canonicalParent, canonicalChild);
+  const physicallyContained = (
+    relative !== '' &&
+    relative !== '..' &&
+    !relative.startsWith(`..${path.sep}`) &&
+    !path.isAbsolute(relative)
+  );
+  return {
+    canonicalParent,
+    canonicalChild,
+    relative,
+    physicallyContained
+  };
+}
+
 function withAmbientGit(values, callback) {
   const previous = new Map();
   for (const key of AMBIENT_GIT_KEYS) {
@@ -289,10 +307,58 @@ test('materializer and authoritative observation remain bound to the exact autho
     redirected.materialization.observedManifestOid,
     authorityA.applied.afterManifestOid
   );
-  assert.equal(
-    redirected.materialization.projection.startsWith(
-      path.join(state.repositoryA, '.git')
-    ),
-    true
+  const authorizedGitDir = path.join(state.repositoryA, '.git');
+  const containment = physicalContainmentEvidence(
+    authorizedGitDir,
+    redirected.materialization.projection
   );
+  const separatorNormalizedGitDir = authorizedGitDir.replace(
+    /[\\/]+/g,
+    path.sep
+  );
+  const separatorNormalizedProjection =
+    redirected.materialization.projection.replace(/[\\/]+/g, path.sep);
+  const lexicalPrefix = redirected.materialization.projection.startsWith(
+    `${authorizedGitDir}${path.sep}`
+  );
+  const separatorNormalizedPrefix = separatorNormalizedProjection.startsWith(
+    `${separatorNormalizedGitDir}${path.sep}`
+  );
+  const caseNormalizedPrefix = separatorNormalizedProjection
+    .toLowerCase()
+    .startsWith(`${separatorNormalizedGitDir.toLowerCase()}${path.sep}`);
+
+  if (process.platform === 'win32') {
+    const diagnostics = {
+      AUTHORIZED_REPOSITORY_PATH: state.repositoryA,
+      AUTHORIZED_REPOSITORY_REALPATH: fs.realpathSync(state.repositoryA),
+      AUTHORIZED_GIT_DIR: authorizedGitDir,
+      AUTHORIZED_GIT_DIR_REALPATH: containment.canonicalParent,
+      MATERIALIZED_PATH: redirected.materialization.projection,
+      MATERIALIZED_PATH_REALPATH: containment.canonicalChild,
+      PATH_RELATIVE_FROM_AUTHORIZED_GIT_DIR: containment.relative,
+      PATH_SEPARATOR: path.sep,
+      PLATFORM: process.platform,
+      DRIVE_LETTER_AUTHORIZED: path.parse(containment.canonicalParent).root,
+      DRIVE_LETTER_MATERIALIZED: path.parse(containment.canonicalChild).root,
+      CASE_ONLY_DIFFERENCE: (
+        !separatorNormalizedPrefix && caseNormalizedPrefix ? 'YES' : 'NO'
+      ),
+      SEPARATOR_ONLY_DIFFERENCE: (
+        !lexicalPrefix && separatorNormalizedPrefix ? 'YES' : 'NO'
+      ),
+      PHYSICAL_CONTAINMENT_TRUE: (
+        containment.physicallyContained ? 'YES' : 'NO'
+      )
+    };
+    for (const [key, value] of Object.entries(diagnostics)) {
+      console.log(`${key}=${value}`);
+    }
+  }
+
+  assert.notEqual(containment.relative, '');
+  assert.notEqual(containment.relative, '..');
+  assert.equal(containment.relative.startsWith(`..${path.sep}`), false);
+  assert.equal(path.isAbsolute(containment.relative), false);
+  assert.equal(containment.physicallyContained, true);
 });
