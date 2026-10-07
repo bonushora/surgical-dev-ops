@@ -3,7 +3,9 @@
 const crypto = require('node:crypto');
 const fs = require('node:fs');
 const path = require('node:path');
-const { canonicalizeAuthorizedRoot } = require('../core/workspace-boundary');
+const {
+  observePhysicalWorkspaceIdentity
+} = require('../core/workspace-boundary');
 const { runTrustedGitRead } = require('./git-read-adapter');
 const { observeFileEvidenceIdentity } = require('./filesystem-read-adapter');
 
@@ -67,18 +69,18 @@ function contentSensitiveWorktreeFingerprint(root, worktree) {
 }
 
 function observe(rootInput) {
-  const root = canonicalizeAuthorizedRoot(rootInput);
-  const lexical = fs.lstatSync(root);
-  const stat = fs.statSync(root, { bigint: true });
-  if (lexical.isSymbolicLink() || !stat.isDirectory()) throw new Error('Authorized workspace root must be a physical directory.');
+  const physicalObservation = observePhysicalWorkspaceIdentity(rootInput);
+  const root = physicalObservation.physical.root;
   const repositoryRoot = runTrustedGitRead(root, 'REPOSITORY_ROOT').result;
   if (repositoryRoot !== root) throw new Error('Authorized workspace must be the exact physical repository root.');
   const repositoryHead = runTrustedGitRead(root, 'HEAD_COMMIT').result;
   const worktree = runTrustedGitRead(root, 'WORKTREE_STATUS').result;
-  const physical = { root, device: String(stat.dev), inode: String(stat.ino), birthtimeNs: String(stat.birthtimeNs), ctimeNs: String(stat.ctimeNs) };
-  const physicalWorkspaceIdentity = crypto.createHash('sha256').update(JSON.stringify(physical)).digest('hex');
   const worktreeFingerprint = contentSensitiveWorktreeFingerprint(root, worktree);
-  return deepFreeze({ physical, physicalWorkspaceIdentity, repositoryHead, worktreeFingerprint });
+  return deepFreeze({
+    ...physicalObservation,
+    repositoryHead,
+    worktreeFingerprint
+  });
 }
 
 function createDeterministicWorkspaceSession({ authorizedRoot, humanSubject, authorizedAt } = {}) {

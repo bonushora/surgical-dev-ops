@@ -9,6 +9,9 @@
 
 const crypto = require('node:crypto');
 const path = require('node:path');
+const {
+  observePhysicalWorkspaceIdentity
+} = require('../core/workspace-boundary');
 
 const {
   readLocalOfflineHumanPublicAuthority,
@@ -578,11 +581,22 @@ function materializeLocalNaturalDevelopmentAuthorization({
     throw new Error('Exact reviewed proposal fingerprint is required.');
   }
 
-  required(
+  const expectedPhysicalWorkspaceIdentity = required(
     physicalWorkspaceIdentity,
     'Physical workspace identity'
   );
-  const workspace = required(repositoryPath, 'Repository path');
+  const workspaceObservation = observePhysicalWorkspaceIdentity(
+    required(repositoryPath, 'Repository path')
+  );
+  if (
+    workspaceObservation.physicalWorkspaceIdentity !==
+      expectedPhysicalWorkspaceIdentity
+  ) {
+    throw new Error(
+      'Physical workspace identity is stale for local G4 materialization.'
+    );
+  }
+  const workspace = workspaceObservation.physical.root;
   const authorityPath = required(authorityRoot, 'Human authority root');
   const journalPath = required(journalStorageRoot, 'Mutation journal root');
   const publicAuthority = readLocalOfflineHumanPublicAuthority({

@@ -1,7 +1,5 @@
 'use strict';
 
-const crypto = require('node:crypto');
-
 const {
   PROTOCOL_VERSION,
   PHYSICAL_CAPABILITY,
@@ -98,8 +96,8 @@ function createGovernedPhysicalExecutor(options = {}) {
       || mission.binding.repositoryHead !== request.repository.head
       || mission.binding.worktreeFingerprint !== request.expectedState.worktreeFingerprint
       || natural.repositoryPath !== request.workspace.path
-      || natural.physicalWorkspaceIdentity !== crypto.createHash('sha256')
-        .update(request.workspace.path, 'utf8').digest('hex')
+      || natural.physicalWorkspaceIdentity !==
+        mission.binding.physicalWorkspaceIdentity
       || !natural.contract || natural.contract.contractFingerprint !== request.physicalExecution.contractFingerprint
       || !natural.patchProposal || natural.patchProposal.proposalFingerprint !== request.physicalExecution.proposalFingerprint
       || natural.patchProposal.target !== request.physicalExecution.target

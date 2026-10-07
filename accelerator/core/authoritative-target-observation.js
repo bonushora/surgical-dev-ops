@@ -12,6 +12,9 @@ const childProcess = require('node:child_process');
 const crypto = require('node:crypto');
 const fs = require('node:fs');
 const path = require('node:path');
+const {
+  createGitRuntimeIsolation
+} = require('../adapters/git-runtime-isolation');
 
 const {
   openVerifiedRegularRead
@@ -62,10 +65,12 @@ function validOid(value) {
 }
 
 function runGit(workspace, args) {
+  const isolation = createGitRuntimeIsolation();
   const result = childProcess.spawnSync(
     'git',
-    ['-C', workspace, ...args],
+    [...isolation.fixedConfig, '-C', workspace, ...args],
     {
+      env: isolation.environment,
       shell: false,
       windowsHide: true,
       maxBuffer: 1024 * 1024,

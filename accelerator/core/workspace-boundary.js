@@ -1,7 +1,14 @@
 'use strict';
 
+const crypto = require('crypto');
 const fs = require('fs');
 const path = require('path');
+
+function deepFreeze(value) {
+  if (!value || typeof value !== 'object' || Object.isFrozen(value)) return value;
+  for (const child of Object.values(value)) deepFreeze(child);
+  return Object.freeze(value);
+}
 
 function createPathIdentityAuthority(platform = process.platform) {
   let pathPort;
@@ -93,6 +100,27 @@ function canonicalizeAuthorizedRoot(rootPath) {
   return canonicalRoot;
 }
 
+function observePhysicalWorkspaceIdentity(rootPath) {
+  const root = canonicalizeAuthorizedRoot(rootPath);
+  const lexical = fs.lstatSync(root);
+  const stat = fs.statSync(root, { bigint: true });
+  if (lexical.isSymbolicLink() || !stat.isDirectory()) {
+    throw new Error('Authorized workspace root must be a physical directory.');
+  }
+  const physical = {
+    root,
+    device: String(stat.dev),
+    inode: String(stat.ino),
+    birthtimeNs: String(stat.birthtimeNs),
+    ctimeNs: String(stat.ctimeNs)
+  };
+  const physicalWorkspaceIdentity = crypto
+    .createHash('sha256')
+    .update(JSON.stringify(physical))
+    .digest('hex');
+  return deepFreeze({ physical, physicalWorkspaceIdentity });
+}
+
 function samePhysicalWorkspaceIdentity(left, right, platform = process.platform) {
   const pathIdentity = createPathIdentityAuthority(platform);
 
@@ -181,6 +209,7 @@ function resolveInspectedFile(authorizedRoot, targetPath) {
 module.exports = {
   createPathIdentityAuthority,
   canonicalizeAuthorizedRoot,
+  observePhysicalWorkspaceIdentity,
   samePhysicalWorkspaceIdentity,
   resolveInspectedFile
 };

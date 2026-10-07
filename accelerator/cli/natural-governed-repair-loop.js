@@ -9,6 +9,9 @@
  */
 
 const crypto = require('node:crypto');
+const {
+  observePhysicalWorkspaceIdentity
+} = require('../core/workspace-boundary');
 
 const {
   createNaturalAgenticMission,
@@ -191,10 +194,8 @@ function hash(label, value) {
 }
 
 function physicalIdentity(repositoryPath) {
-  return crypto
-    .createHash('sha256')
-    .update(repositoryPath, 'utf8')
-    .digest('hex');
+  return observePhysicalWorkspaceIdentity(repositoryPath)
+    .physicalWorkspaceIdentity;
 }
 
 function loopValue(value) {
@@ -910,6 +911,8 @@ function validatePending(loop, pending) {
     pending.patchProposal.objective !== loop.objective ||
     !loop.allowedTargets.includes(pending.patchProposal.target) ||
     pending.repositoryPath !== loop.mission.binding.repositoryPath ||
+    pending.physicalWorkspaceIdentity !==
+      loop.mission.binding.physicalWorkspaceIdentity ||
     pending.physicalWorkspaceIdentity !== physicalIdentity(
       loop.mission.binding.repositoryPath
     )

@@ -18,6 +18,7 @@ const {
   materializeNaturalDevelopmentPatchAuthorization,
 } = require('../../../accelerator/cli/natural-development-patch-authorization');
 const { createDeterministicWorkspaceSession } = require('../../../accelerator/adapters/deterministic-workspace-session-adapter');
+const { observePhysicalWorkspaceIdentity } = require('../../../accelerator/core/workspace-boundary');
 const { createNaturalAgenticMission } = require('../../../accelerator/core/natural-agentic-mission');
 const gateway = require('../../../accelerator/core/integrated-governed-agent-gateway');
 const { createGovernedPhysicalExecutor } = require('../../../accelerator/core/governed-physical-executor');
@@ -56,7 +57,9 @@ function temporal(wallTime) {
 }
 
 function buildArtifacts(state, authorizedAt, expiresAt) {
-  const physicalWorkspaceIdentity = sha(state.repositoryPath);
+  const physicalWorkspaceIdentity =
+    observePhysicalWorkspaceIdentity(state.repositoryPath)
+      .physicalWorkspaceIdentity;
   const repositoryHead = git(state.repositoryPath, ['rev-parse', 'HEAD']);
   const contract = createNaturalDevelopmentTaskContract({
     objective: 'Change one exact governed JavaScript target.',

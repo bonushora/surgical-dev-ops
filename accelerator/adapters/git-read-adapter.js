@@ -7,6 +7,10 @@ const {
   createPathIdentityAuthority,
   canonicalizeAuthorizedRoot
 } = require('../core/workspace-boundary');
+const {
+  createGitPlatformIsolation,
+  createGitRuntimeIsolation
+} = require('./git-runtime-isolation');
 
 const TIMEOUT_MS = 5000;
 const MAX_OUTPUT_BYTES = 64 * 1024;
@@ -28,38 +32,6 @@ const SELECTORS = Object.freeze({
     args: ['ls-files', '-co', '--exclude-standard', '-z']
   })
 });
-function createGitPlatformIsolation(platform = process.platform) {
-  if (!['linux', 'darwin', 'win32'].includes(platform)) {
-    throw new Error(`Git platform is unsupported: ${platform}`);
-  }
-
-  const nullDevice = platform === 'win32'
-    ? 'NUL'
-    : '/dev/null';
-
-  const fixedConfig = Object.freeze([
-    '-c', 'credential.helper=',
-    '-c', 'core.fsmonitor=',
-    '-c', `core.hooksPath=${nullDevice}`,
-    '-c', 'diff.external=',
-    '-c', 'diff.trustExitCode=false',
-    '-c', 'pager.status=false',
-    '-c', 'pager.diff=false',
-    '-c', 'pager.show=false'
-  ]);
-
-  const environment = Object.freeze({
-    GIT_CONFIG_GLOBAL: nullDevice,
-    GIT_CONFIG_SYSTEM: nullDevice
-  });
-
-  return deepFreeze({
-    platform,
-    nullDevice,
-    fixedConfig,
-    environment
-  });
-}
 const PREflightSelectors = Object.freeze(new Set(Object.keys(SELECTORS)));
 
 function deepFreeze(value) {
@@ -119,30 +91,7 @@ function validateGrant(evaluation) {
 }
 
 function sanitizedEnvironment(platform = process.platform) {
-  const isolation = createGitPlatformIsolation(platform);
-
-  return {
-    PATH: platform === 'win32'
-      ? 'C:\\Windows\\System32;C:\\Program Files\\Git\\cmd'
-      : '/usr/local/bin:/usr/bin:/bin',
-    LANG: 'C',
-    LC_ALL: 'C',
-    GIT_TERMINAL_PROMPT: '0',
-    GIT_OPTIONAL_LOCKS: '0',
-    GIT_CONFIG_NOSYSTEM: '1',
-    GIT_CONFIG_GLOBAL: isolation.environment.GIT_CONFIG_GLOBAL,
-    GIT_PAGER: 'cat',
-    PAGER: 'cat',
-    NO_PROXY: '*',
-    no_proxy: '*',
-    GIT_DIR: undefined,
-    GIT_WORK_TREE: undefined,
-    GIT_INDEX_FILE: undefined,
-    GIT_SSH: undefined,
-    GIT_SSH_COMMAND: undefined,
-    GIT_PROXY_COMMAND: undefined,
-    GIT_CONFIG_SYSTEM: isolation.environment.GIT_CONFIG_SYSTEM
-  };
+  return createGitRuntimeIsolation(platform).environment;
 }
 
 function safeWorkspace(value) {
@@ -261,7 +210,7 @@ function runTrustedGitRead(workspaceInput, selectorInput) {
   const result = childProcess.spawnSync('git', args, {
     cwd: workspace, shell: false, input: Buffer.alloc(0), encoding: 'utf8',
     timeout: TIMEOUT_MS, maxBuffer: MAX_OUTPUT_BYTES, windowsHide: true,
-    env: Object.fromEntries(Object.entries(sanitizedEnvironment()).filter(([, value]) => value !== undefined))
+    env: sanitizedEnvironment()
   });
   if (result.error) {
     if (result.error.code === 'ETIMEDOUT') throw new Error('Git preflight timed out.');
@@ -314,7 +263,7 @@ function runTrustedGitReadAsync(workspaceInput, selectorInput) {
         shell: false,
         stdio: ['ignore', 'pipe', 'pipe'],
         windowsHide: true,
-        env: Object.fromEntries(Object.entries(sanitizedEnvironment()).filter(([, value]) => value !== undefined))
+        env: sanitizedEnvironment()
       });
     } catch {
       reject(new Error('Git read process failed closed.'));

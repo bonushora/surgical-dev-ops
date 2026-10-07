@@ -930,9 +930,8 @@ function performOperation({ mission, request, definition, revalidation, options 
         artifacts.patchProposal.beforeSha256 !== binding.beforeSha256 ||
         artifacts.patchProposal.replacementSha256 !== binding.afterSha256 ||
         artifacts.repositoryPath !== mission.binding.repositoryPath ||
-        artifacts.physicalWorkspaceIdentity !== sha256(
-          mission.binding.repositoryPath
-        )
+        artifacts.physicalWorkspaceIdentity !==
+          mission.binding.physicalWorkspaceIdentity
       ) {
         return {
           classification: 'DENIED',

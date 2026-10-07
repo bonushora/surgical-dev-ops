@@ -1,7 +1,9 @@
 'use strict';
 
-const crypto = require('node:crypto');
 const fs = require('node:fs');
+const {
+  observePhysicalWorkspaceIdentity
+} = require('../core/workspace-boundary');
 
 const { discover } = require('../core/repository-discovery');
 const {
@@ -27,10 +29,6 @@ function freeze(value) {
   if (!value || typeof value !== 'object' || Object.isFrozen(value)) return value;
   for (const child of Object.values(value)) freeze(child);
   return Object.freeze(value);
-}
-
-function sha(value) {
-  return crypto.createHash('sha256').update(value).digest('hex');
 }
 
 function evidenceText(evidence) {
@@ -107,7 +105,9 @@ async function prepareInteractiveNaturalDevelopment({
     throw new Error('Interactive development requires a clean worktree.');
   }
   const repositoryPath = fs.realpathSync(repository.repository.path);
-  const physicalWorkspaceIdentity = sha(repositoryPath);
+  const physicalWorkspaceIdentity =
+    observePhysicalWorkspaceIdentity(repositoryPath)
+      .physicalWorkspaceIdentity;
   let contract;
   try {
     contract = createNaturalDevelopmentTaskContract({

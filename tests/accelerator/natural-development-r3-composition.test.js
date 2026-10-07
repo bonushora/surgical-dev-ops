@@ -65,6 +65,9 @@ const {
 } = require(
   '../../accelerator/cli/natural-development-validation-loop'
 );
+const {
+  observePhysicalWorkspaceIdentity
+} = require('../../accelerator/core/workspace-boundary');
 
 const before = 'const value = 1;\n';
 const after = 'const value = 2;\n';
@@ -153,7 +156,8 @@ function artifacts(state, {
   const expiry = expiresAt || new Date(
     Date.parse(authorizedAt) + 5 * 60_000
   ).toISOString();
-  const physicalWorkspaceIdentity = sha(state.repo);
+  const physicalWorkspaceIdentity =
+    observePhysicalWorkspaceIdentity(state.repo).physicalWorkspaceIdentity;
   const contract = createNaturalDevelopmentTaskContract({
     objective,
     physicalWorkspaceIdentity,

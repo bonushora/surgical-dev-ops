@@ -43,6 +43,9 @@ const {
 } = require(
   '../../accelerator/core/authoritative-target-observation'
 );
+const {
+  observePhysicalWorkspaceIdentity
+} = require('../../accelerator/core/workspace-boundary');
 const authorizationStore = require(
   '../../accelerator/adapters/natural-development-authorization-consumption-store'
 );
@@ -134,7 +137,9 @@ function compositionInput(state) {
   const expiresAt = new Date(
     Date.parse(authorizedAt) + 5 * 60_000
   ).toISOString();
-  const physicalWorkspaceIdentity = sha(state.repository);
+  const physicalWorkspaceIdentity =
+    observePhysicalWorkspaceIdentity(state.repository)
+      .physicalWorkspaceIdentity;
   const contract = createNaturalDevelopmentTaskContract({
     objective: 'Qualify the G9/G10 crash window.',
     physicalWorkspaceIdentity,

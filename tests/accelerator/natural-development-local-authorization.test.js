@@ -22,6 +22,9 @@ const {
 const {
   materializeLocalNaturalDevelopmentAuthorization
 } = require('../../accelerator/cli/natural-development-local-authorization');
+const {
+  observePhysicalWorkspaceIdentity
+} = require('../../accelerator/core/workspace-boundary');
 
 const sha = value => crypto.createHash('sha256').update(value).digest('hex');
 function freeze(value) {
@@ -36,7 +39,8 @@ function proposal(root) {
   const after = 'module.exports = 2;\n';
   const contract = createNaturalDevelopmentTaskContract({
     objective: 'Update the fixture.',
-    physicalWorkspaceIdentity: sha(root),
+    physicalWorkspaceIdentity:
+      observePhysicalWorkspaceIdentity(root).physicalWorkspaceIdentity,
     repositoryPath: root,
     repositoryHead: 'a'.repeat(40),
     allowedTargets: ['fixture.js']
@@ -79,7 +83,8 @@ test('exact interactive decision becomes verified local single-use G4 evidence',
   const authorization = materializeLocalNaturalDevelopmentAuthorization({
     patchProposal,
     approvedProposalFingerprint: patchProposal.proposalFingerprint,
-    physicalWorkspaceIdentity: sha(root),
+    physicalWorkspaceIdentity:
+      observePhysicalWorkspaceIdentity(root).physicalWorkspaceIdentity,
     repositoryPath: root,
     authorityRoot,
     journalStorageRoot

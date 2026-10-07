@@ -11,6 +11,9 @@ const crypto = require('node:crypto');
 const {
   discover
 } = require('../core/repository-discovery');
+const {
+  observePhysicalWorkspaceIdentity
+} = require('../core/workspace-boundary');
 
 const {
   orchestrate
@@ -78,13 +81,19 @@ function validateTaskAnchors(
   physicalWorkspaceIdentity,
   repository
 ) {
+  const currentPhysicalWorkspaceIdentity =
+    observePhysicalWorkspaceIdentity(repository.repository.path)
+      .physicalWorkspaceIdentity;
   if (
     !contract ||
     !Object.isFrozen(contract) ||
     proposal.contractFingerprint !== contract.contractFingerprint ||
-    repository.repository.commit !== contract.repositoryHead
+    repository.repository.commit !== contract.repositoryHead ||
+    currentPhysicalWorkspaceIdentity !== physicalWorkspaceIdentity
   ) {
-    throw new Error('G1 contract or repository HEAD is stale.');
+    throw new Error(
+      'G1 contract, physical workspace identity or repository HEAD is stale.'
+    );
   }
 
   const boundary = evaluateNaturalDevelopmentTaskBoundary(

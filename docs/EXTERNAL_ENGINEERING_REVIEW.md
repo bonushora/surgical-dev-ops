@@ -36,6 +36,8 @@ depth of review. Two previously identified qualification points remain open.
 The review produced architecture questions that led to concrete hardening and
 additional qualification work.
 
+The external review is not completed as final exact-SHA qualification evidence.
+
 This review is not a universal security certification, formal audit opinion or
 claim that all defects or attack paths have been identified. The final review
 SHA is not frozen by this repository content. Release, merge, publication and

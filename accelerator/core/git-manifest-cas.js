@@ -4,6 +4,9 @@ const crypto = require('node:crypto');
 const fs = require('node:fs');
 const path = require('node:path');
 const childProcess = require('node:child_process');
+const {
+  createGitRuntimeIsolation
+} = require('../adapters/git-runtime-isolation');
 
 const {
   samePhysicalWorkspaceIdentity
@@ -57,15 +60,18 @@ function runGit(
     allowFailure = false
   } = {}
 ) {
+  const isolation = createGitRuntimeIsolation();
   const result = childProcess.spawnSync(
     'git',
     [
+      ...isolation.fixedConfig,
       '-C',
       workspace,
       ...args
     ],
     {
       input,
+      env: isolation.environment,
       encoding: 'utf8',
       shell: false,
       windowsHide: true,
