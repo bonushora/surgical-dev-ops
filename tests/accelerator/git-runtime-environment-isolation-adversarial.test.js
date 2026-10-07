@@ -86,21 +86,47 @@ function fixture(t) {
   return { root, repositoryA, repositoryB };
 }
 
-function physicalContainmentEvidence(parent, child) {
-  const canonicalParent = fs.realpathSync(parent);
-  const canonicalChild = fs.realpathSync(child);
-  const relative = path.relative(canonicalParent, canonicalChild);
+function containmentFromCanonicalPaths(
+  canonicalParent,
+  canonicalChild,
+  platform = process.platform
+) {
+  const platformPath = platform === 'win32' ? path.win32 : path.posix;
+  const comparisonPath = (value) => {
+    const normalized = platformPath.normalize(value);
+    return platform === 'win32' ? normalized.toLowerCase() : normalized;
+  };
+  const comparisonParent = comparisonPath(canonicalParent);
+  const comparisonChild = comparisonPath(canonicalChild);
+  const sameRoot = (
+    platformPath.parse(comparisonParent).root ===
+    platformPath.parse(comparisonChild).root
+  );
+  const relative = platformPath.relative(
+    comparisonParent,
+    comparisonChild
+  );
   const physicallyContained = (
+    sameRoot &&
     relative !== '' &&
     relative !== '..' &&
-    !relative.startsWith(`..${path.sep}`) &&
-    !path.isAbsolute(relative)
+    !relative.startsWith(`..${platformPath.sep}`) &&
+    !platformPath.isAbsolute(relative)
+  );
+  return { relative, physicallyContained };
+}
+
+function physicalContainmentEvidence(parent, child) {
+  const canonicalParent = path.normalize(fs.realpathSync.native(parent));
+  const canonicalChild = path.normalize(fs.realpathSync.native(child));
+  const containment = containmentFromCanonicalPaths(
+    canonicalParent,
+    canonicalChild
   );
   return {
     canonicalParent,
     canonicalChild,
-    relative,
-    physicallyContained
+    ...containment
   };
 }
 
@@ -178,6 +204,31 @@ test('shared Git runtime is explicit and cross-platform with no ambient authorit
       assert.ok(isolation.clearedEnvironmentKeys.includes(key));
     }
   }
+});
+
+test('Windows physical containment comparison normalizes case separators and drive roots', () => {
+  const parent = 'C:\\Users\\runneradmin\\repository-a\\.git';
+  const child = 'c:/USERS/RUNNERADMIN/repository-a/.git/materialized/value.blob';
+  const contained = containmentFromCanonicalPaths(parent, child, 'win32');
+  assert.equal(contained.relative, 'materialized\\value.blob');
+  assert.equal(contained.physicallyContained, true);
+
+  assert.equal(
+    containmentFromCanonicalPaths(
+      parent,
+      'C:\\Users\\runneradmin\\repository-a\\.git-hostile\\value.blob',
+      'win32'
+    ).physicallyContained,
+    false
+  );
+  assert.equal(
+    containmentFromCanonicalPaths(
+      parent,
+      'D:\\Users\\runneradmin\\repository-a\\.git\\value.blob',
+      'win32'
+    ).physicallyContained,
+    false
+  );
 });
 
 test('Manifest CAS cannot redirect refs to an ambient GIT_DIR/GIT_WORK_TREE repository', (t) => {
