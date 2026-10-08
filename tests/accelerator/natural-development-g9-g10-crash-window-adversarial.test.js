@@ -49,6 +49,9 @@ const {
 const authorizationStore = require(
   '../../accelerator/adapters/natural-development-authorization-consumption-store'
 );
+const authorizationCore = require(
+  '../../accelerator/cli/natural-development-authorization-consumption'
+);
 const {
   reconcileNaturalDevelopmentRecovery
 } = require(
@@ -288,6 +291,24 @@ function effectFingerprint(input, operationId, evidence) {
   }));
 }
 
+function readProbe(evidencePath) {
+  return JSON.parse(fs.readFileSync(evidencePath, 'utf8'));
+}
+
+function consumptionRoot(state) {
+  return path.join(
+    state.journalStorageRoot,
+    '.natural-development-authorization-consumption'
+  );
+}
+
+function consumptionRecord(state, input) {
+  return path.join(
+    consumptionRoot(state),
+    `${input.patchAuthorization.authorizationFingerprint}.json`
+  );
+}
+
 test('G9/G10 crash window blocks replay and reconciles only durable evidence', (t) => {
   const state = fixture(t);
   const input = compositionInput(state);
@@ -318,7 +339,9 @@ test('G9/G10 crash window blocks replay and reconciles only durable evidence', (
     authorizationStore.loadNaturalDevelopmentAuthorizationConsumption({
       stateRoot: consumptionRoot,
       authorizationFingerprint:
-        input.patchAuthorization.authorizationFingerprint
+        input.patchAuthorization.authorizationFingerprint,
+      readPurpose:
+        authorizationStore.READ_PURPOSE.HISTORICAL_RECONCILIATION
     });
   assert.equal(authorizationState.state, 'CLAIMED');
   assert.equal(
@@ -445,4 +468,149 @@ test('G9/G10 crash window blocks replay and reconciles only durable evidence', (
       assert.equal(Object.prototype.hasOwnProperty.call(result, forbidden), false);
     }
   }
+});
+
+test('AGMI runtime T6 denies an A record in the B slot before R3 or dispatch', (t) => {
+  const stateA = fixture(t);
+  const stateB = fixture(t);
+  const inputA = compositionInput(stateA);
+  const inputB = compositionInput(stateB);
+  const inputPathB = path.join(stateB.root, 'composition-input.json');
+  const evidencePath = path.join(stateB.root, 't6-runtime-evidence.json');
+  const stateRootA = consumptionRoot(stateA);
+  const stateRootB = consumptionRoot(stateB);
+  const claimA = authorizationCore.createNaturalDevelopmentAuthorizationClaim({
+    authorization: inputA.patchAuthorization,
+    operationId: 'operation:agmi-runtime-t6-a',
+    physicalWorkspaceIdentity: inputA.physicalWorkspaceIdentity,
+    target: inputA.patchProposal.target,
+    beforeSha256: inputA.patchProposal.beforeSha256,
+    replacementSha256: inputA.patchProposal.replacementSha256
+  });
+
+  authorizationStore.claimNaturalDevelopmentAuthorization({
+    stateRoot: stateRootA,
+    claim: claimA
+  });
+  fs.mkdirSync(stateRootB, { recursive: true });
+  fs.copyFileSync(
+    consumptionRecord(stateA, inputA),
+    consumptionRecord(stateB, inputB)
+  );
+  fs.writeFileSync(inputPathB, JSON.stringify(inputB) + '\n');
+
+  const probe = runChild(
+    inputPathB,
+    'RESTART_REPLAY_PROBE',
+    evidencePath
+  );
+  assert.equal(probe.status, 0, probe.stderr);
+  const evidence = readProbe(evidencePath);
+  assert.equal(evidence.r3PreparationCount, 0);
+  assert.equal(evidence.dispatchCount, 0);
+  assert.equal(evidence.completed, false);
+  assert.match(evidence.error, /requested storage position/i);
+  assert.equal(
+    fs.readFileSync(path.join(stateB.repository, TARGET), 'utf8'),
+    BEFORE
+  );
+});
+
+test('AGMI runtime T2 deletion remains a safe late denial with no second dispatch or effect', (t) => {
+  const state = fixture(t);
+  const input = compositionInput(state);
+  const inputPath = path.join(state.root, 'composition-input.json');
+  const completePath = path.join(state.root, 'complete-evidence.json');
+  const replayPath = path.join(state.root, 't2-replay-evidence.json');
+  fs.writeFileSync(inputPath, JSON.stringify(input) + '\n');
+
+  const complete = runChild(inputPath, 'COMPLETE_PROBE', completePath);
+  assert.equal(complete.status, 0, complete.stderr);
+  const completedEvidence = readProbe(completePath);
+  assert.equal(completedEvidence.completed, true);
+  assert.equal(completedEvidence.r3PreparationCount, 1);
+  assert.equal(completedEvidence.dispatchCount, 1);
+
+  const observed = observeCurrentAuthoritativeTarget({
+    workspace: state.repository,
+    target: TARGET
+  });
+  const manifestAfterOid = observed.manifestOid;
+  const projectionStat = fs.statSync(observed.managedProjection, { bigint: true });
+  fs.unlinkSync(consumptionRecord(state, input));
+
+  const replay = runChild(inputPath, 'RESTART_REPLAY_PROBE', replayPath);
+  assert.equal(replay.status, 0, replay.stderr);
+  const replayEvidence = readProbe(replayPath);
+  assert.equal(replayEvidence.r3PreparationCount, 1);
+  assert.equal(replayEvidence.dispatchCount, 0);
+  assert.equal(replayEvidence.completed, false);
+  assert.match(replayEvidence.error, /exact G3 content/i);
+
+  const afterReplay = observeCurrentAuthoritativeTarget({
+    workspace: state.repository,
+    target: TARGET
+  });
+  assert.equal(afterReplay.manifestOid, manifestAfterOid);
+  assert.equal(
+    fs.statSync(afterReplay.managedProjection, { bigint: true }).mtimeNs,
+    projectionStat.mtimeNs
+  );
+  assert.equal(fs.readFileSync(afterReplay.managedProjection, 'utf8'), AFTER);
+});
+
+test('AGMI runtime T9 and CONSUMED_TO_CLAIMED rollback deny before R3 or second effect', (t) => {
+  const state = fixture(t);
+  const input = compositionInput(state);
+  const inputPath = path.join(state.root, 'composition-input.json');
+  const completePath = path.join(state.root, 'complete-evidence.json');
+  const replayPath = path.join(state.root, 't9-replay-evidence.json');
+  fs.writeFileSync(inputPath, JSON.stringify(input) + '\n');
+
+  const complete = runChild(inputPath, 'COMPLETE_PROBE', completePath);
+  assert.equal(complete.status, 0, complete.stderr);
+  assert.equal(readProbe(completePath).dispatchCount, 1);
+
+  const observed = observeCurrentAuthoritativeTarget({
+    workspace: state.repository,
+    target: TARGET
+  });
+  const manifestAfterOid = observed.manifestOid;
+  const projectionStat = fs.statSync(observed.managedProjection, { bigint: true });
+  const stateRoot = consumptionRoot(state);
+  fs.rmSync(stateRoot, { recursive: true });
+  fs.cpSync(
+    `${completePath}.store-snapshot`,
+    stateRoot,
+    { recursive: true }
+  );
+
+  const rolledBack = authorizationStore
+    .loadNaturalDevelopmentAuthorizationConsumption({
+      stateRoot,
+      authorizationFingerprint:
+        input.patchAuthorization.authorizationFingerprint,
+      readPurpose:
+        authorizationStore.READ_PURPOSE.HISTORICAL_RECONCILIATION
+    });
+  assert.equal(rolledBack.state, 'CLAIMED');
+
+  const replay = runChild(inputPath, 'RESTART_REPLAY_PROBE', replayPath);
+  assert.equal(replay.status, 0, replay.stderr);
+  const replayEvidence = readProbe(replayPath);
+  assert.equal(replayEvidence.r3PreparationCount, 0);
+  assert.equal(replayEvidence.dispatchCount, 0);
+  assert.equal(replayEvidence.completed, false);
+  assert.match(replayEvidence.error, /durable prior claim/i);
+
+  const afterReplay = observeCurrentAuthoritativeTarget({
+    workspace: state.repository,
+    target: TARGET
+  });
+  assert.equal(afterReplay.manifestOid, manifestAfterOid);
+  assert.equal(
+    fs.statSync(afterReplay.managedProjection, { bigint: true }).mtimeNs,
+    projectionStat.mtimeNs
+  );
+  assert.equal(fs.readFileSync(afterReplay.managedProjection, 'utf8'), AFTER);
 });

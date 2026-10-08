@@ -263,7 +263,9 @@ test(
         stateRoot:
           values.stateRoot,
         authorizationFingerprint:
-          values.claim.authorizationFingerprint
+          values.claim.authorizationFingerprint,
+        readPurpose:
+          store.READ_PURPOSE.HISTORICAL_RECONCILIATION
       });
 
     assert.equal(
@@ -324,7 +326,9 @@ test(
         stateRoot:
           values.stateRoot,
         authorizationFingerprint:
-          values.claim.authorizationFingerprint
+          values.claim.authorizationFingerprint,
+        readPurpose:
+          store.READ_PURPOSE.HISTORICAL_RECONCILIATION
       });
 
     assert.equal(

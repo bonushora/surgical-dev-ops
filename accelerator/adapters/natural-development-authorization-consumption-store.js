@@ -15,6 +15,11 @@ const {
 
 const MAX_RECORD_BYTES = 256 * 1024;
 
+const READ_PURPOSE = Object.freeze({
+  CURRENT_AUTHORITY: 'CURRENT_AUTHORITY',
+  HISTORICAL_RECONCILIATION: 'HISTORICAL_RECONCILIATION'
+});
+
 function deepFreeze(value) {
   if (!value || typeof value !== 'object' || Object.isFrozen(value)) return value;
   for (const child of Object.values(value)) deepFreeze(child);
@@ -80,7 +85,7 @@ function hydrate(raw) {
   return validateNaturalDevelopmentAuthorizationConsumption(value);
 }
 
-function readRecord(target) {
+function readRecord(target, authorizationFingerprint) {
   const stat = fs.lstatSync(target);
 
   if (
@@ -93,11 +98,47 @@ function readRecord(target) {
     );
   }
 
-  return hydrate(
+  const record = hydrate(
     JSON.parse(
       fs.readFileSync(target, 'utf8')
     )
   );
+
+  if (
+    record.authorizationFingerprint !==
+      authorizationFingerprint
+  ) {
+    throw new Error(
+      'Persisted G7 authorization record does not match its requested storage position.'
+    );
+  }
+
+  return record;
+}
+
+function requireReadContext({
+  readPurpose,
+  expectedPhysicalWorkspaceIdentity
+}) {
+  if (
+    readPurpose !== READ_PURPOSE.CURRENT_AUTHORITY &&
+    readPurpose !== READ_PURPOSE.HISTORICAL_RECONCILIATION
+  ) {
+    throw new Error(
+      'Explicit G7 authorization record read purpose is required.'
+    );
+  }
+
+  if (
+    readPurpose === READ_PURPOSE.CURRENT_AUTHORITY &&
+    !/^[a-f0-9]{64}$/.test(
+      expectedPhysicalWorkspaceIdentity || ''
+    )
+  ) {
+    throw new Error(
+      'Current-authority G7 read requires the expected physical workspace identity.'
+    );
+  }
 }
 
 function serialize(value) {
@@ -178,7 +219,10 @@ function claimNaturalDevelopmentAuthorization({
     );
 
   if (fs.existsSync(target)) {
-    const existing = readRecord(target);
+    const existing = readRecord(
+      target,
+      claim.authorizationFingerprint
+    );
 
     throw new Error(
       existing.schema === COMMIT_SCHEMA
@@ -202,7 +246,10 @@ function claimNaturalDevelopmentAuthorization({
   }
 
   const persisted =
-    readRecord(target);
+    readRecord(
+      target,
+      claim.authorizationFingerprint
+    );
 
   if (
     persisted.schema !== CLAIM_SCHEMA ||
@@ -250,7 +297,10 @@ function commitNaturalDevelopmentAuthorization({
   }
 
   const current =
-    readRecord(target);
+    readRecord(
+      target,
+      consumption.authorizationFingerprint
+    );
 
   if (current.schema === COMMIT_SCHEMA) {
     if (
@@ -303,7 +353,10 @@ function commitNaturalDevelopmentAuthorization({
   );
 
   const persisted =
-    readRecord(target);
+    readRecord(
+      target,
+      consumption.authorizationFingerprint
+    );
 
   if (
     persisted.schema !== COMMIT_SCHEMA ||
@@ -332,8 +385,15 @@ function commitNaturalDevelopmentAuthorization({
 
 function loadNaturalDevelopmentAuthorizationConsumption({
   stateRoot,
-  authorizationFingerprint
+  authorizationFingerprint,
+  readPurpose,
+  expectedPhysicalWorkspaceIdentity
 } = {}) {
+  requireReadContext({
+    readPurpose,
+    expectedPhysicalWorkspaceIdentity
+  });
+
   const target =
     recordPath(
       stateRoot,
@@ -342,11 +402,27 @@ function loadNaturalDevelopmentAuthorizationConsumption({
 
   if (!fs.existsSync(target)) return null;
 
-  return readRecord(target);
+  const record = readRecord(
+    target,
+    authorizationFingerprint
+  );
+
+  if (
+    readPurpose === READ_PURPOSE.CURRENT_AUTHORITY &&
+    record.physicalWorkspaceIdentity !==
+      expectedPhysicalWorkspaceIdentity
+  ) {
+    throw new Error(
+      'Persisted G7 authorization record does not match the expected physical workspace context.'
+    );
+  }
+
+  return record;
 }
 
 module.exports = Object.freeze({
   MAX_RECORD_BYTES,
+  READ_PURPOSE,
   claimNaturalDevelopmentAuthorization,
   commitNaturalDevelopmentAuthorization,
   loadNaturalDevelopmentAuthorizationConsumption

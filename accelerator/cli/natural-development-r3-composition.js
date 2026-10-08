@@ -190,7 +190,8 @@ function composeAndDispatchNaturalDevelopmentPatch({
 
   _g9DenyDurableReplayBeforeR3Preparation({
     journalStorageRoot,
-    patchAuthorization
+    patchAuthorization,
+    physicalWorkspaceIdentity
   });
 
   const prepared = createGovernedPatchRequest({
@@ -517,7 +518,8 @@ function _g9PropertyValues(objects, keys, predicate = () => true) {
 
 function _g9DenyDurableReplayBeforeR3Preparation({
   journalStorageRoot,
-  patchAuthorization
+  patchAuthorization,
+  physicalWorkspaceIdentity
 }) {
   const root =
     _g9Text(journalStorageRoot);
@@ -550,7 +552,11 @@ function _g9DenyDurableReplayBeforeR3Preparation({
     _g9AuthorizationStore
       .loadNaturalDevelopmentAuthorizationConsumption({
         stateRoot,
-        authorizationFingerprint
+        authorizationFingerprint,
+        readPurpose:
+          _g9AuthorizationStore.READ_PURPOSE.CURRENT_AUTHORITY,
+        expectedPhysicalWorkspaceIdentity:
+          physicalWorkspaceIdentity
       });
 
   if (durable) {

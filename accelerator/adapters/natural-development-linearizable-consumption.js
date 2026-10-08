@@ -195,7 +195,11 @@ function commitLinearizableNaturalDevelopmentAuthorizationConsumption({
       store.loadNaturalDevelopmentAuthorizationConsumption({
         stateRoot,
         authorizationFingerprint:
-          claim.authorizationFingerprint
+          claim.authorizationFingerprint,
+        readPurpose:
+          store.READ_PURPOSE.CURRENT_AUTHORITY,
+        expectedPhysicalWorkspaceIdentity:
+          claim.physicalWorkspaceIdentity
       });
 
     if (
@@ -231,7 +235,11 @@ function commitLinearizableNaturalDevelopmentAuthorizationConsumption({
       store.loadNaturalDevelopmentAuthorizationConsumption({
         stateRoot,
         authorizationFingerprint:
-          claim.authorizationFingerprint
+          claim.authorizationFingerprint,
+        readPurpose:
+          store.READ_PURPOSE.CURRENT_AUTHORITY,
+        expectedPhysicalWorkspaceIdentity:
+          claim.physicalWorkspaceIdentity
       });
 
     core.validateNaturalDevelopmentAuthorizationConsumption(

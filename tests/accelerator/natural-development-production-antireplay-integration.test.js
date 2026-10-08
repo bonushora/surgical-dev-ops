@@ -194,7 +194,9 @@ test(
           stateRoot:
             root,
           authorizationFingerprint:
-            claim.authorizationFingerprint
+            claim.authorizationFingerprint,
+          readPurpose:
+            store.READ_PURPOSE.HISTORICAL_RECONCILIATION
         });
 
     assert.equal(

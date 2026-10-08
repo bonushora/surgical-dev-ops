@@ -128,7 +128,9 @@ test(
         .loadNaturalDevelopmentAuthorizationConsumption({
           stateRoot,
           authorizationFingerprint:
-            exactClaim.authorizationFingerprint
+            exactClaim.authorizationFingerprint,
+          readPurpose:
+            store.READ_PURPOSE.HISTORICAL_RECONCILIATION
         });
 
     assert.equal(
@@ -211,7 +213,9 @@ test(
         .loadNaturalDevelopmentAuthorizationConsumption({
           stateRoot,
           authorizationFingerprint:
-            exactClaim.authorizationFingerprint
+            exactClaim.authorizationFingerprint,
+          readPurpose:
+            store.READ_PURPOSE.HISTORICAL_RECONCILIATION
         });
 
     assert.equal(
@@ -521,7 +525,9 @@ test(
           .loadNaturalDevelopmentAuthorizationConsumption({
             stateRoot,
             authorizationFingerprint:
-              exactClaim.authorizationFingerprint
+              exactClaim.authorizationFingerprint,
+            readPurpose:
+              store.READ_PURPOSE.HISTORICAL_RECONCILIATION
           }),
       /integrity/i
     );
