@@ -81,7 +81,25 @@ function normalizeArgv(input) {
     throw new Error('argv must be a non-empty array of strings.');
   }
   if (!path.isAbsolute(input[0])) throw new Error('argv executable must be an absolute path.');
-  return [...input];
+  let executable;
+  try {
+    executable = fs.realpathSync(path.resolve(input[0]));
+  } catch {
+    throw new Error('argv executable cannot be physically resolved.');
+  }
+  let stat;
+  try {
+    stat = fs.statSync(executable);
+  } catch {
+    throw new Error('argv executable cannot be inspected.');
+  }
+  if (!stat.isFile()) throw new Error('argv executable must be a regular file.');
+  try {
+    fs.accessSync(executable, fs.constants.R_OK | fs.constants.X_OK);
+  } catch {
+    throw new Error('argv executable must be readable and executable.');
+  }
+  return [executable, ...input.slice(1)];
 }
 
 function createExecutionEnvelope(input) {

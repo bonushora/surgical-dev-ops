@@ -13,8 +13,13 @@ const {
   createExecutionEnvelope
 } = require('../../accelerator/core/execution-isolation/execution-envelope');
 const {
-  createLinuxBwrapExecutionProvider
+  createLinuxBwrapExecutionProvider,
+  INTERNAL_AUTHORIZED_EXECUTABLE
 } = require('../../accelerator/adapters/linux-bwrap-execution-provider');
+const {
+  formatIsolationFailure,
+  MAX_DIAGNOSTIC_STDERR_BYTES
+} = require('./execution-isolation-test-diagnostics');
 
 const root = fs.realpathSync(fs.mkdtempSync(path.join(os.tmpdir(), 'sdo-isolation-structural-')));
 const workspaceA = path.join(root, 'workspace-a');
@@ -22,6 +27,21 @@ const workspaceB = path.join(root, 'workspace-b');
 fs.mkdirSync(workspaceA);
 fs.mkdirSync(workspaceB);
 test.after(() => fs.rmSync(root, { recursive: true, force: true }));
+
+function executableFixture(...segments) {
+  const destination = path.join(root, ...segments);
+  fs.mkdirSync(path.dirname(destination), { recursive: true });
+  fs.copyFileSync(process.execPath, destination);
+  fs.chmodSync(destination, fs.statSync(process.execPath).mode & 0o777);
+  return fs.realpathSync(destination);
+}
+
+const externalExecutable = executableFixture('external-runtime', 'authorized-node');
+const visibleExecutable = executableFixture('visible-runtime', 'authorized-node');
+const simulatedHomeExecutable = executableFixture(
+  'simulated-home', '.nvm', 'versions', 'node', 'current', 'bin', 'node');
+const simulatedOptExecutable = executableFixture(
+  'simulated-opt', 'hostedtoolcache', 'node', 'current', 'x64', 'bin', 'node');
 
 function rawProfile(overrides = {}) {
   return {
@@ -43,7 +63,7 @@ function envelope(overrides = {}) {
     repositoryIdentity: 'repository-a',
     authorityFingerprint: 'a'.repeat(64),
     operationFingerprint: 'b'.repeat(64),
-    argv: ['/usr/bin/node', '--version'],
+    argv: [process.execPath, '--version'],
     cwd: '.',
     explicitEnvironment: {},
     ...overrides
@@ -61,7 +81,7 @@ test('A01 valid v1 policy accepted', () => {
     repositoryIdentity: 'repository-a',
     authorityFingerprint: 'a'.repeat(64),
     operationFingerprint: 'b'.repeat(64),
-    argv: ['/usr/bin/node'],
+    argv: [process.execPath],
     cwd: '.',
     explicitEnvironment: {}
   }), /normalized immutable/);
@@ -123,7 +143,7 @@ test('A12 changed workspace changes execution digest', () => {
 });
 
 test('A13 changed argv changes execution digest', () => {
-  assert.notEqual(envelope().digest, envelope({ argv: ['/usr/bin/node', '-p', '1'] }).digest);
+  assert.notEqual(envelope().digest, envelope({ argv: [process.execPath, '-p', '1'] }).digest);
 });
 
 test('A14 changed authority fingerprint changes execution digest', () => {
@@ -201,4 +221,125 @@ test('A25 workload uses shell=false', () => {
   const plan = createLinuxBwrapExecutionProvider().buildPlan(envelope());
   assert.equal(plan.spawnOptions.shell, false);
   assert.equal(plan.arguments.includes('sh -c'), false);
+});
+
+test('R01 executable in an existing runtime root needs no exact-file mount', () => {
+  const provider = createLinuxBwrapExecutionProvider({
+    runtimeDirectories: [path.dirname(visibleExecutable)]
+  });
+  const plan = provider.buildPlan(envelope({ argv: [visibleExecutable, '--version'] }));
+  assert.equal(plan.executableBinding.mode, 'system-runtime');
+  assert.equal(plan.executableBinding.guestPath, visibleExecutable);
+  assert.equal(plan.arguments.includes(INTERNAL_AUTHORIZED_EXECUTABLE), false);
+});
+
+test('R02 external executable receives one exact-file read-only binding', () => {
+  const plan = createLinuxBwrapExecutionProvider().buildPlan(
+    envelope({ argv: [externalExecutable, '--version'] }));
+  const mountIndex = plan.arguments.findIndex((value, index, values) =>
+    value === '--ro-bind' && values[index + 1] === externalExecutable);
+  assert.notEqual(mountIndex, -1);
+  assert.equal(plan.arguments[mountIndex + 2], INTERNAL_AUTHORIZED_EXECUTABLE);
+  assert.deepEqual(plan.executableBinding, {
+    hostPhysicalPath: externalExecutable,
+    guestPath: INTERNAL_AUTHORIZED_EXECUTABLE,
+    mode: 'exact-file-read-only'
+  });
+});
+
+test('R03 external executable parent directory is not mounted', () => {
+  const plan = createLinuxBwrapExecutionProvider().buildPlan(
+    envelope({ argv: [externalExecutable] }));
+  assert.equal(plan.arguments.includes(path.dirname(externalExecutable)), false);
+});
+
+test('R04 executable below simulated HOME does not expose the HOME tree', () => {
+  const simulatedHome = path.join(root, 'simulated-home');
+  const plan = createLinuxBwrapExecutionProvider().buildPlan(
+    envelope({ argv: [simulatedHomeExecutable] }));
+  assert.equal(plan.arguments.includes(simulatedHome), false);
+  assert.equal(plan.executableBinding.hostPhysicalPath, simulatedHomeExecutable);
+});
+
+test('R05 executable below simulated opt does not expose the opt tree', () => {
+  const simulatedOpt = path.join(root, 'simulated-opt');
+  const plan = createLinuxBwrapExecutionProvider().buildPlan(
+    envelope({ argv: [simulatedOptExecutable] }));
+  assert.equal(plan.arguments.includes(simulatedOpt), false);
+  assert.equal(plan.executableBinding.hostPhysicalPath, simulatedOptExecutable);
+});
+
+test('R06 symlink executable resolves to its exact physical target', () => {
+  const link = path.join(root, 'executable-link');
+  fs.symlinkSync(externalExecutable, link, 'file');
+  const executionEnvelope = envelope({ argv: [link, '--version'] });
+  assert.equal(executionEnvelope.argv[0], externalExecutable);
+  const plan = createLinuxBwrapExecutionProvider().buildPlan(executionEnvelope);
+  assert.equal(plan.executableBinding.hostPhysicalPath, externalExecutable);
+});
+
+test('R07 missing executable is rejected before plan construction', () => {
+  assert.throws(() => envelope({ argv: [path.join(root, 'missing-executable')] }),
+    /physically resolved/);
+});
+
+test('R08 directory cannot be authorized as an executable', () => {
+  assert.throws(() => envelope({ argv: [workspaceA] }), /regular file/);
+});
+
+test('R08B non-executable file is rejected', {
+  skip: process.platform === 'win32' ? 'Windows does not expose POSIX execute mode.' : false
+}, () => {
+  const notExecutable = path.join(root, 'not-executable');
+  fs.writeFileSync(notExecutable, 'fixture');
+  fs.chmodSync(notExecutable, 0o600);
+  assert.throws(() => envelope({ argv: [notExecutable] }), /readable and executable/);
+});
+
+test('R09 physical executable mapping changes the deterministic plan digest', () => {
+  const otherExecutable = executableFixture('other-runtime', 'authorized-node');
+  const provider = createLinuxBwrapExecutionProvider();
+  const first = provider.buildPlan(envelope({ argv: [externalExecutable] }));
+  const second = provider.buildPlan(envelope({ argv: [otherExecutable] }));
+  assert.notEqual(first.executableBinding.hostPhysicalPath,
+    second.executableBinding.hostPhysicalPath);
+  assert.notEqual(first.digest, second.digest);
+});
+
+test('R10 arbitrary additional runtime mount remains rejected', () => {
+  assert.throws(() => createRuntimeProfile(rawProfile({
+    filesystem: {
+      workspace: 'rw', hostRoot: 'absent', temporary: 'ephemeral',
+      extraMounts: [path.dirname(externalExecutable)]
+    }
+  })), /filesystem/);
+});
+
+test('R11 unavailable backend remains fail-closed without native fallback', async () => {
+  let workloadSpawns = 0;
+  const processPort = {
+    spawnSync() { return { error: Object.assign(new Error('missing'), { code: 'ENOENT' }) }; },
+    spawn() { workloadSpawns += 1; throw new Error('native fallback'); }
+  };
+  const provider = createLinuxBwrapExecutionProvider({ processPort });
+  await assert.rejects(provider.run(provider.buildPlan(envelope())),
+    { code: 'ISOLATION_BACKEND_UNAVAILABLE' });
+  assert.equal(workloadSpawns, 0);
+});
+
+test('R12 failure diagnostics are bounded and redact physical paths', () => {
+  const marker = path.join(root, 'private-marker');
+  const formatted = formatIsolationFailure({
+    classification: 'PROCESS_FAILED',
+    exitCode: 1,
+    signal: null,
+    stderr: `${marker}:${'x'.repeat(MAX_DIAGNOSTIC_STDERR_BYTES * 2)}`,
+    planDigest: 'd'.repeat(64)
+  }, { redactions: [root] });
+  const evidence = JSON.parse(formatted);
+  assert.equal(evidence.classification, 'PROCESS_FAILED');
+  assert.equal(evidence.stderr.includes(root), false);
+  assert.ok(evidence.stderr.length <= MAX_DIAGNOSTIC_STDERR_BYTES);
+  assert.deepEqual(Object.keys(evidence).sort(),
+    ['classification', 'exitCode', 'planDigest', 'signal', 'stderr']);
 });

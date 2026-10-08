@@ -14,6 +14,8 @@ const REQUIRED_FLAGS = Object.freeze([
 ]);
 const RUNTIME_CANDIDATES = Object.freeze(['/usr', '/bin', '/lib', '/lib64']);
 const INTERNAL_WORKSPACE = '/workspace';
+const INTERNAL_RUNTIME = '/runtime';
+const INTERNAL_AUTHORIZED_EXECUTABLE = `${INTERNAL_RUNTIME}/authorized-executable`;
 
 function deepFreeze(value) {
   if (!value || typeof value !== 'object' || Object.isFrozen(value)) return value;
@@ -39,6 +41,12 @@ function boundedEvidence(value) {
   return String(value || '').replaceAll('\0', '').slice(0, 8192).trim();
 }
 
+function isWithin(root, candidate) {
+  const relative = path.relative(root, candidate);
+  return relative === '' || (!path.isAbsolute(relative) && relative !== '..' &&
+    !relative.startsWith(`..${path.sep}`));
+}
+
 function createLinuxBwrapExecutionProvider({
   binaryPath = '/usr/bin/bwrap',
   platform = process.platform,
@@ -47,7 +55,10 @@ function createLinuxBwrapExecutionProvider({
   terminationGraceMs = 100
 } = {}) {
   const launcher = exactBinaryPath(binaryPath);
-  const runtimeRoots = [...runtimeDirectories].map((candidate) => path.resolve(candidate));
+  const runtimeRoots = [...runtimeDirectories].map((candidate) => ({
+    hostPhysicalRoot: fs.realpathSync(path.resolve(candidate)),
+    guestRoot: path.resolve(candidate)
+  }));
   const issuedPlans = new WeakSet();
 
   function namespaceArguments() {
@@ -59,7 +70,8 @@ function createLinuxBwrapExecutionProvider({
   }
 
   function runtimeMountArguments() {
-    return runtimeRoots.flatMap((root) => ['--ro-bind', root, root]);
+    return runtimeRoots.flatMap(({ hostPhysicalRoot, guestRoot }) =>
+      ['--ro-bind', hostPhysicalRoot, guestRoot]);
   }
 
   function probe() {
@@ -128,14 +140,30 @@ function createLinuxBwrapExecutionProvider({
       LANG: 'C.UTF-8',
       ...envelope.explicitEnvironment
     };
+    const authorizedExecutable = envelope.argv[0];
+    const visibleRuntime = runtimeRoots.find(({ hostPhysicalRoot }) =>
+      isWithin(hostPhysicalRoot, authorizedExecutable));
+    const guestExecutable = visibleRuntime ? path.join(visibleRuntime.guestRoot,
+      path.relative(visibleRuntime.hostPhysicalRoot, authorizedExecutable)) :
+      INTERNAL_AUTHORIZED_EXECUTABLE;
+    const executableBinding = {
+      hostPhysicalPath: authorizedExecutable,
+      guestPath: guestExecutable,
+      mode: visibleRuntime ? 'system-runtime' : 'exact-file-read-only'
+    };
+    const executableMountArguments = visibleRuntime ? [] : [
+      '--dir', INTERNAL_RUNTIME,
+      '--ro-bind', authorizedExecutable, INTERNAL_AUTHORIZED_EXECUTABLE
+    ];
     const arguments_ = [
       ...namespaceArguments(), ...runtimeMountArguments(),
       '--proc', '/proc', '--dev', '/dev', '--tmpfs', '/tmp', '--dir', '/tmp/home',
+      ...executableMountArguments,
       '--bind', envelope.authorizedWorkspacePhysicalRoot, INTERNAL_WORKSPACE,
       '--remount-ro', '/', '--chdir', internalCwd,
       ...Object.keys(childEnvironment).sort().flatMap((key) =>
         ['--setenv', key, childEnvironment[key]]),
-      '--', ...envelope.argv
+      '--', guestExecutable, ...envelope.argv.slice(1)
     ];
     const fields = {
       schema: 'sdo.execution-isolation-plan/v1',
@@ -150,6 +178,7 @@ function createLinuxBwrapExecutionProvider({
         env: { PATH: '/usr/bin:/bin', LANG: 'C.UTF-8' }
       },
       limits: envelope.runtimeProfile.limits,
+      executableBinding,
       envelopeDigest: envelope.digest
     };
     const plan = deepFreeze({ ...fields, digest: digest(fields.schema, fields) });
@@ -237,5 +266,7 @@ function createLinuxBwrapExecutionProvider({
 module.exports = deepFreeze({
   createLinuxBwrapExecutionProvider,
   REQUIRED_FLAGS,
-  INTERNAL_WORKSPACE
+  INTERNAL_WORKSPACE,
+  INTERNAL_RUNTIME,
+  INTERNAL_AUTHORIZED_EXECUTABLE
 });
