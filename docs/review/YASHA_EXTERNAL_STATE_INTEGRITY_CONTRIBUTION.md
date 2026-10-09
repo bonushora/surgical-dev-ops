@@ -53,7 +53,8 @@ verdicts:
 
 - T6 was denied before R3.
 - T2 produced a safe late denial after R3 preparation.
-- Exact-board T9 was denied before R3.
+- Exact-board T9 reached R3 preparation once, then failed closed before dispatch
+  with `Prepared R3 authority differs from exact G3 content.`
 - No second dispatch or effect occurred.
 - Authority was not restored.
 
@@ -62,8 +63,12 @@ verdicts.
 
 ## T9 wording precision
 
-Exact-board T9 was run at 004fa83. An earlier generic T9-shaped runtime probe
-also existed at 07fdc88.
+Exact-board T9 was run at 004fa83. It reached R3 preparation once and then
+entered a safe late-denial path before dispatch/effect. The recorded runtime
+error was `Prepared R3 authority differs from exact G3 content.` No second
+dispatch or effect occurred, and authority was not restored.
+
+An earlier generic T9-shaped runtime probe also existed at 07fdc88.
 
 Accordingly, this record does not claim that the exact-board T9 ran at the
 baseline, and it does not claim that no T9-like runtime probe existed there.
