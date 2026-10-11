@@ -16,6 +16,9 @@ const {
 const {
   provisionLocalOfflineHumanAuthority
 } = require('../../accelerator/core/local-offline-human-authority-store');
+const integrityIdentity = require(
+  '../../accelerator/adapters/natural-development-store-integrity-identity'
+);
 
 const BEFORE =
   "// Manual acceptance fixture\nconst version = 'before';\n";
@@ -192,6 +195,16 @@ test(
       issuer: 'local:scenario-5-regression',
       subjectId: 'scenario-5-human'
     });
+    integrityIdentity.provisionEphemeralTestStoreIntegrity({
+      testOnly: true,
+      fixtureRoot: root,
+      stateRoot: path.join(journalStorageRoot, '.natural-development-authorization-consumption'),
+      identityRoot: path.join(root, 'store-integrity-identity'),
+      witnessRoot: path.join(root, 'store-integrity-witness'),
+      storeId: sha256(`store:${root}`),
+      epoch: sha256(`epoch:${root}`),
+      repositoryIdentity: sha256(`repository:${repository}`)
+    });
 
     const patchOptions = {
       authorityRoot,
@@ -244,7 +257,7 @@ test(
       path.join(consumptionRoot, consumedBefore[0]),
       'utf8'
     ));
-    assert.equal(consumedRecord.state, 'CONSUMED');
+    assert.equal(consumedRecord.payload.state, 'CONSUMED');
     const authoritativeRefBefore = git(repository, [
       'rev-parse',
       '--verify',

@@ -22,6 +22,9 @@ const store =
   require(
     '../../accelerator/adapters/natural-development-authorization-consumption-store'
   );
+const integrityIdentity = require(
+  '../../accelerator/adapters/natural-development-store-integrity-identity'
+);
 
 const G5_PATH =
   require.resolve(
@@ -130,18 +133,30 @@ test(
           .update(value)
           .digest('hex');
 
-    const root =
+    const fixtureRoot =
       fs.mkdtempSync(
         path.join(
           os.tmpdir(),
           'sdo-g9-claim-'
         )
       );
+    const root = path.join(fixtureRoot, 'g7');
+    fs.mkdirSync(root, { mode: 0o700 });
+    integrityIdentity.provisionEphemeralTestStoreIntegrity({
+      testOnly: true,
+      fixtureRoot,
+      stateRoot: root,
+      identityRoot: path.join(fixtureRoot, 'identity'),
+      witnessRoot: path.join(fixtureRoot, 'witness'),
+      storeId: hash(`store:${fixtureRoot}`),
+      epoch: hash(`epoch:${fixtureRoot}`),
+      repositoryIdentity: hash(`repository:${fixtureRoot}`)
+    });
 
     t.after(
       () =>
         fs.rmSync(
-          root,
+          fixtureRoot,
           {
             recursive: true,
             force: true

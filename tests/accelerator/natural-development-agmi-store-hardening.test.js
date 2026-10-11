@@ -13,6 +13,9 @@ const core = require(
 const store = require(
   '../../accelerator/adapters/natural-development-authorization-consumption-store'
 );
+const integrityIdentity = require(
+  '../../accelerator/adapters/natural-development-store-integrity-identity'
+);
 
 const CURRENT_AUTHORITY = 'CURRENT_AUTHORITY';
 const HISTORICAL_RECONCILIATION = 'HISTORICAL_RECONCILIATION';
@@ -39,10 +42,22 @@ function fingerprint(value) {
 }
 
 function fixtureRoot(t, label = 'store') {
-  const value = fs.mkdtempSync(
+  const fixture = fs.mkdtempSync(
     path.join(os.tmpdir(), `sdo-agmi-${label}-`)
   );
-  t.after(() => fs.rmSync(value, { recursive: true, force: true }));
+  const value = path.join(fixture, 'g7');
+  fs.mkdirSync(value, { mode: 0o700 });
+  integrityIdentity.provisionEphemeralTestStoreIntegrity({
+    testOnly: true,
+    fixtureRoot: fixture,
+    stateRoot: value,
+    identityRoot: path.join(fixture, 'identity'),
+    witnessRoot: path.join(fixture, 'witness'),
+    storeId: hash(`store:${label}:${fixture}`),
+    epoch: hash(`epoch:${label}:${fixture}`),
+    repositoryIdentity: hash(`repository:${label}:${fixture}`)
+  });
+  t.after(() => fs.rmSync(fixture, { recursive: true, force: true }));
   return value;
 }
 
@@ -126,7 +141,7 @@ test(
           stateRoot,
           claimB.authorizationFingerprint
         ),
-        /requested storage position/i
+        /requested storage position|store-integrity|envelope/i
       );
     }
   }
@@ -189,7 +204,7 @@ test(
 );
 
 test(
-  'AGMI-CROSS-CONTEXT allows historical inspection but denies current authority in another physical workspace',
+  'AGMI-CROSS-CONTEXT denies a copied record in both historical and current verification paths',
   (t) => {
     const stateRootA = fixtureRoot(t, 'context-a');
     const stateRootB = fixtureRoot(t, 'context-b');
@@ -205,14 +220,13 @@ test(
       recordPath(stateRootB, claimA.authorizationFingerprint)
     );
 
-    const historical = loadHistorical(
-      stateRootB,
-      claimA.authorizationFingerprint
+    assert.throws(
+      () => loadHistorical(
+        stateRootB,
+        claimA.authorizationFingerprint
+      ),
+      /store-integrity|whole-store|context binding/i
     );
-    assert.equal(historical.state, 'CLAIMED');
-    assert.equal(historical.operationalAuthority, false);
-    assert.equal(historical.mutationAuthority, false);
-    assert.equal(historical.dispatchAuthority, false);
 
     assert.throws(
       () => loadCurrent(
@@ -220,7 +234,7 @@ test(
         claimA.authorizationFingerprint,
         workspaceB
       ),
-      /physical workspace context/i
+      /physical workspace context|store-integrity|context binding/i
     );
   }
 );
@@ -259,14 +273,14 @@ test(
           stateRoot,
           requested.authorizationFingerprint
         ),
-        /requested storage position/i
+        /requested storage position|store-integrity|envelope/i
       );
     }
   }
 );
 
 test(
-  'AGMI T2 T3 T9 and CONSUMED_TO_CLAIMED expose the absence of authenticated monotonic state',
+  'AGMI T2 T3 T9 and CONSUMED_TO_CLAIMED are denied by authenticated monotonic state',
   (t) => {
     const stateRoot = fixtureRoot(t, 'monotonic-gap');
     const first = createClaim('first');
@@ -277,19 +291,23 @@ test(
       store.claimNaturalDevelopmentAuthorization({ stateRoot, claim });
     }
 
+    const middleBytes = fs.readFileSync(
+      recordPath(stateRoot, middle.authorizationFingerprint)
+    );
     fs.unlinkSync(recordPath(stateRoot, middle.authorizationFingerprint));
-    assert.equal(loadHistorical(
-      stateRoot,
-      middle.authorizationFingerprint
-    ), null);
-    assert.equal(loadHistorical(
-      stateRoot,
-      first.authorizationFingerprint
-    ).state, 'CLAIMED');
-    assert.equal(loadHistorical(
-      stateRoot,
-      last.authorizationFingerprint
-    ).state, 'CLAIMED');
+    assert.throws(
+      () => loadHistorical(stateRoot, middle.authorizationFingerprint),
+      /whole-store root/i
+    );
+
+    fs.writeFileSync(
+      recordPath(stateRoot, middle.authorizationFingerprint),
+      middleBytes
+    );
+    assert.equal(
+      loadHistorical(stateRoot, middle.authorizationFingerprint).state,
+      'CLAIMED'
+    );
 
     const claimedBytes = fs.readFileSync(
       recordPath(stateRoot, first.authorizationFingerprint)
@@ -298,24 +316,16 @@ test(
       stateRoot,
       consumption: createConsumption(first, 'first')
     });
-    assert.equal(loadHistorical(
-      stateRoot,
-      first.authorizationFingerprint
-    ).state, 'CONSUMED');
-
-    fs.writeFileSync(
-      recordPath(stateRoot, first.authorizationFingerprint),
-      claimedBytes
+    fs.writeFileSync(recordPath(stateRoot, first.authorizationFingerprint), claimedBytes);
+    assert.throws(
+      () => loadHistorical(stateRoot, first.authorizationFingerprint),
+      /whole-store root/i
     );
-    assert.equal(loadHistorical(
-      stateRoot,
-      first.authorizationFingerprint
-    ).state, 'CLAIMED');
   }
 );
 
 test(
-  'AGMI RECOMPUTED_UNKEYED_FINGERPRINT remains an explicit authenticity architecture gap',
+  'AGMI RECOMPUTED_UNKEYED_FINGERPRINT is quarantined and denied by the integrity gate',
   (t) => {
     const stateRoot = fixtureRoot(t, 'unkeyed-gap');
     const claim = createClaim('unkeyed-gap');
@@ -326,10 +336,9 @@ test(
     edited.claimFingerprint = fingerprint(edited);
     writeRecord(stateRoot, claim.authorizationFingerprint, edited);
 
-    const reopened = loadHistorical(
-      stateRoot,
-      claim.authorizationFingerprint
+    assert.throws(
+      () => loadHistorical(stateRoot, claim.authorizationFingerprint),
+      /store-integrity|envelope/i
     );
-    assert.equal(reopened.target, 'src/recomputed-attacker.js');
   }
 );

@@ -18,6 +18,9 @@ const {
   prepareInteractiveNaturalDevelopment,
   approveInteractiveNaturalDevelopment
 } = require('../../accelerator/cli/natural-development-interactive');
+const integrityIdentity = require(
+  '../../accelerator/adapters/natural-development-store-integrity-identity'
+);
 
 function git(repository, arguments_) {
   return execFileSync('git', arguments_, { cwd: repository, encoding: 'utf8' }).trim();
@@ -44,6 +47,16 @@ function fixture() {
     authorityRoot,
     issuer: 'local:native-acceptance',
     subjectId: 'acceptance-human'
+  });
+  integrityIdentity.provisionEphemeralTestStoreIntegrity({
+    testOnly: true,
+    fixtureRoot: root,
+    stateRoot: path.join(journalStorageRoot, '.natural-development-authorization-consumption'),
+    identityRoot: path.join(root, 'store-integrity-identity'),
+    witnessRoot: path.join(root, 'store-integrity-witness'),
+    storeId: sha(`store:${root}`),
+    epoch: sha(`epoch:${root}`),
+    repositoryIdentity: sha(`repository:${repository}`)
   });
   return { root, repository: fs.realpathSync(repository), authorityRoot, journalStorageRoot };
 }

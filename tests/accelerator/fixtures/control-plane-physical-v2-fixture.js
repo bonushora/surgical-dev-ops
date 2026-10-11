@@ -22,6 +22,7 @@ const { observePhysicalWorkspaceIdentity } = require('../../../accelerator/core/
 const { createNaturalAgenticMission } = require('../../../accelerator/core/natural-agentic-mission');
 const gateway = require('../../../accelerator/core/integrated-governed-agent-gateway');
 const { createGovernedPhysicalExecutor } = require('../../../accelerator/core/governed-physical-executor');
+const integrityIdentity = require('../../../accelerator/adapters/natural-development-store-integrity-identity');
 
 const BEFORE = 'const value = 1;\n';
 const AFTER = 'const value = 2;\n';
@@ -252,6 +253,22 @@ function createPhysicalV2Fixture() {
   });
   let lastPhysicalEvidence = null;
   let lastManagedProjection = null;
+  let integrityProvisioned = false;
+
+  function ensureStoreIntegrity() {
+    if (integrityProvisioned) return;
+    integrityIdentity.provisionEphemeralTestStoreIntegrity({
+      testOnly: true,
+      fixtureRoot: root,
+      stateRoot: path.join(state.journalStorageRoot, '.natural-development-authorization-consumption'),
+      identityRoot: path.join(root, 'store-integrity-identity'),
+      witnessRoot: path.join(root, 'store-integrity-witness'),
+      storeId: sha(`store:${root}`),
+      epoch: sha(`epoch:${root}`),
+      repositoryIdentity: sha(`repository:${state.repositoryPath}`),
+    });
+    integrityProvisioned = true;
+  }
 
   function resolveAuthorizedExecution() {
     return freeze({ binding, mission, naturalDevelopment });
@@ -265,6 +282,7 @@ function createPhysicalV2Fixture() {
         ? freeze({ classification: 'succeeded', code: 'PHYSICAL_MUTATION_RECOVERED', physicalEvidence: lastPhysicalEvidence })
         : freeze({ classification: 'unknown', code: 'PHYSICAL_EVIDENCE_UNKNOWN' }),
       dispatchGatewayRequest(input) {
+        ensureStoreIntegrity();
         const result = gateway.dispatchGatewayRequest(input);
         if (result.result.classification === 'SUCCESS' && result.result.data) {
           lastManagedProjection = result.result.data.composition.managedProjection;

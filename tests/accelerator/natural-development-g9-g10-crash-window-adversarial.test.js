@@ -52,6 +52,9 @@ const authorizationStore = require(
 const authorizationCore = require(
   '../../accelerator/cli/natural-development-authorization-consumption'
 );
+const integrityIdentity = require(
+  '../../accelerator/adapters/natural-development-store-integrity-identity'
+);
 const {
   reconcileNaturalDevelopmentRecovery
 } = require(
@@ -123,6 +126,21 @@ function fixture(t) {
     authorityRoot,
     issuer: 'local:test-human',
     subjectId: 'human-test'
+  });
+
+  const stateRoot = path.join(
+    journalStorageRoot,
+    '.natural-development-authorization-consumption'
+  );
+  integrityIdentity.provisionEphemeralTestStoreIntegrity({
+    testOnly: true,
+    fixtureRoot: root,
+    stateRoot,
+    identityRoot: path.join(root, 'store-integrity-identity'),
+    witnessRoot: path.join(root, 'store-integrity-witness'),
+    storeId: sha(`store:${root}`),
+    epoch: sha(`epoch:${root}`),
+    repositoryIdentity: sha(`repository:${repository}`)
   });
 
   t.after(() => fs.rmSync(root, { recursive: true, force: true }));
@@ -509,14 +527,14 @@ test('AGMI runtime T6 denies an A record in the B slot before R3 or dispatch', (
   assert.equal(evidence.r3PreparationCount, 0);
   assert.equal(evidence.dispatchCount, 0);
   assert.equal(evidence.completed, false);
-  assert.match(evidence.error, /requested storage position/i);
+  assert.match(evidence.error, /requested storage position|store-integrity|whole-store|context binding/i);
   assert.equal(
     fs.readFileSync(path.join(stateB.repository, TARGET), 'utf8'),
     BEFORE
   );
 });
 
-test('AGMI runtime T2 deletion remains a safe late denial with no second dispatch or effect', (t) => {
+test('AGMI runtime T2 deletion is denied before R3 with no second dispatch or effect', (t) => {
   const state = fixture(t);
   const input = compositionInput(state);
   const inputPath = path.join(state.root, 'composition-input.json');
@@ -542,10 +560,10 @@ test('AGMI runtime T2 deletion remains a safe late denial with no second dispatc
   const replay = runChild(inputPath, 'RESTART_REPLAY_PROBE', replayPath);
   assert.equal(replay.status, 0, replay.stderr);
   const replayEvidence = readProbe(replayPath);
-  assert.equal(replayEvidence.r3PreparationCount, 1);
+  assert.equal(replayEvidence.r3PreparationCount, 0);
   assert.equal(replayEvidence.dispatchCount, 0);
   assert.equal(replayEvidence.completed, false);
-  assert.match(replayEvidence.error, /exact G3 content/i);
+  assert.match(replayEvidence.error, /whole-store root|store-integrity/i);
 
   const afterReplay = observeCurrentAuthoritativeTarget({
     workspace: state.repository,
@@ -585,15 +603,16 @@ test('AGMI runtime T9 and CONSUMED_TO_CLAIMED rollback deny before R3 or second 
     { recursive: true }
   );
 
-  const rolledBack = authorizationStore
-    .loadNaturalDevelopmentAuthorizationConsumption({
+  assert.throws(
+    () => authorizationStore.loadNaturalDevelopmentAuthorizationConsumption({
       stateRoot,
       authorizationFingerprint:
         input.patchAuthorization.authorizationFingerprint,
       readPurpose:
         authorizationStore.READ_PURPOSE.HISTORICAL_RECONCILIATION
-    });
-  assert.equal(rolledBack.state, 'CLAIMED');
+    }),
+    /whole-store root|store-integrity/i
+  );
 
   const replay = runChild(inputPath, 'RESTART_REPLAY_PROBE', replayPath);
   assert.equal(replay.status, 0, replay.stderr);
@@ -601,7 +620,7 @@ test('AGMI runtime T9 and CONSUMED_TO_CLAIMED rollback deny before R3 or second 
   assert.equal(replayEvidence.r3PreparationCount, 0);
   assert.equal(replayEvidence.dispatchCount, 0);
   assert.equal(replayEvidence.completed, false);
-  assert.match(replayEvidence.error, /durable prior claim/i);
+  assert.match(replayEvidence.error, /whole-store root|store-integrity/i);
 
   const afterReplay = observeCurrentAuthoritativeTarget({
     workspace: state.repository,

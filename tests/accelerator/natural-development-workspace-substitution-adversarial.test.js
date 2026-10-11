@@ -31,6 +31,9 @@ const {
 const {
   composeAndDispatchNaturalDevelopmentPatch
 } = require('../../accelerator/cli/natural-development-r3-composition');
+const integrityIdentity = require(
+  '../../accelerator/adapters/natural-development-store-integrity-identity'
+);
 
 const TARGET = 'example.js';
 const BEFORE = "'use strict';\nmodule.exports = 1;\n";
@@ -69,6 +72,16 @@ function fixture(t) {
     authorityRoot,
     issuer: 'local:workspace-substitution',
     subjectId: 'workspace-substitution-human'
+  });
+  integrityIdentity.provisionEphemeralTestStoreIntegrity({
+    testOnly: true,
+    fixtureRoot: root,
+    stateRoot: path.join(journalStorageRoot, '.natural-development-authorization-consumption'),
+    identityRoot: path.join(root, 'store-integrity-identity'),
+    witnessRoot: path.join(root, 'store-integrity-witness'),
+    storeId: sha(`store:${root}`),
+    epoch: sha(`epoch:${root}`),
+    repositoryIdentity: sha(`repository:${repository}`)
   });
 
   t.after(() => fs.rmSync(root, { recursive: true, force: true }));

@@ -17,6 +17,9 @@ const {
 const {
   provisionLocalOfflineHumanAuthority
 } = require('../../accelerator/core/local-offline-human-authority-store');
+const integrityIdentity = require(
+  '../../accelerator/adapters/natural-development-store-integrity-identity'
+);
 
 function git(repository, args) {
   childProcess.execFileSync('git', args, {
@@ -138,6 +141,16 @@ test(
       authorityRoot,
       issuer: 'local:scenario-4-regression',
       subjectId: 'scenario-4-human'
+    });
+    integrityIdentity.provisionEphemeralTestStoreIntegrity({
+      testOnly: true,
+      fixtureRoot: root,
+      stateRoot: path.join(journalStorageRoot, '.natural-development-authorization-consumption'),
+      identityRoot: path.join(root, 'store-integrity-identity'),
+      witnessRoot: path.join(root, 'store-integrity-witness'),
+      storeId: crypto.createHash('sha256').update(`store:${root}`).digest('hex'),
+      epoch: crypto.createHash('sha256').update(`epoch:${root}`).digest('hex'),
+      repositoryIdentity: crypto.createHash('sha256').update(`repository:${repository}`).digest('hex')
     });
 
     const input = new PassThrough();

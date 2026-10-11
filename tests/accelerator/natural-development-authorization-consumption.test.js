@@ -16,6 +16,9 @@ const store =
   require(
     '../../accelerator/adapters/natural-development-authorization-consumption-store'
   );
+const integrityIdentity = require(
+  '../../accelerator/adapters/natural-development-store-integrity-identity'
+);
 
 const hash = (value) =>
   crypto
@@ -74,18 +77,30 @@ function consumption(boundClaim, overrides = {}) {
 }
 
 function root(t) {
-  const value =
+  const fixture =
     fs.mkdtempSync(
       path.join(
         os.tmpdir(),
         'sdo-g7-authorization-'
       )
     );
+  const value = path.join(fixture, 'g7');
+  fs.mkdirSync(value, { mode: 0o700 });
+  integrityIdentity.provisionEphemeralTestStoreIntegrity({
+    testOnly: true,
+    fixtureRoot: fixture,
+    stateRoot: value,
+    identityRoot: path.join(fixture, 'identity'),
+    witnessRoot: path.join(fixture, 'witness'),
+    storeId: hash(`store:${fixture}`),
+    epoch: hash(`epoch:${fixture}`),
+    repositoryIdentity: hash(`repository:${fixture}`)
+  });
 
   t.after(
     () =>
       fs.rmSync(
-        value,
+        fixture,
         {
           recursive: true,
           force: true
@@ -507,7 +522,7 @@ test(
         )
       );
 
-    tampered.target =
+    tampered.payload.target =
       'accelerator/attacker.js';
 
     fs.writeFileSync(

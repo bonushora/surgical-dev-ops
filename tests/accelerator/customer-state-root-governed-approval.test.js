@@ -20,6 +20,9 @@ const {
 const {
   endpointFor
 } = require('../../accelerator/product/customer-lifecycle');
+const integrityIdentity = require(
+  '../../accelerator/adapters/natural-development-store-integrity-identity'
+);
 
 const EXTERNAL_IPC_DENIALS = new Set([
   'EACCES',
@@ -215,6 +218,20 @@ test('normal customer state root supplies local authority and journal only after
   );
   runtimeStarted = true;
   assert.deepEqual(fs.readdirSync(path.join(fixture.stateRoot, 'journal')), []);
+  integrityIdentity.provisionEphemeralTestStoreIntegrity({
+    testOnly: true,
+    fixtureRoot: fixture.root,
+    stateRoot: path.join(
+      fixture.stateRoot,
+      'journal',
+      '.natural-development-authorization-consumption'
+    ),
+    identityRoot: path.join(fixture.root, 'store-integrity-identity'),
+    witnessRoot: path.join(fixture.root, 'store-integrity-witness'),
+    storeId: sha256(`store:${fixture.root}`),
+    epoch: sha256(`epoch:${fixture.root}`),
+    repositoryIdentity: sha256(`repository:${fixture.repository}`)
+  });
   assert.equal(
     JSON.parse(
       fs.readFileSync(path.join(fixture.stateRoot, 'installation.json'), 'utf8')

@@ -68,6 +68,9 @@ const {
 const {
   observePhysicalWorkspaceIdentity
 } = require('../../accelerator/core/workspace-boundary');
+const integrityIdentity = require(
+  '../../accelerator/adapters/natural-development-store-integrity-identity'
+);
 
 const before = 'const value = 1;\n';
 const after = 'const value = 2;\n';
@@ -119,12 +122,39 @@ function fixture() {
     subjectId: 'human-test'
   });
 
+  integrityIdentity.provisionEphemeralTestStoreIntegrity({
+    testOnly: true,
+    fixtureRoot: root,
+    stateRoot: path.join(journalStorageRoot, '.natural-development-authorization-consumption'),
+    identityRoot: path.join(root, 'store-integrity-identity'),
+    witnessRoot: path.join(root, 'store-integrity-witness'),
+    storeId: sha(`store:${root}`),
+    epoch: sha(`epoch:${root}`),
+    repositoryIdentity: sha(`repository:${repo}`)
+  });
+
   return {
     root,
     repo: fs.realpathSync(repo),
     authorityRoot: fs.realpathSync(authorityRoot),
     journalStorageRoot: fs.realpathSync(journalStorageRoot)
   };
+}
+
+function assertNoMutationJournalEffects(state) {
+  assert.deepEqual(
+    fs.readdirSync(state.journalStorageRoot).sort(),
+    [
+      '.natural-development-authorization-consumption',
+      '.natural-development-authorization-consumption.sdo-store-integrity-context.json'
+    ]
+  );
+  assert.deepEqual(
+    fs.readdirSync(
+      path.join(state.journalStorageRoot, '.natural-development-authorization-consumption')
+    ),
+    []
+  );
 }
 
 function temporal(wallTime) {
@@ -398,7 +428,7 @@ test('tampered G4 provenance fails closed before physical mutation', () => {
       fs.readFileSync(path.join(state.repo, target), 'utf8'),
       before
     );
-    assert.deepEqual(fs.readdirSync(state.journalStorageRoot), []);
+    assertNoMutationJournalEffects(state);
   } finally {
     fs.rmSync(state.root, { recursive: true, force: true });
   }
@@ -444,7 +474,7 @@ test('expired G4 parent denies physical execution without R3 reissue', () => {
       fs.readFileSync(path.join(state.repo, target), 'utf8'),
       before
     );
-    assert.deepEqual(fs.readdirSync(state.journalStorageRoot), []);
+    assertNoMutationJournalEffects(state);
   } finally {
     fs.rmSync(state.root, { recursive: true, force: true });
   }
@@ -657,7 +687,7 @@ test('G5 rejects stale HEAD before R3 dispatch', () => {
       () => dispatch(state, values),
       /HEAD is stale/i
     );
-    assert.deepEqual(fs.readdirSync(state.journalStorageRoot), []);
+    assertNoMutationJournalEffects(state);
   } finally {
     fs.rmSync(state.root, { recursive: true, force: true });
   }
@@ -676,7 +706,7 @@ test('G5 rejects identity mismatch and expired G4 before orchestration', () => {
       () => dispatch(mismatch, values),
       /G4 authorization denied R3 composition/i
     );
-    assert.deepEqual(fs.readdirSync(mismatch.journalStorageRoot), []);
+    assertNoMutationJournalEffects(mismatch);
   } finally {
     fs.rmSync(mismatch.root, { recursive: true, force: true });
   }
@@ -696,7 +726,7 @@ test('G5 rejects identity mismatch and expired G4 before orchestration', () => {
       () => dispatch(expired, values),
       /expired/i
     );
-    assert.deepEqual(fs.readdirSync(expired.journalStorageRoot), []);
+    assertNoMutationJournalEffects(expired);
   } finally {
     fs.rmSync(expired.root, { recursive: true, force: true });
   }

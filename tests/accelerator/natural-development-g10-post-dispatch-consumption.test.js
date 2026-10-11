@@ -21,6 +21,9 @@ const linearizable =
   require(
     '../../accelerator/adapters/natural-development-linearizable-consumption'
   );
+const integrityIdentity = require(
+  '../../accelerator/adapters/natural-development-store-integrity-identity'
+);
 
 const G5_PATH =
   require.resolve(
@@ -34,18 +37,30 @@ const hash = (value) =>
     .digest('hex');
 
 function fixture(t) {
-  const stateRoot =
+  const fixtureRoot =
     fs.mkdtempSync(
       path.join(
         os.tmpdir(),
         'sdo-g10-'
       )
     );
+  const stateRoot = path.join(fixtureRoot, 'g7');
+  fs.mkdirSync(stateRoot, { mode: 0o700 });
+  integrityIdentity.provisionEphemeralTestStoreIntegrity({
+    testOnly: true,
+    fixtureRoot,
+    stateRoot,
+    identityRoot: path.join(fixtureRoot, 'identity'),
+    witnessRoot: path.join(fixtureRoot, 'witness'),
+    storeId: hash(`store:${fixtureRoot}`),
+    epoch: hash(`epoch:${fixtureRoot}`),
+    repositoryIdentity: hash(`repository:${fixtureRoot}`)
+  });
 
   t.after(
     () =>
       fs.rmSync(
-        stateRoot,
+        fixtureRoot,
         {
           recursive: true,
           force: true

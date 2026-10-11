@@ -24,6 +24,9 @@ const {
   prepareNaturalCustomerDevelopment,
   approveNaturalCustomerDevelopment
 } = require('../../accelerator/cli/natural-customer-development');
+const integrityIdentity = require(
+  '../../accelerator/adapters/natural-development-store-integrity-identity'
+);
 
 function sha256(value) {
   return crypto.createHash('sha256').update(value).digest('hex');
@@ -242,6 +245,16 @@ test('exact approval produces one governed effect, GREEN project qualification, 
     authorityRoot,
     issuer: 'local:natural-customer-corrective',
     subjectId: 'corrective-human'
+  });
+  integrityIdentity.provisionEphemeralTestStoreIntegrity({
+    testOnly: true,
+    fixtureRoot: fixture.root,
+    stateRoot: path.join(journalStorageRoot, '.natural-development-authorization-consumption'),
+    identityRoot: path.join(fixture.root, 'store-integrity-identity'),
+    witnessRoot: path.join(fixture.root, 'store-integrity-witness'),
+    storeId: sha256(`store:${fixture.root}`),
+    epoch: sha256(`epoch:${fixture.root}`),
+    repositoryIdentity: sha256(`repository:${fixture.repository}`)
   });
   const before = fs.readFileSync(path.join(fixture.repository, 'calculator.js'));
   const provider = proposalSession(before);
