@@ -134,7 +134,9 @@ test('legacy unkeyed records remain historical-only and cannot become current au
 });
 
 test('an empty test-only G7 claim provisions independent identity and witness siblings once', (t) => {
-  const fixtureRoot = fs.mkdtempSync(path.join(os.tmpdir(), 'sdo-store-integrity-autobootstrap-'));
+  const fixtureRoot = fs.realpathSync(
+    fs.mkdtempSync(path.join(os.tmpdir(), 'sdo-store-integrity-autobootstrap-'))
+  );
   const journalRoot = path.join(fixtureRoot, 'journal');
   const stateRoot = path.join(journalRoot, '.natural-development-authorization-consumption');
   fs.mkdirSync(journalRoot, { mode: 0o700 });
@@ -151,6 +153,117 @@ test('an empty test-only G7 claim provisions independent identity and witness si
   assert.notEqual(context.identityRoot, stateRoot);
   assert.notEqual(context.witnessRoot, stateRoot);
   assert.equal(current(stateRoot, authorization).claimFingerprint, authorization.claimFingerprint);
+});
+
+test('store-integrity fixture paths converge through physical filesystem evidence', (t) => {
+  if (process.platform === 'win32') return t.skip('POSIX ancestor-alias qualification.');
+  const sandbox = fs.realpathSync(
+    fs.mkdtempSync(path.join(os.tmpdir(), 'sdo-store-integrity-path-alias-'))
+  );
+  t.after(() => fs.rmSync(sandbox, { recursive: true, force: true }));
+  const physicalParent = path.join(sandbox, 'physical');
+  const aliasParent = path.join(sandbox, 'alias');
+  fs.mkdirSync(physicalParent, { mode: 0o700 });
+  fs.symlinkSync(physicalParent, aliasParent, 'dir');
+  const lexicalFixtureRoot = path.join(aliasParent, 'fixture');
+  fs.mkdirSync(lexicalFixtureRoot, { mode: 0o700 });
+  const fixtureRoot = fs.realpathSync(lexicalFixtureRoot);
+  assert.notEqual(lexicalFixtureRoot, fixtureRoot);
+
+  const stateRoot = path.join(fixtureRoot, 'g7');
+  identity.provisionEphemeralTestStoreIntegrity({
+    testOnly: true,
+    fixtureRoot,
+    stateRoot,
+    identityRoot: path.join(fixtureRoot, 'identity'),
+    witnessRoot: path.join(fixtureRoot, 'witness'),
+    storeId: sha('store:path-alias'),
+    epoch: sha('epoch:path-alias'),
+    repositoryIdentity: sha('repository:path-alias')
+  });
+  const context = identity.loadIntegrityContext(stateRoot);
+  assert.equal(context.fixtureRoot, fixtureRoot);
+  assert.equal(context.stateRoot, fs.realpathSync(stateRoot));
+  assert.equal(path.dirname(context.identityRoot), fixtureRoot);
+  assert.equal(path.dirname(context.witnessRoot), fixtureRoot);
+});
+
+test('store-integrity provisioning rejects distinct physical roots and traversal', (t) => {
+  const sandbox = fs.realpathSync(
+    fs.mkdtempSync(path.join(os.tmpdir(), 'sdo-store-integrity-path-reject-'))
+  );
+  t.after(() => fs.rmSync(sandbox, { recursive: true, force: true }));
+  const fixtureRoot = path.join(sandbox, 'fixture');
+  const distinctRoot = path.join(sandbox, 'distinct');
+  fs.mkdirSync(fixtureRoot, { mode: 0o700 });
+  fs.mkdirSync(distinctRoot, { mode: 0o700 });
+  const common = {
+    testOnly: true,
+    fixtureRoot,
+    identityRoot: path.join(fixtureRoot, 'identity'),
+    witnessRoot: path.join(fixtureRoot, 'witness'),
+    storeId: sha('store:path-reject'),
+    epoch: sha('epoch:path-reject'),
+    repositoryIdentity: sha('repository:path-reject')
+  };
+  assert.throws(
+    () => identity.provisionEphemeralTestStoreIntegrity({
+      ...common,
+      stateRoot: path.join(distinctRoot, 'g7')
+    }),
+    /inside the isolated fixture/i
+  );
+  assert.throws(
+    () => identity.provisionEphemeralTestStoreIntegrity({
+      ...common,
+      stateRoot: `${fixtureRoot}${path.sep}nested${path.sep}..${path.sep}g7`
+    }),
+    /canonical absolute path/i
+  );
+});
+
+test('store-integrity provisioning rejects a symlink escape after physical resolution', (t) => {
+  if (process.platform === 'win32') return t.skip('POSIX symlink containment qualification.');
+  const sandbox = fs.realpathSync(
+    fs.mkdtempSync(path.join(os.tmpdir(), 'sdo-store-integrity-symlink-escape-'))
+  );
+  t.after(() => fs.rmSync(sandbox, { recursive: true, force: true }));
+  const fixtureRoot = path.join(sandbox, 'fixture');
+  const outsideRoot = path.join(sandbox, 'outside');
+  fs.mkdirSync(fixtureRoot, { mode: 0o700 });
+  fs.mkdirSync(outsideRoot, { mode: 0o700 });
+  fs.symlinkSync(outsideRoot, path.join(fixtureRoot, 'identity'), 'dir');
+  assert.throws(
+    () => identity.provisionEphemeralTestStoreIntegrity({
+      testOnly: true,
+      fixtureRoot,
+      stateRoot: path.join(fixtureRoot, 'g7'),
+      identityRoot: path.join(fixtureRoot, 'identity'),
+      witnessRoot: path.join(fixtureRoot, 'witness'),
+      storeId: sha('store:symlink-escape'),
+      epoch: sha('epoch:symlink-escape'),
+      repositoryIdentity: sha('repository:symlink-escape')
+    }),
+    /resolved outside its isolated root/i
+  );
+});
+
+test('store-integrity provisioning fails closed for an unresolved fixture root', (t) => {
+  const sandbox = fs.realpathSync(
+    fs.mkdtempSync(path.join(os.tmpdir(), 'sdo-store-integrity-unresolved-'))
+  );
+  t.after(() => fs.rmSync(sandbox, { recursive: true, force: true }));
+  const fixtureRoot = path.join(sandbox, 'missing');
+  assert.throws(() => identity.provisionEphemeralTestStoreIntegrity({
+    testOnly: true,
+    fixtureRoot,
+    stateRoot: path.join(fixtureRoot, 'g7'),
+    identityRoot: path.join(fixtureRoot, 'identity'),
+    witnessRoot: path.join(fixtureRoot, 'witness'),
+    storeId: sha('store:unresolved'),
+    epoch: sha('epoch:unresolved'),
+    repositoryIdentity: sha('repository:unresolved')
+  }));
 });
 
 test('a non-empty context-free G7 store is never implicitly provisioned or migrated', (t) => {

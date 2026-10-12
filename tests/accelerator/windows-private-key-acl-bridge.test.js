@@ -107,37 +107,73 @@ test('Windows private-key ACL bridge fails closed when helper is unavailable', (
   );
 });
 
-function replaceAcl(target, mode) {
-  const script = [
-    '$target = $args[0]',
-    '$mode = $args[1]',
-    '$current = [System.Security.Principal.WindowsIdentity]::GetCurrent().User',
-    '$owner = if ($mode -eq "unexpected-owner") {',
-    '  [System.Security.Principal.SecurityIdentifier]::new("S-1-5-32-544")',
-    '} else { $current }',
-    '$acl = [System.Security.AccessControl.FileSecurity]::new()',
-    '$acl.SetOwner($owner)',
-    '$acl.SetAccessRuleProtection($true, $false)',
-    '$full = [System.Security.AccessControl.FileSystemAccessRule]::new(',
-    '  $current,',
-    '  [System.Security.AccessControl.FileSystemRights]::FullControl,',
-    '  [System.Security.AccessControl.AccessControlType]::Allow)',
-    '$acl.AddAccessRule($full)',
-    'if ($mode -eq "broad") {',
-    '  $everyone = [System.Security.Principal.SecurityIdentifier]::new("S-1-1-0")',
-    '  $read = [System.Security.AccessControl.FileSystemAccessRule]::new(',
-    '    $everyone,',
-    '    [System.Security.AccessControl.FileSystemRights]::Read,',
-    '    [System.Security.AccessControl.AccessControlType]::Allow)',
-    '  $acl.AddAccessRule($read)',
-    '}',
-    'Set-Acl -LiteralPath $target -AclObject $acl -ErrorAction Stop'
-  ].join('; ');
-  childProcess.execFileSync(
+const ACL_MUTATION_SCRIPT = `
+[CmdletBinding()]
+param(
+  [Parameter(Mandatory = $true)][string]$Target,
+  [Parameter(Mandatory = $true)]
+  [ValidateSet('broad', 'unexpected-owner')][string]$Mode
+)
+$ErrorActionPreference = 'Stop'
+$sidType = [System.Security.Principal.SecurityIdentifier]
+$current = [System.Security.Principal.WindowsIdentity]::GetCurrent().User
+$acl = Get-Acl -LiteralPath $Target -ErrorAction Stop
+$ownerBefore = $acl.GetOwner($sidType).Value
+$aceCountBefore = @($acl.Access).Count
+if ($Mode -eq 'broad') {
+  $everyone = [System.Security.Principal.SecurityIdentifier]::new('S-1-1-0')
+  $read = [System.Security.AccessControl.FileSystemAccessRule]::new(
+    $everyone,
+    [System.Security.AccessControl.FileSystemRights]::Read,
+    [System.Security.AccessControl.AccessControlType]::Allow
+  )
+  $acl.AddAccessRule($read)
+} else {
+  $unexpectedOwner = [System.Security.Principal.SecurityIdentifier]::new('S-1-5-32-544')
+  $acl.SetOwner($unexpectedOwner)
+}
+Set-Acl -LiteralPath $Target -AclObject $acl -ErrorAction Stop
+$after = Get-Acl -LiteralPath $Target -ErrorAction Stop
+$ownerAfter = $after.GetOwner($sidType).Value
+$readMask = [int][System.Security.AccessControl.FileSystemRights]::Read
+$everyoneReadAllow = @($after.Access | Where-Object {
+  $_.AccessControlType -eq [System.Security.AccessControl.AccessControlType]::Allow -and
+  $_.IdentityReference.Translate($sidType).Value -eq 'S-1-1-0' -and
+  (([int]$_.FileSystemRights -band $readMask) -eq $readMask)
+}).Count -gt 0
+[pscustomobject]@{
+  mode = $Mode
+  currentUserSid = $current.Value
+  ownerBefore = $ownerBefore
+  ownerAfter = $ownerAfter
+  aceCountBefore = $aceCountBefore
+  aceCountAfter = @($after.Access).Count
+  everyoneReadAllow = $everyoneReadAllow
+} | ConvertTo-Json -Compress
+`;
+
+function replaceAcl(root, target, mode) {
+  const scriptPath = path.join(root, 'mutate-private-key-acl.ps1');
+  fs.writeFileSync(scriptPath, ACL_MUTATION_SCRIPT, { encoding: 'utf8', mode: 0o600 });
+  const stdout = childProcess.execFileSync(
     'powershell.exe',
-    ['-NoProfile', '-NonInteractive', '-Command', script, target, mode],
-    { stdio: ['ignore', 'pipe', 'pipe'] }
+    [
+      '-NoProfile', '-NonInteractive', '-ExecutionPolicy', 'Bypass',
+      '-File', scriptPath, '-Target', target, '-Mode', mode
+    ],
+    { encoding: 'utf8', stdio: ['ignore', 'pipe', 'pipe'] }
   );
+  const result = JSON.parse(stdout.trim());
+  assert.equal(result.mode, mode);
+  assert.equal(result.ownerBefore, result.currentUserSid);
+  if (mode === 'broad') {
+    assert.equal(result.everyoneReadAllow, true);
+    assert.ok(result.aceCountAfter > result.aceCountBefore);
+  } else {
+    assert.notEqual(result.ownerAfter, result.currentUserSid);
+    assert.equal(result.ownerAfter, 'S-1-5-32-544');
+  }
+  return result;
 }
 
 function nativeFixture(t, label) {
@@ -161,19 +197,19 @@ test('native Windows helper accepts its restricted private-key ACL', (t) => {
 
 test('native Windows helper rejects a broad private-key ACL', (t) => {
   if (process.platform !== 'win32') return t.skip('Windows-only native ACL qualification.');
-  const { target } = nativeFixture(t, 'broad');
+  const { root, target } = nativeFixture(t, 'broad');
   const bridge = createWindowsPrivateKeyAclBridge();
   bridge.protectPrivateKey(target);
-  replaceAcl(target, 'broad');
+  replaceAcl(root, target, 'broad');
   assert.throws(() => bridge.verifyPrivateKey(target), /failed closed/i);
 });
 
 test('native Windows helper rejects an unexpected private-key owner', (t) => {
   if (process.platform !== 'win32') return t.skip('Windows-only native ACL qualification.');
-  const { target } = nativeFixture(t, 'owner');
+  const { root, target } = nativeFixture(t, 'owner');
   const bridge = createWindowsPrivateKeyAclBridge();
   bridge.protectPrivateKey(target);
-  replaceAcl(target, 'unexpected-owner');
+  replaceAcl(root, target, 'unexpected-owner');
   assert.throws(() => bridge.verifyPrivateKey(target), /failed closed/i);
 });
 
@@ -183,14 +219,7 @@ test('native Windows helper rejects a final-component reparse point', (t) => {
   const bridge = createWindowsPrivateKeyAclBridge();
   bridge.protectPrivateKey(target);
   const link = path.join(root, 'private-key-link.pem');
-  try {
-    fs.symlinkSync(target, link, 'file');
-  } catch (error) {
-    if (error && ['EPERM', 'EACCES', 'UNKNOWN'].includes(error.code)) {
-      return t.skip(`Windows runner cannot create a test reparse point: ${error.code}`);
-    }
-    throw error;
-  }
+  fs.symlinkSync(target, link, 'file');
   const result = childProcess.spawnSync(
     bridge.helperPath,
     ['verify-private-key-acl', link],
