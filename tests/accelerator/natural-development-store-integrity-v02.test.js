@@ -16,7 +16,8 @@ const transition = require('../../accelerator/adapters/natural-development-store
 const sha = (value) => crypto.createHash('sha256').update(value).digest('hex');
 
 function fixture(t, label) {
-  const fixtureRoot = fs.mkdtempSync(path.join(os.tmpdir(), `sdo-store-integrity-${label}-`));
+  const fixturePath = fs.mkdtempSync(path.join(os.tmpdir(), `sdo-store-integrity-${label}-`));
+  const fixtureRoot = fs.realpathSync(fixturePath);
   const stateRoot = path.join(fixtureRoot, 'g7');
   fs.mkdirSync(stateRoot, { mode: 0o700 });
   identity.provisionEphemeralTestStoreIntegrity({

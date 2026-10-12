@@ -13,6 +13,7 @@ const {
 const identity = require('./natural-development-store-integrity-identity');
 const witness = require('./natural-development-monotonic-witness');
 const transition = require('./natural-development-store-transition');
+const { defaultFilesystemDurabilityAdapter } = require('./filesystem-durability-adapter');
 
 const MAX_RECORD_BYTES = 256 * 1024;
 const READ_PURPOSE = Object.freeze({
@@ -83,8 +84,7 @@ function serialize(value) {
 }
 
 function fsyncDirectory(directory) {
-  const descriptor = fs.openSync(directory, 'r');
-  try { fs.fsyncSync(descriptor); } finally { fs.closeSync(descriptor); }
+  defaultFilesystemDurabilityAdapter.flushDirectory(directory);
 }
 
 function writeExclusive(target, value) {

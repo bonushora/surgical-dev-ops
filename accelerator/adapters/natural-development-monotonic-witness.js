@@ -5,6 +5,7 @@ const path = require('node:path');
 
 const identity = require('./natural-development-store-integrity-identity');
 const transition = require('./natural-development-store-transition');
+const { defaultFilesystemDurabilityAdapter } = require('./filesystem-durability-adapter');
 
 const EVENT_SCHEMA = 'sdo.store_integrity_witness_event.v1';
 const POINTER_SCHEMA = 'sdo.store_integrity_witness_pointer.v1';
@@ -21,8 +22,7 @@ const POINTER_KEYS = Object.freeze([
 const MAX_WITNESS_BYTES = 128 * 1024;
 
 function fsyncDirectory(directory) {
-  const descriptor = fs.openSync(directory, 'r');
-  try { fs.fsyncSync(descriptor); } finally { fs.closeSync(descriptor); }
+  defaultFilesystemDurabilityAdapter.flushDirectory(directory);
 }
 
 function serialize(value) {

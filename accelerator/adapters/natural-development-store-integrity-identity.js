@@ -6,6 +6,7 @@ const os = require('node:os');
 const path = require('node:path');
 
 const transition = require('./natural-development-store-transition');
+const { defaultFilesystemDurabilityAdapter } = require('./filesystem-durability-adapter');
 
 const CONTEXT_SCHEMA = 'sdo.store_integrity_test_context.v1';
 const KEY_SCHEMA = 'sdo.store_integrity_key_lifecycle.v1';
@@ -24,8 +25,7 @@ const KEY_KEYS = Object.freeze([
 ].sort());
 
 function fsyncDirectory(directory) {
-  const descriptor = fs.openSync(directory, 'r');
-  try { fs.fsyncSync(descriptor); } finally { fs.closeSync(descriptor); }
+  defaultFilesystemDurabilityAdapter.flushDirectory(directory);
 }
 
 function writeExclusiveJson(target, value, mode = 0o600) {
