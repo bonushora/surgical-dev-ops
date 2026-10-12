@@ -31,7 +31,9 @@ function sha(value) {
 }
 
 function fixture() {
-  const root = fs.mkdtempSync(path.join(os.tmpdir(), 'sdo-native-acceptance-'));
+  const root = fs.realpathSync(
+    fs.mkdtempSync(path.join(os.tmpdir(), 'sdo-native-acceptance-'))
+  );
   const repository = path.join(root, 'repository');
   const authorityRoot = path.join(root, 'authority');
   const journalStorageRoot = path.join(root, 'journal');

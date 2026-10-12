@@ -106,8 +106,8 @@ function temporal(wallTime) {
 }
 
 function fixture(t) {
-  const root = fs.mkdtempSync(
-    path.join(os.tmpdir(), 'sdo-g9-g10-crash-window-')
+  const root = fs.realpathSync(
+    fs.mkdtempSync(path.join(os.tmpdir(), 'sdo-g9-g10-crash-window-'))
   );
   const repository = path.join(root, 'repo');
   const authorityRoot = path.join(root, 'authority');

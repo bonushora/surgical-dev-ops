@@ -100,8 +100,8 @@ function git(repo, args) {
 }
 
 function fixture() {
-  const root = fs.mkdtempSync(
-    path.join(os.tmpdir(), 'sdo-natural-g5-')
+  const root = fs.realpathSync(
+    fs.mkdtempSync(path.join(os.tmpdir(), 'sdo-natural-g5-'))
   );
   const repo = path.join(root, 'repo');
   const authorityRoot = path.join(root, 'authority');

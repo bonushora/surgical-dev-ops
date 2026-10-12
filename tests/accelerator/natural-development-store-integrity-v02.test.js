@@ -260,6 +260,17 @@ test('missing private key and interrupted rotation or revocation block authority
   }
 });
 
+test('POSIX signer admission still rejects group or other access to the private key', (t) => {
+  if (process.platform === 'win32') return t.skip('POSIX mode-bit policy does not apply on Windows.');
+  const value = fixture(t, 'private-key-mode');
+  const target = path.join(value.context.identityRoot, 'private-key.pkcs8.pem');
+  fs.chmodSync(target, 0o640);
+  assert.throws(
+    () => identity.assertActiveSignerAvailable(value.context),
+    /private key is unavailable or unsafe/i
+  );
+});
+
 test('restoring an older witness cannot promote a newer store or reset its baseline', (t) => {
   const value = fixture(t, 'witness-rollback');
   const first = claim('witness-rollback-first');

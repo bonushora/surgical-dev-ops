@@ -44,7 +44,9 @@ function fingerprint(value) {
 }
 
 function fixtureRoot(t, label, { integrity = true } = {}) {
-  const fixture = fs.mkdtempSync(path.join(os.tmpdir(), `sdo-agmi-v02-${label}-`));
+  const fixture = fs.realpathSync(
+    fs.mkdtempSync(path.join(os.tmpdir(), `sdo-agmi-v02-${label}-`))
+  );
   const root = path.join(fixture, integrity ? 'g7' : 'snapshot');
   fs.mkdirSync(root, { mode: 0o700 });
   if (integrity) {

@@ -53,8 +53,8 @@ function git(repository, args) {
 }
 
 function fixture(t) {
-  const root = fs.mkdtempSync(
-    path.join(os.tmpdir(), 'sdo-workspace-substitution-')
+  const root = fs.realpathSync(
+    fs.mkdtempSync(path.join(os.tmpdir(), 'sdo-workspace-substitution-'))
   );
   const repository = path.join(root, 'repository');
   const authorityRoot = path.join(root, 'authority');

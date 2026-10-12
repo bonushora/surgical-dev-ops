@@ -78,12 +78,12 @@ function consumption(boundClaim, overrides = {}) {
 
 function root(t) {
   const fixture =
-    fs.mkdtempSync(
+    fs.realpathSync(fs.mkdtempSync(
       path.join(
         os.tmpdir(),
         'sdo-g7-authorization-'
       )
-    );
+    ));
   const value = path.join(fixture, 'g7');
   fs.mkdirSync(value, { mode: 0o700 });
   integrityIdentity.provisionEphemeralTestStoreIntegrity({

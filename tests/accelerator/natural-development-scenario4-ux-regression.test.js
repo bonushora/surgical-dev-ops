@@ -119,8 +119,8 @@ test(
   'Scenario 4 truthfully presents successful Manifest-CAS completion',
   { timeout: 240_000 },
   async (t) => {
-    const root = fs.mkdtempSync(
-      path.join(os.tmpdir(), 'sdo-scenario3-regression-')
+    const root = fs.realpathSync(
+      fs.mkdtempSync(path.join(os.tmpdir(), 'sdo-scenario3-regression-'))
     );
     const repository = path.join(root, 'repository');
     const authorityRoot = path.join(root, 'authority');

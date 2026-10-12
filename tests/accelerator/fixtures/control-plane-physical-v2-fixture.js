@@ -148,7 +148,9 @@ function buildArtifacts(state, authorizedAt, expiresAt) {
 }
 
 function createPhysicalV2Fixture() {
-  const root = fs.mkdtempSync(path.join(os.tmpdir(), 'sdo-physical-v2-'));
+  const root = fs.realpathSync(
+    fs.mkdtempSync(path.join(os.tmpdir(), 'sdo-physical-v2-'))
+  );
   const repositoryPath = path.join(root, 'repository');
   const authorityRoot = path.join(root, 'authority');
   const journalStorageRoot = path.join(root, 'journal');

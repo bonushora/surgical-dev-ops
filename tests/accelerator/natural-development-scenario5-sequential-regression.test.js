@@ -174,8 +174,8 @@ test(
   'Scenario 5 derives a fresh proposal from the latest authoritative CAS generation',
   { timeout: 90_000 },
   async (t) => {
-    const root = fs.mkdtempSync(
-      path.join(os.tmpdir(), 'sdo-scenario5-sequential-')
+    const root = fs.realpathSync(
+      fs.mkdtempSync(path.join(os.tmpdir(), 'sdo-scenario5-sequential-'))
     );
     const repository = path.join(root, 'repository');
     const authorityRoot = path.join(root, 'authority');

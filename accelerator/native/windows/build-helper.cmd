@@ -25,7 +25,7 @@ if not defined VSINSTALL (
 call "%VSINSTALL%\VC\Auxiliary\Build\vcvars64.bat" >nul
 if errorlevel 1 exit /b 4
 
-cl /nologo /std:c++17 /EHsc /O2 /W4 /MT /utf-8 /DUNICODE /D_UNICODE "%SOURCE%" /Fo:"%OBJECT%" /Fe:"%OUTPUT%"
+cl /nologo /std:c++17 /EHsc /O2 /W4 /MT /utf-8 /DUNICODE /D_UNICODE "%SOURCE%" /Fo:"%OBJECT%" /Fe:"%OUTPUT%" /link advapi32.lib
 if errorlevel 1 exit /b 5
 
 if exist "%OBJECT%" del /q "%OBJECT%"

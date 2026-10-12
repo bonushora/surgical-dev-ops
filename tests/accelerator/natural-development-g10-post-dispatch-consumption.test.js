@@ -38,12 +38,12 @@ const hash = (value) =>
 
 function fixture(t) {
   const fixtureRoot =
-    fs.mkdtempSync(
+    fs.realpathSync(fs.mkdtempSync(
       path.join(
         os.tmpdir(),
         'sdo-g10-'
       )
-    );
+    ));
   const stateRoot = path.join(fixtureRoot, 'g7');
   fs.mkdirSync(stateRoot, { mode: 0o700 });
   integrityIdentity.provisionEphemeralTestStoreIntegrity({

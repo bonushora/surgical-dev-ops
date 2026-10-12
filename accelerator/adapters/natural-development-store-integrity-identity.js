@@ -7,6 +7,9 @@ const path = require('node:path');
 
 const transition = require('./natural-development-store-transition');
 const { defaultFilesystemDurabilityAdapter } = require('./filesystem-durability-adapter');
+const {
+  defaultWindowsPrivateKeyAclBridge
+} = require('./windows-private-key-acl-bridge');
 
 const CONTEXT_SCHEMA = 'sdo.store_integrity_test_context.v1';
 const KEY_SCHEMA = 'sdo.store_integrity_key_lifecycle.v1';
@@ -157,7 +160,11 @@ function provisionEphemeralTestStoreIntegrity({
     lifecycle: 'ACTIVE',
     publicKeySpkiDer: publicDer.toString('base64')
   };
-  writeExclusiveBytes(path.join(identity, PRIVATE_KEY_FILE), privatePem, 0o600);
+  const privateKeyPath = path.join(identity, PRIVATE_KEY_FILE);
+  writeExclusiveBytes(privateKeyPath, privatePem, 0o600);
+  if (process.platform === 'win32') {
+    defaultWindowsPrivateKeyAclBridge.protectPrivateKey(privateKeyPath);
+  }
   writeExclusiveJson(path.join(identity, KEY_METADATA_FILE), metadata);
 
   const context = {
@@ -239,13 +246,22 @@ function loadKeyMetadata(context, { requireActive = false } = {}) {
   return Object.freeze({ ...metadata, publicDer });
 }
 
-function assertActiveSignerAvailable(context) {
-  const metadata = loadKeyMetadata(context, { requireActive: true });
-  const target = path.join(context.identityRoot, PRIVATE_KEY_FILE);
+function assertPrivateKeyFileSafe(target) {
   const stat = fs.lstatSync(target);
-  if (!stat.isFile() || stat.isSymbolicLink() || (stat.mode & 0o077) !== 0) {
+  if (!stat.isFile() || stat.isSymbolicLink()) {
     throw new Error('Store-integrity private key is unavailable or unsafe.');
   }
+  if (process.platform === 'win32') {
+    defaultWindowsPrivateKeyAclBridge.verifyPrivateKey(target);
+  } else if ((stat.mode & 0o077) !== 0) {
+    throw new Error('Store-integrity private key is unavailable or unsafe.');
+  }
+}
+
+function loadActivePrivateKey(context) {
+  const metadata = loadKeyMetadata(context, { requireActive: true });
+  const target = path.join(context.identityRoot, PRIVATE_KEY_FILE);
+  assertPrivateKeyFileSafe(target);
   let privateKey;
   try {
     privateKey = crypto.createPrivateKey(fs.readFileSync(target));
@@ -256,6 +272,11 @@ function assertActiveSignerAvailable(context) {
   if (!derived.equals(metadata.publicDer)) {
     throw new Error('Store-integrity private key does not match the admitted public identity.');
   }
+  return privateKey;
+}
+
+function assertActiveSignerAvailable(context) {
+  loadActivePrivateKey(context);
   return true;
 }
 
@@ -267,13 +288,7 @@ function domainBytes(domain, value) {
 }
 
 function sign(context, domain, value) {
-  assertActiveSignerAvailable(context);
-  const target = path.join(context.identityRoot, PRIVATE_KEY_FILE);
-  const stat = fs.lstatSync(target);
-  if (!stat.isFile() || stat.isSymbolicLink() || (stat.mode & 0o077) !== 0) {
-    throw new Error('Store-integrity private key is unavailable or unsafe.');
-  }
-  const privateKey = crypto.createPrivateKey(fs.readFileSync(target));
+  const privateKey = loadActivePrivateKey(context);
   return crypto.sign(null, domainBytes(domain, value), privateKey).toString('base64');
 }
 

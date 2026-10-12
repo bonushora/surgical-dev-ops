@@ -134,12 +134,12 @@ test(
           .digest('hex');
 
     const fixtureRoot =
-      fs.mkdtempSync(
+      fs.realpathSync(fs.mkdtempSync(
         path.join(
           os.tmpdir(),
           'sdo-g9-claim-'
         )
-      );
+      ));
     const root = path.join(fixtureRoot, 'g7');
     fs.mkdirSync(root, { mode: 0o700 });
     integrityIdentity.provisionEphemeralTestStoreIntegrity({

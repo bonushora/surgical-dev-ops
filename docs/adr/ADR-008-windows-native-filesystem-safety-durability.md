@@ -175,3 +175,28 @@ unsupported and fails closed.
 
 This section does not claim power-loss qualification. It qualifies only the
 explicit native persistence primitives that are actually invoked and evidenced.
+
+## 13. Store-Integrity Private-Key ACL Policy
+
+Windows store-integrity signing keys SHALL NOT be admitted through POSIX mode
+bits because `stat.mode & 0o077` does not prove the effective Windows ACL. The
+repository-fixed native helper SHALL protect and inspect the key through a
+handle opened with `FILE_FLAG_OPEN_REPARSE_POINT` and SHALL fail closed unless
+all of the following are true:
+
+1. the final component is a regular file and is not a reparse point;
+2. the owner SID exactly matches the current process user SID;
+3. the DACL is present, valid, non-empty and protected from inheritance;
+4. every effective allow ACE names only the current process user, LocalSystem
+   or the built-in Administrators group;
+5. every ACE has a directly understood allow/deny form, with unknown,
+   callback, object-specific and inherit-only ACEs rejected; and
+6. the current process can open the same physical file for read and the helper
+   returns operation-bound file identity evidence.
+
+Provisioning SHALL replace an inherited DACL with this protected allowlist and
+then re-read and validate the effective descriptor. Every later signing use
+SHALL revalidate it. A missing helper, native error, malformed or unbound
+evidence, unexpected owner, broader allow ACE, ambiguous ACE type or reparse
+point makes the signer unavailable. Text rendering from `icacls` is not proof
+of this policy and SHALL NOT be used for the admission decision.

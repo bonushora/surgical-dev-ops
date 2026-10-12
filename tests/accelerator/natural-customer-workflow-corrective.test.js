@@ -74,7 +74,9 @@ test('customer failure observability exposes only bounded sanitized classificati
 });
 
 function createFailingCalculatorRepository() {
-  const root = fs.mkdtempSync(path.join(os.tmpdir(), 'sdo-natural-customer-red-'));
+  const root = fs.realpathSync(
+    fs.mkdtempSync(path.join(os.tmpdir(), 'sdo-natural-customer-red-'))
+  );
   const repository = path.join(root, 'repository');
   fs.mkdirSync(repository);
   fs.writeFileSync(path.join(repository, 'package.json'), JSON.stringify({
