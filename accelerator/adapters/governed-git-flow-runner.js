@@ -418,6 +418,117 @@ function createGovernedGitFlowRunner({ spawnSync = childProcess.spawnSync } = {}
     return { ok: true, sha: match[1] };
   }
 
+  function inspectPublishableCommit(authorization, identity, commitSha) {
+    if (identity.head !== commitSha) {
+      return { ok: false, reason: 'Local HEAD differs from the authorized commit SHA.' };
+    }
+    const ancestry = git(identity.workspace, [
+      'merge-base', '--is-ancestor', authorization.remote.expectedSha, commitSha
+    ]);
+    if (!ancestry.ok) {
+      return {
+        ok: false,
+        reason: 'Published commit is not a fast-forward descendant of the expected remote SHA.'
+      };
+    }
+    const rangeCount = scalar(identity.workspace, [
+      'rev-list', '--count', `${authorization.remote.expectedSha}..${commitSha}`
+    ], 'Publication commit count');
+    const parent = scalar(identity.workspace, ['rev-parse', `${commitSha}^`], 'Publication commit parent');
+    const changed = git(identity.workspace, [
+      'diff-tree', '--no-commit-id', '--name-only', '-r', '-z', commitSha
+    ]);
+    const changedPaths = changed.ok ? parseNulPaths(changed.stdout).sort() : [];
+    if (!rangeCount.ok || rangeCount.value !== '1' || !parent.ok ||
+        parent.value !== authorization.remote.expectedSha || !changed.ok ||
+        changedPaths.length === 0 ||
+        changedPaths.some((file) => !authorization.authorizedFiles.includes(file))) {
+      return {
+        ok: false,
+        reason: 'Publishable history is not the single authorized fast-forward commit.',
+        changedPaths
+      };
+    }
+    const secrets = inspectCommittedSecrets(identity.workspace, commitSha, changedPaths);
+    if (!secrets.ok) {
+      return {
+        ok: false,
+        reason: secrets.reason,
+        changedPaths,
+        secretInspection: secrets.inspections
+      };
+    }
+    return {
+      ok: true,
+      changedPaths,
+      secretInspection: secrets.inspections
+    };
+  }
+
+  function reconcile({ authorization: authorizationInput } = {}) {
+    let authorization;
+    try {
+      authorization = validateGitFlowAuthorization(authorizationInput);
+    } catch (error) {
+      return deepFreeze({ state: 'BLOCKED', phase: 'RECONCILE', reason: error.message });
+    }
+    const identity = validateBoundIdentity(authorization, { requireExpectedHead: false });
+    if (!identity.ok) return result(authorization, 'BLOCKED', 'RECONCILE', identity.reason);
+    const remote = observeRemoteSha(authorization, identity.workspace);
+    if (!remote.ok) return result(authorization, 'BLOCKED', 'RECONCILE', remote.reason);
+
+    if (identity.head === authorization.expectedHead) {
+      if (remote.sha !== authorization.remote.expectedSha) {
+        return result(authorization, 'BLOCKED', 'RECONCILE',
+          'Remote CAS identity diverged before an authorized local commit.', {
+            observedRemoteSha: remote.sha
+          });
+      }
+      return result(authorization, 'GREEN', 'PREPARED',
+        'Mission Git Flow is eligible and no authorized commit exists yet.', {
+          commitSha: identity.head,
+          observedRemoteSha: remote.sha,
+          warnings: []
+        });
+    }
+
+    const publishable = inspectPublishableCommit(authorization, identity, identity.head);
+    if (!publishable.ok) {
+      return result(authorization, 'BLOCKED', 'RECONCILE', publishable.reason, {
+        commitSha: identity.head,
+        observedRemoteSha: remote.sha,
+        changedPaths: publishable.changedPaths || [],
+        secretInspection: publishable.secretInspection || []
+      });
+    }
+    if (remote.sha === identity.head) {
+      return result(authorization, 'GREEN', 'PUBLISHED',
+        'Interrupted publication reconciled from exact remote readback.', {
+          commitSha: identity.head,
+          observedRemoteSha: remote.sha,
+          changedPaths: publishable.changedPaths,
+          secretInspection: publishable.secretInspection,
+          warnings: []
+        });
+    }
+    if (remote.sha === authorization.remote.expectedSha) {
+      return result(authorization, 'GREEN', 'LOCAL_GREEN',
+        'Interrupted commit reconciled without creating a duplicate commit.', {
+          commitSha: identity.head,
+          observedRemoteSha: remote.sha,
+          changedPaths: publishable.changedPaths,
+          secretInspection: publishable.secretInspection,
+          warnings: []
+        });
+    }
+    return result(authorization, 'BLOCKED', 'RECONCILE',
+      'Remote CAS identity diverged from both baseline and local commit.', {
+        commitSha: identity.head,
+        observedRemoteSha: remote.sha,
+        changedPaths: publishable.changedPaths
+      });
+  }
+
   function push({ authorization: authorizationInput, commitSha } = {}) {
     let authorization;
     try {
@@ -436,40 +547,12 @@ function createGovernedGitFlowRunner({ spawnSync = childProcess.spawnSync } = {}
     }
     const identity = validateBoundIdentity(authorization, { requireExpectedHead: false });
     if (!identity.ok) return result(authorization, 'BLOCKED', 'PUSH', identity.reason);
-    if (identity.head !== commitSha) {
-      return result(authorization, 'BLOCKED', 'PUSH', 'Local HEAD differs from the authorized commit SHA.');
-    }
-    const ancestry = git(identity.workspace, [
-      'merge-base', '--is-ancestor', authorization.remote.expectedSha, commitSha
-    ]);
-    if (!ancestry.ok) {
-      return result(authorization, 'BLOCKED', 'PUSH',
-        'Published commit is not a fast-forward descendant of the expected remote SHA.');
-    }
-    const rangeCount = scalar(identity.workspace, [
-      'rev-list', '--count', `${authorization.remote.expectedSha}..${commitSha}`
-    ], 'Publication commit count');
-    const parent = scalar(identity.workspace, ['rev-parse', `${commitSha}^`], 'Publication commit parent');
-    const changed = git(identity.workspace, [
-      'diff-tree', '--no-commit-id', '--name-only', '-r', '-z', commitSha
-    ]);
-    const changedPaths = changed.ok ? parseNulPaths(changed.stdout).sort() : [];
-    if (!rangeCount.ok || rangeCount.value !== '1' || !parent.ok ||
-        parent.value !== authorization.remote.expectedSha || !changed.ok ||
-        changedPaths.length === 0 ||
-        changedPaths.some((file) => !authorization.authorizedFiles.includes(file))) {
-      return result(authorization, 'BLOCKED', 'PUSH',
-        'Publishable history is not the single authorized fast-forward commit.', {
-          commitSha,
-          changedPaths
-        });
-    }
-    const secrets = inspectCommittedSecrets(identity.workspace, commitSha, changedPaths);
-    if (!secrets.ok) {
-      return result(authorization, 'BLOCKED', 'PUSH', secrets.reason, {
+    const publishable = inspectPublishableCommit(authorization, identity, commitSha);
+    if (!publishable.ok) {
+      return result(authorization, 'BLOCKED', 'PUSH', publishable.reason, {
         commitSha,
-        changedPaths,
-        secretInspection: secrets.inspections
+        changedPaths: publishable.changedPaths || [],
+        secretInspection: publishable.secretInspection || []
       });
     }
 
@@ -495,8 +578,8 @@ function createGovernedGitFlowRunner({ spawnSync = childProcess.spawnSync } = {}
         'Remote SHA physically matches the authorized commit.', {
           commitSha,
           observedRemoteSha: readback.sha,
-          changedPaths,
-          secretInspection: secrets.inspections,
+          changedPaths: publishable.changedPaths,
+          secretInspection: publishable.secretInspection,
           warnings
         });
     }
@@ -533,7 +616,7 @@ function createGovernedGitFlowRunner({ spawnSync = childProcess.spawnSync } = {}
     });
   }
 
-  return deepFreeze({ inspect, commit, push, snapshot });
+  return deepFreeze({ inspect, reconcile, commit, push, snapshot });
 }
 
 module.exports = deepFreeze({
