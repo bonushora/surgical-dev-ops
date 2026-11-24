@@ -110,3 +110,14 @@ BH-SEP v2.4 and BH-SDP v2.4 are new versioned normative RAW artifacts. They do n
 - [BH-SEP/BH-SDP v2.4 — anti-friction addendum (PT-BR)](./v2.4/BH-ANTI-FRICTION-ADDENDUM.md)
 
 The addendum specifies proportionate evidence reuse, one authorized mission envelope, consolidated verification, and material-only snapshots. It does not change pinned normative RAW, trusted-host containment, credential mediation, CAS, or authorization boundaries. This is documentation-only adoption, not runtime qualification or deployment.
+
+## v2.5 — integrated anti-friction normative texts
+
+The following versioned documents integrate the anti-friction rules **into the BH-SEP and BH-SDP protocols**, instead of relying on an external addendum.
+
+- [BH-SEP v2.5 — PT-BR normative text](./v2.5/BH-SEP.md)
+- [BH-SDP v2.5 — PT-BR normative text](./v2.5/BH-SDP.md)
+- [BH-SEP v2.5 — English translation](./v2.5/BH-SEP_EN.md)
+- [BH-SDP v2.5 — English translation](./v2.5/BH-SDP_EN.md)
+
+v2.5 governs newly authorized assistant missions that select this normative version. This does **not** rewrite immutably preserved v2.2/v2.3/v2.4 RAW files, update the host-pinned v2.4 containment manifest, or qualify a protected runtime migration. The existing v2.4 loader and protected operational profile remain unchanged, fail-closed, and separately qualified.

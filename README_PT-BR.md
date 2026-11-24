@@ -199,7 +199,16 @@ qualifica nem migra automaticamente um runtime implantado.
 - [BH-SEP + BH-SDP v2.3 — cópia combinada PT-BR](./protocols/v2.3/BH-PROTOCOLS.md)
 - [BH-SEP + BH-SDP v2.3 — tradução inglesa combinada](./protocols/v2.3/BH-PROTOCOLS_EN.md)
 
-### v2.4 — atual com contenção integrada ao RAW
+### v2.5 — protocolos normativos antifricção (novas missões)
+
+- [BH-SEP v2.5 — protocolo normativo PT-BR](./protocols/v2.5/BH-SEP.md)
+- [BH-SDP v2.5 — protocolo normativo PT-BR](./protocols/v2.5/BH-SDP.md)
+- [BH-SEP v2.5 — tradução inglesa](./protocols/v2.5/BH-SEP_EN.md)
+- [BH-SDP v2.5 — tradução inglesa](./protocols/v2.5/BH-SDP_EN.md)
+
+A v2.5 integra as regras antifricção aos próprios protocolos para novas missões autorizadas. Isso **não** migra nem qualifica automaticamente o runtime. O loader de contenção confiável permanece pinado na v2.4 até nova qualificação específica.
+
+### v2.4 — RAW protegido com contenção integrada
 
 - [BH-SEP v2.4 — RAW original](./protocols/v2.4/BH-SEP.md)
 - [BH-SDP v2.4 — RAW original](./protocols/v2.4/BH-SDP.md)
