@@ -127,7 +127,7 @@ jobs:
             echo "BLOCKED: no distribution-provided bwrap-userns-restrict profile" >&2
             exit 1
           fi
-          sudo apparmor_parser -r "$profile"
+          sudo apparmor_parser -r /etc/apparmor.d/bwrap-userns-restrict
           bwrap_path="$(command -v bwrap)"
           test "$bwrap_path" = "/usr/bin/bwrap"
           test -x "$bwrap_path"
