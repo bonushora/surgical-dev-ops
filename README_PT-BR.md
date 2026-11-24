@@ -174,8 +174,9 @@ npm test
 ## Protocolos normativos e RAW imutáveis
 
 As versões dos protocolos são independentes da release do software Surgical
-DevOps: `v2.6.0-rc.6` identifica o software, enquanto BH-SEP e BH-SDP v2.3
-governam o runtime atual.
+DevOps: `v2.6.0-rc.6` identifica o software. O perfil normativo ativo documentado
+é BH-SEP/BH-SDP v2.4 com contenção integrada. Atualizar a documentação não
+qualifica nem migra automaticamente um runtime implantado.
 
 ### v2.2 — histórica e preservada
 
@@ -202,6 +203,7 @@ governam o runtime atual.
 
 - [BH-SEP v2.4 — RAW original](./protocols/v2.4/BH-SEP.md)
 - [BH-SDP v2.4 — RAW original](./protocols/v2.4/BH-SDP.md)
+- [BH-SEP/BH-SDP v2.4 — adendo antifricção ratificado (PT-BR)](./protocols/v2.4/BH-ANTI-FRICTION-ADDENDUM.md)
 - [BH-SEP v2.4 — tradução inglesa](./protocols/v2.4/BH-SEP_EN.md)
 - [BH-SDP v2.4 — tradução inglesa](./protocols/v2.4/BH-SDP_EN.md)
 - [BH-SEP + BH-SDP v2.4 — cópia combinada PT-BR](./protocols/v2.4/BH-PROTOCOLS.md)

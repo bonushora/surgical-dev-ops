@@ -104,3 +104,9 @@ This policy is approved and frozen by
 ## v2.4 — current containment-integrated normative RAW
 
 BH-SEP v2.4 and BH-SDP v2.4 are new versioned normative RAW artifacts. They do not overwrite or redirect v2.2 or v2.3. The active profile is `BH-SEP-v2.4+BH-SDP-v2.4+BH-CONTAINMENT-integrated-v1`.
+
+### Ratified anti-friction addendum — 23/11/2026
+
+- [BH-SEP/BH-SDP v2.4 — anti-friction addendum (PT-BR)](./v2.4/BH-ANTI-FRICTION-ADDENDUM.md)
+
+The addendum specifies proportionate evidence reuse, one authorized mission envelope, consolidated verification, and material-only snapshots. It does not change pinned normative RAW, trusted-host containment, credential mediation, CAS, or authorization boundaries. This is documentation-only adoption, not runtime qualification or deployment.

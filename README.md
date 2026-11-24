@@ -178,9 +178,10 @@ npm test
 ## Normative protocols and immutable RAW artifacts
 
 Protocol versions are independent from the Surgical DevOps software release;
-`v2.6.0-rc.6` identifies the Surgical runtime, while product v0.1.0-beta.1
-identifies the customer surface and BH-SEP and BH-SDP v2.3 govern the
-current runtime.
+`v2.6.0-rc.6` identifies the Surgical runtime and product v0.1.0-beta.1
+identifies the customer surface. The documented active normative profile is
+BH-SEP/BH-SDP v2.4 with integrated containment. Updating documentation alone
+does not qualify or switch a deployed runtime.
 
 ### v2.2 — historical and preserved
 
@@ -207,6 +208,7 @@ current runtime.
 
 - [BH-SEP v2.4 — original RAW](./protocols/v2.4/BH-SEP.md)
 - [BH-SDP v2.4 — original RAW](./protocols/v2.4/BH-SDP.md)
+- [BH-SEP/BH-SDP v2.4 — ratified anti-friction addendum (PT-BR)](./protocols/v2.4/BH-ANTI-FRICTION-ADDENDUM.md)
 - [BH-SEP v2.4 — English translation](./protocols/v2.4/BH-SEP_EN.md)
 - [BH-SDP v2.4 — English translation](./protocols/v2.4/BH-SDP_EN.md)
 - [BH-SEP + BH-SDP v2.4 — combined PT-BR copy](./protocols/v2.4/BH-PROTOCOLS.md)
