@@ -37,5 +37,14 @@ if errorlevel 1 exit /b 7
 if exist "%NODE_OBJECT%" del /q "%NODE_OBJECT%"
 if not exist "%NODE_OUTPUT%" exit /b 8
 
-echo BUILT %OUTPUT% and %NODE_OUTPUT%
+set "KEY_SOURCE=%ROOT%sdo-private-key-acl.cpp"
+set "KEY_OUTPUT=%ROOT%sdo-private-key-acl.exe"
+set "KEY_OBJECT=%ROOT%sdo-private-key-acl.obj"
+cl /nologo /std:c++17 /EHsc /O2 /W4 /WX /MT /utf-8 /DUNICODE /D_UNICODE "%KEY_SOURCE%" /Fo:"%KEY_OBJECT%" /Fe:"%KEY_OUTPUT%" /link advapi32.lib
+if errorlevel 1 exit /b 9
+
+if exist "%KEY_OBJECT%" del /q "%KEY_OBJECT%"
+if not exist "%KEY_OUTPUT%" exit /b 10
+
+echo BUILT %OUTPUT%, %NODE_OUTPUT%, and %KEY_OUTPUT%
 exit /b 0
