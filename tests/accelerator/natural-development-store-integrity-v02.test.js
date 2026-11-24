@@ -145,8 +145,9 @@ test('an empty test-only G7 claim provisions independent identity and witness si
 
   assert.equal(receipt.state, 'CLAIMED');
   assert.equal(context.repositoryIdentity, authorization.physicalWorkspaceIdentity);
-  assert.equal(path.dirname(context.identityRoot), journalRoot);
-  assert.equal(path.dirname(context.witnessRoot), journalRoot);
+  // Context roots are physical identities, not lexical /var or Windows 8.3 aliases.
+  assert.equal(path.dirname(context.identityRoot), fs.realpathSync(journalRoot));
+  assert.equal(path.dirname(context.witnessRoot), fs.realpathSync(journalRoot));
   assert.notEqual(context.identityRoot, stateRoot);
   assert.notEqual(context.witnessRoot, stateRoot);
   assert.equal(current(stateRoot, authorization).claimFingerprint, authorization.claimFingerprint);

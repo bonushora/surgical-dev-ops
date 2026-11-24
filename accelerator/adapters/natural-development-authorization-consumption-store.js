@@ -13,6 +13,9 @@ const {
 const identity = require('./natural-development-store-integrity-identity');
 const witness = require('./natural-development-monotonic-witness');
 const transition = require('./natural-development-store-transition');
+const {
+  defaultFilesystemDurabilityAdapter
+} = require('./filesystem-durability-adapter');
 
 const MAX_RECORD_BYTES = 256 * 1024;
 const READ_PURPOSE = Object.freeze({
@@ -83,8 +86,10 @@ function serialize(value) {
 }
 
 function fsyncDirectory(directory) {
-  const descriptor = fs.openSync(directory, 'r');
-  try { fs.fsyncSync(descriptor); } finally { fs.closeSync(descriptor); }
+  // On Windows Node fsync on a directory fails with EPERM. This existing
+  // adapter uses the qualified Win32 FlushFileBuffers helper and fails closed
+  // if the helper or its attestation is unavailable.
+  defaultFilesystemDurabilityAdapter.flushDirectory(directory);
 }
 
 function writeExclusive(target, value) {

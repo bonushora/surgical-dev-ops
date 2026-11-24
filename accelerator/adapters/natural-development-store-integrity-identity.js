@@ -6,6 +6,12 @@ const os = require('node:os');
 const path = require('node:path');
 
 const transition = require('./natural-development-store-transition');
+const {
+  defaultFilesystemDurabilityAdapter
+} = require('./filesystem-durability-adapter');
+const {
+  defaultWindowsPrivateKeyAclBridge
+} = require('./windows-private-key-acl-bridge');
 
 const CONTEXT_SCHEMA = 'sdo.store_integrity_test_context.v1';
 const KEY_SCHEMA = 'sdo.store_integrity_key_lifecycle.v1';
@@ -24,8 +30,10 @@ const KEY_KEYS = Object.freeze([
 ].sort());
 
 function fsyncDirectory(directory) {
-  const descriptor = fs.openSync(directory, 'r');
-  try { fs.fsyncSync(descriptor); } finally { fs.closeSync(descriptor); }
+  // On Windows Node fsync on a directory fails with EPERM. This existing
+  // adapter uses the qualified Win32 FlushFileBuffers helper and fails closed
+  // if the helper or its attestation is unavailable.
+  defaultFilesystemDurabilityAdapter.flushDirectory(directory);
 }
 
 function writeExclusiveJson(target, value, mode = 0o600) {
@@ -65,6 +73,42 @@ function canonicalAbsolute(value, label, { mustExist = true } = {}) {
 function isInside(parent, child) {
   const relative = path.relative(parent, child);
   return relative !== '' && !relative.startsWith('..' + path.sep) && relative !== '..';
+}
+
+function createVerifiedFixtureDescendant(fixtureLexical, fixturePhysical, target, label) {
+  // Require canonical lexical containment first: never mkdir an arbitrary path
+  // just to find out afterwards that it resolved outside the fixture.
+  // The caller may provide the same trusted fixture through an OS lexical
+  // alias (/var vs /private/var; Windows short vs long temp paths).
+  // Require containment in one of these two *verified* roots before mkdir.
+  const anchoredRoot = isInside(fixtureLexical, target)
+    ? fixtureLexical
+    : isInside(fixturePhysical, target) ? fixturePhysical : null;
+  if (!anchoredRoot) {
+    throw new Error(`${label} must stay inside the isolated fixture.`);
+  }
+  const relative = path.relative(anchoredRoot, target);
+  if (path.isAbsolute(relative)) {
+    throw new Error(`${label} must stay inside the isolated fixture.`);
+  }
+  let candidate = anchoredRoot;
+  for (const component of relative.split(path.sep)) {
+    candidate = path.join(candidate, component);
+    try {
+      fs.mkdirSync(candidate, { mode: 0o700 });
+    } catch (error) {
+      if (!error || error.code !== 'EEXIST') throw error;
+    }
+    const stat = fs.lstatSync(candidate);
+    if (!stat.isDirectory() || stat.isSymbolicLink()) {
+      throw new Error(`${label} must stay inside the isolated fixture.`);
+    }
+    const physical = fs.realpathSync(candidate);
+    if (!isInside(fixturePhysical, physical)) {
+      throw new Error(`${label} must stay inside the isolated fixture.`);
+    }
+  }
+  return fs.realpathSync(candidate);
 }
 
 function contextPathForStateRoot(stateRoot) {
@@ -110,6 +154,7 @@ function provisionEphemeralTestStoreIntegrity({
     throw new Error('Explicit testOnly acknowledgement is required for integrity-key provisioning.');
   }
   const fixture = canonicalAbsolute(fixtureRoot, 'Test fixture root');
+  const fixtureLexical = fixtureRoot;
   const temp = fs.realpathSync(os.tmpdir());
   if (!isInside(temp, fixture)) {
     throw new Error('Store-integrity test fixture must be a fresh descendant of the OS temporary root.');
@@ -120,7 +165,9 @@ function provisionEphemeralTestStoreIntegrity({
     [witnessRoot, 'Witness root']
   ]) {
     canonicalAbsolute(value, label, { mustExist: false });
-    if (!isInside(fixture, value)) throw new Error(`${label} must stay inside the isolated fixture.`);
+    if (!isInside(fixtureLexical, value) && !isInside(fixture, value)) {
+      throw new Error(`${label} must stay inside the isolated fixture.`);
+    }
   }
   if (isInside(stateRoot, identityRoot) || isInside(stateRoot, witnessRoot) || identityRoot === stateRoot || witnessRoot === stateRoot) {
     throw new Error('Integrity identity and witness must be outside G7.');
@@ -129,12 +176,9 @@ function provisionEphemeralTestStoreIntegrity({
   assertSha(epoch, 'Witness epoch');
   assertSha(repositoryIdentity, 'Repository identity');
 
-  fs.mkdirSync(stateRoot, { recursive: true, mode: 0o700 });
-  fs.mkdirSync(identityRoot, { recursive: true, mode: 0o700 });
-  fs.mkdirSync(witnessRoot, { recursive: true, mode: 0o700 });
-  const state = fs.realpathSync(stateRoot);
-  const identity = fs.realpathSync(identityRoot);
-  const witness = fs.realpathSync(witnessRoot);
+  const state = createVerifiedFixtureDescendant(fixtureLexical, fixture, stateRoot, 'G7 state root');
+  const identity = createVerifiedFixtureDescendant(fixtureLexical, fixture, identityRoot, 'Integrity identity root');
+  const witness = createVerifiedFixtureDescendant(fixtureLexical, fixture, witnessRoot, 'Witness root');
   if (!isInside(fixture, state) || !isInside(fixture, identity) || !isInside(fixture, witness)) {
     throw new Error('Store-integrity fixture resolved outside its isolated root.');
   }
@@ -157,7 +201,15 @@ function provisionEphemeralTestStoreIntegrity({
     lifecycle: 'ACTIVE',
     publicKeySpkiDer: publicDer.toString('base64')
   };
-  writeExclusiveBytes(path.join(identity, PRIVATE_KEY_FILE), privatePem, 0o600);
+  if (process.platform === 'win32') {
+    // Windows must create the key with a protected native DACL; chmod/mode
+    // checks alone do not prove secrecy, and post-creation sealing leaks time.
+    defaultWindowsPrivateKeyAclBridge.createSecureTestPrivateKey(
+      path.join(identity, PRIVATE_KEY_FILE), privatePem, { testOnly: true }
+    );
+  } else {
+    writeExclusiveBytes(path.join(identity, PRIVATE_KEY_FILE), privatePem, 0o600);
+  }
   writeExclusiveJson(path.join(identity, KEY_METADATA_FILE), metadata);
 
   const context = {
@@ -239,23 +291,60 @@ function loadKeyMetadata(context, { requireActive = false } = {}) {
   return Object.freeze({ ...metadata, publicDer });
 }
 
-function assertActiveSignerAvailable(context) {
+function loadVerifiedSigner(context) {
   const metadata = loadKeyMetadata(context, { requireActive: true });
   const target = path.join(context.identityRoot, PRIVATE_KEY_FILE);
-  const stat = fs.lstatSync(target);
-  if (!stat.isFile() || stat.isSymbolicLink() || (stat.mode & 0o077) !== 0) {
+  // Reject lexical links before opening and require verification of the
+  // *opened descriptor*, not a pathname that may be replaced between calls.
+  const lexical = fs.lstatSync(target);
+  if (!lexical.isFile() || lexical.isSymbolicLink()) {
     throw new Error('Store-integrity private key is unavailable or unsafe.');
   }
-  let privateKey;
+  const openFlags = fs.constants.O_RDONLY |
+    (process.platform === 'win32' ? 0 : (fs.constants.O_NOFOLLOW || 0));
+  const descriptor = fs.openSync(target, openFlags);
   try {
-    privateKey = crypto.createPrivateKey(fs.readFileSync(target));
-  } catch {
-    throw new Error('Store-integrity private key is unavailable or malformed.');
+    const before = fs.fstatSync(descriptor);
+    if (!before.isFile() || before.size < 32 || before.size > 16384) {
+      throw new Error('Store-integrity private key is unavailable or unsafe.');
+    }
+    if (process.platform === 'win32') {
+      // The child validates this inherited handle. The parent then reads
+      // the identical fd without reopening its pathname.
+      defaultWindowsPrivateKeyAclBridge.verifyPrivateKeyHandle(target, descriptor);
+    } else if ((before.mode & 0o077) !== 0) {
+      throw new Error('Store-integrity private key is unavailable or unsafe.');
+    }
+    const bytes = fs.readFileSync(descriptor);
+    let privateKey;
+    try {
+      if (bytes.length !== before.size) {
+        throw new Error('Key size changed during descriptor-bound read.');
+      }
+      privateKey = crypto.createPrivateKey(bytes);
+    } catch {
+      throw new Error('Store-integrity private key is unavailable or malformed.');
+    } finally {
+      bytes.fill(0);
+    }
+    const after = fs.fstatSync(descriptor);
+    if (after.size !== before.size || after.dev !== before.dev ||
+        after.ino !== before.ino || after.mtimeMs !== before.mtimeMs ||
+        after.ctimeMs !== before.ctimeMs) {
+      throw new Error('Store-integrity private key changed during verified read.');
+    }
+    const derived = crypto.createPublicKey(privateKey).export({ type: 'spki', format: 'der' });
+    if (!derived.equals(metadata.publicDer)) {
+      throw new Error('Store-integrity private key does not match the admitted public identity.');
+    }
+    return privateKey;
+  } finally {
+    fs.closeSync(descriptor);
   }
-  const derived = crypto.createPublicKey(privateKey).export({ type: 'spki', format: 'der' });
-  if (!derived.equals(metadata.publicDer)) {
-    throw new Error('Store-integrity private key does not match the admitted public identity.');
-  }
+}
+
+function assertActiveSignerAvailable(context) {
+  loadVerifiedSigner(context);
   return true;
 }
 
@@ -267,13 +356,8 @@ function domainBytes(domain, value) {
 }
 
 function sign(context, domain, value) {
-  assertActiveSignerAvailable(context);
-  const target = path.join(context.identityRoot, PRIVATE_KEY_FILE);
-  const stat = fs.lstatSync(target);
-  if (!stat.isFile() || stat.isSymbolicLink() || (stat.mode & 0o077) !== 0) {
-    throw new Error('Store-integrity private key is unavailable or unsafe.');
-  }
-  const privateKey = crypto.createPrivateKey(fs.readFileSync(target));
+  // Do not reopen the key after the previous ACL check.
+  const privateKey = loadVerifiedSigner(context);
   return crypto.sign(null, domainBytes(domain, value), privateKey).toString('base64');
 }
 
