@@ -6,6 +6,9 @@ const os = require('node:os');
 const path = require('node:path');
 
 const transition = require('./natural-development-store-transition');
+const {
+  defaultFilesystemDurabilityAdapter
+} = require('./filesystem-durability-adapter');
 
 const CONTEXT_SCHEMA = 'sdo.store_integrity_test_context.v1';
 const KEY_SCHEMA = 'sdo.store_integrity_key_lifecycle.v1';
@@ -24,8 +27,10 @@ const KEY_KEYS = Object.freeze([
 ].sort());
 
 function fsyncDirectory(directory) {
-  const descriptor = fs.openSync(directory, 'r');
-  try { fs.fsyncSync(descriptor); } finally { fs.closeSync(descriptor); }
+  // On Windows Node fsync on a directory fails with EPERM. This existing
+  // adapter uses the qualified Win32 FlushFileBuffers helper and fails closed
+  // if the helper or its attestation is unavailable.
+  defaultFilesystemDurabilityAdapter.flushDirectory(directory);
 }
 
 function writeExclusiveJson(target, value, mode = 0o600) {
@@ -65,6 +70,33 @@ function canonicalAbsolute(value, label, { mustExist = true } = {}) {
 function isInside(parent, child) {
   const relative = path.relative(parent, child);
   return relative !== '' && !relative.startsWith('..' + path.sep) && relative !== '..';
+}
+
+function createVerifiedFixtureDescendant(fixtureLexical, fixturePhysical, target, label) {
+  // Require canonical lexical containment first: never mkdir an arbitrary path
+  // just to find out afterwards that it resolved outside the fixture.
+  const relative = path.relative(fixtureLexical, target);
+  if (!isInside(fixtureLexical, target) || path.isAbsolute(relative)) {
+    throw new Error(`${label} must stay inside the isolated fixture.`);
+  }
+  let candidate = fixtureLexical;
+  for (const component of relative.split(path.sep)) {
+    candidate = path.join(candidate, component);
+    try {
+      fs.mkdirSync(candidate, { mode: 0o700 });
+    } catch (error) {
+      if (!error || error.code !== 'EEXIST') throw error;
+    }
+    const stat = fs.lstatSync(candidate);
+    if (!stat.isDirectory() || stat.isSymbolicLink()) {
+      throw new Error(`${label} must stay inside the isolated fixture.`);
+    }
+    const physical = fs.realpathSync(candidate);
+    if (!isInside(fixturePhysical, physical)) {
+      throw new Error(`${label} must stay inside the isolated fixture.`);
+    }
+  }
+  return fs.realpathSync(candidate);
 }
 
 function contextPathForStateRoot(stateRoot) {
@@ -110,6 +142,7 @@ function provisionEphemeralTestStoreIntegrity({
     throw new Error('Explicit testOnly acknowledgement is required for integrity-key provisioning.');
   }
   const fixture = canonicalAbsolute(fixtureRoot, 'Test fixture root');
+  const fixtureLexical = fixtureRoot;
   const temp = fs.realpathSync(os.tmpdir());
   if (!isInside(temp, fixture)) {
     throw new Error('Store-integrity test fixture must be a fresh descendant of the OS temporary root.');
@@ -120,7 +153,7 @@ function provisionEphemeralTestStoreIntegrity({
     [witnessRoot, 'Witness root']
   ]) {
     canonicalAbsolute(value, label, { mustExist: false });
-    if (!isInside(fixture, value)) throw new Error(`${label} must stay inside the isolated fixture.`);
+    if (!isInside(fixtureLexical, value)) throw new Error(`${label} must stay inside the isolated fixture.`);
   }
   if (isInside(stateRoot, identityRoot) || isInside(stateRoot, witnessRoot) || identityRoot === stateRoot || witnessRoot === stateRoot) {
     throw new Error('Integrity identity and witness must be outside G7.');
@@ -129,12 +162,9 @@ function provisionEphemeralTestStoreIntegrity({
   assertSha(epoch, 'Witness epoch');
   assertSha(repositoryIdentity, 'Repository identity');
 
-  fs.mkdirSync(stateRoot, { recursive: true, mode: 0o700 });
-  fs.mkdirSync(identityRoot, { recursive: true, mode: 0o700 });
-  fs.mkdirSync(witnessRoot, { recursive: true, mode: 0o700 });
-  const state = fs.realpathSync(stateRoot);
-  const identity = fs.realpathSync(identityRoot);
-  const witness = fs.realpathSync(witnessRoot);
+  const state = createVerifiedFixtureDescendant(fixtureLexical, fixture, stateRoot, 'G7 state root');
+  const identity = createVerifiedFixtureDescendant(fixtureLexical, fixture, identityRoot, 'Integrity identity root');
+  const witness = createVerifiedFixtureDescendant(fixtureLexical, fixture, witnessRoot, 'Witness root');
   if (!isInside(fixture, state) || !isInside(fixture, identity) || !isInside(fixture, witness)) {
     throw new Error('Store-integrity fixture resolved outside its isolated root.');
   }
