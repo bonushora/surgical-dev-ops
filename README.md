@@ -210,6 +210,8 @@ does not qualify or switch a deployed runtime.
 - [BH-SDP v2.5 — Portuguese normative protocol](./protocols/v2.5/BH-SDP.md)
 - [BH-SEP v2.5 — English translation](./protocols/v2.5/BH-SEP_EN.md)
 - [BH-SDP v2.5 — English translation](./protocols/v2.5/BH-SDP_EN.md)
+- [BH-SEP + BH-SDP v2.5 — combined PT-BR RAW copy](./protocols/v2.5/BH-PROTOCOLS.md)
+- [BH-SEP + BH-SDP v2.5 — combined English RAW copy](./protocols/v2.5/BH-PROTOCOLS_EN.md)
 
 v2.5 integrates anti-friction requirements into the protocol texts themselves. This is a normative documentation update for newly authorized missions, **not** a runtime migration or qualification. The trusted containment loader remains pinned to the v2.4 profile until separately qualified.
 

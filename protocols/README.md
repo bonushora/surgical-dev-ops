@@ -119,5 +119,9 @@ The following versioned documents integrate the anti-friction rules **into the B
 - [BH-SDP v2.5 — PT-BR normative text](./v2.5/BH-SDP.md)
 - [BH-SEP v2.5 — English translation](./v2.5/BH-SEP_EN.md)
 - [BH-SDP v2.5 — English translation](./v2.5/BH-SDP_EN.md)
+- [BH-SEP + BH-SDP v2.5 — combined PT-BR copy](./v2.5/BH-PROTOCOLS.md)
+- [BH-SEP + BH-SDP v2.5 — combined English copy](./v2.5/BH-PROTOCOLS_EN.md)
+
+Combined v2.5 copies are exact concatenations of the corresponding individual normative SEP and SDP texts, separated only by a Markdown divider. They are derived convenience copies, not new independent norms.
 
 v2.5 governs newly authorized assistant missions that select this normative version. This does **not** rewrite immutably preserved v2.2/v2.3/v2.4 RAW files, update the host-pinned v2.4 containment manifest, or qualify a protected runtime migration. The existing v2.4 loader and protected operational profile remain unchanged, fail-closed, and separately qualified.

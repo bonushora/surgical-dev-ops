@@ -205,6 +205,8 @@ qualifica nem migra automaticamente um runtime implantado.
 - [BH-SDP v2.5 — protocolo normativo PT-BR](./protocols/v2.5/BH-SDP.md)
 - [BH-SEP v2.5 — tradução inglesa](./protocols/v2.5/BH-SEP_EN.md)
 - [BH-SDP v2.5 — tradução inglesa](./protocols/v2.5/BH-SDP_EN.md)
+- [BH-SEP + BH-SDP v2.5 — cópia integrada RAW PT-BR](./protocols/v2.5/BH-PROTOCOLS.md)
+- [BH-SEP + BH-SDP v2.5 — cópia integrada RAW em inglês](./protocols/v2.5/BH-PROTOCOLS_EN.md)
 
 A v2.5 integra as regras antifricção aos próprios protocolos para novas missões autorizadas. Isso **não** migra nem qualifica automaticamente o runtime. O loader de contenção confiável permanece pinado na v2.4 até nova qualificação específica.
 
