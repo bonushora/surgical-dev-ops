@@ -291,34 +291,60 @@ function loadKeyMetadata(context, { requireActive = false } = {}) {
   return Object.freeze({ ...metadata, publicDer });
 }
 
-function assertSafePrivateKey(target) {
-  const stat = fs.lstatSync(target);
-  if (!stat.isFile() || stat.isSymbolicLink()) {
+function loadVerifiedSigner(context) {
+  const metadata = loadKeyMetadata(context, { requireActive: true });
+  const target = path.join(context.identityRoot, PRIVATE_KEY_FILE);
+  // Reject lexical links before opening and require verification of the
+  // *opened descriptor*, not a pathname that may be replaced between calls.
+  const lexical = fs.lstatSync(target);
+  if (!lexical.isFile() || lexical.isSymbolicLink()) {
     throw new Error('Store-integrity private key is unavailable or unsafe.');
   }
-  if (process.platform === 'win32') {
-    // No POSIX mode-byte fallback. Native owner, protected DACL, and trustee
-    // evidence must all be confirmed before private key bytes can be read.
-    defaultWindowsPrivateKeyAclBridge.verifyPrivateKey(target);
-  } else if ((stat.mode & 0o077) !== 0) {
-    throw new Error('Store-integrity private key is unavailable or unsafe.');
+  const openFlags = fs.constants.O_RDONLY |
+    (process.platform === 'win32' ? 0 : (fs.constants.O_NOFOLLOW || 0));
+  const descriptor = fs.openSync(target, openFlags);
+  try {
+    const before = fs.fstatSync(descriptor);
+    if (!before.isFile() || before.size < 32 || before.size > 16384) {
+      throw new Error('Store-integrity private key is unavailable or unsafe.');
+    }
+    if (process.platform === 'win32') {
+      // The child validates this inherited handle. The parent then reads
+      // the identical fd without reopening its pathname.
+      defaultWindowsPrivateKeyAclBridge.verifyPrivateKeyHandle(target, descriptor);
+    } else if ((before.mode & 0o077) !== 0) {
+      throw new Error('Store-integrity private key is unavailable or unsafe.');
+    }
+    const bytes = fs.readFileSync(descriptor);
+    let privateKey;
+    try {
+      if (bytes.length !== before.size) {
+        throw new Error('Key size changed during descriptor-bound read.');
+      }
+      privateKey = crypto.createPrivateKey(bytes);
+    } catch {
+      throw new Error('Store-integrity private key is unavailable or malformed.');
+    } finally {
+      bytes.fill(0);
+    }
+    const after = fs.fstatSync(descriptor);
+    if (after.size !== before.size || after.dev !== before.dev ||
+        after.ino !== before.ino || after.mtimeMs !== before.mtimeMs ||
+        after.ctimeMs !== before.ctimeMs) {
+      throw new Error('Store-integrity private key changed during verified read.');
+    }
+    const derived = crypto.createPublicKey(privateKey).export({ type: 'spki', format: 'der' });
+    if (!derived.equals(metadata.publicDer)) {
+      throw new Error('Store-integrity private key does not match the admitted public identity.');
+    }
+    return privateKey;
+  } finally {
+    fs.closeSync(descriptor);
   }
 }
 
 function assertActiveSignerAvailable(context) {
-  const metadata = loadKeyMetadata(context, { requireActive: true });
-  const target = path.join(context.identityRoot, PRIVATE_KEY_FILE);
-  assertSafePrivateKey(target);
-  let privateKey;
-  try {
-    privateKey = crypto.createPrivateKey(fs.readFileSync(target));
-  } catch {
-    throw new Error('Store-integrity private key is unavailable or malformed.');
-  }
-  const derived = crypto.createPublicKey(privateKey).export({ type: 'spki', format: 'der' });
-  if (!derived.equals(metadata.publicDer)) {
-    throw new Error('Store-integrity private key does not match the admitted public identity.');
-  }
+  loadVerifiedSigner(context);
   return true;
 }
 
@@ -330,10 +356,8 @@ function domainBytes(domain, value) {
 }
 
 function sign(context, domain, value) {
-  assertActiveSignerAvailable(context);
-  const target = path.join(context.identityRoot, PRIVATE_KEY_FILE);
-  assertSafePrivateKey(target);
-  const privateKey = crypto.createPrivateKey(fs.readFileSync(target));
+  // Do not reopen the key after the previous ACL check.
+  const privateKey = loadVerifiedSigner(context);
   return crypto.sign(null, domainBytes(domain, value), privateKey).toString('base64');
 }
 

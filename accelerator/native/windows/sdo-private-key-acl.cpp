@@ -123,13 +123,14 @@ bool validateAcl(HANDLE file, PSID user, BY_HANDLE_FILE_INFORMATION& info) {
 }
 
 void success(const char* operation, const std::wstring& path,
-             const BY_HANDLE_FILE_INFORMATION& info) {
+             const BY_HANDLE_FILE_INFORMATION& info,
+             const char* primitive = "CreateFileW+GetSecurityInfo+DaclTrusteeReview") {
   const unsigned long long index =
     (static_cast<unsigned long long>(info.nFileIndexHigh) << 32) |
     static_cast<unsigned long long>(info.nFileIndexLow);
   std::cout << "{\"schema\":\"sdo.windows_private_key_acl.v1\","
                "\"decision\":\"CONFIRMED\",\"operation\":\"" << operation
-            << "\",\"primitive\":\"CreateFileW+GetSecurityInfo+DaclTrusteeReview\","
+            << "\",\"primitive\":\"" << primitive << "\","
                "\"ownerMatchesToken\":true,\"daclProtected\":true,"
                "\"noBroadAllowAces\":true,\"userReadAllowed\":true,"
                "\"volumeSerialNumber\":" << info.dwVolumeSerialNumber
@@ -168,6 +169,44 @@ int verifyKey(const std::wstring& file) {
   CloseHandle(h);
   if (!ok) return fail("ACL_NOT_PROVEN");
   success("VERIFY_PRIVATE_KEY_ACL", file, info);
+  return 0;
+}
+
+
+// Validate the *inherited file object*, not a second path-based open.
+// The parent keeps this same descriptor open for the subsequent key read.
+bool handlePathMatches(HANDLE handle, const std::wstring& expected) {
+  constexpr DWORD flags = FILE_NAME_NORMALIZED | VOLUME_NAME_DOS;
+  const DWORD required = GetFinalPathNameByHandleW(handle, nullptr, 0, flags);
+  if (required == 0 || required > 32767) return false;
+  std::wstring resolved(static_cast<size_t>(required) + 1, L'\0');
+  const DWORD n = GetFinalPathNameByHandleW(
+    handle, &resolved[0], static_cast<DWORD>(resolved.size()), flags
+  );
+  if (n == 0 || n > required) return false;
+  resolved.resize(n);
+  // Windows normally prefixes an absolute local file path with \\?\.
+  constexpr wchar_t prefix[] = L"\\\\?\\";
+  if (resolved.compare(0, 4, prefix) == 0) resolved.erase(0, 4);
+  return CompareStringOrdinal(resolved.c_str(), -1, expected.c_str(), -1, TRUE) == CSTR_EQUAL;
+}
+
+int verifyInheritedKeyHandle(const std::wstring& file) {
+  if (!parentIsSafe(file)) return fail("UNSAFE_PARENT");
+  HANDLE inherited = GetStdHandle(STD_INPUT_HANDLE);
+  if (inherited == nullptr || inherited == INVALID_HANDLE_VALUE ||
+      GetFileType(inherited) != FILE_TYPE_DISK) {
+    return fail("INVALID_INHERITED_HANDLE");
+  }
+  if (!handlePathMatches(inherited, file)) return fail("HANDLE_PATH_MISMATCH");
+  std::vector<BYTE> tokenBytes;
+  PSID user = nullptr;
+  BY_HANDLE_FILE_INFORMATION info{};
+  if (!processUser(tokenBytes, user) || !validateAcl(inherited, user, info)) {
+    return fail("ACL_NOT_PROVEN");
+  }
+  success("VERIFY_PRIVATE_KEY_HANDLE_ACL", file, info,
+          "InheritedHandle+GetSecurityInfo+DaclTrusteeReview");
   return 0;
 }
 
@@ -231,6 +270,7 @@ int wmain(int argc, wchar_t* argv[]) {
   if (file.empty() || file.find(L":") != 1 || file.size() < 5)
     return fail("NONCANONICAL_KEY_PATH");
   if (op == L"verify-private-key") return verifyKey(file);
+  if (op == L"verify-private-key-handle") return verifyInheritedKeyHandle(file);
   if (op == L"create-private-key") return createKey(file);
   return fail("UNSUPPORTED_OPERATION");
 }

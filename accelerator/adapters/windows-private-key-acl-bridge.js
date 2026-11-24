@@ -68,7 +68,7 @@ function createWindowsPrivateKeyAclBridge({
     return checked;
   }
 
-  function run(operation, target, bytes = null) {
+  function run(operation, target, bytes = null, descriptor = null) {
     if (platform !== 'win32' || !available()) {
       throw new Error('Windows native private-key ACL qualification is unavailable.');
     }
@@ -78,14 +78,35 @@ function createWindowsPrivateKeyAclBridge({
       shell: false,
       windowsHide: true,
       encoding: 'utf8',
-      stdio: ['pipe', 'pipe', 'pipe'],
+      // An inherited fd binds the ACL check to the exact still-open file
+      // later read by Node; a pathname-only probe would be race-prone.
+      stdio: [descriptor === null ? 'pipe' : descriptor, 'pipe', 'pipe'],
       timeout: 15000,
       maxBuffer: 64 * 1024
     };
     if (bytes !== null) options.input = bytes;
     const result = processPort.spawnSync(HELPER, args, options);
-    if (!result || result.error || result.status !== 0 || result.signal ||
+    if (!result || result.error || result.signal ||
         typeof result.stdout !== 'string') {
+      throw new Error('Windows private-key ACL native attestation failed closed.');
+    }
+    if (result.status !== 0) {
+      // Native denials stay denials, but preserve the exact failure category
+      // for adversarial regression rather than disguising any error as ACL.
+      let failure = null;
+      try { failure = JSON.parse(result.stdout.trim()); } catch {}
+      const knownDenials = new Set([
+        'ACL_NOT_PROVEN', 'HANDLE_PATH_MISMATCH', 'UNSAFE_PARENT',
+        'INVALID_INHERITED_HANDLE', 'OPEN_FAILED', 'NONCANONICAL_KEY_PATH',
+        'INVALID_ARGUMENTS', 'UNSUPPORTED_OPERATION',
+        'EXCLUSIVE_CREATE_FAILED', 'PRIVATE_KEY_CREATION_NOT_ATTESTED',
+        'USER_TOKEN_UNAVAILABLE', 'SID_FORMAT_FAILED', 'SDDL_INVALID'
+      ]);
+      if (result.status === 2 && failure?.schema === SCHEMA &&
+          failure.decision === 'FAILED' && knownDenials.has(failure.code) &&
+          Number.isSafeInteger(failure.win32Error) && failure.win32Error >= 0) {
+        throw new Error(`Windows private-key ACL native denial: ${failure.code}`);
+      }
       throw new Error('Windows private-key ACL native attestation failed closed.');
     }
     let value;
@@ -94,11 +115,17 @@ function createWindowsPrivateKeyAclBridge({
     const actual = value && typeof value === 'object' && !Array.isArray(value)
       ? Reflect.ownKeys(value).sort() : [];
     const expectedOp = operation === 'create-private-key'
-      ? 'CREATE_PRIVATE_KEY_ACL' : 'VERIFY_PRIVATE_KEY_ACL';
+      ? 'CREATE_PRIVATE_KEY_ACL'
+      : operation === 'verify-private-key-handle'
+        ? 'VERIFY_PRIVATE_KEY_HANDLE_ACL'
+        : 'VERIFY_PRIVATE_KEY_ACL';
+    const expectedPrimitive = operation === 'verify-private-key-handle'
+      ? 'InheritedHandle+GetSecurityInfo+DaclTrusteeReview'
+      : 'CreateFileW+GetSecurityInfo+DaclTrusteeReview';
     if (actual.length !== FIELDS.length || actual.some((v, i) => v !== FIELDS[i]) ||
         value.schema !== SCHEMA || value.decision !== 'CONFIRMED' ||
         value.operation !== expectedOp ||
-        value.primitive !== 'CreateFileW+GetSecurityInfo+DaclTrusteeReview' ||
+        value.primitive !== expectedPrimitive ||
         value.subject !== subject ||
         value.ownerMatchesToken !== true || value.daclProtected !== true ||
         value.noBroadAllowAces !== true || value.userReadAllowed !== true ||
@@ -129,9 +156,16 @@ function createWindowsPrivateKeyAclBridge({
     return run('verify-private-key', target);
   }
 
+  function verifyPrivateKeyHandle(target, descriptor) {
+    if (!Number.isInteger(descriptor) || descriptor < 0) {
+      throw new Error('Windows private-key handle is missing or malformed.');
+    }
+    return run('verify-private-key-handle', target, null, descriptor);
+  }
+
   return deepFreeze({
     schema: 'sdo.windows_private_key_acl_bridge.v1',
-    available, createSecureTestPrivateKey, verifyPrivateKey
+    available, createSecureTestPrivateKey, verifyPrivateKey, verifyPrivateKeyHandle
   });
 }
 
