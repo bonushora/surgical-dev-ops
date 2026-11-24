@@ -114,11 +114,15 @@ function createWindowsPrivateKeyAclBridge({
     if (!testOnly || (!process.env.NODE_TEST_CONTEXT && !/\.test\.js$/.test(main))) {
       throw new Error('Windows private-key native creation is test-only.');
     }
-    if (!Buffer.isBuffer(privateBytes) || privateBytes.length < 32 ||
-        privateBytes.length > 16384) {
+    // PKCS8 PEM from node:crypto is a UTF-8 string; DER exports are Buffers.
+    // Accept these two defined encodings only, preserving the 16 KiB limit.
+    const bytes = typeof privateBytes === 'string'
+      ? Buffer.from(privateBytes, 'utf8') : privateBytes;
+    if (!Buffer.isBuffer(bytes) || bytes.length < 32 ||
+        bytes.length > 16384) {
       throw new Error('Windows private-key source bytes are malformed.');
     }
-    return run('create-private-key', target, privateBytes);
+    return run('create-private-key', target, bytes);
   }
 
   function verifyPrivateKey(target) {

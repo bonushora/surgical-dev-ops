@@ -33,7 +33,7 @@ test('Windows native key creation binds an actual protected DACL and verifies ph
   assert.equal(verified.daclProtected, true);
   assert.equal(verified.noBroadAllowAces, true);
   assert.equal(verified.ownerMatchesToken, true);
-  assert.deepEqual(fs.readFileSync(target), privatePem);
+  assert.equal(fs.readFileSync(target, 'utf8'), privatePem);
   assert.ok(Object.isFrozen(verified));
 });
 
