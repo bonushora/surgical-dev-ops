@@ -1,0 +1,275 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "title": "sdp_snapshot — validador estrutural de compatibilidade v2.4/v2.5 (PROPOSTA NÃO NORMATIVA)",
+  "description": "Rascunho documental: valida somente tipos/formatos explícitos e extensões facultativas. Não atesta autorização, frescor, contenção, validade física ou GREEN. Nenhuma chave nova é exigida por v2.5.",
+  "type": "object",
+  "properties": {
+    "nome_do_projeto": {
+      "type": "string"
+    },
+    "versao_do_protocolo": {
+      "type": "string"
+    },
+    "tipo_de_arquitetura": {
+      "type": "string"
+    },
+    "meta_de_custo": {
+      "type": "string"
+    },
+    "fase_atual": {
+      "type": "string"
+    },
+    "nivel_de_risco": {
+      "enum": [
+        "BAIXO",
+        "MÉDIO",
+        "ALTO"
+      ]
+    },
+    "contagem_de_gates": {
+      "type": "integer",
+      "minimum": 0
+    },
+    "tentativas_equivalentes": {
+      "type": "integer",
+      "minimum": 0
+    },
+    "acoes_manuais": {
+      "type": "array",
+      "items": {
+        "type": "string"
+      }
+    },
+    "ambiente": {
+      "enum": [
+        "localhost",
+        "Preview",
+        "Production"
+      ]
+    },
+    "destino_fisico": {
+      "type": "object",
+      "properties": {
+        "url": {
+          "type": "string"
+        },
+        "branch": {
+          "type": "string"
+        },
+        "sha_antes": {
+          "type": "string"
+        },
+        "sha_depois": {
+          "type": "string"
+        },
+        "aplicabilidade": {
+          "enum": [
+            "REMOTO",
+            "NOT_APPLICABLE"
+          ]
+        },
+        "justificativa_nao_aplicavel": {
+          "type": "string",
+          "minLength": 1
+        }
+      },
+      "allOf": [
+        {
+          "if": {
+            "properties": {
+              "aplicabilidade": {
+                "const": "NOT_APPLICABLE"
+              }
+            },
+            "required": [
+              "aplicabilidade"
+            ]
+          },
+          "then": {
+            "required": [
+              "justificativa_nao_aplicavel"
+            ]
+          }
+        }
+      ],
+      "additionalProperties": true,
+      "$comment": "aplicabilidade e justificativa são propostas opcionais; valores SHA são strings no esquema textual existente."
+    },
+    "estado_green": {
+      "type": "object",
+      "properties": {
+        "codigo": {
+          "enum": [
+            "PASSOU",
+            "FALHOU",
+            "NÃO_EXECUTADO",
+            "DEFERRED",
+            "NOT_APPLICABLE"
+          ]
+        },
+        "backend": {
+          "enum": [
+            "PASSOU",
+            "FALHOU",
+            "NÃO_EXECUTADO",
+            "DEFERRED",
+            "NOT_APPLICABLE"
+          ]
+        },
+        "interface": {
+          "enum": [
+            "PASSOU",
+            "FALHOU",
+            "NÃO_EXECUTADO",
+            "DEFERRED",
+            "NOT_APPLICABLE"
+          ]
+        },
+        "operacao": {
+          "enum": [
+            "PASSOU",
+            "FALHOU",
+            "NÃO_EXECUTADO",
+            "DEFERRED",
+            "NOT_APPLICABLE"
+          ]
+        },
+        "implantacao": {
+          "enum": [
+            "PASSOU",
+            "FALHOU",
+            "NÃO_EXECUTADO",
+            "DEFERRED",
+            "NOT_APPLICABLE"
+          ]
+        },
+        "publicacao": {
+          "enum": [
+            "PASSOU",
+            "FALHOU",
+            "NÃO_EXECUTADO",
+            "DEFERRED",
+            "NOT_APPLICABLE"
+          ]
+        },
+        "experiencia_humana": {
+          "enum": [
+            "PASSOU",
+            "FALHOU",
+            "NÃO_EXECUTADO",
+            "DEFERRED",
+            "NOT_APPLICABLE"
+          ]
+        }
+      },
+      "additionalProperties": true,
+      "$comment": "Não inserir BLOCKED neste enum de GREEN dimensional; registrar bloqueios em campo separado proposto."
+    },
+    "itens_deferred": {
+      "type": "array",
+      "items": {
+        "type": "string"
+      }
+    },
+    "ancoras_fisicas": {
+      "type": "object",
+      "properties": {
+        "hash_do_commit": {
+          "type": "string"
+        },
+        "status_dos_testes": {
+          "enum": [
+            "PASSOU",
+            "FALHOU",
+            "NÃO_EXECUTADO"
+          ]
+        },
+        "ultimas_linhas_inspecionadas": {
+          "type": "string"
+        }
+      },
+      "additionalProperties": true
+    },
+    "componentes_validados": {
+      "type": "array",
+      "items": {
+        "type": "string"
+      }
+    },
+    "proximo_passo": {
+      "type": "string"
+    },
+    "contencao": {
+      "type": "object",
+      "$comment": "EXTENSÃO FACULTATIVA PROPOSTA: não é chave normativa exigida para snapshots legados.",
+      "properties": {
+        "profile_id": {
+          "type": "string"
+        },
+        "sha256_manifesto": {
+          "type": "string"
+        },
+        "geracao": {
+          "type": "integer",
+          "minimum": 0
+        },
+        "politica_websocket": {
+          "type": "string"
+        },
+        "qualificacao_por_plataforma": {
+          "type": "object",
+          "additionalProperties": {
+            "enum": [
+              "PASSOU",
+              "FALHOU",
+              "NÃO_EXECUTADO",
+              "DEFERRED",
+              "NOT_APPLICABLE"
+            ]
+          }
+        }
+      },
+      "additionalProperties": true
+    },
+    "bloqueios": {
+      "type": "array",
+      "$comment": "EXTENSÃO FACULTATIVA PROPOSTA, independente de estado_green.",
+      "items": {
+        "type": "object",
+        "properties": {
+          "operacao": {
+            "type": "string"
+          },
+          "motivo": {
+            "type": "string"
+          },
+          "estado": {
+            "enum": [
+              "BLOCKED",
+              "WARNING"
+            ]
+          }
+        },
+        "required": [
+          "operacao",
+          "motivo",
+          "estado"
+        ],
+        "additionalProperties": true
+      }
+    },
+    "referencia_autorizacao": {
+      "type": "string",
+      "$comment": "Somente uma referência; a presença do campo não prova autoridade."
+    },
+    "identificador_missao": {
+      "type": "string"
+    },
+    "timestamp_snapshot": {
+      "type": "string",
+      "format": "date-time"
+    }
+  },
+  "additionalProperties": true,
+  "$comment": "SEM 'required' global: o trecho normativo mostra um exemplo tipado e a v2.5 declara compatibilidade sem exigir novas chaves. Esquema limitado a tipos e não a conclusões de segurança."
+}
