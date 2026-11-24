@@ -75,11 +75,20 @@ function isInside(parent, child) {
 function createVerifiedFixtureDescendant(fixtureLexical, fixturePhysical, target, label) {
   // Require canonical lexical containment first: never mkdir an arbitrary path
   // just to find out afterwards that it resolved outside the fixture.
-  const relative = path.relative(fixtureLexical, target);
-  if (!isInside(fixtureLexical, target) || path.isAbsolute(relative)) {
+  // The caller may provide the same trusted fixture through an OS lexical
+  // alias (/var vs /private/var; Windows short vs long temp paths).
+  // Require containment in one of these two *verified* roots before mkdir.
+  const anchoredRoot = isInside(fixtureLexical, target)
+    ? fixtureLexical
+    : isInside(fixturePhysical, target) ? fixturePhysical : null;
+  if (!anchoredRoot) {
     throw new Error(`${label} must stay inside the isolated fixture.`);
   }
-  let candidate = fixtureLexical;
+  const relative = path.relative(anchoredRoot, target);
+  if (path.isAbsolute(relative)) {
+    throw new Error(`${label} must stay inside the isolated fixture.`);
+  }
+  let candidate = anchoredRoot;
   for (const component of relative.split(path.sep)) {
     candidate = path.join(candidate, component);
     try {
@@ -153,7 +162,9 @@ function provisionEphemeralTestStoreIntegrity({
     [witnessRoot, 'Witness root']
   ]) {
     canonicalAbsolute(value, label, { mustExist: false });
-    if (!isInside(fixtureLexical, value)) throw new Error(`${label} must stay inside the isolated fixture.`);
+    if (!isInside(fixtureLexical, value) && !isInside(fixture, value)) {
+      throw new Error(`${label} must stay inside the isolated fixture.`);
+    }
   }
   if (isInside(stateRoot, identityRoot) || isInside(stateRoot, witnessRoot) || identityRoot === stateRoot || witnessRoot === stateRoot) {
     throw new Error('Integrity identity and witness must be outside G7.');

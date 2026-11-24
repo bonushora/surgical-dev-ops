@@ -29,7 +29,8 @@ function provision(fixtureRoot, stateRoot, identityRoot, witnessRoot) {
 test('test-only integrity provisioning binds lexical paths to physical fixture ancestry', (t) => {
   const root = fs.mkdtempSync(path.join(os.tmpdir(), 'sdo-physical-fixture-'));
   t.after(() => fs.rmSync(root, { recursive: true, force: true }));
-  const state = path.join(root, 'nested', 'state');
+  // Mix lexical and physically resolved aliases of the same safe fixture.
+  const state = path.join(fs.realpathSync(root), 'nested', 'state');
   const identity = path.join(root, 'identity');
   const witness = path.join(root, 'witness');
   const evidence = provision(root, state, identity, witness);
